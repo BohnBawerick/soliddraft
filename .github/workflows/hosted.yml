@@ -1,0 +1,86 @@
+name: Hosted CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Line tables keep file and line numbers in backtraces. Full debug info is for a
+  # debugger, which CI does not run, and it makes the cached builds nearly twice as big.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+permissions:
+  contents: read
+
+jobs:
+  # Formatting, lints and the pinned kernel commit.
+  lint:
+    name: Lint (fmt, clippy, pinned kernel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Check the pinned usd-brep commit
+        run: |
+          pinned=$(sed -n 's/^pub const USD_BREP_COMMIT: &str = "\(.*\)";/\1/p' crates/soliddraft-smlib-sys/src/lib.rs)
+          actual=$(git -C third_party/usd-brep rev-parse HEAD)
+          echo "pinned $pinned, submodule $actual"
+          test "$pinned" = "$actual"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # The kernel build and the exit tests.
+  test:
+    name: Test (kernel, exit test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+
+  # Rust-only tests also cover macOS and Windows. Assembly integration tests need SMLib and run in the workspace job.
+  rust-only:
+    name: Rust-only crates (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials --all-features
+
+  # The web build: the app compiled to WebAssembly. It does not use the C++ kernel, so it
+  # needs no submodule and no ccache.
+  web:
+    name: Web build (wasm32)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p soliddraft-web --target wasm32-unknown-unknown
+
+  msrv:
+    name: Minimum Rust version (Rust-only crates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials -p soliddraft-assembly --all-features

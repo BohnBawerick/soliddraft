@@ -1,0 +1,23 @@
+[package]
+name = "soliddraft-web"
+description = "The web build of SolidDraft: the app as WebAssembly in a browser canvas, with the kernel and the assistant on a soliddraft-server."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.95"
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+soliddraft-app = { path = "../soliddraft-app" }
+eframe.workspace = true
+log.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = ["console", "Document", "Element", "HtmlCanvasElement", "Location", "Window"] }
+
+[lints]
+workspace = true

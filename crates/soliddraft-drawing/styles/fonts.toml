@@ -1,0 +1,15 @@
+# Sheet fonts. Inter is bundled with the app (crates/soliddraft-app/assets/fonts) and is
+# what the sheet canvas draws with; the PDF writer maps it to Helvetica until a TrueType
+# subset is embedded. An ISO 3098 lettering font can be added here as a second entry and
+# chosen from a style's [text] table.
+
+[[font]]
+id = "inter"
+family = "Inter"
+files = ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf"]
+pdf_base = "Helvetica"
+dxf_style = "STANDARD"
+# ISO 3098 lettering heights, in millimetres.
+heights = [1.8, 2.5, 3.5, 5.0, 7.0, 10.0]
+# Width of a lettering line as a fraction of the height (ISO 3098 type B).
+stroke = 0.1

@@ -1,0 +1,44 @@
+# Arrowheads and other line terminators. Length is along the line, width across it,
+# both as multiples of the style's arrow length, so one style scales every head.
+
+[[arrow]]
+id = "filled"
+name = "Filled arrowhead (ISO 129, ASME Y14.2)"
+length = 1.0
+width = 0.35          # a 20 degree included angle
+filled = true
+
+[[arrow]]
+id = "open"
+name = "Open arrowhead"
+length = 1.0
+width = 0.35
+filled = false
+
+[[arrow]]
+id = "closed"
+name = "Closed, unfilled arrowhead"
+length = 1.0
+width = 0.35
+filled = false
+closed = true
+
+[[arrow]]
+id = "oblique"
+name = "Oblique stroke (architectural tick)"
+length = 0.5
+width = 0.5
+stroke = true
+
+[[arrow]]
+id = "dot"
+name = "Dot (leader on a face)"
+length = 0.3
+width = 0.3
+dot = true
+
+[[arrow]]
+id = "none"
+name = "No terminator"
+length = 0
+width = 0

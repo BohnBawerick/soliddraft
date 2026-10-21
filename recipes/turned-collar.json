@@ -1,0 +1,12 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "turned-collar",
+  "description": "A 6 x 10 mm rectangle on the ZX plane revolved a full turn about the Z axis into a collar (outer radius 30, inner radius 20, 6 mm tall), then chamfered 1 mm on both top edges.",
+  "steps": [
+    { "id": "section", "op": "profile", "plane": "ZX", "rectangle": { "center": [3, 25], "width": 6, "height": 10 } },
+    { "id": "collar", "op": "revolve", "profile": "section", "axis_origin": [0, 0, 0], "axis_direction": [0, 0, 1], "angle_deg": 360 },
+    { "id": "edge_break", "op": "chamfer", "body": "collar", "distance": 1,
+      "edges": { "within": { "min": [-31, -31, 6], "max": [31, 31, 6] } } }
+  ],
+  "result": "edge_break"
+}

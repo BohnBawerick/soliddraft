@@ -1,0 +1,117 @@
+//! The part view's display levels on the SMLib kernel: a rebuild shows the standard
+//! level at once, the worker makes the others, the camera moves between them, and a
+//! quality change swaps the mesh when its replacement is ready without a rebuild or a
+//! new revision.
+
+use std::time::{Duration, Instant};
+
+use soliddraft_app::document::{Command, Document, ExtrudeParams, PlaneKind, ProfileKind};
+use soliddraft_tessellation::{Level, Projection, Quality};
+
+/// A disc 200 mm across and 50 mm thick: large enough that the chord height, not the
+/// 15 degree angle, decides the standard and fine levels.
+fn disc() -> Document {
+    let mut doc = soliddraft_app::new_document();
+    let params = ExtrudeParams {
+        sketch: None,
+        profile: ProfileKind::Circle { diameter: 200.0 },
+        plane: PlaneKind::Top,
+        depth: 50.0,
+        flip: false,
+    };
+    doc.apply(Command::AddExtrude { params, via_assistant: false }).unwrap();
+    doc
+}
+
+fn triangles(doc: &Document) -> usize {
+    doc.meshes.values().map(|m| m.indices.len() / 3).sum()
+}
+
+/// Frames at `projection` until the worker has nothing left to make.
+fn settle(doc: &mut Document, projection: &Projection) {
+    let start = Instant::now();
+    while doc.update_display(projection, 0.016) && doc.display_quality().pending() {
+        assert!(start.elapsed() < Duration::from_secs(60), "the worker did not answer");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn the_camera_moves_the_part_between_levels() {
+    let mut doc = disc();
+    let q = doc.display_quality();
+    assert_eq!(q.shown(), Some(Level::Standard));
+    assert_eq!(doc.tess_params, *q.levels().params(Level::Standard));
+    let standard = triangles(&doc);
+    let faces = doc.faces.len();
+
+    // At about a pixel per millimetre the standard level's 0.57 mm is under a pixel.
+    let middle = Projection::Orthographic { pixels_per_mm: 1.0 };
+    settle(&mut doc, &middle);
+    assert_eq!(doc.display_quality().shown(), Some(Level::Standard));
+
+    // Close up the fine level is shown, from the worker, with the same faces.
+    let version = doc.mesh_version;
+    assert!(doc.update_display(&Projection::Orthographic { pixels_per_mm: 10.0 }, 0.016));
+    assert_eq!(doc.display_quality().shown(), Some(Level::Fine));
+    assert!(doc.mesh_version > version);
+    assert!(triangles(&doc) > standard, "{} vs {standard}", triangles(&doc));
+    assert_eq!(doc.faces.len(), faces);
+    assert_eq!(doc.tess_params, *doc.display_quality().levels().params(Level::Fine));
+
+    // Far away it steps down one level at a time, after two quiet seconds each.
+    let far = Projection::Orthographic { pixels_per_mm: 0.1 };
+    doc.update_display(&far, 1.0);
+    assert_eq!(doc.display_quality().shown(), Some(Level::Fine), "not at once");
+    for _ in 0..8 {
+        doc.update_display(&far, 1.0);
+    }
+    assert_eq!(doc.display_quality().shown(), Some(Level::Coarse));
+    assert!(triangles(&doc) <= standard);
+
+    // A rebuild keeps the level the camera asked for and makes it at once.
+    let params = ExtrudeParams {
+        sketch: None,
+        profile: ProfileKind::Circle { diameter: 40.0 },
+        plane: PlaneKind::Top,
+        depth: 80.0,
+        flip: false,
+    };
+    doc.apply(Command::AddExtrude { params, via_assistant: false }).unwrap();
+    assert_eq!(doc.display_quality().shown(), Some(Level::Coarse));
+    assert_eq!(doc.tess_params, *doc.display_quality().levels().params(Level::Coarse));
+}
+
+#[test]
+fn a_quality_change_swaps_the_mesh_without_a_rebuild() {
+    let mut doc = disc();
+    // Both settings' standard levels stay between the thresholds here.
+    let middle = Projection::Orthographic { pixels_per_mm: 1.5 };
+    settle(&mut doc, &middle);
+    let (before, revision, version) = (triangles(&doc), doc.model().semantic_hash(), doc.mesh_version);
+    // As if just saved.
+    doc.dirty = false;
+
+    doc.set_viewport_quality(Quality::Slider { value: 10 }).unwrap();
+    assert!(doc.dirty, "the setting is saved with the part");
+    assert_eq!(doc.mesh_version, version, "the old mesh stays until the new one is ready");
+    assert_eq!(doc.model().settings().viewport, Quality::Slider { value: 10 });
+    settle(&mut doc, &middle);
+    assert!(doc.mesh_version > version);
+    assert!(triangles(&doc) > before, "{} vs {before}", triangles(&doc));
+    assert_eq!(doc.model().semantic_hash(), revision, "no new revision");
+    assert_eq!(doc.tess_params, *doc.display_quality().levels().params(doc.display_quality().shown().unwrap()));
+
+    // The same value again changes nothing.
+    doc.dirty = false;
+    doc.set_viewport_quality(Quality::Slider { value: 10 }).unwrap();
+    assert!(!doc.dirty);
+    assert!(doc.set_viewport_quality(Quality::Slider { value: 11 }).is_err());
+
+    // Saved and reopened, the part keeps the setting and shows it at once.
+    let bytes = doc.model().to_bytes().unwrap();
+    let reopened = soliddraft_model::Document::from_bytes(&bytes, doc.kernel().clone()).unwrap();
+    let reopened = Document::from_model(reopened);
+    assert_eq!(reopened.display_quality().levels(), doc.display_quality().levels());
+    assert_eq!(triangles(&reopened), triangles(&doc));
+}

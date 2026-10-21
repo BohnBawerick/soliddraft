@@ -1,0 +1,10 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "cylinder",
+  "description": "A cylinder of radius 8 mm and height 25 mm: a circle on XY extruded along +Z.",
+  "steps": [
+    { "id": "sketch", "op": "profile", "plane": "XY", "circle": { "center": [0, 0], "radius": 8 } },
+    { "id": "cylinder", "op": "extrude", "profile": "sketch", "distance": 25 }
+  ],
+  "result": "cylinder"
+}

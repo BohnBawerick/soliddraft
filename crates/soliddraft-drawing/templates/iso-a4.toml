@@ -1,0 +1,168 @@
+# ISO A4 landscape, first angle.
+#
+# Every length is in millimetres. Sheet coordinates start at the paper's bottom-left
+# corner with Y up. Title block cells are [x, y, width, height] from the block's own
+# bottom-left corner; the block sits in the bottom-right corner of the frame.
+# A field's value is literal text with ${property} links: title, number, revision,
+# designer, checked, approved, owner, status, date, scale, projection, sheet, sheets,
+# document_type. A sheet can override any field by key.
+
+id = "iso-a4"
+name = "ISO A4 landscape · first angle"
+standard = "iso"
+projection = "first_angle"
+units = "mm"
+style = "iso"
+
+# ISO 5455 scales offered, largest first.
+scales = ["5:1", "2:1", "1:1", "1:2", "1:5", "1:10", "1:20"]
+
+[paper]
+name = "A4"
+width = 297
+height = 210
+
+# ISO 5457: 20 mm filing margin on the left, 10 mm elsewhere.
+[margins]
+left = 20
+right = 10
+top = 10
+bottom = 10
+
+# Zone grid: numbered columns from the left, lettered rows from the top, labels in the
+# margin outside the frame.
+[zones]
+columns = 6
+rows = 4
+band = 5
+
+# ISO 128-2 line widths.
+[lines]
+visible = 0.5
+hidden = 0.25
+centre = 0.25
+dimension = 0.25
+cutting = 0.7
+border = 0.7
+thin = 0.18
+
+
+# ISO 7200 title block: 180 x 36 mm, four rows of 9 mm.
+[title_block]
+width = 180
+height = 36
+rules = [
+  { from = [0, 9],   to = [180, 9] },
+  { from = [0, 18],  to = [180, 18] },
+  { from = [0, 27],  to = [180, 27] },
+  { from = [60, 0],  to = [60, 36] },
+  { from = [120, 18], to = [120, 36] },
+  { from = [120, 0], to = [120, 9] },
+  { from = [24, 0],  to = [24, 9] },
+  { from = [140, 0], to = [140, 9] },
+]
+
+[[title_block.field]]
+key = "designer"
+label = "Designed by"
+value = "${designer}"
+cell = [0, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "checked"
+label = "Checked by"
+value = "${checked}"
+cell = [60, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "approved"
+label = "Approved by"
+value = "${approved}"
+cell = [120, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "document_type"
+label = "Document type"
+value = "${document_type}"
+cell = [0, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "status"
+label = "Document status"
+value = "${status}"
+cell = [60, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "date"
+label = "Date"
+value = "${date}"
+cell = [120, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "owner"
+label = "Legal owner"
+value = "${owner}"
+cell = [0, 9, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "title"
+label = "Title"
+value = "${title}"
+cell = [60, 9, 120, 9]
+size = 5
+weight = "semibold"
+
+[[title_block.field]]
+key = "projection"
+label = "Projection"
+value = ""
+cell = [0, 0, 24, 9]
+size = 3.5
+symbol = "projection"
+
+[[title_block.field]]
+key = "scale"
+label = "Scale"
+value = "${scale}"
+cell = [24, 0, 36, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "number"
+label = "Drawing number"
+value = "${number}"
+cell = [60, 0, 60, 9]
+size = 3.5
+weight = "medium"
+
+[[title_block.field]]
+key = "revision"
+label = "Rev."
+value = "${revision}"
+cell = [120, 0, 20, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "sheet"
+label = "Sheet"
+value = "${sheet} / ${sheets}"
+cell = [140, 0, 40, 9]
+size = 3.5
+
+# The general notes block: bottom-left of the drawing area, above the frame.
+[notes]
+offset = [8, 6]
+heading = "NOTES"
+height = 2.5
+lines = [
+  "1. BREAK ALL SHARP EDGES 0.5 × 45°.",
+  "2. GENERAL TOLERANCES ISO 2768-mK.",
+  "3. DIMENSIONS IN MILLIMETRES.",
+]

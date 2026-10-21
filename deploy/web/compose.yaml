@@ -1,0 +1,32 @@
+# The web build of SolidDraft on one host: one container with the server and the web app.
+# Run with docker compose -f deploy/web/compose.yaml up --build.
+name: soliddraft-web
+
+services:
+  web:
+    image: soliddraft-web:${SOLIDDRAFT_WEB_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/web/Dockerfile
+      args:
+        SOLIDDRAFT_COMMIT: ${SOLIDDRAFT_COMMIT:-}
+    # The Docker daemon is a system service, so the container comes back after a reboot
+    # without anyone logging in.
+    restart: unless-stopped
+    # The server does not handle SIGTERM itself; an init process makes it stop at once
+    # instead of after the ten-second grace period, which shortens a deploy's swap.
+    init: true
+    ports:
+      - "${SOLIDDRAFT_WEB_PORT:-127.0.0.1:8766}:8766"
+    # The assistant's model key, kept outside the repository. The file may be empty; the
+    # assistant is then off and everything else works.
+    env_file:
+      - path: ${SOLIDDRAFT_WEB_ENV:-${HOME}/.config/soliddraft-web/env}
+        required: false
+    user: nobody
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 512

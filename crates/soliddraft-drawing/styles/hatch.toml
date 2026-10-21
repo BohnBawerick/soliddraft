@@ -1,0 +1,64 @@
+# Section hatch patterns. Angle in degrees from the sheet's X axis, spacing in sheet
+# millimetres. The first pattern is the default for section views.
+
+[[pattern]]
+id = "iso-general"
+name = "General section (ISO 128-50)"
+angle = 45
+spacing = 3.0
+width = 0.25
+
+[[pattern]]
+id = "ansi31"
+name = "Iron, steel (ANSI 31)"
+angle = 45
+spacing = 2.5
+width = 0.25
+
+[[pattern]]
+id = "ansi32"
+name = "Steel (ANSI 32)"
+angle = 45
+spacing = 3.0
+width = 0.25
+double = true          # two lines close together, then the spacing
+double_gap = 0.8
+
+[[pattern]]
+id = "ansi33"
+name = "Bronze, brass, copper (ANSI 33)"
+angle = 45
+spacing = 3.0
+width = 0.25
+dash = [3.0, 1.5]
+
+[[pattern]]
+id = "ansi37"
+name = "Lead, zinc, magnesium (ANSI 37)"
+angle = 45
+spacing = 2.5
+width = 0.25
+cross = true           # a second set at 90 degrees
+
+[[pattern]]
+id = "aluminium"
+name = "Aluminium (ISO)"
+angle = 45
+spacing = 2.5
+width = 0.25
+dash = [4.0, 1.0, 1.0, 1.0]
+
+[[pattern]]
+id = "insulation"
+name = "Insulation, packing"
+angle = 0
+spacing = 2.0
+width = 0.18
+cross = true
+
+[[pattern]]
+id = "none"
+name = "No hatch"
+angle = 0
+spacing = 0
+width = 0

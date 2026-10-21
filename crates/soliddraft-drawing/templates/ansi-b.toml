@@ -1,0 +1,159 @@
+# ANSI B (17 x 11 in) landscape, third angle. Lengths in millimetres; see iso-a3.toml for
+# the meaning of every table.
+
+id = "ansi-b"
+name = "ANSI B landscape · third angle"
+standard = "asme"
+projection = "third_angle"
+units = "mm"
+style = "asme"
+
+scales = ["4:1", "2:1", "1:1", "1:2", "1:4", "1:8", "1:16"]
+
+[paper]
+name = "ANSI B"
+width = 431.8
+height = 279.4
+
+# ASME Y14.1: 0.38 in (9.7 mm) margins, rounded to 10.
+[margins]
+left = 10
+right = 10
+top = 10
+bottom = 10
+
+[zones]
+columns = 8
+rows = 4
+band = 5
+
+# ASME Y14.2 line widths.
+[lines]
+visible = 0.6
+hidden = 0.3
+centre = 0.3
+dimension = 0.3
+cutting = 0.6
+border = 0.6
+thin = 0.18
+
+
+# ASME Y14.1 style title block: 180 x 36 mm, the company and title rows above the
+# number row.
+[title_block]
+width = 180
+height = 36
+rules = [
+  { from = [0, 9],   to = [180, 9] },
+  { from = [0, 18],  to = [180, 18] },
+  { from = [0, 27],  to = [180, 27] },
+  { from = [60, 0],  to = [60, 36] },
+  { from = [120, 18], to = [120, 36] },
+  { from = [120, 0], to = [120, 9] },
+  { from = [24, 0],  to = [24, 9] },
+  { from = [140, 0], to = [140, 9] },
+]
+
+[[title_block.field]]
+key = "designer"
+label = "DRAWN"
+value = "${designer}"
+cell = [0, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "checked"
+label = "CHECKED"
+value = "${checked}"
+cell = [60, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "approved"
+label = "APPROVED"
+value = "${approved}"
+cell = [120, 27, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "document_type"
+label = "TYPE"
+value = "${document_type}"
+cell = [0, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "status"
+label = "STATUS"
+value = "${status}"
+cell = [60, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "date"
+label = "DATE"
+value = "${date}"
+cell = [120, 18, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "owner"
+label = "COMPANY"
+value = "${owner}"
+cell = [0, 9, 60, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "title"
+label = "TITLE"
+value = "${title}"
+cell = [60, 9, 120, 9]
+size = 5
+weight = "semibold"
+
+[[title_block.field]]
+key = "projection"
+label = "PROJ"
+value = ""
+cell = [0, 0, 24, 9]
+size = 3.5
+symbol = "projection"
+
+[[title_block.field]]
+key = "scale"
+label = "SCALE"
+value = "${scale}"
+cell = [24, 0, 36, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "number"
+label = "DWG NO."
+value = "${number}"
+cell = [60, 0, 60, 9]
+size = 3.5
+weight = "medium"
+
+[[title_block.field]]
+key = "revision"
+label = "REV"
+value = "${revision}"
+cell = [120, 0, 20, 9]
+size = 3.5
+
+[[title_block.field]]
+key = "sheet"
+label = "SHEET"
+value = "${sheet} OF ${sheets}"
+cell = [140, 0, 40, 9]
+size = 3.5
+
+[notes]
+offset = [12, 12]
+heading = "NOTES"
+height = 2.5
+lines = [
+  "1. BREAK ALL SHARP EDGES .02 MAX.",
+  "2. INTERPRET PER ASME Y14.5-2018.",
+  "3. DIMENSIONS IN MILLIMETERS.",
+]

@@ -1,0 +1,46 @@
+# ISO dimensioning: ISO 129-1 placement, ISO 3098 lettering, ISO 128 lines.
+# Lengths in sheet millimetres.
+
+id = "iso"
+name = "ISO 129-1"
+
+[text]
+font = "inter"             # a font id from fonts.toml
+height = 3.5               # dimension values (ISO 3098 series: 2.5, 3.5, 5, 7)
+note_height = 3.5          # notes and callouts
+label_height = 2.5         # view captions such as "SCALE 1:2"
+position = "above"         # text above an unbroken dimension line
+gap = 0.8                  # clearance between the text and the line
+decimal_separator = "."
+
+[arrows]
+kind = "filled"            # an arrow id from arrows.toml
+length = 3.5
+
+[lines]
+extension_gap = 1.0        # from the outline to the start of an extension line
+extension_overshoot = 2.0  # past the dimension line
+offset = 10.0              # first dimension line from the outline
+spacing = 7.0              # between parallel dimension lines
+leader_shoulder = 3.0      # the horizontal tail of a leader before its text
+inside_min = 2.0           # arrows flip outside when the span is shorter than this many arrow lengths
+
+[symbols]
+diameter = "Ø"            # U+00D8, which the sheet font carries; ISO 129 draws the same sign
+radius = "R"
+degree = "°"
+depth = "DEEP"
+counterbore = "⌴"
+countersink = "⌵"
+times = "×"                # "4× ⌀9"
+through = "THRU"
+reference_parentheses = false
+
+[centre_mark]
+size = 2.5                 # half-length of the central cross
+gap = 1.5                  # gap between the cross and the extension
+extension = 2.5            # how far the centrelines reach past the circle
+
+[dangling]
+mark = "×"                 # drawn at a lost end
+colour = "error"

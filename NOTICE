@@ -1,0 +1,21 @@
+SolidDraft
+Copyright (c) 2026 Pedro De Paiva
+
+This product includes USD BRep, developed by NVIDIA CORPORATION & AFFILIATES:
+https://github.com/NVIDIA-Omniverse/usd-brep
+Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Licensed under the Apache License, Version 2.0.
+
+SolidDraft compiles the SMLib and SM_API sources of USD BRep, release 1.0.0 at
+commit c9c5979f04cea8c38213004d4f04df0dcfb40d05, without modification, and
+links them into its binaries (crate soliddraft-smlib-sys). Those sources are
+included as the git submodule third_party/usd-brep, which carries their
+LICENSE and THIRD_PARTY_NOTICES.md. None of the third-party components listed
+in that notices file (OpenUSD, oneTBB and the others) is compiled into or
+linked by SolidDraft.
+
+This product bundles the Inter typeface, copyright (c) 2016 The Inter Project
+Authors (https://github.com/rsms/inter), under the SIL Open Font License,
+Version 1.1 (crates/soliddraft-app/assets/fonts/LICENSE-Inter.txt). The drawing
+crate carries a copy of Inter Regular and the licence in crates/soliddraft-drawing/fonts/
+and embeds a subset of it in the PDFs it writes.

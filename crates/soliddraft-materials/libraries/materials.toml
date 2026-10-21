@@ -1,0 +1,854 @@
+# SolidDraft's starter materials.
+#
+# Every value comes from a named public source, cited in each entry's `source`; the
+# comment above a value gives it as the source prints it, before conversion to SI.
+# A value the source does not give is left out, and stays unknown in SolidDraft.
+#
+# - Metals: MIL-HDBK-5J, "Metallic Materials and Elements for Aerospace Vehicle
+#   Structures" (2003), a US government work in the public domain. Strengths are
+#   design minimums (A-basis, or S-basis where the handbook gives only that), in the
+#   longitudinal direction, at room temperature. Fcy (compressive yield) stands in
+#   for compressive strength, which the handbook does not give.
+# - Copper alloys: the Copper Development Association's alloy pages
+#   (alloys.copper.org), typical values.
+# - Woods: the USDA Wood Handbook, FPL-GTR-282 (2021), a US government work in the
+#   public domain. Clear wood at 12 % moisture content; the elastic modulus is the
+#   static bending modulus along the grain, compression is parallel to the grain,
+#   and conductivity is across the grain.
+# - Plastics, glass and generic steel: FreeCAD's material cards (CC-BY-3.0, by the
+#   FreeCAD authors, github.com/FreeCAD/FreeCAD, commit 406063b1116a). For some
+#   plastics the card's ultimate tensile strength is the stress at break, which is
+#   below the yield stress of a plastic that necks.
+
+format = "soliddraft-library/1"
+name = "SolidDraft materials"
+
+# Carbon and alloy steels
+
+[[material]]
+id = "steel-generic"
+name = "Steel, generic"
+category = "Carbon and alloy steels"
+source = "FreeCAD material card Standard/Metal/Steel/Steel-Generic.FCMat (commit 406063b1116a; a blend card whose values are at the low end of the range for steels; no strengths given)"
+licence = "CC-BY-3.0"
+# Density: 7900 kg/m^3
+density_kg_m3 = 7900
+# YoungsModulus: 200000 MPa
+youngs_modulus_pa = 2e11
+# PoissonRatio: 0.3
+poisson = 0.3
+# ThermalExpansionCoefficient: 0.000012 m/m/K
+thermal_expansion_per_k = 1.2e-5
+# ThermalConductivity: 50 W/m/K
+conductivity_w_mk = 50
+# SpecificHeat: 500 J/kg/K
+specific_heat_j_kgk = 500
+default_appearance = "steel-machined"
+hatch = "ANSI32"
+
+[[material]]
+id = "steel-aisi-1025"
+name = "Carbon steel AISI 1025"
+category = "Carbon and alloy steels"
+source = "MIL-HDBK-5J, table 2.2.1.0(b), PDF p.62 (2-8), sheet/strip/plate annealed, S-basis, L. Fcy(L) used as compressive strength; E, G, mu, w are single table values"
+# w = 0.284 lb/in^3
+density_kg_m3 = 7861
+# E = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.32
+poisson = 0.32
+# G = 11.0 x10^3 ksi
+shear_modulus_pa = 7.584e10
+# Fty(L) = 36 ksi
+yield_pa = 2.482e8
+# Ftu(L) = 55 ksi
+tensile_pa = 3.792e8
+# Fcy(L) = 36 ksi
+compressive_pa = 2.482e8
+# K = 30.0 Btu/[(hr)(ft^2)(F)/ft] (at 32 F)
+conductivity_w_mk = 51.92
+# C = 0.116 Btu/(lb)(F) (122 to 212 F)
+specific_heat_j_kgk = 485.7
+default_appearance = "steel-machined"
+hatch = "ANSI32"
+
+[[material]]
+id = "steel-aisi-4130"
+name = "Steel AISI 4130 (normalized and tempered)"
+category = "Carbon and alloy steels"
+source = "MIL-HDBK-5J, table 2.3.1.0(c1), PDF p.71 (2-17), sheet/strip/plate/tubing, normalized and tempered, stress relieved, thickness <= 0.188 in, S-basis (table gives no L/LT split). Fcy used as compressive strength"
+# w = 0.283 lb/in^3
+density_kg_m3 = 7833
+# E = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.32
+poisson = 0.32
+# G = 11.0 x10^3 ksi
+shear_modulus_pa = 7.584e10
+# Fty = 75 ksi
+yield_pa = 5.171e8
+# Ftu = 95 ksi
+tensile_pa = 6.55e8
+# Fcy = 75 ksi
+compressive_pa = 5.171e8
+default_appearance = "steel-machined"
+hatch = "ANSI32"
+
+[[material]]
+id = "steel-aisi-4140"
+name = "Steel AISI 4140"
+category = "Carbon and alloy steels"
+source = "MIL-HDBK-5J, table 2.3.1.0(g2), PDF p.79 (2-25), all wrought forms, quenched and tempered; elastic constants and density only (strengths in this table have no A or S basis)"
+# w = 0.283 lb/in^3
+density_kg_m3 = 7833
+# E = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.32
+poisson = 0.32
+# G = 11.0 x10^3 ksi
+shear_modulus_pa = 7.584e10
+default_appearance = "steel-machined"
+hatch = "ANSI32"
+
+[[material]]
+id = "steel-aisi-4340"
+name = "Steel AISI 4340 (quenched and tempered, Ftu 260 ksi)"
+category = "Carbon and alloy steels"
+source = "MIL-HDBK-5J, table 2.3.1.0(f1), PDF p.76 (2-22), AISI 4340 (AMS 6414, vacuum-melted only) bar/forging/tubing, quenched and tempered, thickness <= 1.70 in (martemper) / 2.50 in (oil) / 3.50 in (water), S-basis. Fcy used as compressive strength"
+# w = 0.283 lb/in^3
+density_kg_m3 = 7833
+# E = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.32
+poisson = 0.32
+# G = 11.0 x10^3 ksi
+shear_modulus_pa = 7.584e10
+# Fty = 217 ksi
+yield_pa = 1.496e9
+# Ftu = 260 ksi
+tensile_pa = 1.793e9
+# Fcy = 235 ksi
+compressive_pa = 1.62e9
+default_appearance = "steel-machined"
+hatch = "ANSI32"
+
+# Stainless steels
+
+[[material]]
+id = "stainless-304"
+name = "Stainless steel 304 (annealed)"
+category = "Stainless steels"
+source = "MIL-HDBK-5J, table 2.7.1.0(b), PDF p.277 (2-223), AISI 301 and related 300-series, sheet/strip annealed, thickness <= 0.187 in, S-basis, L; footnote b: properties also applicable to AISI 304, AMS 5513 annealed. Fcy(L) used as compressive strength"
+# w = 0.286 lb/in^3
+density_kg_m3 = 7916
+# E(L) = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.27
+poisson = 0.27
+# G = 11.2 x10^3 ksi
+shear_modulus_pa = 7.722e10
+# Fty(L) = 26 ksi
+yield_pa = 1.793e8
+# Ftu(L) = 73 ksi
+tensile_pa = 5.033e8
+# Fcy(L) = 23 ksi
+compressive_pa = 1.586e8
+default_appearance = "stainless-brushed"
+hatch = "ANSI32"
+
+[[material]]
+id = "stainless-316"
+name = "Stainless steel 316 (annealed)"
+category = "Stainless steels"
+source = "MIL-HDBK-5J, table 2.7.1.0(b), PDF p.277 (2-223), AISI 301 and related 300-series, sheet/strip annealed, thickness <= 0.187 in, S-basis, L; footnote c: properties also applicable to AISI 316, AMS 5524 annealed. Fcy(L) used as compressive strength"
+# w = 0.286 lb/in^3
+density_kg_m3 = 7916
+# E(L) = 29.0 x10^3 ksi
+youngs_modulus_pa = 1.999e11
+# mu = 0.27
+poisson = 0.27
+# G = 11.2 x10^3 ksi
+shear_modulus_pa = 7.722e10
+# Fty(L) = 26 ksi
+yield_pa = 1.793e8
+# Ftu(L) = 73 ksi
+tensile_pa = 5.033e8
+# Fcy(L) = 23 ksi
+compressive_pa = 1.586e8
+default_appearance = "stainless-brushed"
+hatch = "ANSI32"
+
+[[material]]
+id = "stainless-17-4ph"
+name = "Stainless steel 17-4PH (H1150)"
+category = "Stainless steels"
+source = "MIL-HDBK-5J, table 2.6.9.0(e), PDF p.253 (2-199), bar, condition H1150, thickness < 8.000 in, A-basis, L. Fcy(L) used as compressive strength"
+# w = 0.284 lb/in^3 (H1150)
+density_kg_m3 = 7861
+# E = 28.5 x10^3 ksi
+youngs_modulus_pa = 1.965e11
+# mu = 0.27
+poisson = 0.27
+# G = 11.2 x10^3 ksi
+shear_modulus_pa = 7.722e10
+# Fty(L) = 100 ksi
+yield_pa = 6.895e8
+# Ftu(L) = 125 ksi
+tensile_pa = 8.618e8
+# Fcy(L) = 90 ksi
+compressive_pa = 6.205e8
+default_appearance = "stainless-brushed"
+hatch = "ANSI32"
+
+# Aluminium alloys
+
+[[material]]
+id = "aluminium-2024-t3"
+name = "Aluminium 2024-T3"
+category = "Aluminium alloys"
+source = "MIL-HDBK-5J, table 3.2.3.0(b1), PDF p.373 (3-71), sheet T3 0.010-0.128 in, A-basis, L. Fcy(L) used as compressive strength"
+# w = 0.100 lb/in^3
+density_kg_m3 = 2768
+# E = 10.5 x10^3 ksi
+youngs_modulus_pa = 7.239e10
+# mu = 0.33
+poisson = 0.33
+# G = 4.0 x10^3 ksi
+shear_modulus_pa = 2.758e10
+# Fty(L) = 47 ksi
+yield_pa = 3.241e8
+# Ftu(L) = 64 ksi
+tensile_pa = 4.413e8
+# Fcy(L) = 39 ksi
+compressive_pa = 2.689e8
+default_appearance = "aluminium-brushed"
+hatch = "ANSI38"
+
+[[material]]
+id = "aluminium-5052-h32"
+name = "Aluminium 5052-H32"
+category = "Aluminium alloys"
+source = "MIL-HDBK-5J, table 3.5.1.0(b1), PDF p.522 (3-220), sheet and plate H32 0.017-2.000 in, S-basis, L. Fcy(L) used as compressive strength"
+# w = 0.097 lb/in^3
+density_kg_m3 = 2685
+# E = 10.1 x10^3 ksi
+youngs_modulus_pa = 6.964e10
+# mu = 0.33
+poisson = 0.33
+# G = 3.85 x10^3 ksi
+shear_modulus_pa = 2.654e10
+# Fty(L) = 23 ksi
+yield_pa = 1.586e8
+# Ftu(L) = 31 ksi
+tensile_pa = 2.137e8
+# Fcy(L) = 22 ksi
+compressive_pa = 1.517e8
+# C = 0.23 Btu/(lb)(F) (at 212 F)
+specific_heat_j_kgk = 963
+default_appearance = "aluminium-brushed"
+hatch = "ANSI38"
+
+[[material]]
+id = "aluminium-6061-t6"
+name = "Aluminium 6061-T6"
+category = "Aluminium alloys"
+source = "MIL-HDBK-5J, table 3.6.2.0(b1), PDF p.566 (3-264), sheet T6/T62 0.010-0.249 in, A-basis, L. Fcy(L) used as compressive strength"
+# w = 0.098 lb/in^3
+density_kg_m3 = 2713
+# E = 9.9 x10^3 ksi
+youngs_modulus_pa = 6.826e10
+# mu = 0.33
+poisson = 0.33
+# G = 3.8 x10^3 ksi
+shear_modulus_pa = 2.62e10
+# Fty(L) = 36 ksi
+yield_pa = 2.482e8
+# Ftu(L) = 42 ksi
+tensile_pa = 2.896e8
+# Fcy(L) = 35 ksi
+compressive_pa = 2.413e8
+default_appearance = "aluminium-brushed"
+hatch = "ANSI38"
+
+[[material]]
+id = "aluminium-7075-t6"
+name = "Aluminium 7075-T6"
+category = "Aluminium alloys"
+source = "MIL-HDBK-5J, table 3.7.6.0(b1), PDF p.673 (3-371), sheet T6/T62 0.012-0.039 in, A-basis, L (the 0.008-0.011 in S-basis column has no L values). Fcy(L) used as compressive strength"
+# w = 0.101 lb/in^3
+density_kg_m3 = 2796
+# E = 10.3 x10^3 ksi
+youngs_modulus_pa = 7.102e10
+# mu = 0.33
+poisson = 0.33
+# G = 3.9 x10^3 ksi
+shear_modulus_pa = 2.689e10
+# Fty(L) = 69 ksi
+yield_pa = 4.757e8
+# Ftu(L) = 76 ksi
+tensile_pa = 5.24e8
+# Fcy(L) = 68 ksi
+compressive_pa = 4.688e8
+default_appearance = "aluminium-brushed"
+hatch = "ANSI38"
+
+# Titanium alloys
+
+[[material]]
+id = "titanium-ti-6al-4v"
+name = "Titanium Ti-6Al-4V (annealed)"
+category = "Titanium alloys"
+source = "MIL-HDBK-5J, table 5.4.1.0(b), PDF p.945 (5-53), sheet annealed, thickness column printed 0.1875 in, A-basis, L. Fcy(L) used as compressive strength"
+# w = 0.160 lb/in^3
+density_kg_m3 = 4429
+# E = 16.0 x10^3 ksi
+youngs_modulus_pa = 1.103e11
+# mu = 0.31
+poisson = 0.31
+# G = 6.2 x10^3 ksi
+shear_modulus_pa = 4.275e10
+# Fty(L) = 126 ksi
+yield_pa = 8.687e8
+# Ftu(L) = 134 ksi
+tensile_pa = 9.239e8
+# Fcy(L) = 133 ksi
+compressive_pa = 9.17e8
+default_appearance = "titanium"
+
+# Magnesium alloys
+
+[[material]]
+id = "magnesium-az31b"
+name = "Magnesium AZ31B-H24"
+category = "Magnesium alloys"
+source = "MIL-HDBK-5J, table 4.2.1.0(b), PDF p.841 (4-7), sheet H24 0.016-0.062 in, S-basis, L (no Fcy given for this thickness)"
+# w = 0.0639 lb/in^3
+density_kg_m3 = 1769
+# E = 6.5 x10^3 ksi
+youngs_modulus_pa = 4.482e10
+# mu = 0.35
+poisson = 0.35
+# G = 2.4 x10^3 ksi
+shear_modulus_pa = 1.655e10
+# Fty(L) = 29 ksi
+yield_pa = 1.999e8
+# Ftu(L) = 39 ksi
+tensile_pa = 2.689e8
+default_appearance = "magnesium"
+hatch = "ANSI37"
+
+# Copper alloys
+
+[[material]]
+id = "copper-c11000"
+name = "Copper C11000 (electrolytic tough pitch)"
+category = "Copper alloys"
+source = "Copper Development Association, alloys.copper.org/alloy/C11000, physical properties at 68 F; tensile strength flat products, 1/2 hard (H02), typical (retrieved 2026-10-14). Density from the specific gravity"
+# Specific gravity 8.91
+density_kg_m3 = 8910.0
+# Modulus of elasticity in tension 17000 ksi
+youngs_modulus_pa = 117200000000.0
+# Modulus of rigidity 6400 ksi
+shear_modulus_pa = 44130000000.0
+# Tensile strength 42 ksi
+tensile_pa = 289600000.0
+# Coefficient of thermal expansion 9.4 x 10^-6 per F (68-212 F)
+thermal_expansion_per_k = 1.692e-05
+# Thermal conductivity 226 Btu/sq ft/ft hr/F
+conductivity_w_mk = 391.1
+# Specific heat capacity 0.092 Btu/lb/F
+specific_heat_j_kgk = 385.2
+default_appearance = "copper-polished"
+hatch = "ANSI33"
+
+[[material]]
+id = "brass-c26000"
+name = "Brass C26000 (cartridge brass, 70/30)"
+category = "Copper alloys"
+source = "Copper Development Association, alloys.copper.org/alloy/C26000, physical properties at 68 F; tensile strength flat products, 1/2 hard (H02), typical (retrieved 2026-10-14). Density from the specific gravity"
+# Specific gravity 8.53
+density_kg_m3 = 8530.0
+# Modulus of elasticity in tension 16000 ksi
+youngs_modulus_pa = 110300000000.0
+# Modulus of rigidity 6000 ksi
+shear_modulus_pa = 41370000000.0
+# Tensile strength 62 ksi
+tensile_pa = 427500000.0
+# Coefficient of thermal expansion 11.1 x 10^-6 per F (68-572 F)
+thermal_expansion_per_k = 1.998e-05
+# Thermal conductivity 70 Btu/sq ft/ft hr/F
+conductivity_w_mk = 121.2
+# Specific heat capacity 0.09 Btu/lb/F
+specific_heat_j_kgk = 376.8
+default_appearance = "brass-polished"
+hatch = "ANSI33"
+
+[[material]]
+id = "brass-c36000"
+name = "Brass C36000 (free-cutting)"
+category = "Copper alloys"
+source = "Copper Development Association, alloys.copper.org/alloy/C36000, physical properties at 68 F (retrieved 2026-10-14). Density from the specific gravity"
+# Specific gravity 8.5
+density_kg_m3 = 8500.0
+# Modulus of elasticity in tension 14000 ksi
+youngs_modulus_pa = 96530000000.0
+# Modulus of rigidity 5300 ksi
+shear_modulus_pa = 36540000000.0
+# Coefficient of thermal expansion 11.4 x 10^-6 per F (68-572 F)
+thermal_expansion_per_k = 2.052e-05
+# Thermal conductivity 67 Btu/sq ft/ft hr/F
+conductivity_w_mk = 116.0
+# Specific heat capacity 0.09 Btu/lb/F
+specific_heat_j_kgk = 376.8
+default_appearance = "brass-polished"
+hatch = "ANSI33"
+
+[[material]]
+id = "bronze-phosphor-c51000"
+name = "Phosphor bronze C51000 (5 % tin)"
+category = "Copper alloys"
+source = "Copper Development Association, alloys.copper.org/alloy/C51000, physical properties at 68 F; tensile strength flat products, 1/2 hard (H02), typical (retrieved 2026-10-14). Density from the specific gravity"
+# Specific gravity 8.86
+density_kg_m3 = 8860.0
+# Modulus of elasticity in tension 16000 ksi
+youngs_modulus_pa = 110300000000.0
+# Modulus of rigidity 6000 ksi
+shear_modulus_pa = 41370000000.0
+# Tensile strength 66 ksi
+tensile_pa = 455100000.0
+# Coefficient of thermal expansion 9.9 x 10^-6 per F (68-572 F)
+thermal_expansion_per_k = 1.782e-05
+# Thermal conductivity 40 Btu/sq ft/ft hr/F
+conductivity_w_mk = 69.23
+# Specific heat capacity 0.09 Btu/lb/F
+specific_heat_j_kgk = 376.8
+default_appearance = "bronze"
+hatch = "ANSI33"
+
+[[material]]
+id = "bronze-manganese-c86500"
+name = "Manganese bronze C86500 (as cast)"
+category = "Copper alloys"
+source = "MIL-HDBK-5J, table 7.3.1.0(c), PDF p.1190 (7-10), sand and centrifugal casting, as cast, S-basis; Ftu and Fty marked footnote a (conformance by casting-cut specimens). Manganese bronze, not a bearing or aluminium bronze"
+# w = 0.301 lb/in^3
+density_kg_m3 = 8332
+# E = 15.0 x10^3 ksi
+youngs_modulus_pa = 1.034e11
+# Fty = 25 ksi
+yield_pa = 1.724e8
+# Ftu = 65 ksi
+tensile_pa = 4.482e8
+# alpha = 11.3 x10^-6 in/in/F (68 to 212 F)
+thermal_expansion_per_k = 2.034e-5
+# K = 50 Btu/[(hr)(ft^2)(F)/ft] (at 68 F)
+conductivity_w_mk = 86.54
+# C = 0.09 Btu/(lb)(F) (at 68 F)
+specific_heat_j_kgk = 376.8
+default_appearance = "bronze"
+hatch = "ANSI33"
+
+# Woods
+
+[[material]]
+id = "pine-eastern-white"
+name = "Pine, eastern white"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.35; density = 0.35 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 392
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 8,500 MPa
+youngs_modulus_pa = 8.5e9
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 33,100 kPa
+compressive_pa = 33100000
+# Table 4-7 thermal conductivity at 12% MC, row Pine / Eastern white (across the grain, +/-20 %) printed as 0.11 W m-1 K-1
+conductivity_w_mk = 0.11
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-pine"
+
+[[material]]
+id = "pine-southern-loblolly"
+name = "Pine, southern (loblolly)"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.51; density = 0.51 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 571.2
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 12,300 MPa
+youngs_modulus_pa = 1.23e10
+# Table 5-2 mu_LR (Pine / Loblolly) printed as 0.328
+poisson = 0.328
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 49,200 kPa
+compressive_pa = 49200000
+# Table 4-7 thermal conductivity at 12% MC, row Pine / Loblolly (across the grain, +/-20 %) printed as 0.15 W m-1 K-1
+conductivity_w_mk = 0.15
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-pine"
+
+[[material]]
+id = "douglas-fir-coast"
+name = "Douglas-fir, coast"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.48; density = 0.48 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 537.6
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 13,400 MPa
+youngs_modulus_pa = 1.34e10
+# Table 5-2 mu_LR (Douglas-fir (variety not given)) printed as 0.292
+poisson = 0.292
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 49,900 kPa
+compressive_pa = 49900000
+# Table 4-7 thermal conductivity at 12% MC, row Douglas fir / Coast (across the grain, +/-20 %) printed as 0.14 W m-1 K-1
+conductivity_w_mk = 0.14
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-douglas-fir"
+
+[[material]]
+id = "oak-northern-red"
+name = "Oak, northern red"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.63; density = 0.63 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 705.6
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 12,500 MPa
+youngs_modulus_pa = 1.25e10
+# Table 5-2 mu_LR (Oak, red (not split by species)) printed as 0.350
+poisson = 0.35
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 46,600 kPa
+compressive_pa = 46600000
+# Table 4-7 thermal conductivity at 12% MC, row Oak, red / Northern red (across the grain, +/-20 %) printed as 0.18 W m-1 K-1
+conductivity_w_mk = 0.18
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-oak"
+
+[[material]]
+id = "oak-white"
+name = "Oak, white"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.68; density = 0.68 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 761.6
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 12,300 MPa
+youngs_modulus_pa = 1.23e10
+# Table 5-2 mu_LR (Oak, white) printed as 0.369
+poisson = 0.369
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 51,300 kPa
+compressive_pa = 51300000
+# Table 4-7 thermal conductivity at 12% MC, row Oak, white / White (across the grain, +/-20 %) printed as 0.19 W m-1 K-1
+conductivity_w_mk = 0.19
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-oak"
+
+[[material]]
+id = "maple-sugar"
+name = "Maple, sugar"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.63; density = 0.63 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 705.6
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 12,600 MPa
+youngs_modulus_pa = 1.26e10
+# Table 5-2 mu_LR (Maple, sugar) printed as 0.424
+poisson = 0.424
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 54,000 kPa
+compressive_pa = 54000000
+# Table 4-7 thermal conductivity at 12% MC, row Maple / Sugar (across the grain, +/-20 %) printed as 0.18 W m-1 K-1
+conductivity_w_mk = 0.18
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-maple"
+
+[[material]]
+id = "birch-yellow"
+name = "Birch, yellow"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.62; density = 0.62 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 694.4
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 13,900 MPa
+youngs_modulus_pa = 1.39e10
+# Table 5-2 mu_LR (Birch, yellow) printed as 0.426
+poisson = 0.426
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 56,300 kPa
+compressive_pa = 56300000
+# Table 4-7 thermal conductivity at 12% MC, row Birch / Yellow (across the grain, +/-20 %) printed as 0.18 W m-1 K-1
+conductivity_w_mk = 0.18
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-birch"
+
+[[material]]
+id = "walnut-black"
+name = "Walnut, black"
+category = "Woods"
+source = "USDA Wood Handbook FPL-GTR-282 (2021), Table 5-3a (pp. 5-4 to 5-7, metric strength, 12 % MC), Table 5-2 (p. 5-3, Poisson), Table 4-7 (pp. 4-15, 4-16, conductivity), Table 4-8 (p. 4-17, heat capacity); density = SG x 1000 x 1.12 (Table 4-6a basis, 12 % MC, p. 4-13)"
+# Table 5-3a specific gravity (12 % MC) printed as 0.55; density = 0.55 x 1000 x 1.12 kg/m^3
+density_kg_m3 = 616
+# Table 5-3a modulus of elasticity (static bending, 12 %) printed as 11,600 MPa
+youngs_modulus_pa = 1.16e10
+# Table 5-2 mu_LR (Walnut, black) printed as 0.495
+poisson = 0.495
+# Table 5-3a compression parallel to grain (maximum crushing strength, 12 %) printed as 52,300 kPa
+compressive_pa = 52300000
+# Table 4-8 heat capacity of solid wood at 300 K (27 C), 12% MC (all species) printed as 1.7 kJ kg-1 K-1
+specific_heat_j_kgk = 1700
+default_appearance = "wood-walnut"
+
+# Plastics
+
+[[material]]
+id = "abs"
+name = "ABS"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/ABS-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/DataSheet.aspx?MatGUID=eb7a78f5948d481c9493a67f0d089646)"
+licence = "CC-BY-3.0"
+# Density: 1060 kg/m^3
+density_kg_m3 = 1060
+# YoungsModulus: 2300 MPa
+youngs_modulus_pa = 2.3e9
+# PoissonRatio: 0.37
+poisson = 0.37
+# YieldStrength: 44.1 MPa
+yield_pa = 44100000
+# UltimateTensileStrength: 38.8 MPa
+tensile_pa = 38800000
+# ThermalExpansionCoefficient: 0.000093 m/m/K
+thermal_expansion_per_k = 9.3e-5
+# ThermalConductivity: 0.158 W/m/K
+conductivity_w_mk = 0.158
+# SpecificHeat: 2050 J/kg/K
+specific_heat_j_kgk = 2050
+default_appearance = "plastic-ivory"
+hatch = "ANSI34"
+
+[[material]]
+id = "pla"
+name = "PLA"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PLA-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: https://www.sd3d.com/wp-content/uploads/2017/06/MaterialTDS-PLA_01.pdf)"
+licence = "CC-BY-3.0"
+# Density: 1240 kg/m^3
+density_kg_m3 = 1240
+# YoungsModulus: 3640 MPa
+youngs_modulus_pa = 3.64e9
+# PoissonRatio: 0.36
+poisson = 0.36
+# YieldStrength: 35.9 MPa
+yield_pa = 35900000
+# UltimateTensileStrength: 26.4 MPa
+tensile_pa = 26400000
+# ThermalExpansionCoefficient: 0.000041 m/m/K
+thermal_expansion_per_k = 4.1e-5
+# ThermalConductivity: 0.130 W/m/K
+conductivity_w_mk = 0.13
+# SpecificHeat: 1800 J/kg/K
+specific_heat_j_kgk = 1800
+default_appearance = "plastic-natural"
+hatch = "ANSI34"
+
+[[material]]
+id = "pet"
+name = "PET (polyethylene terephthalate)"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PET-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/DataSheet.aspx?MatGUID=a696bdcdff6f41dd98f8eec3599eaa20)"
+licence = "CC-BY-3.0"
+# Density: 1380 kg/m^3
+density_kg_m3 = 1380
+# YoungsModulus: 3150 MPa
+youngs_modulus_pa = 3.15e9
+# PoissonRatio: 0.36
+poisson = 0.36
+# YieldStrength: 62.8 MPa
+yield_pa = 62800000
+# UltimateTensileStrength: 38.8 MPa
+tensile_pa = 38800000
+# CompressiveStrength: 38.0 MPa
+compressive_pa = 38000000
+# ThermalExpansionCoefficient: 0.000072 m/m/K
+thermal_expansion_per_k = 7.2e-5
+# ThermalConductivity: 0.181 W/m/K
+conductivity_w_mk = 0.181
+# SpecificHeat: 1140 J/kg/K
+specific_heat_j_kgk = 1140
+default_appearance = "plastic-clear"
+hatch = "ANSI34"
+
+[[material]]
+id = "nylon-pa6"
+name = "Nylon (polyamide 6)"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PA6-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/datasheet.aspx?MatGUID=8d78f3cfcb6f49d595896ce6ce6a2ef1)"
+licence = "CC-BY-3.0"
+# Density: 1150 kg/m^3
+density_kg_m3 = 1150
+# YoungsModulus: 2930 MPa
+youngs_modulus_pa = 2.93e9
+# PoissonRatio: 0.39
+poisson = 0.39
+# YieldStrength: 70.5 MPa
+yield_pa = 70500000
+# UltimateTensileStrength: 75.5 MPa
+tensile_pa = 75500000
+# CompressiveStrength: 67.6 MPa
+compressive_pa = 67600000
+# ThermalExpansionCoefficient: 0.000082 m/m/K
+thermal_expansion_per_k = 8.2e-5
+# ThermalConductivity: 0.262 W/m/K
+conductivity_w_mk = 0.262
+# SpecificHeat: 1670 J/kg/K
+specific_heat_j_kgk = 1670
+default_appearance = "plastic-natural"
+hatch = "ANSI34"
+
+[[material]]
+id = "polycarbonate"
+name = "Polycarbonate"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PC-Molded.FCMat (commit 406063b1116a; no ReferenceSource field; no SourceURL field)"
+licence = "CC-BY-3.0"
+# Density: 1200,00 kg/m^3
+density_kg_m3 = 1200
+# YoungsModulus: 2200,00 MPa
+youngs_modulus_pa = 2.2e9
+# PoissonRatio: 0.37
+poisson = 0.37
+# YieldStrength: 80,00 MPa
+yield_pa = 80000000
+# UltimateTensileStrength: 60,00 MPa
+tensile_pa = 60000000
+# CompressiveStrength: 80,00 MPa
+compressive_pa = 80000000
+# ThermalExpansionCoefficient: 68,00 µm/m/K
+thermal_expansion_per_k = 6.8e-5
+# ThermalConductivity: 0,20 W/m/K
+conductivity_w_mk = 0.2
+# SpecificHeat: 1250,00 J/kg/K
+specific_heat_j_kgk = 1250
+default_appearance = "plastic-clear"
+hatch = "ANSI34"
+
+[[material]]
+id = "acrylic-pmma"
+name = "Acrylic (PMMA)"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/Acrylic-Glass-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/DataSheet.aspx?MatGUID=632572aeef2a4224b5ac8fbd4f1b6f77)"
+licence = "CC-BY-3.0"
+# Density: 1160 kg/m^3
+density_kg_m3 = 1160
+# YoungsModulus: 2550 MPa
+youngs_modulus_pa = 2.55e9
+# PoissonRatio: 0.38
+poisson = 0.38
+# YieldStrength: 73.7 MPa
+yield_pa = 73700000
+# UltimateTensileStrength: 57.7 MPa
+tensile_pa = 57700000
+# CompressiveStrength: 103 MPa
+compressive_pa = 103000000
+# ThermalExpansionCoefficient: 0.000075 m/m/K
+thermal_expansion_per_k = 7.5e-5
+# ThermalConductivity: 0.193 W/m/K
+conductivity_w_mk = 0.193
+# SpecificHeat: 1480 J/kg/K
+specific_heat_j_kgk = 1480
+default_appearance = "plastic-clear"
+hatch = "ANSI34"
+
+[[material]]
+id = "ptfe"
+name = "PTFE"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PTFE-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/datasheet.aspx?MatGUID=4d14eac958e5401a8fd152e1261b6843)"
+licence = "CC-BY-3.0"
+# Density: 2070 kg/m^3
+density_kg_m3 = 2070
+# YoungsModulus: 564 MPa
+youngs_modulus_pa = 564000000
+# PoissonRatio: 0.46
+poisson = 0.46
+# YieldStrength: 20.5 MPa
+yield_pa = 20500000
+# UltimateTensileStrength: 34.6 MPa
+tensile_pa = 34600000
+# CompressiveStrength: 10.2 MPa
+compressive_pa = 10200000
+# ThermalExpansionCoefficient: 0.000108 m/m/K
+thermal_expansion_per_k = 1.08e-4
+# ThermalConductivity: 0.263 W/m/K
+conductivity_w_mk = 0.263
+# SpecificHeat: 1010 J/kg/K
+specific_heat_j_kgk = 1010
+default_appearance = "plastic-white"
+hatch = "ANSI34"
+
+[[material]]
+id = "polypropylene"
+name = "Polypropylene"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PP-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/DataSheet.aspx?MatGUID=a882a1c603374e278d062f106dfda95b)"
+licence = "CC-BY-3.0"
+# Density: 916 kg/m^3
+density_kg_m3 = 916
+# YoungsModulus: 1470 MPa
+youngs_modulus_pa = 1.47e9
+# PoissonRatio: 0.44
+poisson = 0.44
+# YieldStrength: 32.8 MPa
+yield_pa = 32800000
+# UltimateTensileStrength: 79.7 MPa
+tensile_pa = 79700000
+# CompressiveStrength: 10 MPa
+compressive_pa = 10000000
+# ThermalExpansionCoefficient: 0.000123 m/m/K
+thermal_expansion_per_k = 1.23e-4
+# ThermalConductivity: 0.249 W/m/K
+conductivity_w_mk = 0.249
+# SpecificHeat: 1920 J/kg/K
+specific_heat_j_kgk = 1920
+default_appearance = "plastic-natural"
+hatch = "ANSI34"
+
+[[material]]
+id = "pvc"
+name = "PVC"
+category = "Plastics"
+source = "FreeCAD material card Standard/Thermoplast/PVC-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; SourceURL: http://www.matweb.com/search/DataSheet.aspx?MatGUID=1f650966ec834bb8833dd4c6e3116079)"
+licence = "CC-BY-3.0"
+# Density: 1380 kg/m^3
+density_kg_m3 = 1380
+# YoungsModulus: 2800 MPa
+youngs_modulus_pa = 2.8e9
+# PoissonRatio: 0.38
+poisson = 0.38
+# UltimateTensileStrength: 50 MPa
+tensile_pa = 50000000
+# ThermalExpansionCoefficient: 0.000075 m/m/K
+thermal_expansion_per_k = 7.5e-5
+# ThermalConductivity: 0.150 W/m/K
+conductivity_w_mk = 0.15
+# SpecificHeat: 1000 J/kg/K
+specific_heat_j_kgk = 1000
+default_appearance = "plastic-grey"
+hatch = "ANSI34"
+
+# Glass
+
+[[material]]
+id = "glass"
+name = "Glass (soda-lime)"
+category = "Glass"
+source = "FreeCAD material card Standard/Glass/Glass-Generic.FCMat (commit 406063b1116a; no ReferenceSource field; no SourceURL field)"
+licence = "CC-BY-3.0"
+# Density: 2520 kg/m^3
+density_kg_m3 = 2520
+# YoungsModulus: 72000 MPa
+youngs_modulus_pa = 7.2e10
+# PoissonRatio: 0.22
+poisson = 0.22
+# ThermalExpansionCoefficient: 0.000009 m/m/K
+thermal_expansion_per_k = 9e-6
+default_appearance = "glass-clear"
+hatch = "ANSI36"

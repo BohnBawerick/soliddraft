@@ -1,0 +1,17 @@
+[package]
+name = "soliddraft-smlib-sys"
+description = "Builds and links SMLib and SM_API, the C++ kernel of NVIDIA USD BRep, from the pinned submodule."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+links = "soliddraft_smlib"
+build = "build.rs"
+
+[build-dependencies]
+cc = { version = "1.2.61", features = ["parallel"] }
+
+[lints]
+workspace = true

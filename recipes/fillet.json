@@ -1,0 +1,12 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "fillet",
+  "description": "The block with its four top edges rounded by a circular fillet of radius 2 mm.",
+  "steps": [
+    { "id": "sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "block", "op": "extrude", "profile": "sketch", "distance": 10 },
+    { "id": "rounded", "op": "fillet", "body": "block", "radius": 2,
+      "edges": { "within": { "min": [-100, -100, 10], "max": [100, 100, 10] } } }
+  ],
+  "result": "rounded"
+}

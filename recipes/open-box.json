@@ -1,0 +1,14 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "open-box",
+  "description": "The block shelled to 2 mm walls with its top face open, then intersected with a radius 14 mm cylinder into a rounded tray.",
+  "steps": [
+    { "id": "sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "block", "op": "extrude", "profile": "sketch", "distance": 10 },
+    { "id": "hollow", "op": "shell", "body": "block", "thickness": 2, "open_faces": { "nearest": [0, 0, 10] } },
+    { "id": "drum_sketch", "op": "profile", "plane": "XY", "circle": { "center": [0, 0], "radius": 14 } },
+    { "id": "drum", "op": "extrude", "profile": "drum_sketch", "distance": 10 },
+    { "id": "rounded_tray", "op": "boolean", "kind": "intersect", "target": "hollow", "tool": "drum" }
+  ],
+  "result": "rounded_tray"
+}

@@ -1,0 +1,535 @@
+//! The 3D viewport: camera input, picking, overlays (heads-up toolbar, view
+//! cube, origin triad, hover label) and the hand-off to the wgpu renderer.
+
+pub mod assembly;
+pub mod camera;
+pub mod environment;
+pub mod look;
+pub mod pick;
+pub mod render;
+
+use crate::document::{DisplayMesh, Document, Selection};
+use crate::icons::{self, Icon};
+use crate::sketch::Sketch;
+use crate::state::{AppAction, SketchSession};
+use crate::theme;
+use camera::{Camera, StandardView};
+use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use glam::Vec3;
+use look::Preset;
+use render::{DisplayMode, FrameInput, PickSample, Picked, ViewportCallback};
+use soliddraft_kernel_api::Plane;
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+pub struct ViewportEvents {
+    /// A primary click happened; the payload is what was under the cursor.
+    pub clicked: Option<Option<Picked>>,
+    pub set_view: Option<StandardView>,
+    pub fit: bool,
+    pub set_display: Option<DisplayMode>,
+    pub toggle_projection: bool,
+    /// Actions the sketcher raised.
+    pub actions: Vec<AppAction>,
+}
+
+/// What the viewport draws besides the document this frame.
+pub struct Overlay<'a> {
+    /// Material a feature adds or removes, with whether it removes.
+    pub ghost: Option<(Arc<DisplayMesh>, bool)>,
+    /// A body drawn in place of the document's while a feature is previewed.
+    pub preview: Option<Arc<DisplayMesh>>,
+    /// The open sketch, which takes the pointer.
+    pub sketch: Option<&'a mut SketchSession>,
+    /// A closed sketch to show quietly on its plane.
+    pub passive_sketch: Option<(Plane, &'a Sketch)>,
+}
+
+pub struct ViewportState {
+    pub camera: Camera,
+    pub display: DisplayMode,
+    pub preset: Preset,
+    pub hover: Option<Picked>,
+    pub hover_point: Option<Vec3>,
+    pub rect: Rect,
+    pick: Arc<Mutex<PickSample>>,
+    cube_hover: Option<StandardView>,
+}
+
+impl Default for ViewportState {
+    fn default() -> Self {
+        Self {
+            camera: Camera::default(),
+            display: DisplayMode::default(),
+            preset: Preset::default(),
+            hover: None,
+            hover_point: None,
+            rect: Rect::NOTHING,
+            pick: Arc::new(Mutex::new(PickSample::default())),
+            cube_hover: None,
+        }
+    }
+}
+
+/// A projected view-cube face: view, normal, label, screen polygon, depth, facing.
+type CubeFace<'a> = (StandardView, Vec3, &'a str, Vec<Pos2>, f32, f32);
+
+const CUBE_FACES: [(StandardView, Vec3, &str); 6] = [
+    (StandardView::Front, Vec3::NEG_Y, "FRONT"),
+    (StandardView::Back, Vec3::Y, "BACK"),
+    (StandardView::Right, Vec3::X, "RIGHT"),
+    (StandardView::Left, Vec3::NEG_X, "LEFT"),
+    (StandardView::Top, Vec3::Z, "TOP"),
+    (StandardView::Bottom, Vec3::NEG_Z, "BOTTOM"),
+];
+
+impl ViewportState {
+    /// How many physical pixels a millimetre covers in the last frame's view, for the
+    /// display level choice.
+    pub fn projection(&self, pixels_per_point: f32) -> soliddraft_tessellation::Projection {
+        let c = &self.camera;
+        let height_px = f64::from((self.rect.height() * pixels_per_point).max(1.0));
+        let fov_y = f64::from(c.fov_y);
+        if c.orthographic {
+            let view_height = 2.0 * f64::from(c.distance) * (fov_y / 2.0).tan();
+            soliddraft_tessellation::Projection::Orthographic { pixels_per_mm: height_px / view_height.max(1e-9) }
+        } else {
+            let e = c.eye();
+            let eye = soliddraft_kernel_api::Vec3::new(e.x.into(), e.y.into(), e.z.into());
+            soliddraft_tessellation::Projection::Perspective { eye, fov_y, height_px }
+        }
+    }
+
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        doc: &Document,
+        overlay: Overlay<'_>,
+        selection: Option<Selection>,
+        hover_label: Option<&str>,
+    ) -> ViewportEvents {
+        let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
+        let sketching = sketch.is_some();
+        let mut events = ViewportEvents::default();
+        let rect = ui.available_rect_before_wrap();
+        self.rect = rect;
+        let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "3D viewport"));
+        let ppp = ui.ctx().pixels_per_point();
+        let aspect = rect.width() / rect.height().max(1.0);
+
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        if self.camera.tick(dt) {
+            ui.ctx().request_repaint();
+        }
+
+        // Navigation: left drag orbits, right or middle drag pans, wheel zooms toward the cursor.
+        let shift = ui.input(|i| i.modifiers.shift);
+        let delta = response.drag_delta();
+        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
+            self.camera.orbit(delta.x, delta.y);
+        } else if response.dragged_by(egui::PointerButton::Secondary)
+            || response.dragged_by(egui::PointerButton::Middle)
+            || (response.dragged_by(egui::PointerButton::Primary) && shift)
+        {
+            self.camera.pan(delta.x, delta.y, rect.height());
+        }
+        if response.hovered() {
+            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
+            let factor = (scroll * 0.0025).exp() * pinch;
+            if (factor - 1.0).abs() > 1e-5 {
+                let ndc = response.hover_pos().map(|p| {
+                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
+                });
+                self.camera.zoom(factor, ndc, aspect);
+            }
+        }
+        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
+
+        // Hover pick from the last id-buffer readback. The readback lags one
+        // frame, so keep repainting briefly while the pointer rests on the view.
+        let hover_pos =
+            if response.hovered() && !response.dragged() && !sketching { response.hover_pos() } else { None };
+        let cursor_px = hover_pos
+            .map(|p| [((p.x - rect.left()) * ppp).max(0.0) as u32, ((p.y - rect.top()) * ppp).max(0.0) as u32]);
+        self.hover = None;
+        self.hover_point = None;
+        if let (Some(px), Some(pos)) = (cursor_px, hover_pos) {
+            let sample = self.pick.lock().unwrap();
+            self.hover = decode_pick(&sample, px[0], px[1]);
+            drop(sample);
+            if let Some(picked) = self.hover {
+                let (o, d) = self.camera.ray(pos, rect);
+                self.hover_point = pick::hit_point(doc, picked, o, d);
+            }
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        if response.clicked_by(egui::PointerButton::Primary) && !sketching {
+            events.clicked = Some(self.hover);
+        }
+
+        // Hand the frame to the GPU.
+        // Sent every frame: egui may discard a pass before its paint callbacks run,
+        // so the renderer decides what to upload by comparing versions.
+        let meshes = (doc.mesh_version, doc.meshes.iter().map(|(id, m)| (*id, m.clone())).collect());
+        // The shader compares face pick ids; edges and vertices are highlighted by the painter.
+        let hover_id = match self.hover {
+            Some(Picked::Face(p)) => p,
+            _ => 0,
+        };
+        let selected_id = match selection {
+            Some(Selection::Face(f)) => doc.pick_of_face(f).unwrap_or(0),
+            _ => 0,
+        };
+        // A selected feature lights the faces it made; the body is one merged solid now.
+        let selected_feature = match selection {
+            Some(Selection::Feature(id)) if sketch.is_none() => id as u32,
+            _ => 0,
+        };
+        let selected_body = None;
+        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+            rect,
+            ViewportCallback(FrameInput {
+                view: self.camera.view(),
+                proj: self.camera.projection(aspect),
+                eye: self.camera.eye(),
+                basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
+                orthographic: self.camera.orthographic,
+                distance: self.camera.distance,
+                size_px,
+                pixels_per_point: ppp,
+                display: self.display,
+                preset: self.preset,
+                hover_id,
+                selected_id,
+                selected_feature,
+                selected_body,
+                cursor_px,
+                meshes,
+                ghost,
+                preview,
+                pick_out: self.pick.clone(),
+                assembly: None,
+            }),
+        ));
+
+        let painter = ui.painter().with_clip_rect(rect);
+        if let Some((plane, sk)) = passive_sketch {
+            crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::MUTED.gamma_multiply(0.9));
+        }
+        if let Some(session) = sketch {
+            events.actions = crate::sketcher::run(ui, session, doc, &self.camera, rect, &response);
+            ui.ctx().request_repaint();
+        }
+        self.paint_highlights(&painter, doc, selection, rect);
+        self.paint_triad(&painter, rect);
+        self.paint_hud(ui, rect, &mut events);
+        self.paint_view_cube(ui, rect, &mut events);
+        self.paint_pills(ui, rect, hover_label);
+        events
+    }
+
+    fn paint_highlights(&self, painter: &egui::Painter, doc: &Document, selection: Option<Selection>, rect: Rect) {
+        let draw_edge = |pick: u32, stroke: Stroke| {
+            for m in doc.meshes.values() {
+                if let Some(e) = m.edges.iter().find(|e| e.pick == pick) {
+                    for seg in e.segments.as_chunks::<2>().0 {
+                        if let (Some(a), Some(b)) =
+                            (self.camera.project(seg[0], rect), self.camera.project(seg[1], rect))
+                        {
+                            painter.line_segment([a, b], stroke);
+                        }
+                    }
+                }
+            }
+        };
+        let draw_vertex = |pos: Vec3, radius: f32, color: Color32| {
+            if let Some(p) = self.camera.project(pos, rect) {
+                painter.circle(p, radius, color, Stroke::new(1.5, Color32::WHITE));
+            }
+        };
+        let selected_edge = match selection {
+            Some(Selection::Edge(e)) => doc.pick_of_edge(e),
+            _ => None,
+        };
+        let selected_vertex = match selection {
+            Some(Selection::Vertex(k)) => doc.vertex_position(k),
+            _ => None,
+        };
+        if let Some(p) = selected_edge {
+            draw_edge(p, Stroke::new(2.5, theme::ACCENT));
+        }
+        if let Some(pos) = selected_vertex {
+            draw_vertex(pos, 5.0, theme::ACCENT);
+        }
+        match self.hover {
+            Some(Picked::Edge(p)) if selected_edge != Some(p) => {
+                draw_edge(p, Stroke::new(2.0, theme::ACCENT.gamma_multiply(0.7)))
+            }
+            Some(Picked::Vertex(p)) => {
+                if let Some(pos) = pick::vertex_position(doc, p)
+                    && selected_vertex != Some(pos)
+                {
+                    draw_vertex(pos, 4.5, theme::ACCENT.gamma_multiply(0.7));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Small axis triad in the lower-left corner, rotation only.
+    fn paint_triad(&self, painter: &egui::Painter, rect: Rect) {
+        let origin = pos2(rect.left() + 34.0, rect.bottom() - 46.0);
+        let view = self.camera.view();
+        let axes = [
+            (Vec3::X, Color32::from_rgb(0xd6, 0x45, 0x45), "X"),
+            (Vec3::Y, Color32::from_rgb(0x2e, 0x9e, 0x5b), "Y"),
+            (Vec3::Z, Color32::from_rgb(0x1f, 0x5f, 0xd0), "Z"),
+        ];
+        let mut items: Vec<(f32, Pos2, Color32, &str)> = axes
+            .iter()
+            .map(|(a, c, l)| {
+                let v = view.transform_vector3(*a);
+                (v.z, origin + vec2(v.x, -v.y) * 22.0, *c, *l)
+            })
+            .collect();
+        items.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, tip, color, label) in items {
+            painter.line_segment([origin, tip], Stroke::new(2.0, color));
+            painter.circle_filled(tip, 2.5, color);
+            let dir = (tip - origin).normalized();
+            painter.text(tip + dir * 9.0, Align2::CENTER_CENTER, label, theme::font_semibold(10.0), color);
+        }
+    }
+
+    fn paint_hud(&mut self, ui: &mut egui::Ui, rect: Rect, events: &mut ViewportEvents) {
+        let height = 30.0;
+        let items: Vec<HudItem> = vec![
+            HudItem::Icon(Icon::Home, "Isometric view (I)"),
+            HudItem::Icon(Icon::Fit, "Zoom to fit (Z)"),
+            HudItem::Text("F", "Front view (F)"),
+            HudItem::Text("T", "Top view (T)"),
+            HudItem::Text("R", "Right view (R)"),
+            HudItem::Sep,
+            HudItem::Icon(Icon::Display, "Display style"),
+            HudItem::Icon(Icon::Section, "Section view (phase 2)"),
+            HudItem::Icon(Icon::Measure, "Measure (phase 2)"),
+        ];
+        let width: f32 = items.iter().map(|i| i.width()).sum::<f32>() + 10.0;
+        let hud = Rect::from_center_size(pos2(rect.center().x, rect.top() + 12.0 + height / 2.0), vec2(width, height));
+        ui.painter().rect(
+            hud,
+            CornerRadius::same(9),
+            theme::hud_bg(),
+            Stroke::new(1.0, theme::LINE),
+            StrokeKind::Inside,
+        );
+        let mut x = hud.left() + 5.0;
+        for (idx, item) in items.iter().enumerate() {
+            let w = item.width();
+            let r = Rect::from_min_size(pos2(x, hud.top() + 3.0), vec2(w, height - 6.0));
+            x += w;
+            match item {
+                HudItem::Sep => {
+                    ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0, theme::LINE));
+                    continue;
+                }
+                HudItem::Icon(icon, tip) | HudItem::IconText(icon, tip) => {
+                    let enabled = !tip.contains("phase 2");
+                    let resp = hud_button(ui, r, idx, enabled, tip, |p, c| icons::paint(p, *icon, r.shrink(5.0), c));
+                    if resp.clicked() {
+                        match idx {
+                            0 => events.set_view = Some(StandardView::Isometric),
+                            1 => events.fit = true,
+                            6 => {
+                                let i = DisplayMode::ALL.iter().position(|m| *m == self.display).unwrap_or(0);
+                                events.set_display = Some(DisplayMode::ALL[(i + 1) % DisplayMode::ALL.len()]);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                HudItem::Text(label, tip) => {
+                    let resp = hud_button(ui, r, idx, true, tip, |p, c| {
+                        p.text(r.center(), Align2::CENTER_CENTER, label, theme::font_semibold(12.0), c);
+                    });
+                    if resp.clicked() {
+                        events.set_view = Some(match *label {
+                            "F" => StandardView::Front,
+                            "T" => StandardView::Top,
+                            _ => StandardView::Right,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn paint_view_cube(&mut self, ui: &mut egui::Ui, rect: Rect, events: &mut ViewportEvents) {
+        let size = 84.0;
+        let center = pos2(rect.right() - 18.0 - size / 2.0, rect.top() + 20.0 + size / 2.0);
+        let area = Rect::from_center_size(center, Vec2::splat(size + 16.0));
+        let resp = ui.interact(area, ui.id().with("view_cube"), Sense::click());
+        let view = self.camera.view();
+        let half = size * 0.31;
+        let project = |p: Vec3| {
+            let v = view.transform_vector3(p);
+            (center + vec2(v.x, -v.y) * half, v.z)
+        };
+        let painter = ui.painter();
+        let mut faces: Vec<CubeFace<'_>> = Vec::new();
+        for (sv, n, label) in CUBE_FACES {
+            let u = if n.z.abs() > 0.5 { Vec3::X } else { Vec3::Z.cross(n).normalize() };
+            let v = n.cross(u);
+            let corners = [n + u + v, n - u + v, n - u - v, n + u - v];
+            let projected: Vec<(Pos2, f32)> = corners.iter().map(|c| project(*c)).collect();
+            let depth = projected.iter().map(|(_, z)| z).sum::<f32>() / 4.0;
+            let facing = view.transform_vector3(n).z;
+            faces.push((sv, n, label, projected.iter().map(|(p, _)| *p).collect(), depth, facing));
+        }
+        faces.sort_by(|a, b| a.4.total_cmp(&b.4));
+        let pointer = resp.hover_pos();
+        let mut hovered = None;
+        for (sv, _, label, poly, _, facing) in &faces {
+            if *facing <= 0.02 {
+                continue;
+            }
+            let is_hover = pointer.is_some_and(|p| point_in_convex(p, poly));
+            if is_hover {
+                hovered = Some(*sv);
+            }
+            let shade = 0.82 + 0.18 * facing.clamp(0.0, 1.0);
+            let base = if is_hover {
+                theme::SELECTION_BG
+            } else {
+                Color32::from_rgb((248.0 * shade) as u8, (249.0 * shade) as u8, (251.0 * shade) as u8)
+            };
+            painter.add(egui::Shape::convex_polygon(
+                poly.clone(),
+                base,
+                Stroke::new(1.0, theme::LINE.gamma_multiply(1.2)),
+            ));
+            let c = poly.iter().fold(Vec2::ZERO, |a, p| a + p.to_vec2()) / 4.0;
+            let alpha = (facing.clamp(0.0, 1.0) * 1.6).min(1.0);
+            let col = if is_hover { theme::SELECTION_INK } else { theme::MUTED.gamma_multiply(alpha) };
+            let font = theme::font_semibold(6.5 + 1.5 * facing.clamp(0.0, 1.0));
+            painter.text(c.to_pos2(), Align2::CENTER_CENTER, label, font, col);
+        }
+        self.cube_hover = hovered;
+        if let Some(sv) = hovered {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            if resp.clicked() {
+                events.set_view = Some(sv);
+            }
+        }
+    }
+
+    fn paint_pills(&self, ui: &mut egui::Ui, rect: Rect, hover_label: Option<&str>) {
+        let proj = if self.camera.orthographic { "Orthographic" } else { "Perspective" };
+        let text =
+            format!("mm · {} · {} · {} · {}", self.camera.view_name, self.display.label(), self.preset.label(), proj);
+        let painter = ui.painter();
+        let galley = painter.layout_no_wrap(text, theme::font(11.0), theme::MUTED);
+        let size = galley.size() + vec2(18.0, 7.0);
+        let r = Rect::from_min_size(pos2(rect.left() + 82.0, rect.bottom() - 12.0 - size.y), size);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+        painter.galley(r.center() - galley.size() / 2.0, galley, theme::MUTED);
+
+        let (label, color) = match hover_label {
+            Some(l) => (l.to_owned(), theme::INK),
+            None => ("Hover a face, edge or vertex".to_owned(), theme::MUTED),
+        };
+        let galley = painter.layout_no_wrap(label, theme::font(11.0), color);
+        let size = galley.size() + vec2(18.0, 7.0);
+        let r = Rect::from_min_size(pos2(rect.right() - 14.0 - size.x, rect.bottom() - 12.0 - size.y), size);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+        painter.galley(r.center() - galley.size() / 2.0, galley, color);
+    }
+}
+
+enum HudItem {
+    Icon(Icon, &'static str),
+    #[allow(dead_code)]
+    IconText(Icon, &'static str),
+    Text(&'static str, &'static str),
+    Sep,
+}
+
+impl HudItem {
+    fn width(&self) -> f32 {
+        match self {
+            HudItem::Sep => 9.0,
+            _ => 28.0,
+        }
+    }
+}
+
+fn hud_button(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    idx: usize,
+    enabled: bool,
+    tip: &str,
+    draw: impl FnOnce(&egui::Painter, Color32),
+) -> egui::Response {
+    let id = ui.id().with(("hud", idx));
+    let resp = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
+    let painter = ui.painter();
+    if enabled && resp.hovered() {
+        painter.rect_filled(rect, CornerRadius::same(6), theme::HOVER);
+    }
+    let color = if enabled { theme::INK } else { theme::MUTED.gamma_multiply(0.5) };
+    draw(painter, color);
+    resp.on_hover_text(tip)
+}
+
+fn point_in_convex(p: Pos2, poly: &[Pos2]) -> bool {
+    let mut sign = 0.0_f32;
+    for i in 0..poly.len() {
+        let a = poly[i];
+        let b = poly[(i + 1) % poly.len()];
+        let cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+        if sign == 0.0 {
+            sign = cross;
+        } else if sign * cross < 0.0 {
+            return false;
+        }
+    }
+    true
+}
+
+/// Priority: a vertex within 7 px, then an edge within 5 px, then the face
+/// under the cursor.
+fn decode_pick(sample: &PickSample, cx: u32, cy: u32) -> Option<Picked> {
+    if sample.data.is_empty() {
+        return None;
+    }
+    let mut best_vertex: Option<(i32, u32)> = None;
+    let mut best_edge: Option<(i32, u32)> = None;
+    for dy in -7i32..=7 {
+        for dx in -7i32..=7 {
+            let (x, y) = (cx as i32 + dx, cy as i32 + dy);
+            if x < 0 || y < 0 {
+                continue;
+            }
+            let Some(v) = sample.at(x as u32, y as u32) else { continue };
+            let d2 = dx * dx + dy * dy;
+            match v >> render::KIND_SHIFT {
+                3 if d2 <= 49 && best_vertex.is_none_or(|(bd, _)| d2 < bd) => best_vertex = Some((d2, v)),
+                2 if d2 <= 25 && best_edge.is_none_or(|(bd, _)| d2 < bd) => best_edge = Some((d2, v)),
+                _ => {}
+            }
+        }
+    }
+    if let Some((_, v)) = best_vertex {
+        return Picked::decode(v);
+    }
+    if let Some((_, v)) = best_edge {
+        return Picked::decode(v);
+    }
+    sample.at(cx, cy).and_then(Picked::decode)
+}

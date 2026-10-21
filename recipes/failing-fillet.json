@@ -1,0 +1,11 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "failing-fillet",
+  "description": "A fillet of radius 50 mm on a 10 mm thick block cannot be built. The step must fail, and the block must keep its digest.",
+  "steps": [
+    { "id": "sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "block", "op": "extrude", "profile": "sketch", "distance": 10 },
+    { "id": "too_big", "op": "fillet", "body": "block", "radius": 50, "edges": "all", "expect": "error" }
+  ],
+  "result": "block"
+}

@@ -1,0 +1,89 @@
+[package]
+name = "soliddraft-app"
+description = "SolidDraft: the desktop application. Ribbon, feature tree, properties, assistant panel and the wgpu viewport."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.95"
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+default-run = "soliddraft-app"
+
+[lib]
+name = "soliddraft_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "soliddraft-app"
+path = "src/main.rs"
+
+[dependencies]
+soliddraft-assembly.workspace = true
+soliddraft-kernel-api.workspace = true
+soliddraft-model.workspace = true
+soliddraft-tessellation.workspace = true
+soliddraft-sketch.workspace = true
+soliddraft-document.workspace = true
+soliddraft-materials.workspace = true
+soliddraft-drawing.workspace = true
+kurbo.workspace = true
+toml.workspace = true
+serde.workspace = true
+soliddraft-assistant.workspace = true
+egui.workspace = true
+eframe.workspace = true
+egui-wgpu.workspace = true
+egui_dock.workspace = true
+wgpu.workspace = true
+glam.workspace = true
+half = "2.7.1"
+bytemuck.workspace = true
+log.workspace = true
+image.workspace = true
+serde_json.workspace = true
+web-time.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+soliddraft-kernel-smlib.workspace = true
+env_logger.workspace = true
+rfd.workspace = true
+
+# The web build: the kernel and the assistant through the server, files by upload and
+# download (docs/web.md).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+soliddraft-kernel-remote.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+js-sys.workspace = true
+# The DXF writer makes uuids, which need the browser's random source on this target.
+uuid = { version = "1.26.1", features = ["js"] }
+web-sys = { workspace = true, features = [
+    "AbortController",
+    "AbortSignal",
+    "Blob",
+    "Crypto",
+    "Document",
+    "File",
+    "FileList",
+    "Headers",
+    "HtmlAnchorElement",
+    "HtmlInputElement",
+    "Navigator",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "RequestInit",
+    "Response",
+    "Url",
+    "Window",
+    "XmlHttpRequest",
+] }
+
+[dev-dependencies]
+egui_kittest.workspace = true
+lopdf = "0.45.0"
+# The version wgpu uses, to check the viewport shader translates to WebGL2's GLSL.
+naga = { version = "30.0.1", features = ["wgsl-in", "glsl-out"] }
+pollster.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+{
+  "backend": "smlib usd-brep 1.0.0 (c9c5979f04ce)",
+  "views": {
+    "bracket": {
+      "front": {
+        "visible": 9,
+        "hidden": 55,
+        "digest": "97cfb2e6176f690180d5925b1a6b5c8c"
+      },
+      "iso": {
+        "visible": 44,
+        "hidden": 36,
+        "digest": "fa22b7f6bf89a3e911cff78076875fdf"
+      },
+      "right": {
+        "visible": 17,
+        "hidden": 68,
+        "digest": "979572e27eb83ee33083492d7d930490"
+      },
+      "top": {
+        "visible": 13,
+        "hidden": 29,
+        "digest": "dc8a7eeb7ec7f9e7d9a584f36e8a627f"
+      }
+    }
+  }
+}

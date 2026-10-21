@@ -1,0 +1,5 @@
+# The web image (deploy/web/Dockerfile) builds from the repository root.
+target/
+.git/
+**/.git
+docs/screenshots/

@@ -1,0 +1,22 @@
+[package]
+name = "soliddraft-sketch"
+description = "SolidDraft sketches: points, lines, arcs and circles with constraints, solved by ezpz behind an app-owned interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+soliddraft-kernel-api.workspace = true
+ezpz.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# Exact float parsing, so solved sketches round-trip bit for bit in the tests.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+
+[lints]
+workspace = true

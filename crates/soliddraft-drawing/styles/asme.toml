@@ -1,0 +1,46 @@
+# ASME dimensioning: ASME Y14.5 placement with inline text, ASME Y14.2 lines.
+# Lengths in sheet millimetres.
+
+id = "asme"
+name = "ASME Y14.5"
+
+[text]
+font = "inter"
+height = 3.0               # 0.12 in
+note_height = 3.0
+label_height = 2.5
+position = "inline"        # text breaks the dimension line
+gap = 1.0
+decimal_separator = "."
+
+[arrows]
+kind = "filled"
+length = 3.0               # 0.12 in
+
+[lines]
+extension_gap = 1.5
+extension_overshoot = 3.0
+offset = 10.0
+spacing = 6.0
+leader_shoulder = 3.0
+inside_min = 2.0
+
+[symbols]
+diameter = "Ø"            # U+00D8, which the sheet font carries; ISO 129 draws the same sign
+radius = "R"
+degree = "°"
+depth = "DEEP"
+counterbore = "⌴"
+countersink = "⌵"
+times = "X"                # "4X ⌀9"
+through = "THRU"
+reference_parentheses = true
+
+[centre_mark]
+size = 2.0
+gap = 1.5
+extension = 2.5
+
+[dangling]
+mark = "×"
+colour = "error"

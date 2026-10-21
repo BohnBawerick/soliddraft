@@ -1,0 +1,304 @@
+# SolidDraft's starter appearances: metals, anodised and painted finishes, plastics,
+# rubber, glass and woods, in glTF metallic-roughness terms. Colours are sRGB. Metal
+# colours follow published reflectance (F0) measurements; the rest are chosen to
+# read well on screen. Written for SolidDraft and licensed with it (MIT).
+
+format = "soliddraft-library/1"
+name = "SolidDraft appearances"
+
+[[appearance]]
+id = "soliddraft-default"
+name = "Default"
+base_color = "#c7ccd4"
+metallic = 0.0
+roughness = 0.45
+
+[[appearance]]
+id = "steel-polished"
+name = "Steel, polished"
+base_color = "#c5c7c8"
+metallic = 1.0
+roughness = 0.15
+
+[[appearance]]
+id = "steel-machined"
+name = "Steel, machined"
+base_color = "#c5c7c8"
+metallic = 1.0
+roughness = 0.4
+
+[[appearance]]
+id = "steel-cast"
+name = "Steel, cast"
+base_color = "#8f9192"
+metallic = 1.0
+roughness = 0.7
+
+[[appearance]]
+id = "stainless-brushed"
+name = "Stainless steel, brushed"
+base_color = "#cdcfd0"
+metallic = 1.0
+roughness = 0.3
+
+[[appearance]]
+id = "stainless-polished"
+name = "Stainless steel, polished"
+base_color = "#cdcfd0"
+metallic = 1.0
+roughness = 0.1
+
+[[appearance]]
+id = "aluminium-polished"
+name = "Aluminium, polished"
+base_color = "#f5f6f6"
+metallic = 1.0
+roughness = 0.1
+
+[[appearance]]
+id = "aluminium-brushed"
+name = "Aluminium, brushed"
+base_color = "#e8e9ea"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "aluminium-cast"
+name = "Aluminium, cast"
+base_color = "#cfd1d3"
+metallic = 1.0
+roughness = 0.65
+
+[[appearance]]
+id = "titanium"
+name = "Titanium"
+base_color = "#c2bbb3"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "magnesium"
+name = "Magnesium"
+base_color = "#d6d8d8"
+metallic = 1.0
+roughness = 0.45
+
+[[appearance]]
+id = "copper-polished"
+name = "Copper, polished"
+base_color = "#fad1c2"
+metallic = 1.0
+roughness = 0.2
+
+[[appearance]]
+id = "brass-polished"
+name = "Brass, polished"
+base_color = "#f5e4ae"
+metallic = 1.0
+roughness = 0.2
+
+[[appearance]]
+id = "bronze"
+name = "Bronze"
+base_color = "#dab690"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "chrome"
+name = "Chrome"
+base_color = "#e3e4e6"
+metallic = 1.0
+roughness = 0.03
+
+[[appearance]]
+id = "anodised-clear"
+name = "Anodised, clear"
+base_color = "#d9dbdd"
+metallic = 1.0
+roughness = 0.4
+
+[[appearance]]
+id = "anodised-black"
+name = "Anodised, black"
+base_color = "#2a2b2d"
+metallic = 1.0
+roughness = 0.4
+
+[[appearance]]
+id = "anodised-red"
+name = "Anodised, red"
+base_color = "#b3262e"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "anodised-blue"
+name = "Anodised, blue"
+base_color = "#1f4e8c"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "anodised-gold"
+name = "Anodised, gold"
+base_color = "#d6a94a"
+metallic = 1.0
+roughness = 0.35
+
+[[appearance]]
+id = "paint-white"
+name = "Paint, gloss white"
+base_color = "#f2f2ef"
+metallic = 0.0
+roughness = 0.2
+
+[[appearance]]
+id = "paint-black"
+name = "Paint, gloss black"
+base_color = "#1b1c1e"
+metallic = 0.0
+roughness = 0.2
+
+[[appearance]]
+id = "paint-red"
+name = "Paint, red"
+base_color = "#b8231f"
+metallic = 0.0
+roughness = 0.3
+
+[[appearance]]
+id = "paint-blue"
+name = "Paint, blue"
+base_color = "#1d4f9c"
+metallic = 0.0
+roughness = 0.3
+
+[[appearance]]
+id = "paint-green"
+name = "Paint, green"
+base_color = "#2f7a3b"
+metallic = 0.0
+roughness = 0.3
+
+[[appearance]]
+id = "paint-yellow"
+name = "Paint, safety yellow"
+base_color = "#f2c400"
+metallic = 0.0
+roughness = 0.3
+
+[[appearance]]
+id = "powder-coat-black"
+name = "Powder coat, black"
+base_color = "#202124"
+metallic = 0.0
+roughness = 0.6
+
+[[appearance]]
+id = "plastic-white"
+name = "Plastic, white"
+base_color = "#f4f4f2"
+metallic = 0.0
+roughness = 0.45
+
+[[appearance]]
+id = "plastic-ivory"
+name = "Plastic, ivory"
+base_color = "#ece6d6"
+metallic = 0.0
+roughness = 0.45
+
+[[appearance]]
+id = "plastic-natural"
+name = "Plastic, natural"
+base_color = "#e9e6dc"
+metallic = 0.0
+roughness = 0.5
+
+[[appearance]]
+id = "plastic-grey"
+name = "Plastic, grey"
+base_color = "#8a8d91"
+metallic = 0.0
+roughness = 0.5
+
+[[appearance]]
+id = "plastic-black"
+name = "Plastic, black"
+base_color = "#1e1f21"
+metallic = 0.0
+roughness = 0.5
+
+[[appearance]]
+id = "plastic-clear"
+name = "Plastic, clear"
+base_color = "#f4f7f8"
+metallic = 0.0
+roughness = 0.05
+opacity = 0.25
+
+[[appearance]]
+id = "rubber-black"
+name = "Rubber, black"
+base_color = "#1b1b1b"
+metallic = 0.0
+roughness = 0.9
+
+[[appearance]]
+id = "glass-clear"
+name = "Glass, clear"
+base_color = "#f2f7f6"
+metallic = 0.0
+roughness = 0.02
+opacity = 0.15
+
+[[appearance]]
+id = "glass-tinted"
+name = "Glass, tinted"
+base_color = "#6f8f8a"
+metallic = 0.0
+roughness = 0.02
+opacity = 0.4
+
+[[appearance]]
+id = "wood-pine"
+name = "Wood, pine"
+base_color = "#dcb880"
+metallic = 0.0
+roughness = 0.7
+
+[[appearance]]
+id = "wood-douglas-fir"
+name = "Wood, Douglas-fir"
+base_color = "#c99766"
+metallic = 0.0
+roughness = 0.7
+
+[[appearance]]
+id = "wood-oak"
+name = "Wood, oak"
+base_color = "#b88a55"
+metallic = 0.0
+roughness = 0.65
+
+[[appearance]]
+id = "wood-maple"
+name = "Wood, maple"
+base_color = "#e6cfa6"
+metallic = 0.0
+roughness = 0.6
+
+[[appearance]]
+id = "wood-birch"
+name = "Wood, birch"
+base_color = "#e2c79c"
+metallic = 0.0
+roughness = 0.6
+
+[[appearance]]
+id = "wood-walnut"
+name = "Wood, walnut"
+base_color = "#5e4130"
+metallic = 0.0
+roughness = 0.55

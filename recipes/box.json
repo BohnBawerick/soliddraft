@@ -1,0 +1,10 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "box",
+  "description": "A 40 x 30 x 10 mm block: a rectangle on XY extruded along +Z.",
+  "steps": [
+    { "id": "sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "box", "op": "extrude", "profile": "sketch", "distance": 10 }
+  ],
+  "result": "box"
+}

@@ -1,0 +1,16 @@
+[package]
+name = "soliddraft-kernel-wasm"
+description = "The SMLib kernel compiled to its own WebAssembly module with Emscripten, so the web build runs the kernel in the browser."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+soliddraft-kernel-smlib.workspace = true
+soliddraft-kernel-remote.workspace = true
+
+[lints]
+workspace = true

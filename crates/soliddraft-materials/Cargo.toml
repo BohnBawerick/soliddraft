@@ -1,0 +1,23 @@
+[package]
+name = "soliddraft-materials"
+description = "SolidDraft materials and appearances: the two types, libraries found through File locations, the copies documents keep, mass from density and the SolidWorks .sldmat importer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+soliddraft-document.workspace = true
+soliddraft-kernel-api.workspace = true
+roxmltree = "0.20"
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+
+[lints]
+workspace = true

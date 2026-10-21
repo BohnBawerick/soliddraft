@@ -1,0 +1,2159 @@
+{
+  "meta": {
+    "title": "Bracket",
+    "number": "SD-0001",
+    "revision": "A",
+    "designer": "P. Pérez",
+    "date": "2026-10-14",
+    "units": "millimetre"
+  },
+  "model": {
+    "kind": "part",
+    "path": "bracket.json",
+    "pinned": "fixture:bracket-rev7"
+  },
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "template": "iso-a3",
+      "size": {
+        "name": "A3",
+        "width_mm": 420.0,
+        "height_mm": 297.0
+      },
+      "scale": {
+        "numerator": 1,
+        "denominator": 1
+      },
+      "projection": "first_angle",
+      "zones": {
+        "columns": 8,
+        "rows": 6
+      },
+      "format_overrides": {
+        "owner": "SolidDraft workshop",
+        "status": "In work"
+      },
+      "views": [
+        {
+          "id": 1,
+          "kind": {
+            "type": "base",
+            "orientation": {
+              "type": "standard",
+              "view": "front"
+            }
+          },
+          "position": [
+            100.0,
+            190.0
+          ],
+          "scale": {
+            "type": "sheet"
+          },
+          "display": {
+            "hidden": "visible",
+            "tangent": "removed",
+            "seams": false
+          },
+          "excluded_from_update": false,
+          "geometry": {
+            "source_digest": "fixture:bracket-rev7",
+            "curves": [
+              {
+                "path": "M-60,-30 L60,-30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "bottom",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      60.0,
+                      0.0,
+                      0.0
+                    ],
+                    "size": 120.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M60,-30 L60,-20",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      0.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M60,-20 L-50,-20",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      65.0,
+                      0.0,
+                      10.0
+                    ],
+                    "size": 110.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-50,-20 L-50,30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "inner",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      0.0,
+                      35.0
+                    ],
+                    "size": 50.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-50,30 L-60,30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      0.0,
+                      60.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,30 L-60,-30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "outer",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      0.0,
+                      30.0
+                    ],
+                    "size": 60.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-2,-20 L-2,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      58.0,
+                      45.0,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": true,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M22,-20 L22,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      82.0,
+                      45.0,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": true,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-2,0 L22,0",
+                "source": {
+                  "kind": "edge",
+                  "feature": "boss",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 24.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M4,-30 L4,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "bore",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      64.0,
+                      45.0,
+                      15.0
+                    ],
+                    "size": 30.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M16,-30 L16,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "bore",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      76.0,
+                      45.0,
+                      15.0
+                    ],
+                    "size": 30.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-39.5,-30 L-39.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      20.5,
+                      23.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-30.5,-30 L-30.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      29.5,
+                      23.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M50.5,-30 L50.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      110.5,
+                      23.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M59.5,-30 L59.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      119.5,
+                      23.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-60,-5 L-50,-5",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "floor",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      25.0,
+                      25.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,7 L-50,7",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "roof",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      25.0,
+                      37.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              }
+            ],
+            "bbox": [
+              -60.0,
+              -30.0,
+              60.0,
+              30.0
+            ]
+          }
+        },
+        {
+          "id": 2,
+          "kind": {
+            "type": "projected",
+            "parent": 1,
+            "direction": "down"
+          },
+          "position": [
+            100.0,
+            93.0
+          ],
+          "alignment": {
+            "parent": 1,
+            "axis": "vertical"
+          },
+          "scale": {
+            "type": "parent"
+          },
+          "display": {
+            "hidden": "visible",
+            "tangent": "removed",
+            "seams": false
+          },
+          "excluded_from_update": false,
+          "geometry": {
+            "source_digest": "fixture:bracket-rev7",
+            "curves": [
+              {
+                "path": "M-60,-45 L-60,45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "outer",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      60.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-50,-45 L-50,45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "inner",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      45.0,
+                      60.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,-45 L-50,-45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "front",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      0.0,
+                      60.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,45 L-50,45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "back",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      90.0,
+                      60.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-50,-45 L60,-45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      65.0,
+                      0.0,
+                      10.0
+                    ],
+                    "size": 110.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-50,45 L60,45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "back",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      65.0,
+                      90.0,
+                      10.0
+                    ],
+                    "size": 110.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M60,-45 L60,45",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      45.0,
+                      10.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M22,0 C22,6.6274 16.6274,12 10,12 C3.3726,12 -2,6.6274 -2,0 C-2,-6.6274 3.3726,-12 10,-12 C16.6274,-12 22,-6.6274 22,0 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "boss",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 75.3982
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M16,0 C16,3.3137 13.3137,6 10,6 C6.6863,6 4,3.3137 4,0 C4,-3.3137 6.6863,-6 10,-6 C13.3137,-6 16,-3.3137 16,0 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "bore",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 37.6991
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-30.5,-22 C-30.5,-19.5147 -32.5147,-17.5 -35,-17.5 C-37.4853,-17.5 -39.5,-19.5147 -39.5,-22 C-39.5,-24.4853 -37.4853,-26.5 -35,-26.5 C-32.5147,-26.5 -30.5,-24.4853 -30.5,-22 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      25.0,
+                      23.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-30.5,22 C-30.5,24.4853 -32.5147,26.5 -35,26.5 C-37.4853,26.5 -39.5,24.4853 -39.5,22 C-39.5,19.5147 -37.4853,17.5 -35,17.5 C-32.5147,17.5 -30.5,19.5147 -30.5,22 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      25.0,
+                      67.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M59.5,-22 C59.5,-19.5147 57.4853,-17.5 55,-17.5 C52.5147,-17.5 50.5,-19.5147 50.5,-22 C50.5,-24.4853 52.5147,-26.5 55,-26.5 C57.4853,-26.5 59.5,-24.4853 59.5,-22 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      23.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M59.5,22 C59.5,24.4853 57.4853,26.5 55,26.5 C52.5147,26.5 50.5,24.4853 50.5,22 C50.5,19.5147 52.5147,17.5 55,17.5 C57.4853,17.5 59.5,19.5147 59.5,22 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 3,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      67.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,-20 L-50,-20",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "side",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      25.0,
+                      25.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              },
+              {
+                "path": "M-60,20 L-50,20",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "side",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      65.0,
+                      25.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              }
+            ],
+            "bbox": [
+              -60.0,
+              -45.0,
+              60.0,
+              45.0
+            ]
+          }
+        },
+        {
+          "id": 3,
+          "kind": {
+            "type": "projected",
+            "parent": 1,
+            "direction": "right"
+          },
+          "position": [
+            250.0,
+            190.0
+          ],
+          "alignment": {
+            "parent": 1,
+            "axis": "horizontal"
+          },
+          "scale": {
+            "type": "parent"
+          },
+          "display": {
+            "hidden": "visible",
+            "tangent": "removed",
+            "seams": false
+          },
+          "excluded_from_update": false,
+          "geometry": {
+            "source_digest": "fixture:bracket-rev7",
+            "curves": [
+              {
+                "path": "M45,-30 L-45,-30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "bottom",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      0.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-45,-30 L-45,30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "back",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      90.0,
+                      30.0
+                    ],
+                    "size": 60.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-45,30 L45,30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      60.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M45,30 L45,-30",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "front",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      0.0,
+                      30.0
+                    ],
+                    "size": 60.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M20,-5 L-20,-5",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "floor",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      25.0
+                    ],
+                    "size": 40.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-20,-5 L-20,7",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "side",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      65.0,
+                      31.0
+                    ],
+                    "size": 12.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-20,7 L20,7",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "roof",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      37.0
+                    ],
+                    "size": 40.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M20,7 L20,-5",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "side",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      25.0,
+                      31.0
+                    ],
+                    "size": 12.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M45,-20 L-45,-20",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      45.0,
+                      10.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              },
+              {
+                "path": "M12,-20 L12,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      33.0,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-12,-20 L-12,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      57.0,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M12,0 L-12,0",
+                "source": {
+                  "kind": "edge",
+                  "feature": "boss",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 24.0
+                  }
+                },
+                "visible": false,
+                "kind": "edge"
+              },
+              {
+                "path": "M6,-30 L6,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "bore",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      39.0,
+                      15.0
+                    ],
+                    "size": 30.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-6,-30 L-6,0",
+                "source": {
+                  "kind": "face",
+                  "feature": "bore",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      51.0,
+                      15.0
+                    ],
+                    "size": 30.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M26.5,-30 L26.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      18.5,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M17.5,-30 L17.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      27.5,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-17.5,-30 L-17.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      62.5,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-26.5,-30 L-26.5,-20",
+                "source": {
+                  "kind": "face",
+                  "feature": "holes",
+                  "role": "wall",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      71.5,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": false,
+                "kind": "silhouette"
+              }
+            ],
+            "bbox": [
+              -45.0,
+              -30.0,
+              45.0,
+              30.0
+            ]
+          }
+        },
+        {
+          "id": 4,
+          "kind": {
+            "type": "base",
+            "orientation": {
+              "type": "standard",
+              "view": "isometric"
+            }
+          },
+          "position": [
+            352.0,
+            215.0
+          ],
+          "scale": {
+            "type": "custom",
+            "factor": 0.5
+          },
+          "display": {
+            "hidden": "removed",
+            "tangent": "phantom",
+            "seams": false
+          },
+          "excluded_from_update": false,
+          "geometry": {
+            "source_digest": "fixture:bracket-rev7",
+            "curves": [
+              {
+                "path": "M-37.1231,-9.1856 L5.3033,-33.6805",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      60.0,
+                      0.0,
+                      0.0
+                    ],
+                    "size": 120.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M5.3033,-33.6805 L5.3033,-29.598",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      0.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M5.3033,-29.598 L-33.5876,-7.1443",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      65.0,
+                      0.0,
+                      10.0
+                    ],
+                    "size": 110.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-33.5876,-7.1443 L-33.5876,13.2681",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 3,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      0.0,
+                      35.0
+                    ],
+                    "size": 50.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-33.5876,13.2681 L-37.1231,15.3093",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 4,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      0.0,
+                      60.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-37.1231,15.3093 L-37.1231,-9.1856",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "front",
+                  "ordinal": 5,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      0.0,
+                      30.0
+                    ],
+                    "size": 60.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M5.3033,-33.6805 L37.1231,-15.3093",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      45.0,
+                      0.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M37.1231,-15.3093 L37.1231,-11.2268",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      90.0,
+                      5.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M5.3033,-29.598 L37.1231,-11.2268",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "end",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      120.0,
+                      45.0,
+                      10.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-33.5876,-7.1443 L-1.7678,11.2268",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      45.0,
+                      10.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-1.7678,11.2268 L37.1231,-11.2268",
+                "source": {
+                  "kind": "edge",
+                  "feature": "plate",
+                  "role": "top",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      65.0,
+                      90.0,
+                      10.0
+                    ],
+                    "size": 110.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-33.5876,13.2681 L-1.7678,31.6392",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "inner",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      45.0,
+                      60.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-1.7678,31.6392 L-1.7678,11.2268",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "inner",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      90.0,
+                      35.0
+                    ],
+                    "size": 50.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-37.1231,15.3093 L-5.3033,33.6805",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      0.0,
+                      45.0,
+                      60.0
+                    ],
+                    "size": 90.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-5.3033,33.6805 L-1.7678,31.6392",
+                "source": {
+                  "kind": "edge",
+                  "feature": "flange",
+                  "role": "top",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      5.0,
+                      90.0,
+                      60.0
+                    ],
+                    "size": 10.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-24.7487,4.0825 L-10.6066,12.2474",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "edge",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      45.0,
+                      25.0
+                    ],
+                    "size": 40.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-10.6066,12.2474 L-10.6066,17.1464",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "edge",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      65.0,
+                      31.0
+                    ],
+                    "size": 12.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-10.6066,17.1464 L-24.7487,8.9815",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "edge",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      45.0,
+                      37.0
+                    ],
+                    "size": 40.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-24.7487,8.9815 L-24.7487,4.0825",
+                "source": {
+                  "kind": "edge",
+                  "feature": "slot",
+                  "role": "edge",
+                  "ordinal": 3,
+                  "fingerprint": {
+                    "point": [
+                      10.0,
+                      25.0,
+                      31.0
+                    ],
+                    "size": 12.0
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M7.7782,-4.4907 C10.1213,-3.1379 10.1213,-0.9446 7.7782,0.4082 C5.435,1.7611 1.636,1.7611 -0.7071,0.4082 C-3.0503,-0.9446 -3.0503,-3.1379 -0.7071,-4.4907 C1.636,-5.8435 5.435,-5.8435 7.7782,-4.4907 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "boss",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 75.3982
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-2.4645,-10.2062 C-2.4645,-12.1194 0.2218,-13.6703 3.5355,-13.6703 C6.8492,-13.6703 9.5355,-12.1194 9.5355,-10.2062",
+                "source": {
+                  "kind": "edge",
+                  "feature": "boss",
+                  "role": "cap_start",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      10.0
+                    ],
+                    "size": 75.3982
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M9.5355,-10.2062 L9.5355,-2.0412",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      78.48528137423857,
+                      53.48528137423857,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": true,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M-2.4645,-10.2062 L-2.4645,-2.0412",
+                "source": {
+                  "kind": "face",
+                  "feature": "boss",
+                  "role": "wall",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      61.51471862576143,
+                      36.51471862576143,
+                      20.0
+                    ],
+                    "size": 20.0
+                  }
+                },
+                "visible": true,
+                "kind": "silhouette"
+              },
+              {
+                "path": "M5.6569,-3.266 C6.8284,-2.5896 6.8284,-1.4929 5.6569,-0.8165 C4.4853,-0.1401 2.5858,-0.1401 1.4142,-0.8165 C0.2426,-1.4929 0.2426,-2.5896 1.4142,-3.266 C2.5858,-3.9424 4.4853,-3.9424 5.6569,-3.266 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "bore",
+                  "role": "top",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      70.0,
+                      45.0,
+                      30.0
+                    ],
+                    "size": 37.6991
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-18.5616,-6.4299 C-17.6829,-5.9226 -17.6829,-5.1001 -18.5616,-4.5928 C-19.4402,-4.0855 -20.8649,-4.0855 -21.7435,-4.5928 C-22.6222,-5.1001 -22.6222,-5.9226 -21.7435,-6.4299 C-20.8649,-6.9372 -19.4402,-6.9372 -18.5616,-6.4299 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 0,
+                  "fingerprint": {
+                    "point": [
+                      25.0,
+                      23.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M-3.0052,2.5516 C-2.1265,3.0589 -2.1265,3.8814 -3.0052,4.3887 C-3.8839,4.896 -5.3085,4.896 -6.1872,4.3887 C-7.0659,3.8814 -7.0659,3.0589 -6.1872,2.5516 C-5.3085,2.0442 -3.8839,2.0442 -3.0052,2.5516 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 1,
+                  "fingerprint": {
+                    "point": [
+                      25.0,
+                      67.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M13.2583,-24.8011 C14.1369,-24.2938 14.1369,-23.4713 13.2583,-22.964 C12.3796,-22.4567 10.955,-22.4567 10.0763,-22.964 C9.1976,-23.4713 9.1976,-24.2938 10.0763,-24.8011 C10.955,-25.3084 12.3796,-25.3084 13.2583,-24.8011 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 2,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      23.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              },
+              {
+                "path": "M28.8146,-15.8196 C29.6933,-15.3123 29.6933,-14.4898 28.8146,-13.9825 C27.9359,-13.4752 26.5113,-13.4752 25.6326,-13.9825 C24.7539,-14.4898 24.7539,-15.3123 25.6326,-15.8196 C26.5113,-16.3269 27.9359,-16.3269 28.8146,-15.8196 Z",
+                "source": {
+                  "kind": "edge",
+                  "feature": "holes",
+                  "role": "cap_end",
+                  "ordinal": 3,
+                  "fingerprint": {
+                    "point": [
+                      115.0,
+                      67.0,
+                      10.0
+                    ],
+                    "size": 28.2743
+                  }
+                },
+                "visible": true,
+                "kind": "edge"
+              }
+            ],
+            "bbox": [
+              -37.1231,
+              -33.6805,
+              37.1231,
+              33.6805
+            ]
+          }
+        }
+      ],
+      "annotations": [
+        {
+          "id": 1,
+          "view": 1,
+          "body": {
+            "type": "dimension",
+            "kind": {
+              "type": "linear",
+              "orientation": "horizontal"
+            },
+            "value": {
+              "type": "measured",
+              "value": 120.0
+            },
+            "tolerance": {
+              "type": "none"
+            },
+            "precision": 0,
+            "text": "<DIM>",
+            "dim_type": "projected"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "flange",
+                "role": "outer",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    0.0,
+                    0.0,
+                    30.0
+                  ],
+                  "size": 60.0
+                }
+              },
+              "attach": {
+                "type": "end"
+              },
+              "cached": [
+                -60.0,
+                30.0
+              ]
+            },
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "plate",
+                "role": "end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    120.0,
+                    0.0,
+                    5.0
+                  ],
+                  "size": 10.0
+                }
+              },
+              "attach": {
+                "type": "end"
+              },
+              "cached": [
+                60.0,
+                -20.0
+              ]
+            }
+          ],
+          "placement": [
+            0.0,
+            42.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 2,
+          "view": 1,
+          "body": {
+            "type": "dimension",
+            "kind": {
+              "type": "linear",
+              "orientation": "vertical"
+            },
+            "value": {
+              "type": "measured",
+              "value": 60.0
+            },
+            "tolerance": {
+              "type": "none"
+            },
+            "precision": 0,
+            "text": "<DIM>",
+            "dim_type": "projected"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "plate",
+                "role": "bottom",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    60.0,
+                    0.0,
+                    0.0
+                  ],
+                  "size": 120.0
+                }
+              },
+              "attach": {
+                "type": "start"
+              },
+              "cached": [
+                -60.0,
+                -30.0
+              ]
+            },
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "flange",
+                "role": "top",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    5.0,
+                    0.0,
+                    60.0
+                  ],
+                  "size": 10.0
+                }
+              },
+              "attach": {
+                "type": "end"
+              },
+              "cached": [
+                -60.0,
+                30.0
+              ]
+            }
+          ],
+          "placement": [
+            -72.0,
+            0.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 3,
+          "view": 1,
+          "body": {
+            "type": "dimension",
+            "kind": {
+              "type": "linear",
+              "orientation": "vertical"
+            },
+            "value": {
+              "type": "measured",
+              "value": 10.0
+            },
+            "tolerance": {
+              "type": "none"
+            },
+            "precision": 0,
+            "text": "<DIM>",
+            "dim_type": "projected"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "plate",
+                "role": "bottom",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    60.0,
+                    0.0,
+                    0.0
+                  ],
+                  "size": 120.0
+                }
+              },
+              "attach": {
+                "type": "end"
+              },
+              "cached": [
+                60.0,
+                -30.0
+              ]
+            },
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "plate",
+                "role": "end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    120.0,
+                    0.0,
+                    5.0
+                  ],
+                  "size": 10.0
+                }
+              },
+              "attach": {
+                "type": "end"
+              },
+              "cached": [
+                60.0,
+                -20.0
+              ]
+            }
+          ],
+          "placement": [
+            72.0,
+            -25.0
+          ],
+          "state": {
+            "type": "changed",
+            "previous": "8"
+          }
+        },
+        {
+          "id": 4,
+          "view": 1,
+          "body": {
+            "type": "note",
+            "text": "FACE BOSS FLAT",
+            "leader": [
+              [
+                30.0,
+                22.0
+              ]
+            ]
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "boss",
+                "role": "cap_end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    70.0,
+                    45.0,
+                    30.0
+                  ],
+                  "size": 75.3982
+                }
+              },
+              "attach": {
+                "type": "max"
+              },
+              "cached": [
+                22.0,
+                0.0
+              ]
+            }
+          ],
+          "placement": [
+            34.0,
+            22.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 5,
+          "view": 2,
+          "body": {
+            "type": "dimension",
+            "kind": {
+              "type": "diameter"
+            },
+            "value": {
+              "type": "measured",
+              "value": 24.0
+            },
+            "tolerance": {
+              "type": "none"
+            },
+            "precision": 0,
+            "text": "<DIM>",
+            "dim_type": "projected"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "boss",
+                "role": "cap_end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    70.0,
+                    45.0,
+                    30.0
+                  ],
+                  "size": 75.3982
+                }
+              },
+              "attach": {
+                "type": "centre"
+              },
+              "cached": [
+                10.0,
+                0.0
+              ]
+            }
+          ],
+          "placement": [
+            37.0,
+            22.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 6,
+          "view": 2,
+          "body": {
+            "type": "centre_mark"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "boss",
+                "role": "cap_end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    70.0,
+                    45.0,
+                    30.0
+                  ],
+                  "size": 75.3982
+                }
+              },
+              "attach": {
+                "type": "centre"
+              },
+              "cached": [
+                10.0,
+                0.0
+              ]
+            }
+          ],
+          "placement": [
+            10.0,
+            0.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 7,
+          "view": 2,
+          "body": {
+            "type": "hole_callout",
+            "text": "4X ⌀9 THRU"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "holes",
+                "role": "cap_end",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    25.0,
+                    23.0,
+                    10.0
+                  ],
+                  "size": 28.2743
+                }
+              },
+              "attach": {
+                "type": "centre"
+              },
+              "cached": [
+                -35.0,
+                -22.0
+              ]
+            }
+          ],
+          "placement": [
+            -45.0,
+            -55.0
+          ],
+          "state": {
+            "type": "ok"
+          }
+        },
+        {
+          "id": 8,
+          "view": 3,
+          "body": {
+            "type": "dimension",
+            "kind": {
+              "type": "linear",
+              "orientation": "vertical"
+            },
+            "value": {
+              "type": "measured",
+              "value": 12.0
+            },
+            "tolerance": {
+              "type": "none"
+            },
+            "precision": 0,
+            "text": "<DIM>",
+            "dim_type": "projected"
+          },
+          "anchors": [
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "slot",
+                "role": "floor",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    0.0,
+                    45.0,
+                    25.0
+                  ],
+                  "size": 40.0
+                }
+              },
+              "attach": {
+                "type": "mid"
+              },
+              "cached": [
+                0.0,
+                -5.0
+              ]
+            },
+            {
+              "entity": {
+                "kind": "edge",
+                "feature": "slot",
+                "role": "roof",
+                "ordinal": 0,
+                "fingerprint": {
+                  "point": [
+                    0.0,
+                    45.0,
+                    37.0
+                  ],
+                  "size": 40.0
+                }
+              },
+              "attach": {
+                "type": "mid"
+              },
+              "cached": [
+                0.0,
+                7.0
+              ]
+            }
+          ],
+          "placement": [
+            57.0,
+            1.0
+          ],
+          "state": {
+            "type": "dangling",
+            "lost": [
+              0,
+              1
+            ],
+            "cause": "Both references were edges of Slot (Cut-Extrude1), which no longer exists"
+          }
+        }
+      ]
+    }
+  ],
+  "next_view_label": "A",
+  "next_datum_label": "A",
+  "settings": {
+    "automatic_update": true,
+    "update_on_open": false
+  }
+}

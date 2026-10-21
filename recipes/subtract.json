@@ -1,0 +1,13 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "subtract",
+  "description": "The block with a radius 6 mm hole through it: block minus a cylinder longer than the block is thick.",
+  "steps": [
+    { "id": "block_sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "block", "op": "extrude", "profile": "block_sketch", "distance": 10 },
+    { "id": "hole_sketch", "op": "profile", "plane": { "base": "XY", "origin": [-8, 3, -5] }, "circle": { "center": [0, 0], "radius": 6 } },
+    { "id": "hole_tool", "op": "extrude", "profile": "hole_sketch", "distance": 20 },
+    { "id": "drilled", "op": "boolean", "kind": "subtract", "target": "block", "tool": "hole_tool" }
+  ],
+  "result": "drilled"
+}

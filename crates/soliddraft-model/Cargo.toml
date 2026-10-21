@@ -1,0 +1,26 @@
+[package]
+name = "soliddraft-model"
+description = "The SolidDraft part document: features, persistent references, rebuild, undo and redo, and native files."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+soliddraft-document.workspace = true
+soliddraft-kernel-api.workspace = true
+soliddraft-materials.workspace = true
+soliddraft-sketch.workspace = true
+soliddraft-tessellation.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+thiserror.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+soliddraft-kernel-smlib.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,33 @@
+[package]
+name = "soliddraft-assistant"
+description = "SolidDraft's assistant: the model provider, the conversation loop, tool schemas and the MCP server, independent of the interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+keyring-core = "1.0.1"
+
+# The HTTP client is for native builds. The web build reaches its model through the relay
+# on its server.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls", "system-proxy"] }
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["rt-async-io-crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1.1.0"
+
+[lints]
+workspace = true

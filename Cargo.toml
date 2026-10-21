@@ -1,0 +1,93 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/soliddraft-kernel-api",
+    "crates/soliddraft-kernel-smlib",
+    "crates/soliddraft-kernel-remote",
+    "crates/soliddraft-server",
+    "crates/soliddraft-web",
+    "crates/soliddraft-kernel-wasm",
+    "crates/soliddraft-smlib-sys",
+    "crates/soliddraft-recipe",
+    "crates/soliddraft-sketch",
+    "crates/soliddraft-model",
+    "crates/soliddraft-cli",
+    "crates/soliddraft-app",
+    "crates/soliddraft-drawing",
+    "crates/soliddraft-document",
+    "crates/soliddraft-materials",
+    "crates/soliddraft-assistant",
+    "crates/soliddraft-assembly",
+    "crates/soliddraft-tessellation",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/BohnBawerick/soliddraft"
+publish = false
+
+[workspace.dependencies]
+soliddraft-assembly = { path = "crates/soliddraft-assembly" }
+soliddraft-assistant = { path = "crates/soliddraft-assistant" }
+soliddraft-document = { path = "crates/soliddraft-document" }
+soliddraft-drawing = { path = "crates/soliddraft-drawing" }
+soliddraft-kernel-api = { path = "crates/soliddraft-kernel-api" }
+soliddraft-materials = { path = "crates/soliddraft-materials" }
+soliddraft-kernel-smlib = { path = "crates/soliddraft-kernel-smlib" }
+soliddraft-kernel-remote = { path = "crates/soliddraft-kernel-remote" }
+soliddraft-recipe = { path = "crates/soliddraft-recipe" }
+soliddraft-smlib-sys = { path = "crates/soliddraft-smlib-sys" }
+soliddraft-sketch = { path = "crates/soliddraft-sketch" }
+soliddraft-model = { path = "crates/soliddraft-model" }
+soliddraft-tessellation = { path = "crates/soliddraft-tessellation" }
+# The sketch solver. No tagged releases upstream, so the commit is pinned (release 0.2.29).
+ezpz = { git = "https://github.com/KittyCAD/ezpz", rev = "915882cc731da31042ce494c89b10334ee57837a" }
+cxx = "1.0.205"
+cxx-build = "1.0.205"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.10.9"
+thiserror = "2.0.18"
+zip = { version = "9.0.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+egui = "0.36.2"
+eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts", "accesskit"] }
+egui-wgpu = "0.36.2"
+egui_dock = "0.21.1"
+wgpu = "30"
+glam = "0.34"
+bytemuck = { version = "1", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+image = { version = "0.25", default-features = false, features = ["png"] }
+egui_kittest = { version = "0.36.2", features = ["wgpu", "eframe"] }
+pollster = "0.4"
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
+kurbo = { version = "0.13.1", features = ["serde"] }
+toml = "1.1"
+web-time = "1.1.0"
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4.79"
+js-sys = "0.3.106"
+web-sys = "0.3.106"
+
+# The kernel is C++ built by build.rs; build it optimised even in dev builds so tests
+# and debug runs of the CLI are not slowed by an unoptimised kernel.
+[profile.dev.package.soliddraft-smlib-sys]
+opt-level = 2
+
+# The UI stack and the viewport maths are far too slow unoptimised.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+debug = 1
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

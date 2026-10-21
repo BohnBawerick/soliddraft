@@ -1,0 +1,40 @@
+[package]
+name = "soliddraft-cli"
+description = "Headless SolidDraft: replays recipes, draws views, makes drawings, manages materials, serves the command layer over MCP, and manages the assistant's API key."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.95"
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "soliddraft"
+path = "src/main.rs"
+
+[dependencies]
+soliddraft-assembly.workspace = true
+soliddraft-document.workspace = true
+soliddraft-drawing.workspace = true
+soliddraft-kernel-api.workspace = true
+soliddraft-kernel-smlib.workspace = true
+soliddraft-materials.workspace = true
+soliddraft-recipe.workspace = true
+soliddraft-model.workspace = true
+soliddraft-tessellation.workspace = true
+soliddraft-app = { path = "../soliddraft-app" }
+soliddraft-assistant.workspace = true
+egui-wgpu.workspace = true
+glam.workspace = true
+pollster.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+soliddraft-kernel-api = { workspace = true, features = ["contract"] }
+dxf = "0.6.2"
+lopdf = "0.45.0"
+zip.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+{
+  "format": "soliddraft-recipe/1",
+  "name": "union",
+  "description": "The block with a radius 6 mm boss standing on its top face: block union cylinder.",
+  "steps": [
+    { "id": "block_sketch", "op": "profile", "plane": "XY", "rectangle": { "center": [0, 0], "width": 40, "height": 30 } },
+    { "id": "block", "op": "extrude", "profile": "block_sketch", "distance": 10 },
+    { "id": "boss_sketch", "op": "profile", "plane": { "base": "XY", "origin": [10, 0, 5] }, "circle": { "center": [0, 0], "radius": 6 } },
+    { "id": "boss", "op": "extrude", "profile": "boss_sketch", "distance": 20 },
+    { "id": "joined", "op": "boolean", "kind": "union", "target": "block", "tool": "boss" }
+  ],
+  "result": "joined"
+}

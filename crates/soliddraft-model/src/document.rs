@@ -1,0 +1,788 @@
+//! The part document: features in tree order, rebuilt through the kernel trait.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use soliddraft_document::DocumentId;
+use soliddraft_kernel_api::{
+    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, HistoryRecord, Kernel, KernelError, KernelResult, OpTag,
+    Plane, Topology, Vec3,
+};
+use soliddraft_sketch::profile::Region;
+use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
+use soliddraft_tessellation::{Report, Settings};
+
+use crate::command::UndoEntry;
+use crate::feature::{
+    BlendFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
+    SketchFeature, SketchPlane,
+};
+use crate::materials::PartMaterials;
+use crate::reference::{
+    self, EdgeRef, FaceRef, Generator, NameMap, NamedFace, NamingError, ReferenceSlot, RepairNeeded, RepairReason, View,
+};
+
+/// How far an extrusion from a sketch on a face of the part starts behind that face, so
+/// the tool overlaps the part instead of touching it along a coplanar face. Only where
+/// that changes nothing: a boss growing out of the face starts inside the material, a
+/// cut going into the face starts in the air. A reversed boss or cut starts on the face.
+pub const FACE_OVERLAP: f64 = 0.01;
+
+/// The state of a feature after the last rebuild.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FeatureStatus {
+    /// Built.
+    Ok,
+    /// Suppressed by the user; the body passes through unchanged.
+    Suppressed,
+    /// Below the rollback bar; not built.
+    RolledBack,
+    /// One or more references did not resolve to exactly one matching entity. The
+    /// feature is not built and the body passes through unchanged.
+    RepairNeeded(Vec<RepairNeeded>),
+    /// An input feature, such as the sketch an extrusion sweeps, was not built because
+    /// it needs a repair, failed or is suppressed. The repair is reported on that
+    /// feature; this one builds again once it does.
+    Blocked(FeatureId),
+    /// The feature could not be built: bad parameters, a missing input, or a kernel
+    /// failure. The body passes through unchanged.
+    Failed(String),
+}
+
+impl FeatureStatus {
+    /// True when the feature was built.
+    pub fn is_ok(&self) -> bool {
+        *self == FeatureStatus::Ok
+    }
+}
+
+/// A sketch as the last rebuild placed it.
+#[derive(Clone, Debug)]
+pub struct BuiltSketch {
+    /// The plane in model space.
+    pub plane: Plane,
+    /// True when the plane is a face of the part.
+    pub on_face: bool,
+    /// The closed regions, or why the sketch has none.
+    pub regions: Result<Vec<Region>, String>,
+}
+
+/// One feature's rebuild result.
+#[derive(Debug)]
+pub(crate) struct Built {
+    pub status: FeatureStatus,
+    /// The part body after this feature.
+    pub output: Option<BodyId>,
+    /// The body this feature made, which the document releases when it rebuilds.
+    pub owned: Option<BodyId>,
+    /// The faces this feature generated, named.
+    pub names: Vec<NamedFace>,
+    pub sketch: Option<BuiltSketch>,
+}
+
+impl Built {
+    fn pass(status: FeatureStatus, current: Option<BodyId>) -> Built {
+        Built { status, output: current, owned: None, names: Vec::new(), sketch: None }
+    }
+
+    fn failed(current: Option<BodyId>, message: impl Into<String>) -> Built {
+        Built::pass(FeatureStatus::Failed(message.into()), current)
+    }
+}
+
+/// How a face is named for people.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceLabel {
+    /// The feature that generated the face.
+    pub feature: FeatureId,
+    /// The part of the feature that made it.
+    pub generator: Generator,
+    /// Rank among the feature's faces with the same generator.
+    pub ordinal: u32,
+    /// The face's part of the feature: "End cap", "Side of line 5".
+    pub part: String,
+    /// The feature's name and the part: "Boss-Extrude1 · End cap".
+    pub text: String,
+}
+
+/// A part: an ordered feature list, its rebuild, its undo history.
+///
+/// The document never stores kernel state. It stores features and rebuilds them through
+/// [`Kernel`], caching one body per feature so an edit rebuilds only from the first
+/// changed feature down.
+pub struct Document {
+    /// The document's identity, kept in its file's manifest.
+    pub(crate) id: DocumentId,
+    pub(crate) name: String,
+    pub(crate) features: Vec<Feature>,
+    /// The first feature below the rollback bar.
+    pub(crate) rollback: Option<FeatureId>,
+    pub(crate) next_id: u32,
+    /// The material, the appearances and the copies of both the part holds.
+    pub(crate) materials: PartMaterials,
+    /// Viewport quality, export accuracy and whether to save display data: kept in the
+    /// file's `settings.json`, outside the part's truth and hashes.
+    pub(crate) settings: Settings,
+    pub(crate) kernel: Arc<dyn Kernel>,
+    pub(crate) built: Vec<Built>,
+    /// Index of the first feature whose cached build is stale.
+    pub(crate) dirty: usize,
+    pub(crate) undo: Vec<UndoEntry>,
+    pub(crate) redo: Vec<UndoEntry>,
+    pub(crate) log: Vec<String>,
+    /// The solver's verdict on the last sketch a command solved.
+    pub(crate) last_solve: Option<SolveStatus>,
+}
+
+impl Drop for Document {
+    fn drop(&mut self) {
+        for b in &self.built {
+            if let Some(body) = b.owned {
+                let _ = self.kernel.release(body);
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Document {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Document")
+            .field("name", &self.name)
+            .field("features", &self.features)
+            .field("rollback", &self.rollback)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Document {
+    /// An empty part.
+    pub fn new(name: impl Into<String>, kernel: Arc<dyn Kernel>) -> Self {
+        Document {
+            id: DocumentId::new(),
+            name: name.into(),
+            features: Vec::new(),
+            rollback: None,
+            next_id: 1,
+            materials: PartMaterials::default(),
+            settings: Settings::default(),
+            kernel,
+            built: Vec::new(),
+            dirty: 0,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            log: Vec::new(),
+            last_solve: None,
+        }
+    }
+
+    /// The part's id: minted when the part is made, kept through renames, moves and
+    /// edits.
+    pub fn id(&self) -> DocumentId {
+        self.id
+    }
+
+    /// Gives the part a new id, for Save as copy: the copy is a different document.
+    pub fn new_identity(&mut self) {
+        self.id = DocumentId::new();
+    }
+
+    /// The part's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Renames the part. Not an undoable command: the name is the file's, not the model's.
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.name = name.into();
+    }
+
+    /// The part's display and accuracy settings.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// Replaces the part's settings after checking them. Not an undoable command, and
+    /// not a change to the part: its revision and geometry hash stay the same, so no
+    /// assembly or drawing that pins it sees a change.
+    pub fn set_settings(&mut self, settings: Settings) -> Result<(), String> {
+        settings.check()?;
+        self.settings = settings;
+        Ok(())
+    }
+
+    /// What the part's viewport quality gives its body: each level's deviation in
+    /// millimetres and triangle count. `None` without a body.
+    pub fn quality_report(&self) -> Option<KernelResult<Report>> {
+        Some(soliddraft_tessellation::report(self.kernel.as_ref(), self.body()?, &self.settings.viewport))
+    }
+
+    /// The kernel the document builds on.
+    pub fn kernel(&self) -> &Arc<dyn Kernel> {
+        &self.kernel
+    }
+
+    /// Every feature, in tree order.
+    pub fn features(&self) -> &[Feature] {
+        &self.features
+    }
+
+    /// A feature by id.
+    pub fn feature(&self, id: FeatureId) -> Option<&Feature> {
+        self.features.iter().find(|f| f.id == id)
+    }
+
+    /// A feature's position in the tree.
+    pub fn index_of(&self, id: FeatureId) -> Option<usize> {
+        self.features.iter().position(|f| f.id == id)
+    }
+
+    /// The first feature below the rollback bar, or `None` when every feature is active.
+    pub fn rollback(&self) -> Option<FeatureId> {
+        self.rollback
+    }
+
+    /// Number of features above the rollback bar.
+    pub fn active_count(&self) -> usize {
+        self.rollback.and_then(|id| self.index_of(id)).unwrap_or(self.features.len())
+    }
+
+    /// The command log: one line per executed, undone or redone command.
+    pub fn log(&self) -> &[String] {
+        &self.log
+    }
+
+    /// The solver's verdict on the last sketch a command solved.
+    pub fn last_solve(&self) -> Option<&SolveStatus> {
+        self.last_solve.as_ref()
+    }
+
+    fn built_index(&self, id: FeatureId) -> Option<usize> {
+        self.index_of(id).filter(|&i| i < self.built.len())
+    }
+
+    /// A feature's state after the last rebuild.
+    pub fn status(&self, id: FeatureId) -> Option<&FeatureStatus> {
+        self.built_index(id).map(|i| &self.built[i].status)
+    }
+
+    /// Every feature's id and state, in tree order.
+    pub fn statuses(&self) -> Vec<(FeatureId, &FeatureStatus)> {
+        self.features.iter().zip(&self.built).map(|(f, b)| (f.id, &b.status)).collect()
+    }
+
+    /// The part body at the end of the tree (or at the rollback bar).
+    pub fn body(&self) -> Option<BodyId> {
+        self.built.last().and_then(|b| b.output)
+    }
+
+    /// The part body right after a feature.
+    pub fn body_after(&self, id: FeatureId) -> Option<BodyId> {
+        self.built_index(id).and_then(|i| self.built[i].output)
+    }
+
+    /// The part body a feature starts from.
+    pub fn body_before(&self, id: FeatureId) -> Option<BodyId> {
+        let i = self.built_index(id)?;
+        i.checked_sub(1).and_then(|p| self.built[p].output)
+    }
+
+    /// Where a sketch lies and what regions it has, as the last rebuild placed it.
+    pub fn built_sketch(&self, id: FeatureId) -> Option<&BuiltSketch> {
+        self.built_index(id).and_then(|i| self.built[i].sketch.as_ref())
+    }
+
+    /// The faces a feature generated in the last rebuild, named.
+    pub fn generated_faces(&self, id: FeatureId) -> &[NamedFace] {
+        self.built_index(id).map(|i| self.built[i].names.as_slice()).unwrap_or(&[])
+    }
+
+    pub(crate) fn name_map(&self) -> NameMap<'_> {
+        self.features.iter().zip(&self.built).map(|(f, b)| (f.id, b.names.as_slice())).collect()
+    }
+
+    /// The bodies of the last rebuild, latest first, without repeats.
+    fn bodies(&self) -> Vec<BodyId> {
+        let mut out: Vec<BodyId> = Vec::new();
+        for b in self.built.iter().rev() {
+            if let Some(body) = b.output
+                && !out.contains(&body)
+            {
+                out.push(body);
+            }
+        }
+        out
+    }
+
+    pub(crate) fn view_of(&self, body: BodyId) -> KernelResult<(Topology, Vec<HistoryRecord>)> {
+        Ok((self.kernel.topology(body)?, self.kernel.history(body)?))
+    }
+
+    /// The latest body of the rebuild that contains a face or edge.
+    fn body_with(&self, has: impl Fn(&Topology) -> bool) -> Option<(Topology, Vec<HistoryRecord>)> {
+        self.bodies().into_iter().filter_map(|b| self.view_of(b).ok()).find(|(t, _)| has(t))
+    }
+
+    /// A persistent name for a face of the part, for a feature to store. The face may be
+    /// in the final body or in the body after any feature.
+    pub fn face_ref(&self, face: FaceId) -> Result<FaceRef, NamingError> {
+        let (t, h) = self.body_with(|t| t.face(face).is_some()).ok_or(NamingError::NotInModel(face.to_string()))?;
+        let mut r = reference::name_face(face, &View { topology: &t, history: &h }, &self.name_map())?;
+        r.label = self.face_label(face).map(|l| l.text).unwrap_or_default();
+        Ok(r)
+    }
+
+    /// A persistent name for an edge of the part, for a feature to store. Its label
+    /// names the two faces it separates: "Base · End cap ∩ Flange · End cap".
+    pub fn edge_ref(&self, edge: EdgeId) -> Result<EdgeRef, NamingError> {
+        let (t, h) = self.body_with(|t| t.edge(edge).is_some()).ok_or(NamingError::NotInModel(edge.to_string()))?;
+        let mut r = reference::name_edge(edge, &View { topology: &t, history: &h }, &self.name_map())?;
+        let faces = &t.edge(edge).expect("named edges are in the topology").faces;
+        let labels: Vec<String> =
+            faces.iter().map(|f| self.face_label(*f).map(|l| l.text).unwrap_or_else(|| f.to_string())).collect();
+        r.label = if labels.len() == 2 && labels[0] == labels[1] {
+            format!("{} · seam", labels[0])
+        } else {
+            labels.join(" ∩ ")
+        };
+        Ok(r)
+    }
+
+    /// Finds a face reference in a body, as a feature reading that body would.
+    pub fn resolve_face(&self, r: &FaceRef, body: BodyId) -> Result<FaceId, RepairNeeded> {
+        let (t, h) = self.view_of(body).map_err(|e| kernel_repair(ReferenceSlot::SketchPlane, e))?;
+        reference::resolve_face(r, &View { topology: &t, history: &h }, &self.name_map())
+            .map_err(|u| u.into_repair(ReferenceSlot::SketchPlane))
+    }
+
+    /// Finds an edge reference in a body, as a feature reading that body would.
+    pub fn resolve_edge(&self, r: &EdgeRef, body: BodyId) -> Result<EdgeId, RepairNeeded> {
+        let slot = ReferenceSlot::Edge { index: 0 };
+        let (t, h) = self.view_of(body).map_err(|e| kernel_repair(slot, e))?;
+        reference::resolve_edge(r, &View { topology: &t, history: &h }, &self.name_map())
+            .map_err(|u| u.into_repair(slot))
+    }
+
+    /// Moves the rollback bar without an undo entry and rebuilds, for views that show
+    /// the part as it was before a feature, such as editing that feature. A command
+    /// that rolls back for good is [`Command::RollTo`](crate::Command::RollTo).
+    pub fn set_rollback(&mut self, before: Option<FeatureId>) {
+        if before == self.rollback {
+            return;
+        }
+        let end = |r: Option<FeatureId>| r.and_then(|id| self.index_of(id)).unwrap_or(self.features.len());
+        let first = end(self.rollback).min(end(before));
+        self.rollback = before;
+        self.touch(first);
+        self.rebuild();
+    }
+
+    /// The name of a face for people, such as "Boss-Extrude1 · End cap".
+    pub fn face_label(&self, face: FaceId) -> Option<FaceLabel> {
+        let (t, h) = self.body_with(|t| t.face(face).is_some())?;
+        self.label_in(face, &t, &h)
+    }
+
+    /// Names every face of a body for people, in topology order, with one kernel query
+    /// for the whole body. Faces no feature generated have no label.
+    pub fn face_labels(&self, body: BodyId) -> Vec<(FaceId, Option<FaceLabel>)> {
+        let Ok((t, h)) = self.view_of(body) else { return Vec::new() };
+        t.faces.iter().map(|f| (f.id, self.label_in(f.id, &t, &h))).collect()
+    }
+
+    /// The feature whose operation created each edge of a body, in topology order,
+    /// following split edges back to the edge they came from.
+    pub fn edge_features(&self, body: BodyId) -> Vec<(EdgeId, Option<FeatureId>)> {
+        let (Ok(t), Ok(h)) = (self.kernel.topology(body), self.kernel.history(body)) else { return Vec::new() };
+        let creator = |edge: EdgeId| {
+            let mut x = edge;
+            for r in h.iter().rev() {
+                if r.edges.created.contains(&x) {
+                    return feature_of_tag(r.tag.as_str());
+                }
+                if let Some(s) = r.edges.split.iter().find(|s| s.into.contains(&x)) {
+                    x = s.from;
+                }
+            }
+            None
+        };
+        t.edges.iter().map(|e| (e.id, creator(e.id))).collect()
+    }
+
+    fn label_in(&self, face: FaceId, t: &Topology, h: &[HistoryRecord]) -> Option<FaceLabel> {
+        let (feature, generator, ordinal) =
+            reference::origin_label(face, &View { topology: t, history: h }, &self.name_map())?;
+        let f = self.feature(feature)?;
+        let what = match generator {
+            Generator::Side { entity } => {
+                let kind = self.profile_sketch(feature).and_then(|s| s.entity(entity).map(|e| e.kind));
+                match kind {
+                    Some(EntityKind::Line { .. }) => format!("Side of line {entity}"),
+                    Some(EntityKind::Arc { .. }) => format!("Side of arc {entity}"),
+                    Some(EntityKind::Circle { .. }) => format!("Wall of circle {entity}"),
+                    _ => generator.to_string(),
+                }
+            }
+            _ => generator.to_string(),
+        };
+        let count = self.generated_faces(feature).iter().filter(|n| n.generator == generator).count();
+        let suffix = if count > 1 { format!(" {}", ordinal + 1) } else { String::new() };
+        let part = format!("{what}{suffix}");
+        Some(FaceLabel { feature, generator, ordinal, text: format!("{} · {part}", f.name), part })
+    }
+
+    /// The sketch an extrusion sweeps (a sketch feature's, or its built-in shape's), or
+    /// a sketch feature's own.
+    fn profile_sketch(&self, id: FeatureId) -> Option<Sketch> {
+        match &self.feature(id)?.kind {
+            FeatureKind::Sketch(s) => Some(s.sketch.clone()),
+            FeatureKind::Extrude(e) => match &e.profile {
+                ProfileSource::Sketch { feature } => match &self.feature(*feature)?.kind {
+                    FeatureKind::Sketch(s) => Some(s.sketch.clone()),
+                    _ => None,
+                },
+                ProfileSource::Shape { shape, .. } => shape.sketch().ok(),
+            },
+            _ => None,
+        }
+    }
+
+    /// Rebuilds from the first stale feature to the end of the tree.
+    pub(crate) fn rebuild(&mut self) {
+        let start = self.dirty.min(self.built.len());
+        for b in self.built.drain(start..) {
+            if let Some(body) = b.owned {
+                let _ = self.kernel.release(body);
+            }
+        }
+        let active = self.active_count();
+        let mut current = start.checked_sub(1).and_then(|i| self.built[i].output);
+        for i in start..self.features.len() {
+            let f = self.features[i].clone();
+            let built = if i >= active {
+                Built::pass(FeatureStatus::RolledBack, current)
+            } else if f.suppressed {
+                Built::pass(FeatureStatus::Suppressed, current)
+            } else {
+                self.build(&f, current)
+            };
+            current = built.output;
+            self.built.push(built);
+        }
+        self.dirty = self.built.len();
+    }
+
+    /// Marks every feature from `index` down as stale.
+    pub(crate) fn touch(&mut self, index: usize) {
+        self.dirty = self.dirty.min(index);
+    }
+
+    fn build(&self, f: &Feature, current: Option<BodyId>) -> Built {
+        match &f.kind {
+            FeatureKind::Sketch(s) => self.build_sketch(s, current),
+            FeatureKind::Extrude(e) => self.build_extrude(f, e, current),
+            FeatureKind::Fillet(b) => self.build_blend(f, b, false, current),
+            FeatureKind::Chamfer(b) => self.build_blend(f, b, true, current),
+        }
+    }
+
+    fn build_sketch(&self, s: &SketchFeature, current: Option<BodyId>) -> Built {
+        let (plane, on_face) = match &s.plane {
+            SketchPlane::Datum { datum, offset } => {
+                let p = datum.plane();
+                (p.with_origin(p.origin + p.normal * *offset), false)
+            }
+            SketchPlane::Face { face } => {
+                let repair = |reason, message: String, candidates| {
+                    let r = RepairNeeded { slot: ReferenceSlot::SketchPlane, reason, message, candidates };
+                    Built::pass(FeatureStatus::RepairNeeded(vec![r]), current)
+                };
+                let Some(body) = current else {
+                    return repair(RepairReason::Missing, "there is no part body to sketch on".into(), vec![]);
+                };
+                let (t, h) = match self.view_of(body) {
+                    Ok(v) => v,
+                    Err(e) => return Built::failed(current, e.to_string()),
+                };
+                let id = match reference::resolve_face(face, &View { topology: &t, history: &h }, &self.name_map()) {
+                    Ok(id) => id,
+                    Err(u) => {
+                        return Built::pass(
+                            FeatureStatus::RepairNeeded(vec![u.into_repair(ReferenceSlot::SketchPlane)]),
+                            current,
+                        );
+                    }
+                };
+                let info = t.face(id).expect("resolved faces are in the topology");
+                let Some(normal) = info.normal else {
+                    let detail = "the face is not planar".to_string();
+                    return repair(RepairReason::Mismatch { detail: detail.clone() }, detail, vec![]);
+                };
+                (plane_on_face(normal, info.centroid), true)
+            }
+        };
+        let regions = s.sketch.regions().map_err(|e| e.to_string());
+        Built {
+            status: FeatureStatus::Ok,
+            output: current,
+            owned: None,
+            names: Vec::new(),
+            sketch: Some(BuiltSketch { plane, on_face, regions }),
+        }
+    }
+
+    fn build_extrude(&self, f: &Feature, e: &ExtrudeFeature, current: Option<BodyId>) -> Built {
+        let shape_sketch;
+        let sk = match &e.profile {
+            ProfileSource::Sketch { feature } => {
+                let sketch_name = self.feature(*feature).map(|s| s.name.clone()).unwrap_or_else(|| feature.to_string());
+                let Some(input) = self.built_index(*feature).map(|i| &self.built[i]) else {
+                    return Built::failed(current, format!("its sketch {sketch_name} is missing"));
+                };
+                let Some(sk) = input.sketch.as_ref() else {
+                    if input.status.is_ok() {
+                        return Built::failed(current, format!("{sketch_name} is not a sketch"));
+                    }
+                    return Built::pass(FeatureStatus::Blocked(*feature), current);
+                };
+                sk
+            }
+            ProfileSource::Shape { datum, shape } => {
+                let regions = shape.sketch().and_then(|s| s.regions().map_err(|e| e.to_string()));
+                shape_sketch = BuiltSketch { plane: datum.plane(), on_face: false, regions };
+                &shape_sketch
+            }
+        };
+        let sketch_name = match &e.profile {
+            ProfileSource::Sketch { feature } => self.feature(*feature).map_or("the sketch".into(), |s| s.name.clone()),
+            ProfileSource::Shape { .. } => "the built-in profile".to_string(),
+        };
+        let regions = match &sk.regions {
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => return Built::failed(current, format!("{sketch_name} has no closed region")),
+            Err(err) => return Built::failed(current, format!("{sketch_name} has no closed region: {err}")),
+        };
+        let dir = if e.reverse { -sk.plane.normal } else { sk.plane.normal };
+        // Behind the face is material for a boss along the normal and air for a cut
+        // against it; only there is starting behind the face harmless.
+        let away = (e.operation == ExtrudeOp::Boss) != e.reverse;
+        let back = if sk.on_face && away { FACE_OVERLAP } else { 0.0 };
+        let start = sk.plane.with_origin(sk.plane.origin - dir * back);
+        let distance = match e.end {
+            EndCondition::Blind { depth } if depth.is_finite() && depth > 0.0 => depth + back,
+            EndCondition::Blind { depth } => {
+                return Built::failed(current, format!("depth must be positive, got {depth}"));
+            }
+            EndCondition::ThroughAll => {
+                let Some(body) = current else {
+                    return Built::failed(current, "through all needs a body to go through");
+                };
+                let bbox = match self.kernel.topology(body) {
+                    Ok(t) => t.bbox,
+                    Err(err) => return Built::failed(current, err.to_string()),
+                };
+                let (lo, hi) = (bbox.min, bbox.max);
+                let reach = (0..8)
+                    .map(|c| {
+                        let corner = Vec3::new(
+                            if c & 1 == 0 { lo.x } else { hi.x },
+                            if c & 2 == 0 { lo.y } else { hi.y },
+                            if c & 4 == 0 { lo.z } else { hi.z },
+                        );
+                        (corner - start.origin).dot(dir)
+                    })
+                    .fold(f64::NEG_INFINITY, f64::max);
+                if reach <= back + 1e-9 {
+                    return Built::failed(current, "the body lies entirely behind the sketch plane");
+                }
+                reach + 1.0 + 0.01 * bbox.diagonal()
+            }
+        };
+        let mut mine: Option<BodyId> = None;
+        let mut faces: Vec<(FaceId, Generator, usize, Vec3, u64)> = Vec::new();
+        let mut run = |mine: &mut Option<BodyId>| -> KernelResult<Option<BodyId>> {
+            let k = &self.kernel;
+            let mut body = current;
+            for (i, region) in regions.iter().enumerate() {
+                let tag = |step: &str| OpTag::new(format!("{}.r{i}.{step}", f.id));
+                let sheet = k.create_body_from_profile(&tag("profile"), &region.to_profile(start))?;
+                let tool = k.extrude(&tag("sweep"), sheet.body, &Extrude { distance, direction: Some(dir) });
+                let _ = k.release(sheet.body);
+                let tool = tool?;
+                let topology = match k.topology(tool.body) {
+                    Ok(t) => t,
+                    Err(err) => {
+                        let _ = k.release(tool.body);
+                        return Err(err);
+                    }
+                };
+                for o in &tool.record.face_roles {
+                    let generator = match o.role {
+                        FaceRole::StartCap => Generator::StartCap,
+                        FaceRole::EndCap => Generator::EndCap,
+                        FaceRole::Side { loop_index, segment } => region
+                            .entity(loop_index as usize, segment as usize)
+                            .map_or(Generator::Other, |entity| Generator::Side { entity }),
+                        _ => Generator::Other,
+                    };
+                    let centroid = topology.face(o.face).map_or(Vec3::ZERO, |x| x.centroid);
+                    faces.push((o.face, generator, i, centroid, tool.record.seq));
+                }
+                let next = match (e.operation, body) {
+                    (ExtrudeOp::Boss, None) => tool.body,
+                    (ExtrudeOp::Cut, None) => {
+                        let _ = k.release(tool.body);
+                        return Err(KernelError::InvalidInput("there is no body to cut".into()));
+                    }
+                    (op, Some(b)) => {
+                        let (kind, step) = if op == ExtrudeOp::Boss {
+                            (BooleanOp::Union, "union")
+                        } else {
+                            (BooleanOp::Subtract, "cut")
+                        };
+                        let joined = k.boolean(&tag(step), kind, b, tool.body);
+                        let _ = k.release(tool.body);
+                        joined?.body
+                    }
+                };
+                if let Some(old) = mine.replace(next) {
+                    let _ = k.release(old);
+                }
+                body = Some(next);
+            }
+            Ok(body)
+        };
+        match run(&mut mine) {
+            Ok(output) => Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None },
+            Err(err) => {
+                if let Some(body) = mine {
+                    let _ = self.kernel.release(body);
+                }
+                Built::failed(current, err.to_string())
+            }
+        }
+    }
+
+    fn build_blend(&self, f: &Feature, b: &BlendFeature, chamfer: bool, current: Option<BodyId>) -> Built {
+        let what = if chamfer { "chamfer" } else { "fillet" };
+        let Some(body) = current else {
+            return Built::failed(current, format!("there is no body to {what}"));
+        };
+        if b.edges.is_empty() {
+            return Built::failed(current, format!("the {what} has no edges"));
+        }
+        let (t, h) = match self.view_of(body) {
+            Ok(v) => v,
+            Err(err) => return Built::failed(current, err.to_string()),
+        };
+        let names = self.name_map();
+        let view = View { topology: &t, history: &h };
+        let mut ids: Vec<EdgeId> = Vec::new();
+        let mut repairs = Vec::new();
+        for (i, r) in b.edges.iter().enumerate() {
+            match reference::resolve_edge(r, &view, &names) {
+                Ok(id) => ids.push(id),
+                Err(u) => repairs.push(u.into_repair(ReferenceSlot::Edge { index: i as u32 })),
+            }
+        }
+        if !repairs.is_empty() {
+            return Built::pass(FeatureStatus::RepairNeeded(repairs), current);
+        }
+        for (i, id) in ids.iter().enumerate() {
+            if let Some(j) = ids[..i].iter().position(|x| x == id) {
+                return Built::failed(current, format!("edges {} and {} name the same edge", j + 1, i + 1));
+            }
+        }
+        let tag = OpTag::new(format!("{}.blend", f.id));
+        let result = if chamfer {
+            self.kernel.chamfer(&tag, body, &ids, b.size)
+        } else {
+            self.kernel.fillet(&tag, body, &ids, b.size)
+        };
+        let result = match result {
+            Ok(r) => r,
+            Err(err) => return Built::failed(current, err.to_string()),
+        };
+        let topology = self.kernel.topology(result.body).ok();
+        let faces = result
+            .record
+            .face_roles
+            .iter()
+            .map(|o| {
+                let generator = match o.role {
+                    FaceRole::Blend { edge } => ids
+                        .iter()
+                        .position(|x| *x == edge)
+                        .map_or(Generator::Other, |i| Generator::Blend { edge: i as u32 }),
+                    _ => Generator::Other,
+                };
+                let centroid = topology.as_ref().and_then(|t| t.face(o.face)).map_or(Vec3::ZERO, |x| x.centroid);
+                (o.face, generator, 0, centroid, result.record.seq)
+            })
+            .collect();
+        Built {
+            status: FeatureStatus::Ok,
+            output: Some(result.body),
+            owned: Some(result.body),
+            names: number(faces),
+            sketch: None,
+        }
+    }
+}
+
+fn kernel_repair(slot: ReferenceSlot, e: KernelError) -> RepairNeeded {
+    RepairNeeded { slot, reason: RepairReason::Missing, message: e.to_string(), candidates: Vec::new() }
+}
+
+/// The feature an operation tag belongs to. The document tags every kernel operation
+/// `F<id>.<step>`.
+pub fn feature_of_tag(tag: &str) -> Option<FeatureId> {
+    let rest = tag.strip_prefix('F')?;
+    let (id, _) = rest.split_once('.')?;
+    id.parse().ok().map(FeatureId)
+}
+
+/// Ordinals: faces with the same generator are ranked by region, then by centroid.
+fn number(mut faces: Vec<(FaceId, Generator, usize, Vec3, u64)>) -> Vec<NamedFace> {
+    let key = |c: Vec3| [c.x, c.y, c.z].map(|v| (v * 1e6).round() as i64);
+    faces.sort_by_key(|f| (f.1, f.2, key(f.3)));
+    let mut counts: HashMap<Generator, u32> = HashMap::new();
+    faces
+        .into_iter()
+        .map(|(face, generator, _, _, seq)| {
+            let n = counts.entry(generator).or_default();
+            let ordinal = *n;
+            *n += 1;
+            NamedFace { face, generator, ordinal, seq }
+        })
+        .collect()
+}
+
+/// The sketch plane on a planar face: origin at the world origin projected onto the
+/// face, X horizontal for a face that is not horizontal, else the world X axis.
+pub fn plane_on_face(normal: Vec3, point: Vec3) -> Plane {
+    let n = normal;
+    let x_dir = if n.z.abs() < 1.0 - 1e-9 {
+        Vec3::Z.cross(n).normalized().expect("not parallel to Z")
+    } else {
+        (Vec3::X - n * Vec3::X.dot(n)).normalized().expect("parallel to Z")
+    };
+    Plane { origin: n * point.dot(n), normal: n, x_dir }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn face_planes_have_upright_frames() {
+        let p = plane_on_face(-Vec3::Y, Vec3::new(3.0, -45.0, 7.0));
+        assert!(p.is_well_formed());
+        assert!(p.origin.distance(Vec3::new(0.0, -45.0, 0.0)) < 1e-12);
+        assert!(p.x_dir.distance(Vec3::X) < 1e-12 && p.y_dir().distance(Vec3::Z) < 1e-12);
+        let top = plane_on_face(Vec3::Z, Vec3::new(5.0, 5.0, 10.0));
+        assert!(top.origin.distance(Vec3::new(0.0, 0.0, 10.0)) < 1e-12);
+        assert!(top.x_dir.distance(Vec3::X) < 1e-12 && top.y_dir().distance(Vec3::Y) < 1e-12);
+        let right = plane_on_face(Vec3::X, Vec3::new(60.0, 1.0, 1.0));
+        assert!(right.x_dir.distance(Vec3::Y) < 1e-12 && right.y_dir().distance(Vec3::Z) < 1e-12);
+    }
+}
