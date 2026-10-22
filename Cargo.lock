@@ -5033,6 +5033,7 @@ dependencies = [
  "soliddraft-document",
  "soliddraft-drawing",
  "soliddraft-kernel-api",
+ "soliddraft-kernel-catallax",
  "soliddraft-kernel-smlib",
  "soliddraft-materials",
  "soliddraft-model",

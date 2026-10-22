@@ -48,6 +48,13 @@ jobs:
           submodules: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Regenerate Catallax drawing snapshots
+        run: SOLIDDRAFT_BLESS=1 cargo test -p soliddraft-cli --test view_exit_test --test draw_exit_test --test d3_exit_test -- --test-threads=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: catallax-drawing-snapshots
+          path: recipes/golden/
       - run: cargo test --workspace --all-features
 
   # Rust-only tests also cover macOS and Windows. Assembly integration tests need SMLib and run in the workspace job.

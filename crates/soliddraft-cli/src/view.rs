@@ -5,18 +5,16 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use serde::Serialize;
-use soliddraft_kernel_api::drawing::{
-    Curve3, CutRegion, SectionSpec, StandardView, ViewCurves, ViewFrame, ViewSpec, mesh_hlr,
-};
+use soliddraft_kernel_api::drawing::{Curve3, CutRegion, SectionSpec, StandardView, ViewCurves, ViewFrame, ViewSpec};
 use soliddraft_kernel_api::{Kernel, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 
 pub(crate) const USAGE: &str = "\
 usage: soliddraft view <recipe.json> [--dir <view>[,<view>...]] [--up x,y,z]
                       [--seams] [--smooth] [--tolerance <mm>] [--mesh]
                       [--section x,y,z] [--svg <out.svg>] [--json] [--curves]
 
-Replays a recipe on the SMLib kernel and computes hidden-line views of its result:
+Replays a recipe on the Catallax kernel and computes hidden-line views of its result:
 visible curves solid, hidden curves dashed, each tagged with the edge or face it
 comes from.
 
@@ -26,7 +24,7 @@ comes from.
   --seams      show seams
   --smooth     show edges between tangent faces
   --tolerance  curve accuracy in mm (default: the kernel's)
-  --mesh       use the approximate mesh method instead of the kernel's exact one
+  --mesh       use polygon hidden-line removal (the default on Catallax)
   --section    cut the body by the plane through this point that faces the eye,
                remove the material in front of it and hatch the cut faces
   --svg        write the view to this SVG file; with several views, put {view} in
@@ -60,7 +58,6 @@ struct Options {
     svg: Option<String>,
     json: bool,
     curves: bool,
-    mesh: bool,
     section: Option<Vec3>,
 }
 
@@ -76,15 +73,8 @@ fn parse(args: &[String]) -> Result<Options, String> {
     let mut file = None;
     let mut dirs = "front".to_string();
     let (mut up, mut seams, mut smooth, mut tolerance) = (None, false, false, 0.0);
-    let mut o = Options {
-        file: String::new(),
-        views: Vec::new(),
-        svg: None,
-        json: false,
-        curves: false,
-        mesh: false,
-        section: None,
-    };
+    let mut o =
+        Options { file: String::new(), views: Vec::new(), svg: None, json: false, curves: false, section: None };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value = |name: &str| it.next().cloned().ok_or(format!("{name} needs a value"));
@@ -96,7 +86,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--tolerance" => {
                 tolerance = value("--tolerance")?.parse().map_err(|_| "--tolerance needs a number of millimetres")?
             }
-            "--mesh" => o.mesh = true,
+            "--mesh" => {}
             "--section" => o.section = Some(vector(&value("--section")?).ok_or("--section needs x,y,z")?),
             "--svg" => o.svg = Some(value("--svg")?),
             "--json" => o.json = true,
@@ -129,9 +119,6 @@ fn parse(args: &[String]) -> Result<Options, String> {
         }
         o.views.push((name, spec));
     }
-    if o.mesh && o.section.is_some() {
-        return Err("--section needs the kernel's exact method, not --mesh".into());
-    }
     if o.views.len() > 1 && o.svg.as_ref().is_some_and(|p| !p.contains("{view}")) {
         return Err("with several views, put {view} in the --svg name".into());
     }
@@ -146,7 +133,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let kernel = SmlibKernel::new();
+    let kernel = CatallaxKernel::new();
     let built = std::fs::read_to_string(&o.file)
         .map_err(|e| e.to_string())
         .and_then(|text| soliddraft_recipe::parse(&text).map_err(|e| e.to_string()))
@@ -165,7 +152,6 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             Some(origin) => {
                 kernel.section_view(body, &SectionSpec { view: *spec, origin }).map(|s| (s.curves, Some(s.regions)))
             }
-            None if o.mesh => mesh_hlr::view_curves(&kernel, body, spec).map(|c| (c, None)),
             None => kernel.view_curves(body, spec).map(|c| (c, None)),
         };
         let millis = start.elapsed().as_secs_f64() * 1000.0;
@@ -191,7 +177,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 recipe: &report.recipe,
                 backend: format!("{} {}", report.backend.name, report.backend.version),
                 view: name.clone(),
-                method: if o.mesh { "mesh" } else { "exact" },
+                method: "mesh",
                 visible,
                 hidden,
                 digest: curves.digest(),

@@ -5,8 +5,8 @@
 //! lies in front of it. Silhouettes of curved faces come from the mesh, where a face's
 //! triangles turn from facing the eye to facing away. Everything comes out as polylines.
 //!
-//! It works on any backend that can [`tessellate`](crate::Kernel::tessellate) and report
-//! [`edge_curve`](crate::Kernel::edge_curve)s, so it is the fallback for a backend
+//! It works on any backend that can [`tessellate`](crate::Kernel::tessellate) and supply
+//! [`tessellate_edges`](crate::Kernel::tessellate_edges), so it is the fallback for a backend
 //! without exact hidden-line removal and the yardstick the exact backends are compared
 //! with. It always draws smooth (tangent) edges.
 
@@ -35,8 +35,8 @@ const REFINE_STEPS: u32 = 16;
 /// margin moves the change between visible and hidden very little.
 const DEPTH_TOL_CHORDS: f64 = 30.0;
 
-/// Approximate view curves of `body`, from a fine tessellation and the backend's exact
-/// edge curves. Sheet bodies are refused, as on the exact backends.
+/// Approximate view curves of `body`, from a fine tessellation and edge polylines.
+/// Sheet bodies are refused, as on the exact backends.
 pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> KernelResult<ViewCurves> {
     let frame =
         spec.frame().ok_or_else(|| KernelError::InvalidInput("view direction is zero or parallel to up".into()))?;
@@ -49,6 +49,7 @@ pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> Kernel
     let params =
         TessellationParams { chord_height: chord, curve_angle_deg: 2.0, surface_angle_deg: 2.0, ..Default::default() };
     let mesh = kernel.tessellate(body, &params)?;
+    let polylines = kernel.tessellate_edges(body, &params)?;
     let mut lines = Vec::new();
     for edge in &topology.edges {
         let mut faces = edge.faces.clone();
@@ -62,7 +63,16 @@ pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> Kernel
             }
             _ => CurveSource::Edge(edge.id),
         };
-        let points = kernel.edge_curve(body, edge.id)?.sample(chord * 0.25);
+        let points = polylines
+            .iter()
+            .find(|p| p.edge == edge.id)
+            .ok_or_else(|| KernelError::QueryFailed {
+                query: "mesh_hlr".into(),
+                code: 0,
+                message: format!("missing polyline for {}", edge.id),
+            })?
+            .points
+            .clone();
         lines.push(SourcedPolyline { source, points });
     }
     lines.extend(silhouettes(&mesh, &frame));

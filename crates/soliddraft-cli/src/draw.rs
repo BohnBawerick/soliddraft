@@ -19,7 +19,7 @@ use soliddraft_drawing::{
 };
 use soliddraft_kernel_api::drawing::StandardView;
 use soliddraft_kernel_api::{Aabb, BooleanOp, Kernel, Point2, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_recipe::{Command as Step, Recipe, Shape};
 
 pub(crate) const USAGE: &str = "\
@@ -32,7 +32,7 @@ usage: soliddraft draw <part.dwprt | recipe.json> [--template <id>] [--views <vi
                       [--search <folder>]... [--out <file>]... [--json]
 
 Makes a drawing of a part file (.dwprt, or .dwpart from before) or of a recipe's
-result on the SMLib kernel: the views projected with hidden lines, scaled and
+result on the Catallax kernel: the views projected with hidden lines, scaled and
 placed on the template's sheet, and the part's feature dimensions brought in
 (Model items). Writes the drawing file and its SVG, PDF and DXF. The drawing
 references the part by id and pins the part's revision.
@@ -605,12 +605,12 @@ pub(crate) struct Source {
     pub backend: String,
 }
 
-/// Opens the part file at `path` (or replays the recipe there) on the SMLib kernel and
+/// Opens the part file at `path` (or replays the recipe there) on the Catallax kernel and
 /// runs `f` on the part.
 pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>) -> Result<R, String> {
     match DocKind::of_path(path) {
         Some(DocKind::Part) => {
-            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(SmlibKernel::new()))?;
+            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(CatallaxKernel::new()))?;
             let ctx = PartContext::new(&doc).ok_or_else(|| format!("{}: the part has no body", path.display()))?;
             let backend = doc.kernel().backend();
             let source = Source {
@@ -628,7 +628,7 @@ pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Re
             let value: serde_json::Value =
                 serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
             let revision = ContentHash::of_json(&value);
-            let kernel = SmlibKernel::new();
+            let kernel = CatallaxKernel::new();
             let (part, backend) = build(&kernel, &recipe, path, revision.clone())?;
             let source = Source { id: None, revision, name: recipe.name.clone(), backend };
             let out = f(&part, &source);
@@ -986,7 +986,7 @@ fn apply_steps(drawing: &mut Drawing, part: &Part, steps: &[Step2]) -> Result<()
 /// Replays the recipe and describes its result as a part: the body, its geometric
 /// digest and the dimensions of its features.
 fn build<'k>(
-    kernel: &'k SmlibKernel,
+    kernel: &'k CatallaxKernel,
     recipe: &Recipe,
     path: &Path,
     revision: ContentHash,

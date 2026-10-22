@@ -336,11 +336,18 @@ pub(super) fn mesh(model: &Model, mesh: &catallax_mesh::Mesh, ids: &Ids, params:
                 .push(format!("{name}: Catallax stage 1 display entry supports chord tolerance only"));
         }
     }
+    let mut vertices = BTreeMap::new();
     for triangle in &mesh.triangles {
         let points = triangle.vertices.map(|v| Vec3::from(mesh.positions[v]));
         let fallback = (points[1] - points[0]).cross(points[2] - points[0]).normalized().unwrap_or(Vec3::Z);
         let f = model.face(triangle.face);
-        for point in points {
+        for (vertex, point) in triangle.vertices.into_iter().zip(points) {
+            // Share vertices within each face while keeping sharp-face normals separate.
+            if let Some(index) = vertices.get(&(triangle.face, vertex)) {
+                out.indices.push(*index);
+                continue;
+            }
+            vertices.insert((triangle.face, vertex), out.positions.len() as u32);
             let real = |v: f64| {
                 catallax_numbers::Real::from_rational(
                     catallax_numbers::Rational::from_f64_exact(v).expect("finite Catallax mesh coordinate"),

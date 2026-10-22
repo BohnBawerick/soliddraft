@@ -5,6 +5,7 @@
 //! origin sets; display estimates never decide topology or operation success.
 
 mod convert;
+mod drawing_queries;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -313,20 +314,20 @@ impl Kernel for CatallaxKernel {
         self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body))
     }
 
-    fn view_curves(&self, _: BodyId, _: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
-        Err(gap("exact drawing visibility", "1, drawing queries (roadmap section 7)"))
+    fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
+        drawing_queries::view_curves(self, body, spec)
     }
     fn silhouette_curves(&self, _: BodyId, _: Vec3) -> KernelResult<Vec<drawing::ViewCurve>> {
         Err(gap("exact silhouettes", "1, drawing queries (roadmap section 7)"))
     }
     fn section_curves(&self, _: BodyId, _: &Plane) -> KernelResult<Vec<drawing::ViewCurve>> {
-        Err(gap("section curves", "1, drawing queries (roadmap section 7)"))
+        Err(gap("exact section curves", "1, drawing queries (roadmap section 7)"))
     }
-    fn edge_curve(&self, _: BodyId, _: EdgeId) -> KernelResult<drawing::Curve3> {
-        Err(gap("exact edge curve conversion", "1"))
+    fn edge_curve(&self, body: BodyId, edge: EdgeId) -> KernelResult<drawing::Curve3> {
+        drawing_queries::edge_curve(&self.solid(body)?, body, edge)
     }
-    fn face_loops(&self, _: BodyId, _: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
-        Err(gap("exact face loop conversion", "1"))
+    fn face_loops(&self, body: BodyId, face: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
+        drawing_queries::face_loops(&self.solid(body)?, body, face)
     }
     fn lines_and_arcs(&self, _: &drawing::Curve3, _: f64) -> KernelResult<Vec<drawing::Curve3>> {
         Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))

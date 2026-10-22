@@ -149,3 +149,86 @@ fn refused_extrusion_does_not_change_its_profile_and_handles_stay_owned() {
         matches!(k.shell(&OpTag::new("shell"), b, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 3"))
     );
 }
+
+#[test]
+fn polygon_views_and_boolean_sections_keep_sources_on_the_original_body() {
+    use soliddraft_kernel_api::drawing::{Curve3, CurveSource, StandardView, ViewSpec};
+
+    let k = CatallaxKernel::new();
+    let (_, body) = build(&k, &parse(BRACKET).unwrap()).unwrap();
+    let topology = k.topology(body).unwrap();
+    let before = summarize(&k, body).unwrap();
+    for direction in [StandardView::Front, StandardView::Top, StandardView::Right, StandardView::Isometric] {
+        let spec = ViewSpec::standard(direction);
+        let view = k.view_curves(body, &spec).unwrap();
+        let again = k.view_curves(body, &spec).unwrap();
+        assert_eq!(view, again, "polygon output must be deterministic");
+        assert!(view.counts().0 > 0);
+        assert!(view.curves.iter().all(|c| match c.source {
+            CurveSource::Edge(e) => topology.edge(e).is_some(),
+            CurveSource::Silhouette(f) | CurveSource::Seam(f) => topology.face(f).is_some(),
+            _ => false,
+        }));
+        if direction == StandardView::Top {
+            assert!(
+                view.curves
+                    .iter()
+                    .any(|c| matches!(c.curve, Curve3::Circle { radius, .. } if (radius - 6.0).abs() < 1e-8)),
+                "the bore remains dimensionable"
+            );
+        }
+        if direction == StandardView::Isometric {
+            assert!(
+                view.curves.iter().any(|c| matches!(c.source, CurveSource::Silhouette(_))),
+                "shared triangle vertices must produce silhouettes"
+            );
+        }
+    }
+    let section = k.section_view(body, &contract::bracket_section_spec()).unwrap();
+    assert_eq!(section.region_areas(&contract::bracket_section_spec().view.frame().unwrap()), [910.0, 560.0, 230.0]);
+    for curve in section
+        .curves
+        .curves
+        .iter()
+        .chain(section.regions.iter().flat_map(|r| r.outer.iter().chain(r.holes.iter().flatten())))
+    {
+        assert!(
+            match curve.source {
+                CurveSource::Edge(e) => topology.edge(e).is_some(),
+                CurveSource::Silhouette(f) | CurveSource::Seam(f) | CurveSource::Section(f) =>
+                    topology.face(f).is_some(),
+                CurveSource::Unknown => false,
+            },
+            "section curve lost its original source: {:?}",
+            curve.source
+        );
+    }
+    assert_eq!(summarize(&k, body).unwrap(), before, "a section must not change the part");
+    k.release(body).unwrap();
+    contract::box_section_view_hatches_the_cut(&k);
+    contract::section_planes_off_the_body(&k);
+}
+
+#[test]
+fn polygon_face_loops_keep_holes_and_coedge_order() {
+    use soliddraft_kernel_api::drawing::{SectionSpec, StandardView, ViewSpec};
+
+    let k = CatallaxKernel::new();
+    let outer = contract::cylinder(&k, Vec3::ZERO, 10.0, 20.0);
+    let inner = contract::cylinder(&k, Vec3::new(0.0, 0.0, -1.0), 4.0, 22.0);
+    let body = k.boolean(&OpTag::new("bore"), BooleanOp::Subtract, outer, inner).unwrap().body;
+    let spec = SectionSpec { view: ViewSpec::standard(StandardView::Top), origin: Vec3::new(0.0, 0.0, 10.0) };
+    let section = k.section_view(body, &spec).unwrap();
+    assert_eq!(section.regions.len(), 1);
+    assert_eq!(section.regions[0].holes.len(), 1);
+    let area = section.regions[0].area(&spec.view.frame().unwrap());
+    assert!((area - std::f64::consts::PI * 84.0).abs() < 0.2, "annular area {area}");
+    for boundary in std::iter::once(&section.regions[0].outer).chain(&section.regions[0].holes) {
+        for i in 0..boundary.len() {
+            assert!(boundary[i].curve.end().distance(boundary[(i + 1) % boundary.len()].curve.start()) < 1e-8);
+        }
+    }
+    for id in [body, outer, inner] {
+        k.release(id).unwrap();
+    }
+}
