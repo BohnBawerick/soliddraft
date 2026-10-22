@@ -35,6 +35,8 @@
 //! `soliddraft mcp [--demo | --open PART.dwprt] [--http PORT]` serves a headless part's command
 //! layer to an MCP client, on stdin and stdout or on a loopback HTTP port.
 //!
+//! `soliddraft screenshot <part.dwprt> --png out.png` captures the viewport without a window.
+//!
 //! `soliddraft commands [--json] [QUERY]` lists or searches the command registry that the
 //! app, the assistant and the MCP server share; see [`commands::USAGE`].
 //!
@@ -420,6 +422,10 @@ fn mcp(args: &[String]) -> ExitCode {
             }
         }
         i += 1;
+    }
+    if bundle.is_none() && args.iter().any(|a| a == "--max-work") {
+        eprintln!("--max-work requires --bundle");
+        return ExitCode::from(2);
     }
     let evidence_kernel =
         bundle.as_ref().map(|_| Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_diagnostics(max_work)));

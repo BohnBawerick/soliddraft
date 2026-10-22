@@ -238,32 +238,38 @@ impl Kernel for CatallaxKernel {
 
     fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
         self.observe("create_body_from_profile", || {
-        profile.check()?;
-        let mut state = self.state()?;
-        let seq = state.id();
-        let result = format!("op_{seq}");
-        let step = json!({"id":result, "op":"profile", "plane":profile.plane, "loops":{"outer":profile.outer,"holes":profile.holes}});
-        // Conversion validates the exact frame and joined profile without manufacturing a sheet.
-        // The converter requires a body result, so validate with a structural extrusion only.
-        let input = json!({"format":"soliddraft-recipe/1","name":"profile","steps":[step, {"id":"check_body","op":"extrude","profile":result,"distance":1}],"result":"check_body"});
-        catallax_app::soliddraft::convert(&input.to_string())
-            .map_err(|e| build_error(OpKind::Profile, Error::Conversion(e)))?;
-        let record = HistoryRecord {
-            seq,
-            tag: tag.clone(),
-            op: OpKind::Profile,
-            faces: EntityChanges::default(),
-            edges: EntityChanges::default(),
-            vertices: EntityChanges::default(),
-            face_roles: vec![],
-        };
-        let body = BodyId::from_raw(state.id());
-        state.bodies.insert(
-            body,
-            Stored { steps: BTreeMap::from([(seq, step)]), result, history: vec![record.clone()], solid: None },
-        );
-        Ok(OpResult { body, record })
-
+            profile.check()?;
+            let mut state = self.state()?;
+            let seq = state.id();
+            let result = format!("op_{seq}");
+            let step = json!({
+                "id":result, "op":"profile", "plane":profile.plane,
+                "loops":{"outer":profile.outer,"holes":profile.holes}
+            });
+            // Conversion validates the exact frame and joined profile without manufacturing a sheet.
+            // The converter requires a body result, so validate with a structural extrusion only.
+            let input = json!({
+                "format":"soliddraft-recipe/1","name":"profile",
+                "steps":[step, {"id":"check_body","op":"extrude","profile":result,"distance":1}],
+                "result":"check_body"
+            });
+            catallax_app::soliddraft::convert(&input.to_string())
+                .map_err(|e| build_error(OpKind::Profile, Error::Conversion(e)))?;
+            let record = HistoryRecord {
+                seq,
+                tag: tag.clone(),
+                op: OpKind::Profile,
+                faces: EntityChanges::default(),
+                edges: EntityChanges::default(),
+                vertices: EntityChanges::default(),
+                face_roles: vec![],
+            };
+            let body = BodyId::from_raw(state.id());
+            state.bodies.insert(
+                body,
+                Stored { steps: BTreeMap::from([(seq, step)]), result, history: vec![record.clone()], solid: None },
+            );
+            Ok(OpResult { body, record })
         })
     }
 
@@ -282,14 +288,16 @@ impl Kernel for CatallaxKernel {
 
     fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
         self.observe("revolve", || {
-        let mut state = self.state()?;
-        let p = state.get(profile)?;
-        if p.solid.is_some() {
-            return Err(KernelError::InvalidInput("revolve needs a profile".into()));
-        }
-        let step = json!({"op":"revolve","profile":p.result,"axis_origin":params.axis_origin,"axis_direction":params.axis_direction,"angle_deg":params.angle_deg});
-        state.operation(tag, OpKind::Revolve, &[profile], step)
-
+            let mut state = self.state()?;
+            let p = state.get(profile)?;
+            if p.solid.is_some() {
+                return Err(KernelError::InvalidInput("revolve needs a profile".into()));
+            }
+            let step = json!({
+                "op":"revolve","profile":p.result,"axis_origin":params.axis_origin,
+                "axis_direction":params.axis_direction,"angle_deg":params.angle_deg
+            });
+            state.operation(tag, OpKind::Revolve, &[profile], step)
         })
     }
 

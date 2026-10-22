@@ -133,7 +133,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let kernel = CatallaxKernel::new();
+    let kernel = CatallaxKernel::with_diagnostics(100_000_000);
     let built = std::fs::read_to_string(&o.file)
         .map_err(|e| e.to_string())
         .and_then(|text| soliddraft_recipe::parse(&text).map_err(|e| e.to_string()))
@@ -201,6 +201,22 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         }
     }
     let _ = kernel.release(body);
+    {
+        match kernel.take_diagnostics().and_then(|log| {
+            let text = serde_json::to_string(&log).expect("diagnostics serialize");
+            if let Some(svg) = &o.svg {
+                std::fs::write(format!("{svg}.kernel.json"), text)
+                    .map_err(|e| soliddraft_kernel_api::KernelError::Unavailable(e.to_string()))?;
+            }
+            Ok(())
+        }) {
+            Ok(()) => {}
+            Err(error) => {
+                eprintln!("view diagnostics: {error}");
+                ok = false;
+            }
+        }
+    }
     if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 

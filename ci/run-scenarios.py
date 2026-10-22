@@ -124,8 +124,9 @@ def run(args):
     args.out.mkdir(parents=True, exist_ok=False)
     write(args.out / "scenario.json", scenario)
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False}
-    client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
+    client = None
     try:
+        client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
         initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
         if initialized["protocolVersion"] != "2025-06-18":
@@ -146,6 +147,10 @@ def run(args):
             if step.get("refusal"):
                 code = step["refusal"]
                 checks.append({"check": "application refusal", "actual": command["output"], "pass": code in command["output"]})
+                kernel = json.loads((directory / "kernel.json").read_text())
+                refusals = [operation["refusal"]["code"] for call in kernel["calls"]
+                    for operation in call["operation_log"]["operations"] if operation.get("refusal")]
+                checks.append({"check": "recorded kernel refusal", "actual": refusals, "pass": code in refusals})
                 questions = sorted(directory.glob("question-*.json"))
                 checks.append({"check": "kernel question exported", "pass": bool(questions)})
                 if questions:
@@ -178,11 +183,12 @@ def run(args):
         report["error"] = str(error)
     finally:
         try:
-            client.close()
+            if client is not None:
+                client.close()
         except Exception as error:
             report["error"] = str(error)
             report["pass"] = False
-        write(args.out / "protocol.json", client.transcript)
+        write(args.out / "protocol.json", client.transcript if client else [])
         write(args.out / "result.json", report)
     print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error")}))
     return 0 if report["pass"] else 1

@@ -60,6 +60,7 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `view.svg` and `viewport.png`, for rendered steps. The PNG comes from the
   viewport's `ViewportRenderer`, shader and camera. The adjacent `viewport.json`
   records the adapter and kernel calls made while reopening the saved part.
+  `view.svg.kernel.json` records the view command's Catallax calls.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 

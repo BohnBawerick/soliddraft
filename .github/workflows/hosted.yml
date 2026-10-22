@@ -132,6 +132,12 @@ jobs:
         run: |
           revision=$(sed -n 's/^pub const CATALLAX_REVISION: &str = "\(.*\)";/\1/p' crates/soliddraft-kernel-catallax/src/lib.rs)
           test -n "$revision"
+          python3 - "$revision" <<'PY'
+          import pathlib, sys, tomllib
+          manifest = tomllib.loads(pathlib.Path("crates/soliddraft-kernel-catallax/Cargo.toml").read_text())
+          dependencies = [d for d in manifest["dependencies"].values() if d.get("git", "").endswith("/catallax")]
+          assert dependencies and all(d["rev"] == sys.argv[1] for d in dependencies)
+          PY
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
