@@ -145,6 +145,15 @@ impl CatallaxKernel {
 
     /// Enables synchronous per-call evidence and deterministic work accounting.
     pub fn with_diagnostics(max_work: u64) -> Self {
+        Self::capture(Some(max_work))
+    }
+
+    /// Captures evidence without imposing a work allowance on normal application commands.
+    pub fn with_operation_log() -> Self {
+        Self::capture(None)
+    }
+
+    fn capture(max_work: Option<u64>) -> Self {
         Self {
             state: Mutex::new(State { capture: true, ..State::default() }),
             diagnostics: Some(diagnostics::Diagnostics::new(max_work)),

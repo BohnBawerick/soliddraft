@@ -19,12 +19,12 @@ impl Drop for Scope {
 }
 
 pub(crate) struct Diagnostics {
-    max_work: u64,
+    max_work: Option<u64>,
     calls: Mutex<Vec<Value>>,
 }
 
 impl Diagnostics {
-    pub(crate) fn new(max_work: u64) -> Self {
+    pub(crate) fn new(max_work: Option<u64>) -> Self {
         Self { max_work, calls: Mutex::new(Vec::new()) }
     }
 
@@ -47,15 +47,21 @@ impl Diagnostics {
         }
         ACTIVE.with(|active| *active.borrow_mut() = Some(operation.to_owned()));
         let _scope = Scope;
-        let ((mut result, work), entries) = with_operation_log(|| with_operation_budget(self.max_work, run));
-        if work.exhausted {
+        let ((mut result, work), entries) = with_operation_log(|| match self.max_work {
+            Some(limit) => {
+                let (result, work) = with_operation_budget(limit, run);
+                (result, Some(work))
+            }
+            None => (run(), None),
+        });
+        if work.is_some_and(|w| w.exhausted) {
             result =
                 Err(KernelError::Unavailable("numbers.operation-budget: operation work allowance exhausted".into()));
         }
         self.calls.lock().expect("diagnostics lock").push(json!({
             "operation":operation, "log_scope":operation,"nested":false, "status":if result.is_ok() {"answered"} else {"refused"},
             "error":result.as_ref().err().map(ToString::to_string),
-            "max_work":self.max_work, "work":{"used":work.used,"exhausted":work.exhausted},
+            "max_work":self.max_work, "work":work.map(|w| json!({"used":w.used,"exhausted":w.exhausted})),
             "wall_ms":start.elapsed().as_secs_f64()*1000.0,
             "operation_log":{"format":"catallax-operation-log/1", "operations":entries.iter().enumerate()
                 .map(|(sequence, e)| entry(sequence, e)).collect::<Vec<_>>()}
@@ -101,7 +107,7 @@ mod tests {
 
     #[test]
     fn nested_queries_share_one_log_and_work_scope() {
-        let diagnostics = Diagnostics::new(100);
+        let diagnostics = Diagnostics::new(Some(100));
         diagnostics
             .observe("view_curves", || {
                 diagnostics.observe("tessellate", || {

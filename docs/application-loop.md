@@ -84,5 +84,6 @@ Directories must be new. Neither MCP capture nor the runner overwrites an older
 run. Commands have a timeout, and the runner stops at the first unexpected failure.
 To collect the same evidence from another agent, start
 `soliddraft mcp --bundle /tmp/new-agent-run`. `--max-work N` sets its per-call
-kernel allowance. Normal MCP sessions without `--bundle` keep their existing
+kernel allowance. View, drawing and screenshot logging impose no work allowance.
+Normal MCP sessions without `--bundle` keep their existing
 kernel behavior and do not collect diagnostic data.

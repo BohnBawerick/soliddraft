@@ -41,7 +41,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
 }
 
 async fn capture(part: &str, png: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let kernel = Arc::new(CatallaxKernel::with_diagnostics(100_000_000));
+    let kernel = Arc::new(CatallaxKernel::with_operation_log());
     let doc = Document::from_model(soliddraft_model::Document::open(part, kernel.clone())?);
     if doc.display_body().is_none() || doc.meshes.is_empty() {
         return Err("part has no displayed solid".into());

@@ -619,7 +619,7 @@ fn with_part<R>(
     f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>,
 ) -> Result<R, String> {
     let kernel = std::sync::Arc::new(if kernel_log.is_some() {
-        CatallaxKernel::with_diagnostics(100_000_000)
+        CatallaxKernel::with_operation_log()
     } else {
         CatallaxKernel::new()
     });

@@ -155,6 +155,12 @@ jobs:
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
       - run: cargo build --locked -p soliddraft-cli
+      - name: Regenerate the drawing golden for the updated kernel pin
+        run: SOLIDDRAFT_BLESS=1 cargo test --locked -p soliddraft-cli --test view_exit_test bracket_catallax_views_match_golden_across_runs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-catallax-views
+          path: recipes/golden/catallax-views.json
       - name: Build the verifier from the same pinned revision
         run: cargo build --locked --manifest-path .ci-catallax/Cargo.toml -p catallax-cli --bin catallax-verify --target-dir target
       - name: Run the bracket and refusal scenarios
