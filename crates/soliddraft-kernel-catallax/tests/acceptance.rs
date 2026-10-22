@@ -285,8 +285,20 @@ fn face_frame_normal_sweeps_use_the_certified_frame_without_changing_other_direc
         k.release(body).unwrap();
     }
     let error = k
-        .extrude(&OpTag::new("independent_direction"), sheet, &Extrude { distance: 20.0, direction: Some(-Vec3::Y) })
+        .extrude(
+            &OpTag::new("independent_direction"),
+            sheet,
+            &Extrude { distance: 20.0, direction: Some(Vec3::new(2e-19, 1.0, 0.0)) },
+        )
         .unwrap_err();
-    assert!(error.to_string().contains("features.unsupported-elliptic-cylinder"), "{error}");
+    assert!(error.to_string().contains("features.unsupported-algebraic-placement"), "{error}");
+    let evidence = k.take_diagnostics().unwrap();
+    let question = evidence["questions"].as_array().unwrap().last().unwrap();
+    let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();
+    let catallax_recipe::Operation::Extrude { direction: Some(direction), .. } = &recipe.steps.last().unwrap().op
+    else {
+        panic!()
+    };
+    assert_eq!(direction.0[0], catallax_recipe::Number::parse("2e-19").unwrap());
     k.release(sheet).unwrap();
 }
