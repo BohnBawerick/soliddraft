@@ -40,7 +40,7 @@ SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and
 
 ## What works today
 
-Work in progress. The list below records the existing application features, including SMLib-only operations. The default Catallax backend supports sketches, extrudes, cuts, booleans and rational-frame revolves. Fillets wait for Catallax stage 4; chamfers and shell wait for stage 3. Exact drawings still require the explicit SMLib paths. See [the backend gaps](docs/needs-catallax.md).
+Work in progress. The list below records the existing application features, including SMLib-only operations. The default Catallax backend supports sketches, extrudes, cuts, booleans and rational-frame revolves. Fillets wait for Catallax stage 4; chamfers and shell wait for stage 3. Drawings use Catallax meshes for polygon hidden-line removal and Catallax booleans for plane sections. Exact silhouettes and some curve conversions remain pending. See [the backend gaps](docs/needs-catallax.md).
 
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.

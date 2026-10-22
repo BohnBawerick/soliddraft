@@ -1,0 +1,18 @@
+{
+  "DIMENSION": {
+    "other": 11
+  },
+  "FORMAT": {
+    "circle": 2,
+    "line": 48,
+    "text": 36
+  },
+  "TEXT": {
+    "text": 7
+  },
+  "VISIBLE": {
+    "arc": 76,
+    "circle": 6,
+    "line": 4302
+  }
+}

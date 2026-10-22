@@ -4,7 +4,7 @@
 //!   B of the boss on the front view at twice its parent's scale, as in frame 6 of the
 //!   drawing examples, with ordinate dimensions, a geometric tolerance, a datum, a surface
 //!   finish, a revision table and a revision symbol; the SVG matches
-//!   `recipes/golden/bracket-d3.svg`;
+//!   `recipes/golden/catallax-bracket-d3.svg`;
 //! - the section's three cut regions are hatched, in the SVG and as HATCH entities in
 //!   the DXF;
 //! - the DXF re-reads with the `dxf` crate with every dimension a DIMENSION entity, and
@@ -148,7 +148,7 @@ fn bracket_sections_details_and_sheets() {
         assert!(svg.contains(&format!(">{text}</text>")), "{text} is not on the sheet");
     }
     assert!(svg.contains(r#"<g id="HATCH""#) && svg.contains(r#"<g id="CUTTING""#), "no hatch or cutting line");
-    golden("bracket-d3.svg", &svg);
+    golden("catallax-bracket-d3.svg", &svg);
 
     let counts = dxf_counts(&dir.join("bracket.dxf"));
     assert_eq!(counts.get("HATCH/HATCH"), Some(&3), "{counts:?}");
@@ -168,7 +168,7 @@ fn bracket_sections_details_and_sheets() {
         assert!(blocks.contains(&base.block_name.as_str()), "{} has no block", base.block_name);
         assert!(base.actual_measurement > 0.0 && !base.text.is_empty());
     }
-    golden("bracket-d3-dxf.json", &(serde_json::to_string_pretty(&counts).unwrap() + "\n"));
+    golden("catallax-bracket-d3-dxf.json", &(serde_json::to_string_pretty(&counts).unwrap() + "\n"));
     if !ezdxf_audit(&dir.join("bracket.dxf")) {
         eprintln!("ezdxf is not installed: skipped its audit");
     }

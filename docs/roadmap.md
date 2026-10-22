@@ -80,7 +80,7 @@ Reference geometry (planes, axes, points) is application-side work and can come 
 
 ## 7. Drawings on Catallax
 
-Drawings are SolidDraft's most finished feature, and they depend on hidden-line removal that SMLib provides and Catallax does not. They move to the polygon-mode pass (`mesh_hlr`) over Catallax's shared-edge meshes on the day SMLib goes, so drawings never go dark. Exact silhouettes and sections become Catallax requests: plane sections are booleans Catallax already builds, and silhouettes of cylinders, cones, spheres and tori have closed forms. The drawing crate, its associativity and its exporters are kernel-independent and stay as they are.
+Drawings use the polygon-mode pass (`mesh_hlr`) over Catallax's display triangles and edge polylines, with face origins preserved for associativity. Plane sections subtract a half-space through Catallax booleans and hatch the cut-face loops. Whole lines and untrimmed circles retain their geometry after polygon visibility; other curves and silhouettes keep the polygon result. Exact silhouettes and the remaining curve conversions are Catallax requests. The drawing document, its associativity and its exporters keep their formats.
 
 ## 8. Work that does not depend on the kernel
 
@@ -162,6 +162,6 @@ Kernel-independent items from section 8 run alongside, as people and machines al
 
 ## 11. Open questions
 
-1. **Drawings.** Start with the polygon-mode hidden-line pass so drawings keep working when SMLib goes, as proposed, or wait for exact silhouettes from Catallax.
+1. **Drawings.** The polygon-mode hidden-line pass is implemented as proposed. The question remains open for the project owner. Exact silhouettes remain Catallax work.
 2. **Waiting features.** Confirm the behaviour in section 2: disabled ribbon commands that name their stage, and existing parts that stop at a waiting feature with a rebuild error.
 3. **Shared with Catallax's roadmap. Answered.** Target parts P1 to P10 are confirmed. The B-rep carries the stand-in for field-only lattices. Fillets between planes and cylinders come forward into Catallax stage 3.

@@ -5,6 +5,7 @@
 //! origin sets; display estimates never decide topology or operation success.
 
 mod convert;
+mod drawing_queries;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -40,8 +41,29 @@ struct Stored {
 struct Solid {
     app: ApplicationBody,
     ids: convert::Ids,
+    display: Mutex<Option<(Rational, Arc<catallax_mesh::Mesh>)>>,
     topology: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
+}
+
+impl Solid {
+    fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
+        let mut cached =
+            self.display.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
+        if let Some((chord, mesh)) = cached.as_ref()
+            && chord == &options.chord_tolerance
+        {
+            return Ok(mesh.clone());
+        }
+        let mesh = Arc::new(
+            mesh_body(&self.app.built.model, self.app.built.result, options, &mut Decider::default())
+                .map_err(|e| query_error(query, e))?
+                .value,
+        );
+        // Keep one tolerance per immutable body so triangles and edges share the same mesh.
+        *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
+        Ok(mesh)
+    }
 }
 
 impl State {
@@ -91,7 +113,13 @@ impl State {
                 steps,
                 result,
                 history: history.into_values().collect(),
-                solid: Some(Arc::new(Solid { app, ids, topology: OnceLock::new(), mass: OnceLock::new() })),
+                solid: Some(Arc::new(Solid {
+                    app,
+                    ids,
+                    display: Mutex::new(None),
+                    topology: OnceLock::new(),
+                    mass: OnceLock::new(),
+                })),
             },
         );
         Ok(OpResult { body, record })
@@ -235,30 +263,26 @@ impl Kernel for CatallaxKernel {
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         let solid = self.solid(body)?;
         let options = options(params)?;
-        let mesh = mesh_body(&solid.app.built.model, solid.app.built.result, &options, &mut Decider::default())
-            .map_err(|e| query_error("tessellate", e))?;
+        let mesh = solid.display(&options, "tessellate")?;
         let rounding_budget = options.chord_tolerance.to_f64_nearest();
-        if mesh.value.positions.iter().any(|p| {
+        if mesh.positions.iter().any(|p| {
             let rounded = p.map(|v| f64::from(v as f32));
             !rounded.iter().all(|v| v.is_finite()) || Vec3::from(*p).distance(rounded.into()) > rounding_budget
         }) {
             return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
         }
-        Ok(convert::mesh(&solid.app.built.model, &mesh.value, &solid.ids, params))
+        Ok(convert::mesh(&solid.app.built.model, &mesh, &solid.ids, params))
     }
 
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
         let solid = self.solid(body)?;
-        let mesh =
-            mesh_body(&solid.app.built.model, solid.app.built.result, &options(params)?, &mut Decider::default())
-                .map_err(|e| query_error("tessellate_edges", e))?;
+        let mesh = solid.display(&options(params)?, "tessellate_edges")?;
         Ok(mesh
-            .value
             .edges
             .iter()
             .map(|edge| EdgePolyline {
                 edge: solid.ids.edges[&edge.edge],
-                points: edge.vertices.iter().map(|v| mesh.value.positions[*v].into()).collect(),
+                points: edge.vertices.iter().map(|v| mesh.positions[*v].into()).collect(),
             })
             .collect())
     }
@@ -313,20 +337,20 @@ impl Kernel for CatallaxKernel {
         self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body))
     }
 
-    fn view_curves(&self, _: BodyId, _: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
-        Err(gap("exact drawing visibility", "1, drawing queries (roadmap section 7)"))
+    fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
+        drawing_queries::view_curves(self, body, spec)
     }
     fn silhouette_curves(&self, _: BodyId, _: Vec3) -> KernelResult<Vec<drawing::ViewCurve>> {
         Err(gap("exact silhouettes", "1, drawing queries (roadmap section 7)"))
     }
     fn section_curves(&self, _: BodyId, _: &Plane) -> KernelResult<Vec<drawing::ViewCurve>> {
-        Err(gap("section curves", "1, drawing queries (roadmap section 7)"))
+        Err(gap("exact section curves", "1, drawing queries (roadmap section 7)"))
     }
-    fn edge_curve(&self, _: BodyId, _: EdgeId) -> KernelResult<drawing::Curve3> {
-        Err(gap("exact edge curve conversion", "1"))
+    fn edge_curve(&self, body: BodyId, edge: EdgeId) -> KernelResult<drawing::Curve3> {
+        drawing_queries::edge_curve(self.solid(body)?.as_ref(), body, edge)
     }
-    fn face_loops(&self, _: BodyId, _: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
-        Err(gap("exact face loop conversion", "1"))
+    fn face_loops(&self, body: BodyId, face: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
+        drawing_queries::face_loops(self.solid(body)?.as_ref(), body, face)
     }
     fn lines_and_arcs(&self, _: &drawing::Curve3, _: f64) -> KernelResult<Vec<drawing::Curve3>> {
         Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))

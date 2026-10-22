@@ -18,8 +18,8 @@ use soliddraft_drawing::{
     display, project,
 };
 use soliddraft_kernel_api::drawing::StandardView;
-use soliddraft_kernel_api::{Aabb, BooleanOp, Kernel, Point2, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_api::{BooleanOp, Kernel, Point2, Vec3};
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_recipe::{Command as Step, Recipe, Shape};
 
 pub(crate) const USAGE: &str = "\
@@ -32,7 +32,7 @@ usage: soliddraft draw <part.dwprt | recipe.json> [--template <id>] [--views <vi
                       [--search <folder>]... [--out <file>]... [--json]
 
 Makes a drawing of a part file (.dwprt, or .dwpart from before) or of a recipe's
-result on the SMLib kernel: the views projected with hidden lines, scaled and
+result on the Catallax kernel: the views projected with hidden lines, scaled and
 placed on the template's sheet, and the part's feature dimensions brought in
 (Model items). Writes the drawing file and its SVG, PDF and DXF. The drawing
 references the part by id and pins the part's revision.
@@ -605,12 +605,12 @@ pub(crate) struct Source {
     pub backend: String,
 }
 
-/// Opens the part file at `path` (or replays the recipe there) on the SMLib kernel and
+/// Opens the part file at `path` (or replays the recipe there) on the Catallax kernel and
 /// runs `f` on the part.
 pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>) -> Result<R, String> {
     match DocKind::of_path(path) {
         Some(DocKind::Part) => {
-            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(SmlibKernel::new()))?;
+            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(CatallaxKernel::new()))?;
             let ctx = PartContext::new(&doc).ok_or_else(|| format!("{}: the part has no body", path.display()))?;
             let backend = doc.kernel().backend();
             let source = Source {
@@ -628,7 +628,7 @@ pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Re
             let value: serde_json::Value =
                 serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
             let revision = ContentHash::of_json(&value);
-            let kernel = SmlibKernel::new();
+            let kernel = CatallaxKernel::new();
             let (part, backend) = build(&kernel, &recipe, path, revision.clone())?;
             let source = Source { id: None, revision, name: recipe.name.clone(), backend };
             let out = f(&part, &source);
@@ -986,15 +986,14 @@ fn apply_steps(drawing: &mut Drawing, part: &Part, steps: &[Step2]) -> Result<()
 /// Replays the recipe and describes its result as a part: the body, its geometric
 /// digest and the dimensions of its features.
 fn build<'k>(
-    kernel: &'k SmlibKernel,
+    kernel: &'k CatallaxKernel,
     recipe: &Recipe,
     path: &Path,
     revision: ContentHash,
 ) -> Result<(Part<'k>, String), String> {
     let (report, body) = soliddraft_recipe::build(kernel, recipe).map_err(|e| format!("{}: {e}", path.display()))?;
-    let bbox = kernel.topology(body).map_err(|e| e.to_string())?.bbox;
     let backend = format!("{} {}", report.backend.name, report.backend.version);
-    let part = Part { kernel, body, digest: revision, dimensions: feature_dimensions(recipe, bbox), namer: None };
+    let part = Part { kernel, body, digest: revision, dimensions: feature_dimensions(recipe), namer: None };
     Ok((part, backend))
 }
 
@@ -1002,8 +1001,21 @@ fn build<'k>(
 /// circle's diameter (identical cut circles counted as one), and each extrusion that adds
 /// material dimensioned from the part's base along its direction, so heights share one
 /// datum.
-pub(crate) fn feature_dimensions(recipe: &Recipe, bbox: Aabb) -> Vec<ModelDimension> {
+pub(crate) fn feature_dimensions(recipe: &Recipe) -> Vec<ModelDimension> {
     let step = |id: &str| recipe.steps.iter().find(|s| s.id == id);
+    let mut input = step(&recipe.result);
+    let mut datum = None;
+    // Follow the result's target to its base profile, so display bounds never set a dimension datum.
+    for _ in &recipe.steps {
+        match input.map(|s| &s.command) {
+            Some(Step::Profile { plane, .. }) => {
+                datum = Some(plane.plane().origin);
+                break;
+            }
+            Some(command) => input = command.inputs().first().and_then(|id| step(id)),
+            None => break,
+        }
+    }
     let mut out: Vec<ModelDimension> = Vec::new();
     let mut cut_circles: Vec<(usize, f64, Vec3)> = Vec::new();
     for s in &recipe.steps {
@@ -1062,14 +1074,7 @@ pub(crate) fn feature_dimensions(recipe: &Recipe, bbox: Aabb) -> Vec<ModelDimens
             Shape::Loops { .. } => {}
         }
         if !cut {
-            let corners = (0..8).map(|i| {
-                Vec3::new(
-                    if i & 1 == 0 { bbox.min.x } else { bbox.max.x },
-                    if i & 2 == 0 { bbox.min.y } else { bbox.max.y },
-                    if i & 4 == 0 { bbox.min.z } else { bbox.max.z },
-                )
-            });
-            let base = corners.map(|p| p.dot(dir)).fold(f64::INFINITY, f64::min);
+            let base = datum.unwrap_or(plane.origin).dot(dir);
             let from = plane.origin + dir * (base - plane.origin.dot(dir));
             out.push(ModelDimension {
                 feature: s.id.clone(),
@@ -1136,13 +1141,27 @@ mod tests {
     fn the_bracket_recipe_defines_its_dimensions() {
         let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../recipes/bracket.json")).unwrap();
         let recipe = soliddraft_recipe::parse(&text).unwrap();
-        let bbox = Aabb { min: Vec3::ZERO, max: Vec3::new(120.0, 90.0, 60.0) };
-        let dims = feature_dimensions(&recipe, bbox);
+        let dims = feature_dimensions(&recipe);
         let names: Vec<String> = dims.iter().map(|d| format!("{} {} x{}", d.feature, d.name, d.count)).collect();
         assert!(names.contains(&"hole1 diameter x4".to_owned()), "{names:?}");
         assert!(names.contains(&"slot width x1".to_owned()) && names.contains(&"slot height x1".to_owned()));
         let boss = dims.iter().find(|d| d.feature == "boss" && d.name == "depth").unwrap();
         let ModelMeasure::Distance { from, to, .. } = boss.measure else { panic!() };
         assert_eq!((from.z, to.z), (0.0, 30.0), "heights are from the base");
+        let plate = dims.iter().find(|d| d.feature == "plate" && d.name == "depth").unwrap();
+        let ModelMeasure::Distance { from, to, .. } = plate.measure else { panic!() };
+        assert_eq!((from.z, to.z), (0.0, 10.0));
+    }
+
+    #[test]
+    fn recipe_depths_use_the_base_profile_datum() {
+        let mut recipe = soliddraft_recipe::parse(include_str!("../../../recipes/box.json")).unwrap();
+        let Step::Profile { plane, .. } = &mut recipe.steps[0].command else { panic!() };
+        *plane =
+            soliddraft_recipe::PlaneSpec::Full(soliddraft_kernel_api::Plane::XY.with_origin(Vec3::new(0.0, 0.0, 7.0)));
+        let dims = feature_dimensions(&recipe);
+        let depth = dims.iter().find(|d| d.name == "depth").unwrap();
+        let ModelMeasure::Distance { from, to, .. } = depth.measure else { panic!() };
+        assert_eq!((from.z, to.z), (7.0, 17.0));
     }
 }

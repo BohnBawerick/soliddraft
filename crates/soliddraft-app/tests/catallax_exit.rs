@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use egui::{Key, pos2, vec2};
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use soliddraft_app::app::{Automation, SolidDraftApp};
 use soliddraft_app::document::{self, FeatureKind, Selection};
 use soliddraft_kernel_api::{BooleanOp, Vec3};
@@ -149,4 +150,102 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
     assert!((volume(doc) - original).abs() < 1e-4);
     harness.run_steps(5);
     harness.render().expect("rebuilt bracket renders");
+    drawing_workspace(&mut harness);
+}
+
+fn click_button(harness: &mut Harness<'_, SolidDraftApp>, label: &str) {
+    harness
+        .get_all_by_role_and_label(egui::accesskit::Role::Button, label)
+        .next()
+        .unwrap_or_else(|| panic!("no button labelled {label}"))
+        .click();
+    harness.run_steps(4);
+}
+
+fn click_at(harness: &mut Harness<'_, SolidDraftApp>, pos: egui::Pos2) {
+    harness.hover_at(pos);
+    harness.run_steps(3);
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        harness.step();
+    }
+    harness.run_steps(4);
+}
+
+fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
+    use soliddraft_drawing::ViewKind;
+
+    click_button(harness, "Make drawing");
+    click_button(harness, "Create drawing (Enter)");
+    harness.run_steps(12);
+    assert!(harness.state().state.drawing.is_active());
+    let session = harness.state().state.drawing.session.as_ref().unwrap();
+    assert_eq!(session.doc.drawing.sheets[0].views.len(), 4);
+    assert!(session.doc.drawing.sheets[0].views.iter().all(|v| !v.geometry.curves.is_empty()));
+    {
+        let ctx = soliddraft_app::drawing::part::PartContext::new(&harness.state().state.doc).unwrap();
+        let part = ctx.part();
+        let index = soliddraft_drawing::PartIndex::build(&part).unwrap();
+        for curve in session.doc.drawing.sheets[0].views.iter().flat_map(|v| &v.geometry.curves) {
+            assert!(
+                matches!(index.resolve(&curve.source), soliddraft_drawing::Resolution::Found(_)),
+                "new view reference does not resolve: {:?}",
+                curve.source
+            );
+        }
+    }
+    let top = session.doc.drawing.sheets[0]
+        .views
+        .iter()
+        .find(|v| soliddraft_drawing::project::view_label(&session.doc.drawing.sheets[0], v) == "Top view")
+        .unwrap()
+        .id;
+    let boss = session.screen_of_model(top, Vec3::new(70.0, 45.0, 30.0)).unwrap();
+    click_button(harness, "Section");
+    click_at(harness, boss);
+    click_at(harness, boss + vec2(70.0, 2.0));
+    assert!(harness.state().state.drawing.session.as_ref().unwrap().draft.pending.is_some());
+    let session = harness.state().state.drawing.session.as_ref().unwrap();
+    let top_pos = session.doc.drawing.view(top).unwrap().position;
+    let place = session.screen_of(soliddraft_kernel_api::Point2::new(top_pos.u + 130.0, top_pos.v));
+    click_at(harness, place);
+    let session = harness.state().state.drawing.session.as_ref().unwrap();
+    let section = session.doc.drawing.sheets[0]
+        .views
+        .iter()
+        .find(|v| matches!(v.kind, ViewKind::Section { .. }))
+        .expect("the section was placed in the drawing workspace");
+    assert_eq!(section.geometry.hatch.len(), 3);
+    assert!(section.geometry.curves.iter().any(|c| c.visible));
+    harness.render().expect("Catallax drawing workspace renders its section");
+
+    let doc = &mut harness.state_mut().state.doc;
+    let plate = doc.features.iter().find(|f| f.name == "plate").unwrap();
+    let id = plate.id;
+    let FeatureKind::Extrude(mut params) = plate.kind.clone() else { panic!() };
+    // The hole tools end at Z=11; keep this edit through-hole to preserve the referenced rims.
+    params.depth = 10.5;
+    doc.apply(document::Command::EditExtrude { id, params }).unwrap();
+    harness.run_steps(12);
+    let session = harness.state().state.drawing.session.as_ref().unwrap();
+    let update = session.doc.last_update.as_ref().expect("the drawing regenerated after the plate edit");
+    assert_eq!(update.views, 5);
+    assert!(
+        update.dangling.is_empty(),
+        "annotation states: {:?}",
+        session.doc.drawing.sheets[0].annotations.iter().map(|a| (a.id, &a.state)).collect::<Vec<_>>()
+    );
+    assert!(session.is_up_to_date());
+    let section =
+        session.doc.drawing.sheets[0].views.iter().find(|v| matches!(v.kind, ViewKind::Section { .. })).unwrap();
+    assert_eq!(section.geometry.hatch.len(), 3);
+    let image = harness.render().expect("regenerated Catallax drawing workspace renders");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/exit-test/catallax-drawing.png");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    image.save(path).expect("save the Catallax drawing workspace proof");
 }
