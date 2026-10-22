@@ -43,6 +43,8 @@ Optional `checks` use JSON pointers into `command.json`, with exactly one of
 `tolerance`, default 0.001. Missing values fail. A step can set `render: false`
 for a sketch without a body, `drawing: true` for drawing output, or `refusal`
 with an expected stable kernel code. Unexpected tool errors fail immediately.
+MCP rounds reported volumes to two decimals, so the bracket checks allow
+0.005 mm³ around the analytical volume.
 
 Every run has `scenario.json`, `protocol.json` and `result.json`. Each executed
 MCP tool call has a numbered directory under `commands/` containing:
