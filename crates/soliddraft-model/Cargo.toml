@@ -20,7 +20,7 @@ thiserror.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
-soliddraft-kernel-smlib.workspace = true
+soliddraft-kernel-catallax.workspace = true
 
 [lints]
 workspace = true

@@ -1,36 +1,31 @@
-//! The policy, the worker and the cache on the SMLib kernel.
+//! The policy, the worker and the cache on the Catallax kernel.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use soliddraft_kernel_api::contract;
-use soliddraft_kernel_api::{Kernel, KernelError, Mesh, OpTag, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_api::{Kernel, KernelError, Mesh, Vec3};
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_tessellation::{DeviceBudget, DisplayCache, Level, Levels, Quality, Tessellator, report};
 
 const WAIT: Duration = Duration::from_secs(60);
 
-/// The contract block with its top edges rounded: planes, cylinders and a 50 mm
-/// diagonal.
-fn rounded_block(k: &dyn Kernel) -> soliddraft_kernel_api::BodyId {
-    let b = contract::block(k);
-    let t = k.topology(b).unwrap();
-    let top: Vec<_> = t.edges.iter().filter(|e| e.bbox.min.z > 10.0 - 1e-6).map(|e| e.id).collect();
-    k.fillet(&OpTag::new("round"), b, &top, 3.0).unwrap().body
+/// A cylinder exercises chord refinement without waiting for kernel fillets.
+fn curved_body(k: &dyn Kernel) -> soliddraft_kernel_api::BodyId {
+    contract::cylinder(k, Vec3::ZERO, 10.0, 20.0)
 }
 
 #[test]
 fn the_report_gives_each_levels_deviation_and_triangles() {
-    let k = SmlibKernel::new();
-    let body = rounded_block(&k);
+    let k = CatallaxKernel::new();
+    let body = curved_body(&k);
     let r = report(&k, body, &Quality::Auto).unwrap();
-    assert!((r.diagonal_mm - 2600f64.sqrt()).abs() < 1e-6, "{}", r.diagonal_mm);
+    assert!((34.6..34.8).contains(&r.diagonal_mm), "{}", r.diagonal_mm);
     let deviations: Vec<f64> = r.levels.iter().map(|l| l.deviation_mm.unwrap()).collect();
     assert!((deviations[1] - 0.002 * r.diagonal_mm).abs() < 1e-12);
     assert_eq!(deviations[0], deviations[1] * 4.0);
     assert_eq!(deviations[2], deviations[1] / 4.0);
-    // The 3 mm fillets' 15 degree angle bounds the mesh before the coarse and standard
-    // chords do (its sagitta is 0.026 mm), so those two levels can come out equal.
+    // Chord refinement adds triangles on the curved wall.
     let triangles: Vec<usize> = r.levels.iter().map(|l| l.triangles).collect();
     assert!(triangles.windows(2).all(|w| w[0] <= w[1]), "finer levels never have fewer triangles: {triangles:?}");
     assert!(triangles[2] > triangles[0], "{triangles:?}");
@@ -50,8 +45,8 @@ fn the_report_gives_each_levels_deviation_and_triangles() {
 
 #[test]
 fn the_worker_answers_off_the_interface_thread() {
-    let k: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
-    let body = rounded_block(k.as_ref());
+    let k: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
+    let body = curved_body(k.as_ref());
     let levels = Levels::new(&Quality::Auto, k.topology(body).unwrap().bbox.diagonal());
     let mut t: Tessellator<&str> = Tessellator::new(k.clone());
     let generation = t.request("block", body, levels.all());
@@ -66,8 +61,8 @@ fn the_worker_answers_off_the_interface_thread() {
 
 #[test]
 fn a_new_request_supersedes_the_old_one() {
-    let k: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
-    let body = rounded_block(k.as_ref());
+    let k: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
+    let body = curved_body(k.as_ref());
     let coarse = Levels::new(&Quality::Slider { value: 1 }, 50.0);
     let fine = Levels::new(&Quality::Slider { value: 10 }, 50.0);
     let mut t: Tessellator<u32> = Tessellator::new(k.clone());
@@ -97,7 +92,7 @@ fn a_new_request_supersedes_the_old_one() {
 
 #[test]
 fn many_placements_share_one_definitions_meshes() {
-    let k: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let k: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let bolt = contract::cylinder(k.as_ref(), Vec3::new(0.0, 0.0, 0.0), 3.0, 20.0);
     let levels = Levels::new(&Quality::Auto, k.topology(bolt).unwrap().bbox.diagonal());
     let mut t: Tessellator<&str> = Tessellator::new(k.clone());
@@ -113,8 +108,6 @@ fn many_placements_share_one_definitions_meshes() {
     assert!(cache.missing(&"bolt", &levels).is_empty());
     let per_placement: Vec<_> = (0..10_000).map(|_| cache.best(&"bolt", &levels, Level::Standard).unwrap().1).collect();
     assert!(per_placement.windows(2).all(|w| Arc::ptr_eq(&w[0], &w[1])), "every placement draws the same mesh");
-    // A small cylinder's circles are bounded by the 15 degree angle, not the chord, at
-    // the coarse and standard levels, so those two share one mesh.
     let standard = cache.get(&"bolt", levels.key(Level::Standard)).unwrap();
     let coarse = cache.get(&"bolt", levels.key(Level::Coarse)).unwrap();
     assert!(Arc::ptr_eq(&standard, &coarse) || standard.triangle_count() > coarse.triangle_count());

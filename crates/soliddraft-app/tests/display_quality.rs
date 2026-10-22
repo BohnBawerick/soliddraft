@@ -1,4 +1,4 @@
-//! The part view's display levels on the SMLib kernel: a rebuild shows the standard
+//! The part view's display levels on the Catallax kernel: a rebuild shows the standard
 //! level at once, the worker makes the others, the camera moves between them, and a
 //! quality change swaps the mesh when its replacement is ready without a rebuild or a
 //! new revision.
@@ -13,7 +13,7 @@ use soliddraft_tessellation::{Level, Projection, Quality};
 fn disc() -> Document {
     let mut doc = soliddraft_app::document::Document::new(
         "Part1",
-        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+        std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
     );
     let params = ExtrudeParams {
         sketch: None,

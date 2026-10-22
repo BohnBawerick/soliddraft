@@ -61,7 +61,7 @@ fn the_bracket_in_each_look() {
             SolidDraftApp::new(
                 cc,
                 soliddraft_app::command_tools::board_bracket_on(std::sync::Arc::new(
-                    soliddraft_kernel_smlib::SmlibKernel::new(),
+                    soliddraft_kernel_catallax::CatallaxKernel::new(),
                 )),
                 Automation::default(),
             )

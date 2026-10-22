@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -13,7 +13,7 @@ use soliddraft_tessellation::{ExportTolerance, Level, Quality, Settings};
 
 /// A cylinder of radius 10 and height 20, so the quality setting shows.
 fn cylinder() -> Document {
-    let mut doc = Document::new("Pin", Arc::new(SmlibKernel::new()));
+    let mut doc = Document::new("Pin", Arc::new(CatallaxKernel::new()));
     let mut s = Sketch::new();
     s.circle_at(P2::new(0.0, 0.0), 20.0).unwrap();
     solve(&mut s, None, true);

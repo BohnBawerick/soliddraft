@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use soliddraft_document::{ConfigScope, ConfigurationId};
 use soliddraft_kernel_api::{FaceId, Kernel};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_materials::{
     Appearance, AppearanceId, Catalog, Library, LibraryMatch, Material, MaterialId, Origin, sldmat,
 };
@@ -340,7 +340,7 @@ fn import(file: &Path, a: &Args) -> Result<bool, String> {
 }
 
 pub(crate) fn open(part: &Path) -> Result<Document, String> {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     Document::open(part, kernel).map_err(|e| format!("{}: {e}", part.display()))
 }
 

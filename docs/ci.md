@@ -1,14 +1,7 @@
 # Continuous integration
 
-`hosted.yml` runs on pushes, pull requests and manual dispatch. All jobs use
-GitHub-hosted runners and read-only repository permissions.
+`hosted.yml` runs on pushes, pull requests and manual dispatch. All jobs use GitHub-hosted runners and read-only repository permissions.
 
-Linux runs formatting, clippy, the pinned USD BRep check, workspace tests, the browser
-app build and Rust 1.88 compatibility checks. Rust-only crates run on Linux, macOS
-and Windows. CI does not build the kernel's Emscripten module; see
-[the web build](web.md) for the manual build and contract-test commands.
+The complete Catallax-only workspace builds and tests on Linux, macOS and Windows from a checkout with no submodules. Linux also runs formatting, clippy, the browser application build, the interactive Catallax bracket test and Rust 1.88 checks for the crates that still support it. The browser build compiles Catallax into the same `wasm32-unknown-unknown` module as the application. No job needs SMLib, Emscripten or a C++ kernel toolchain.
 
-Run the same checks locally with `cargo fmt --all --check`,
-`cargo clippy --workspace --all-targets --all-features -- -D warnings`,
-`cargo test --workspace --all-features` and
-`cargo build -p soliddraft-web --target wasm32-unknown-unknown`.
+Run the same checks with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features --locked` and `cargo build -p soliddraft-web --target wasm32-unknown-unknown --locked`.

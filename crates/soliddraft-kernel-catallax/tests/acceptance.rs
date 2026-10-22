@@ -8,7 +8,6 @@ const BRACKET: &str = include_str!("../../../recipes/bracket.json");
 
 #[test]
 fn phase_zero_repeatability_and_failure_preserves_the_previous_body() {
-    // Successful fillets remain SMLib coverage until Catallax stage 4.
     for text in [
         include_str!("../../../recipes/box.json"),
         include_str!("../../../recipes/cylinder.json"),

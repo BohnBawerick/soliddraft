@@ -12,7 +12,7 @@
 # 3. Sets the modification time of every file in the checkout (see below).
 # 4. Runs the command with --timings.
 # 5. After a successful build, deletes the builds it did not use (see prune below).
-# 6. Reports how many build units were fresh, the kernel's ccache hits, what pruning
+# 6. Reports how many build units were fresh, what pruning
 #    freed and the directory's size.
 #
 # Cargo decides whether a workspace crate is fresh by comparing its source files'
@@ -145,11 +145,10 @@ prune() {
 }
 
 rm -rf -- "$target/cargo-timings"
-ccache_log=$(mktemp)
 status=0
 pruned=
 # --timings goes straight after the subcommand, before any `--` for the compiler.
-CCACHE_STATSLOG=$ccache_log "$1" "$2" --timings "${@:3}" || status=$?
+"$1" "$2" --timings "${@:3}" || status=$?
 if ((status == 0)); then
     pruned=$(prune "$@" || echo "failed")
     echo "$id" >"$stamp"
@@ -166,14 +165,6 @@ report=$(mktemp)
             sed 's/:<\/td><td>/: /' | paste -sd ',' | sed 's/,/, /g')
         echo "- Cargo: ${units:-no unit counts in the timings report}"
     fi
-    # The first Hits line counts every cacheable compile of this job.
-    ccache_hits=$(CCACHE_STATSLOG=$ccache_log ccache --show-log-stats 2>/dev/null |
-        awk '/^ +Hits:/ && !seen++ { $1 = ""; print substr($0, 2) }' || true)
-    if [[ -n $ccache_hits ]]; then
-        echo "- ccache: $ccache_hits hits"
-    else
-        echo "- ccache: no C++ compiled"
-    fi
     if [[ -n $pruned ]]; then
         echo "- Pruning: $pruned"
     fi
@@ -188,5 +179,5 @@ cat "$report"
 if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
     cat "$report" >>"$GITHUB_STEP_SUMMARY"
 fi
-rm -f -- "$report" "$ccache_log"
+rm -f -- "$report"
 exit "$status"

@@ -315,7 +315,7 @@ pub struct Validation {
 /// Which backend is answering.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackendInfo {
-    /// Short backend name, such as "smlib".
+    /// Short backend name, currently "catallax".
     pub name: String,
     /// The backend's kernel version, such as an upstream commit.
     pub version: String,
@@ -407,7 +407,7 @@ pub trait Kernel: Send + Sync {
     fn backend(&self) -> BackendInfo;
 
     /// Registers a closed profile for an extrusion or revolution.
-    /// SMLib also exposes sheet queries on this handle. Catallax defers its geometry
+    /// Catallax defers profile geometry
     /// until a sweep and reports sheet queries as unsupported.
     fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult>;
 

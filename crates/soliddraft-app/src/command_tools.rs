@@ -1460,7 +1460,7 @@ mod tests {
 
     #[test]
     fn the_board_bracket_builds() {
-        let doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
         let names: Vec<&str> = doc.features.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(
             names,
@@ -1488,7 +1488,7 @@ mod tests {
 
     #[test]
     fn propose_apply_undo_is_one_step() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
         let mut book = ProposalBook::default();
         let before = doc.features.len();
         let depth = doc.undo_depth();
@@ -1529,7 +1529,7 @@ mod tests {
 
     #[test]
     fn unresolved_references_are_rejected_before_preview() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
         let mut book = ProposalBook::default();
         let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
         for (commands, expect) in [
@@ -1553,7 +1553,7 @@ mod tests {
 
     #[test]
     fn the_inside_corner_reads_as_concave() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
         let mut book = ProposalBook::default();
         let tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
         let all: Vec<Value> = tools

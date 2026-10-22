@@ -330,7 +330,7 @@ impl Kernel for CatallaxKernel {
     fn fillet(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
         self.observe("fillet", || {
             self.solid(body)?;
-            Err(gap("fillet", "4 (or stage 3 if brought forward)"))
+            Err(gap("fillets between planes and cylinders", "3; other fillets arrive with Catallax stage 4"))
         })
     }
 

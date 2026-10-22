@@ -14,7 +14,7 @@ use soliddraft_document::{
 };
 use soliddraft_drawing::file;
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 
 use crate::draw::{missing_text, search_folders};
 
@@ -282,7 +282,7 @@ fn repair_drawing(path: &Path, a: &Args) -> Result<bool, String> {
 }
 
 fn migrate(a: &Args) -> Result<bool, String> {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut out = Vec::new();
     for path in &a.files {
         let identity = identify_file(path).map_err(|e| format!("{}: {e}", path.display()))?;

@@ -58,7 +58,7 @@ pub struct FileMeta {
     pub format: String,
     /// The app that wrote the file, such as "soliddraft 0.1.0".
     pub app: String,
-    /// The kernel backend the line work came from, such as "smlib c9c5979".
+    /// The kernel backend the line work came from, such as "catallax a778fb4".
     pub kernel: String,
     /// Units of dimensions.
     pub units: Units,

@@ -1,18 +1,14 @@
 //! `soliddraft-server`: serves the web build of SolidDraft. See the library docs.
 
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
 
 use soliddraft_assistant::AssistantSettings;
-use soliddraft_kernel_smlib::SmlibKernel;
 use soliddraft_server::{Config, Server};
 
-const USAGE: &str = "soliddraft-server [--listen ADDR] [--web DIR] [--session-idle MINUTES]
+const USAGE: &str = "soliddraft-server [--listen ADDR] [--web DIR]
 
   --listen ADDR           address to listen on (default 127.0.0.1:8766)
   --web DIR               the web build to serve (default ./web)
-  --session-idle MINUTES  release a browser tab's bodies after this long without a heartbeat (default 10)
 
 The assistant uses the provider, key and model the environment gives, as the desktop app
 does: OPENROUTER_API_KEY or ANTHROPIC_API_KEY, and SOLIDDRAFT_PROVIDER and SOLIDDRAFT_MODEL
@@ -24,7 +20,6 @@ fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let mut listen = "127.0.0.1:8766".to_owned();
     let mut web_dir = PathBuf::from("web");
-    let mut idle_minutes = 10u64;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| {
@@ -36,12 +31,6 @@ fn main() {
         match arg.as_str() {
             "--listen" => listen = value("--listen"),
             "--web" => web_dir = PathBuf::from(value("--web")),
-            "--session-idle" => {
-                idle_minutes = value("--session-idle").parse().unwrap_or_else(|_| {
-                    eprintln!("--session-idle takes a whole number of minutes");
-                    std::process::exit(2)
-                })
-            }
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return;
@@ -73,9 +62,7 @@ fn main() {
     });
     let config = Config {
         web_dir,
-        kernel: Arc::new(SmlibKernel::new()),
         provider,
-        session_idle: Duration::from_secs(idle_minutes * 60),
         commit: soliddraft_assistant::environment::var("SOLIDDRAFT_COMMIT").filter(|c| !c.is_empty()),
     };
     let server = Server::bind(&listen, config).unwrap_or_else(|e| {

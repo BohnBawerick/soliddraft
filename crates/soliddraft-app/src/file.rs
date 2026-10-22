@@ -197,7 +197,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("soliddraft-file-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         set_config_dir(Some(dir.clone()));
-        let kernel: Arc<dyn Kernel> = Arc::new(soliddraft_kernel_smlib::SmlibKernel::new());
+        let kernel: Arc<dyn Kernel> = Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new());
         let mut doc = Document::new("Bracket", kernel.clone());
         doc.apply(Command::AddExtrude { params: ExtrudeParams::default(), via_assistant: false }).unwrap();
         let path = dir.join(format!("bracket.{EXTENSION}"));

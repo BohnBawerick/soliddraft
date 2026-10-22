@@ -1630,7 +1630,7 @@ mod tests {
     use crate::sketch::{ConstraintKind, EntityKind, P2, PointRef};
 
     fn doc() -> Document {
-        Document::new("Test", Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()))
+        Document::new("Test", Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()))
     }
 
     fn rect_sketch(w: f64, h: f64, at: P2) -> Sketch {

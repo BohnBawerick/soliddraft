@@ -2,22 +2,15 @@
 //! Assistant requests still use the server and stream in the background.
 
 use std::cell::RefCell;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use serde::Deserialize;
 use soliddraft_assistant::relay::{LineReader, RelayLine};
 use soliddraft_assistant::wire::ChatRequest;
 use soliddraft_assistant::{Delivery, Provider, ProviderError, ProviderResponse, StreamEvent};
-use soliddraft_kernel_api::Kernel;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-
-/// The header that names this tab's kernel session; the server's `SESSION_HEADER`.
-const SESSION_HEADER: &str = "x-soliddraft-session";
-
-/// How often the tab tells the server it is still open, in milliseconds.
-const HEARTBEAT_MS: i32 = 60_000;
 
 thread_local! {
     static CONTEXT: RefCell<Option<egui::Context>> = const { RefCell::new(None) };
@@ -45,44 +38,6 @@ fn js_error(value: JsValue) -> String {
     value.as_string().or_else(|| js_sys::JSON::stringify(&value).ok().and_then(|s| s.as_string())).unwrap_or_default()
 }
 
-/// This tab's kernel session: a random id, kept alive by a heartbeat and closed when the
-/// page goes away.
-fn session() -> &'static str {
-    static SESSION: OnceLock<String> = OnceLock::new();
-    SESSION.get_or_init(|| {
-        let mut bytes = [0u8; 16];
-        let filled = window().crypto().ok().and_then(|c| c.get_random_values_with_u8_array(&mut bytes).ok()).is_some();
-        if !filled {
-            for b in &mut bytes {
-                *b = (js_sys::Math::random() * 256.0) as u8;
-            }
-        }
-        let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-        keep_alive(&id);
-        id
-    })
-}
-
-fn keep_alive(id: &str) {
-    let ping_url = format!("api/session/ping?session={id}");
-    let ping = Closure::<dyn FnMut()>::new(move || {
-        let init = web_sys::RequestInit::new();
-        init.set_method("POST");
-        let _ = window().fetch_with_str_and_init(&ping_url, &init);
-    });
-    let _ =
-        window().set_interval_with_callback_and_timeout_and_arguments_0(ping.as_ref().unchecked_ref(), HEARTBEAT_MS);
-    ping.forget();
-
-    // A beacon still goes out while the page unloads, which a fetch may not.
-    let close_url = format!("api/session/close?session={id}");
-    let close = Closure::<dyn FnMut()>::new(move || {
-        let _ = window().navigator().send_beacon(&close_url);
-    });
-    let _ = window().add_event_listener_with_callback("pagehide", close.as_ref().unchecked_ref());
-    close.forget();
-}
-
 /// The server's answer to a failed request, in a line. A page from something that is not
 /// the SolidDraft server, such as a proxy's error page, is left out.
 fn refusal(status: u16, body: &str) -> String {
@@ -101,20 +56,11 @@ fn request(method: &str, url: &str, body: Option<&str>) -> Result<(u16, String),
     if body.is_some() {
         xhr.set_request_header("content-type", "application/json").map_err(js_error)?;
     }
-    xhr.set_request_header(SESSION_HEADER, session()).map_err(js_error)?;
     xhr.send_with_opt_str(body).map_err(|e| format!("cannot reach the SolidDraft server: {}", js_error(e)))?;
     let status = xhr.status().map_err(js_error)?;
     let text = xhr.response_text().map_err(js_error)?.unwrap_or_default();
     Ok((status, text))
 }
-
-/// The browser's in-process Catallax backend.
-pub fn kernel() -> Arc<dyn Kernel> {
-    crate::kernel()
-}
-
-/// Catallax is compiled into the application and needs no separate module to load.
-pub async fn kernel_ready() {}
 
 /// What the server says about itself.
 #[derive(Clone, Debug, Default, Deserialize)]

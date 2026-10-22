@@ -1,10 +1,10 @@
-//! Document behaviour on the SMLib backend: commands, undo and redo, reorder, suppress,
+//! Document behaviour on the Catallax backend: commands, undo and redo, reorder, suppress,
 //! rollback, references and files.
 
 use std::sync::Arc;
 
 use soliddraft_kernel_api::{Kernel, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     BlendFeature, BuiltinShape, Command, CommandError, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp,
@@ -12,7 +12,7 @@ use soliddraft_model::{
 };
 
 fn doc() -> Document {
-    Document::new("Part1", Arc::new(SmlibKernel::new()))
+    Document::new("Part1", Arc::new(CatallaxKernel::new()))
 }
 
 fn add(doc: &mut Document, kind: FeatureKind) -> FeatureId {
@@ -55,9 +55,18 @@ fn block(doc: &mut Document) -> (FeatureId, FeatureId) {
     (s, e)
 }
 
+fn assert_waiting(doc: &Document, feature: FeatureId) {
+    assert!(
+        matches!(doc.status(feature), Some(FeatureStatus::Failed(error))
+        if error.contains("Catallax stage 3") && error.contains("Catallax stage 4")),
+        "{:?}",
+        doc.status(feature)
+    );
+}
+
 fn top_edges(doc: &Document) -> Vec<soliddraft_model::EdgeRef> {
     let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
-    t.edges.iter().filter(|e| e.bbox.min.z > 10.0 - 1e-6).map(|e| doc.edge_ref(e.id).unwrap()).collect()
+    t.edges.iter().filter(|e| e.midpoint.z > 10.0 - 1e-6).map(|e| doc.edge_ref(e.id).unwrap()).collect()
 }
 
 #[test]
@@ -83,7 +92,8 @@ fn undo_and_redo_walk_the_command_stack() {
     let edges = top_edges(&d);
     let f = add(&mut d, FeatureKind::Fillet(BlendFeature { edges, size: 2.0 }));
     let filleted = volume(&d);
-    assert!(filleted < 12000.0);
+    assert!((filleted - 12000.0).abs() < 1e-6);
+    assert_waiting(&d, f);
     assert_eq!(d.undo_label(), Some("add Fillet1"));
     d.undo().unwrap();
     assert!(d.feature(f).is_none());
@@ -116,17 +126,19 @@ fn edits_rebuild_only_from_the_first_changed_feature() {
     })
     .unwrap();
     assert_eq!(d.body_after(e), block_body, "editing the fillet keeps the block");
-    assert_ne!(d.body_after(f), fillet_body);
+    assert_eq!(d.body_after(f), fillet_body, "an unsupported fillet passes the same body through");
+    assert_waiting(&d, f);
     d.execute(Command::EditFeature { id: e, kind: boss(s, 20.0) }).unwrap();
     assert_ne!(d.body_after(e), block_body, "editing the block rebuilds it");
-    assert!(d.status(f).unwrap().is_ok(), "the fillet follows its edges to the taller block");
+    assert_waiting(&d, f);
+    assert_eq!(d.body_after(f), d.body_after(e));
 }
 
 fn top_edges_of(d: &Document, feature: FeatureId) -> Vec<soliddraft_model::EdgeRef> {
     let body = d.body_after(feature).unwrap();
     let t = d.kernel().topology(body).unwrap();
-    let z = t.bbox.max.z;
-    t.edges.iter().filter(|e| e.bbox.min.z > z - 1e-6).map(|e| d.edge_ref(e.id).unwrap()).collect()
+    let z = t.edges.iter().map(|e| e.midpoint.z).fold(f64::NEG_INFINITY, f64::max);
+    t.edges.iter().filter(|e| e.midpoint.z > z - 1e-6).map(|e| d.edge_ref(e.id).unwrap()).collect()
 }
 
 #[test]
@@ -315,7 +327,7 @@ fn a_kernel_failure_marks_the_feature_and_keeps_the_body() {
 
 #[test]
 fn files_round_trip_and_refuse_what_they_cannot_read() {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut d = Document::new("Block", kernel.clone());
     block(&mut d);
     let edges = top_edges(&d);
@@ -353,7 +365,7 @@ fn legacy_part_file(d: &Document) -> Vec<u8> {
 fn draftwell_parts_open_and_save_with_soliddraft_prefixes() {
     use soliddraft_document::manifest::{Entry, write_package};
     use soliddraft_document::{Package, Section};
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut d = Document::new("Old block", kernel.clone());
     block(&mut d);
     let custom = soliddraft_tessellation::Settings {
@@ -393,7 +405,7 @@ fn draftwell_parts_open_and_save_with_soliddraft_prefixes() {
 
 #[test]
 fn format_1_parts_open_with_a_stable_id_and_migrate_on_save() {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut d = Document::new("Block", kernel.clone());
     block(&mut d);
     let old = legacy_part_file(&d);
@@ -425,7 +437,7 @@ fn format_1_parts_open_with_a_stable_id_and_migrate_on_save() {
 
 #[test]
 fn hashes_follow_the_design_and_ids_follow_the_document() {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut d = Document::new("Block", kernel.clone());
     let (s, e) = block(&mut d);
     let (rev, shape) = (d.semantic_hash(), d.geometry_hash());
@@ -452,7 +464,7 @@ fn hashes_follow_the_design_and_ids_follow_the_document() {
 #[test]
 fn files_with_unknown_required_sections_are_refused() {
     use soliddraft_document::manifest::{Entry, Section, write_package};
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut d = Document::new("Block", kernel.clone());
     block(&mut d);
     let mut m = d.manifest();
@@ -489,28 +501,25 @@ fn sketches_on_faces_follow_the_face() {
 }
 
 #[test]
-fn chamfers_bevel_edges_and_name_their_faces() {
+fn existing_chamfer_waits_for_stage_three_and_keeps_the_body_after_reopen() {
     let mut d = doc();
-    block(&mut d);
+    let (_, block) = block(&mut d);
     let edges = top_edges(&d);
     let c = add(&mut d, FeatureKind::Chamfer(BlendFeature { edges, size: 1.0 }));
-    assert!(d.status(c).unwrap().is_ok(), "{:?}", d.status(c));
     assert_eq!(d.feature(c).unwrap().name, "Chamfer1");
-    let t = d.kernel().topology(d.body().unwrap()).unwrap();
-    assert_eq!(t.faces.len(), 10, "four bevel faces");
-    let v = volume(&d);
-    assert!(v < 12000.0 && v > 12000.0 - 0.5 * 140.0 - 1e-6, "volume {v}");
-    let blends: Vec<u32> = d
-        .generated_faces(c)
-        .iter()
-        .filter_map(|n| match n.generator {
-            Generator::Blend { edge } => Some(edge),
-            _ => None,
-        })
-        .collect();
-    let mut sorted = blends.clone();
-    sorted.sort();
-    assert_eq!(sorted, [0, 1, 2, 3], "each bevel face names the edge it replaced");
+    let check = |d: &Document| {
+        assert!(
+            matches!(d.status(c), Some(FeatureStatus::Failed(error)) if error.contains("Catallax stage 3")),
+            "{:?}",
+            d.status(c)
+        );
+        assert_eq!(d.body_after(c), d.body_after(block));
+        assert!(d.generated_faces(c).is_empty());
+        assert!((volume(d) - 12000.0).abs() < 1e-6);
+    };
+    check(&d);
+    let back = Document::from_bytes(&d.to_bytes().unwrap(), Arc::new(CatallaxKernel::new())).unwrap();
+    check(&back);
 }
 
 #[test]

@@ -16,7 +16,7 @@ use soliddraft_assembly::{
 };
 use soliddraft_document::{DocKind, DocRef, identify_file};
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_materials::{Appearance, Srgb};
 use soliddraft_tessellation::Quality;
 
@@ -163,7 +163,7 @@ fn rotation(a: &Args) -> Result<Option<DQuat>, String> {
 }
 
 fn kernel() -> Arc<dyn Kernel> {
-    Arc::new(SmlibKernel::new())
+    Arc::new(CatallaxKernel::new())
 }
 
 fn options(a: &Args) -> OpenOptions {

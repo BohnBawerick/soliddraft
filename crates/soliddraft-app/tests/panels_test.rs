@@ -40,7 +40,9 @@ fn harness() -> App<'static> {
         .build_eframe(|cc| {
             SolidDraftApp::new(
                 cc,
-                soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())),
+                soliddraft_app::demo_document_on(
+                    std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
+                ),
                 Automation::default(),
             )
         })

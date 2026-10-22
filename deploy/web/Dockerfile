@@ -2,30 +2,7 @@
 # root with `docker compose -f deploy/web/compose.yaml build`;
 # docs/web.md describes the setup.
 #
-# Three build stages:
-# - kernel: the SMLib kernel as its own WebAssembly module, with Emscripten.
-# - build: the server, natively with the SMLib kernel, and the app to WebAssembly with
-#   trunk.
-# - the runtime image: the server and the files it serves.
-# Cache mounts keep cargo's registry and build output between builds, so a rebuild after
-# a small change takes minutes, not the full kernel build.
-
 ARG RUST_VERSION=1.99.0
-
-FROM emscripten/emsdk:6.0.12 AS kernel
-ARG RUST_VERSION
-ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
-RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal \
-      --default-toolchain "${RUST_VERSION}" --target wasm32-unknown-emscripten
-WORKDIR /src
-COPY . .
-ARG BUILD_JOBS=4
-RUN --mount=type=cache,target=/opt/cargo/registry \
-    --mount=type=cache,target=/src/target \
-    cargo build --release --locked -j "${BUILD_JOBS}" -p soliddraft-kernel-wasm --target wasm32-unknown-emscripten \
- && mkdir -p /out/kernel \
- && cp target/wasm32-unknown-emscripten/release/soliddraft-kernel-wasm.js \
-       target/wasm32-unknown-emscripten/release/soliddraft_kernel_wasm.wasm /out/kernel/
 
 FROM rust:${RUST_VERSION}-bookworm AS build
 
@@ -57,7 +34,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out-server /usr/local/bin/soliddraft-server
 COPY --from=build /out/web /srv/soliddraft/web
-COPY --from=kernel /out/kernel /srv/soliddraft/web/kernel
 USER nobody
 EXPOSE 8766
 ENV SOLIDDRAFT_NO_KEYCHAIN=1

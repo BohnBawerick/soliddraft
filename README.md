@@ -36,34 +36,42 @@ Help fund SolidDraft and Catallax through [GitHub Sponsors](https://github.com/s
 
 A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle.
 
-SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. The desktop and browser application now select Catallax. The SMLib backend and its regression tests remain until the separate removal task. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
+SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. The desktop, browser and command-line application run on Catallax. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
 
 ![SolidDraft with a rebuilt bracket](docs/screenshots/soliddraft.png)
 
 ## What works today
 
-Work in progress. The list below records the existing application features, including SMLib-only operations. The default Catallax backend supports sketches, extrudes, cuts, booleans and rational-frame revolves. Fillets wait for Catallax stage 4; chamfers and shell wait for stage 3. Drawings use Catallax meshes for polygon hidden-line removal and Catallax booleans for plane sections. Exact silhouettes and some curve conversions remain pending. See [the backend gaps](docs/needs-catallax.md).
+Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/needs-catallax.md) for the limits of the current application entry.
 
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
-- Extrude, cut, fillet and chamfer. References that survive a rebuild or ask to be repaired. Undo and redo. Feature tree editing. Part files.
-- Drawings: ISO and ANSI sheets, aligned views, sections, details, auxiliary and broken-out views, ordinate, baseline and chain dimensions, GD&T, datums, surface finish and revision marks. Output to its own drawing file, SVG, PDF and DXF. Drawings pin the part revision they were saved against and can be updated after the part changes.
+- Extrudes, cuts, two-sided through all, booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
+- Drawings use Catallax meshes for polygon hidden-line removal and Catallax booleans for plane sections. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.
 - The assistant, connected to Claude: it reads the part, proposes changes as cards you preview, apply and undo. The same commands are open to outside agents over MCP.
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
-- A WebAssembly build that runs the whole app, kernel included, in a browser.
+- A WebAssembly build that runs the app and Catallax in one browser module.
 
-Not yet: STEP, IGES and mesh import and export, surfacing and sheet metal. Assemblies are in progress. Only drawings can be exported today. The [roadmap](docs/roadmap.md) orders the remaining work and names the kernel stages that features will wait for when SMLib goes.
+Waiting commands stay visible and disabled with a tooltip naming their Catallax stage. Existing parts rebuild up to a waiting feature, mark it with a rebuild error and pass the preceding body through unchanged.
+
+| Waiting feature | Catallax stage |
+|---|---|
+| One-sided through all, up to face, up to next; hole and countersink | 3 |
+| Chamfer; pattern and mirror; shell, offset and thicken | 3 |
+| Fillets between planes and cylinders | 3 |
+| Other fillets; draft | 4 |
+| Sweep and loft; spline, ellipse and text profiles | 5 |
+| STEP import | 6 |
+
+Catallax stage 1 already provides STEP AP242 and shared-edge meshes. The application's STEP, STL and 3MF export commands still need wiring. IGES import and export, surfacing and sheet metal are not available. Assemblies are in progress. The [roadmap](docs/roadmap.md) orders the remaining work.
 
 ## Building
 
-You need Rust 1.95 or later and a C++17 compiler. The kernel source is a git submodule:
+You need Rust 1.95 or later. There is no C++ kernel, submodule or separate kernel build.
 
 ```sh
-git submodule update --init third_party/usd-brep
-cargo build --release
+cargo build --release --locked
 ```
-
-The first build compiles SMLib, which takes several minutes.
 
 ## Running the app
 
@@ -73,7 +81,7 @@ cargo run --release -p soliddraft-app -- --demo
 
 A part or drawing file on the command line opens it. `--demo` loads a sample part, `--bench` measures frame times on a dense body and exits, `--screenshot out.png` saves the window and exits, `--help` lists the rest. Press `?` in the app for the keyboard shortcuts.
 
-Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Fillet and chamfer take edges clicked in the viewport.
+Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Fillet and chamfer remain visible while they wait for the Catallax stages listed above.
 
 ## Running in a browser
 
@@ -110,7 +118,7 @@ The app's exit tests drive the real interface through `egui_kittest` on wgpu and
 
 ## Contributing
 
-Pull requests are welcome. Read `docs/DESIGN.md` for the app's interface to the kernel and `docs/modelling.md` for the document model before changing either. Keep the kernel behind its interface; nothing in the app may depend on SMLib directly. Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` before you open a pull request. Agent-written code is fine and expected; say so in the pull request, and stay accountable for what it does.
+Pull requests are welcome. Read `docs/DESIGN.md` for the app's interface to the kernel and `docs/modelling.md` for the document model before changing either. Keep document and viewport code behind the existing kernel interface; Catallax is the only backend. Run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` before you open a pull request. Agent-written code is fine and expected; say so in the pull request, and stay accountable for what it does.
 
 If a change needs a new kernel operation, describe it in an issue before changing the bridge.
 
@@ -118,7 +126,7 @@ If a change needs a new kernel operation, describe it in an issue before changin
 
 Licensed under MIT. See `LICENSE` and `NOTICE`.
 
-The SMLib kernel is NVIDIA's, under Apache-2.0, compiled unmodified from USD BRep release 1.0.0 and included as a git submodule with its own notices. The bundled Inter font is under the SIL Open Font License 1.1.
+The bundled Inter font is under the SIL Open Font License 1.1.
 
 SolidDraft is not affiliated with, sponsored by or endorsed by Dassault Systèmes, Autodesk, Siemens or NVIDIA. SolidWorks, DraftSight, Parasolid and the other names above are their owners' marks.
 

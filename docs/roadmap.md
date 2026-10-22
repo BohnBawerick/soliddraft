@@ -8,7 +8,7 @@ The companion document is [Catallax's roadmap](https://github.com/BohnBawerick/c
 
 SolidDraft runs only on Catallax. Catallax is designed for the features SolidDraft's users drive, and SolidDraft grows step by step toward the most usable parts of SolidWorks and nTopology: parametric parts, drawings and assemblies on one side; implicit modelling, lattices, field-driven thickness, topology optimisation and simulation-led shapes on the other. The most usable features come first.
 
-SMLib, the C++ kernel the application runs on today, is removed as soon as the Catallax backend displays the first target part. It is not kept as a fallback. A kernel kept in reserve is the half-commitment that Hanno Braun's Fornjot retrospective names as its project's biggest mistake, and keeping it would also keep the C++ toolchain, the second WebAssembly module and an interface shaped around a kernel we are not building.
+SolidDraft runs on Catallax. The former SMLib C++ kernel, its toolchain and its separate WebAssembly module have been removed. It is not kept as a fallback. A kernel kept in reserve is the half-commitment that Hanno Braun's Fornjot retrospective names as its project's biggest mistake, and keeping it would also keep the C++ toolchain, the second WebAssembly module and an interface shaped around a kernel we are not building.
 
 ## 2. What removing SMLib means for users
 
@@ -106,7 +106,7 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 | `soliddraft-recipe/1` | Changes | Converges on `catallax-recipe`; old files read through the converter. |
 | The remote kernel backend | Changes | The JSON protocol stays as a developer tool for the command line, MCP and tests. The server kernel stops being a product path, because Catallax compiles into the application's own WebAssembly module. |
 | The WebAssembly kernel backend: SMLib under Emscripten as a second module | Dropped | Goes with SMLib, with its Emscripten CI job. Catallax is safe Rust and builds for `wasm32-unknown-unknown` inside the application module. Its findings stay as evidence that the browser side of the application is sound. |
-| Golden digests and the conformance runner | Changes | The SMLib golden files stay as the record of what SMLib answered. The runner replays the corpus on Catallax and lists differences from them, then retires once Catallax's two-kernel check and the SolidWorks comparison corpus cover the same ground. |
+| Golden digests and the conformance runner | Changes | SMLib-only golden files are removed. The runner replays recipes on Catallax; Catallax view and drawing baselines stay. |
 | Kernel thread and process isolation | Dropped | Needed only for SMLib's process-wide state. |
 | `validate()`, per-operation volume checks, `KernelError::InvalidResult` | Changes | Volume checks stay as tests. The runtime gate goes: Catallax never returns a body it has not proven valid, and a refusal is a typed outcome. |
 | Persistent references | Changes | Simplify as section 4 says. |
@@ -122,7 +122,7 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 | 1, shell and viewport | Stays | Kernel-independent. |
 | 2, modelling | Stays | Fillets between planes and cylinders and chamfers wait for Catallax stage 3; other fillets wait for stage 4. References simplify. The sketcher's rational point joining already meets RECIPE.md section 6.2's converter rule. |
 | 3, assistant | Stays | Kernel-independent. MCP and the command line drive the application loop. |
-| 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL and 3MF come from Catallax's meshes. The conformance runner becomes the golden-file replay. |
+| 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL and 3MF come from Catallax's meshes. The recipe runner and Catallax drawing baselines remain. |
 
 ### 9.3 Queued work
 
