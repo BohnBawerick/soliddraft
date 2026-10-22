@@ -243,12 +243,9 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
                 message: "Catallax display face has no nondegenerate triangles (Catallax stage 1)".into(),
             });
         };
-        let proven_area = catallax_measure::face_area(
-            model,
-            face_mesh.face,
-            &catallax_measure::Accuracy::default(),
-            &mut catallax_numbers::Decider::default(),
-        )
+        let proven_area = super::numerical("face_area", |dec| {
+            catallax_measure::face_area(model, face_mesh.face, &catallax_measure::Accuracy::default(), dec)
+        })
         .map_err(|e| query_error("face_area", e))?;
         let mut edges = Vec::new();
         for l in &face.loops {

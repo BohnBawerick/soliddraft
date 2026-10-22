@@ -742,6 +742,11 @@ fn registry() -> Vec<CommandSpec> {
         ),
         cmd("selection", "Selection details", Icon::Search, "What the user has selected in the viewport or the tree")
             .agents(Agents::Tool, "By name, with its details. Use it when the user says this, that or here.", Vec::new),
+        cmd("rollback", "Rollback", Icon::Rollback, "Move the rollback bar before a feature, or to the end").agents(
+            Agents::Mcp,
+            "Uses the same document rebuild as the tree rollback bar.",
+            tools::rollback_params,
+        ),
         // Edit.
         cmd("undo", "Undo", Icon::Undo, "Undo the last change to the part or drawing")
             .both()

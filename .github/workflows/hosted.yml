@@ -112,3 +112,55 @@ jobs:
         with:
           name: catallax-drawing-workspace
           path: target/exit-test/catallax-drawing.png
+
+  application-loop:
+    name: Application scenarios (MCP, viewport, kernel replay)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      WGPU_BACKEND: vulkan
+      XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Read the application's pinned Catallax revision
+        id: catallax
+        run: |
+          revision=$(sed -n 's/^pub const CATALLAX_REVISION: &str = "\(.*\)";/\1/p' crates/soliddraft-kernel-catallax/src/lib.rs)
+          test -n "$revision"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: BohnBawerick/catallax
+          ref: ${{ steps.catallax.outputs.revision }}
+          path: .ci-catallax
+          persist-credentials: false
+      - name: Install the software Vulkan adapter
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
+      - run: cargo build --locked -p soliddraft-cli
+      - name: Build the verifier from the same pinned revision
+        run: cargo build --locked --manifest-path .ci-catallax/Cargo.toml -p catallax-cli --bin catallax-verify --target-dir target
+      - name: Run the bracket and refusal scenarios
+        run: |
+          status=0
+          for scenario in ci/scenarios/*.json; do
+            name=$(basename "$scenario" .json)
+            python3 ci/run-scenarios.py "$scenario" --soliddraft target/debug/soliddraft --catallax-verify target/debug/catallax-verify --out "$RUNNER_TEMP/application-loop/$name" || status=1
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: application-loop
+          path: ${{ runner.temp }}/application-loop
+          if-no-files-found: error

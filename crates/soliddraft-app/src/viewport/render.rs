@@ -1327,7 +1327,7 @@ impl ViewportRenderer {
         }
     }
 
-    fn paint(&self, pass: &mut wgpu::RenderPass<'static>) {
+    pub fn paint(&self, pass: &mut wgpu::RenderPass<'static>) {
         log::debug!("paint");
         let Some(targets) = &self.targets else { return };
         pass.set_pipeline(&self.blit_pipeline);
