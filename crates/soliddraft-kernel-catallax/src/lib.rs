@@ -78,6 +78,9 @@ impl State {
         let app = catallax_app::build_soliddraft(&input.to_string(), &MeshOptions::default(), &mut Decider::default())
             .map_err(|e| build_error(op, e))?
             .body;
+        if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
+            return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
+        }
         let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &mut self.next);
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
@@ -279,7 +282,7 @@ impl Kernel for CatallaxKernel {
                     centroid: mass
                         .centroid
                         .map(|c| Vec3::from(c.each_ref().map(convert::midpoint)))
-                        .unwrap_or(Vec3::ZERO),
+                        .ok_or_else(|| gap("centroid of an empty body", "1"))?,
                     inertia: None,
                 })
             })

@@ -136,6 +136,11 @@ fn refused_extrusion_does_not_change_its_profile_and_handles_stay_owned() {
     assert_eq!(k.history(p).unwrap(), history);
     let b = k.extrude(&OpTag::new("valid"), p, &Extrude { distance: 5.0, direction: None }).unwrap().body;
     k.release(p).unwrap();
+    let before = summarize(&k, b).unwrap();
+    assert!(
+        matches!(k.boolean(&OpTag::new("empty"), BooleanOp::Subtract, b, b), Err(KernelError::Unsupported(message)) if message.contains("empty results"))
+    );
+    assert_eq!(before, summarize(&k, b).unwrap());
     assert!(k.validate(b).unwrap().valid);
     assert!(
         matches!(k.chamfer(&OpTag::new("bevel"), b, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 3"))
