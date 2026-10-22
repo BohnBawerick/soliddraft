@@ -62,11 +62,13 @@ impl<'a> PartContext<'a> {
     /// and not suppressed. A feature that is gone is named by what the reference
     /// remembered of it.
     pub fn feature_of(&self, entity: &EntityRef) -> Option<(u64, String, bool)> {
-        let id = match &entity.model {
-            Some(ModelEntity::Edge(e)) => Some(u64::from(e.faces[0].feature.0)),
-            Some(ModelEntity::Face(f)) => Some(u64::from(f.feature.0)),
-            None => soliddraft_model::feature_of_tag(&entity.feature).map(|f| u64::from(f.0)),
-        }?;
+        let id = entity.feature.strip_prefix('f').and_then(|id| id.parse::<u64>().ok()).filter(|id| *id != 0).or_else(
+            || match &entity.model {
+                Some(ModelEntity::Edge(e)) => Some(u64::from(e.faces[0].feature.0)),
+                Some(ModelEntity::Face(f)) => Some(u64::from(f.feature.0)),
+                None => soliddraft_model::feature_of_tag(&entity.feature).map(|f| u64::from(f.0)),
+            },
+        )?;
         match self.doc.feature(id) {
             Some(f) if !f.suppressed => Some((id, f.name.clone(), true)),
             _ => Some((id, feature_name(entity), false)),

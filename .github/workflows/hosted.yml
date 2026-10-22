@@ -108,7 +108,7 @@ jobs:
         if: always()
         with:
           name: catallax-drawing-workspace-${{ matrix.os }}
-          path: target/exit-test/catallax-drawing.png
+          path: target/exit-test/
 
   application-loop:
     name: Application scenarios (MCP, viewport, kernel replay)
