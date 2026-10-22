@@ -101,8 +101,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install the software Vulkan adapter
         run: |
-          sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture

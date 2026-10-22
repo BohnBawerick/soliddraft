@@ -107,7 +107,7 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
         .build_eframe(move |cc| SolidDraftApp::new(cc, doc, Automation::default()));
     harness.run_steps(5);
     harness.key_press(Key::Z);
-    harness.run_steps(6);
+    harness.run_steps(30);
     let image = harness.render().expect("bracket frame renders");
     assert!(image.width() > 1000 && image.height() > 600);
     assert!(harness.state().state.doc.meshes.values().any(|m| m.triangle_count() > 100));

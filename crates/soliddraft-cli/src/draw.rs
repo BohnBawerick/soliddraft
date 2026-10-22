@@ -610,7 +610,7 @@ pub(crate) struct Source {
 pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>) -> Result<R, String> {
     match DocKind::of_path(path) {
         Some(DocKind::Part) => {
-            let doc = soliddraft_app::file::open(path, soliddraft_app::kernel())?;
+            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(SmlibKernel::new()))?;
             let ctx = PartContext::new(&doc).ok_or_else(|| format!("{}: the part has no body", path.display()))?;
             let backend = doc.kernel().backend();
             let source = Source {

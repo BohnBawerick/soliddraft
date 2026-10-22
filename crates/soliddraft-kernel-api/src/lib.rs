@@ -406,7 +406,9 @@ pub trait Kernel: Send + Sync {
     /// Which backend this is.
     fn backend(&self) -> BackendInfo;
 
-    /// Builds a planar sheet body from a closed profile.
+    /// Registers a closed profile for an extrusion or revolution.
+    /// SMLib also exposes sheet queries on this handle. Catallax defers its geometry
+    /// until a sweep and reports sheet queries as unsupported.
     fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult>;
 
     /// Sweeps a profile body along a straight line into a solid.
