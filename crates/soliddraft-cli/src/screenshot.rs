@@ -135,7 +135,7 @@ async fn capture(part: &str, png: &str) -> Result<(), Box<dyn std::error::Error>
     });
     device.poll(wgpu::PollType::wait_indefinitely())?;
     recv.recv()??;
-    let mapped = buffer.slice(..).get_mapped_range();
+    let mapped = buffer.slice(..).get_mapped_range()?;
     let pixels: Vec<u8> = mapped.chunks(row as usize).flat_map(|r| r[..(width * 4) as usize].iter().copied()).collect();
     image::save_buffer(png, &pixels, width, height, image::ColorType::Rgba8)?;
     drop(mapped);
