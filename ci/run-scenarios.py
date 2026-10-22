@@ -160,8 +160,13 @@ def run(args):
                     replay["pass"] &= replay.get("refusal") == code and replay.get("status") == "refused"
                     checks.append(replay)
             if step.get("render", True) and (directory / "recipe.json").exists():
-                checks.append(cli(args.soliddraft, ["view", directory / "recipe.json", "--catallax", "--mesh",
-                    "--dir", "iso", "--svg", directory / "view.svg", "--json"], directory, "view", args.timeout))
+                view = cli(args.soliddraft, ["view", directory / "recipe.json",
+                    "--dir", "iso", "--svg", directory / "view.svg", "--json"], directory, "view", args.timeout)
+                if view["pass"]:
+                    rendered = json.loads((directory / "view.stdout").read_text())
+                    view["backend"] = rendered["backend"]
+                    view["method"] = rendered["method"]
+                checks.append(view)
                 checks.append(cli(args.soliddraft, ["screenshot", directory / "part.dwprt", "--png", directory / "viewport.png"],
                     directory, "screenshot", args.timeout))
                 if (directory / "view.svg").exists():

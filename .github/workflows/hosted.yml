@@ -120,7 +120,6 @@ jobs:
     env:
       WGPU_BACKEND: vulkan
       XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
-      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
         with:
