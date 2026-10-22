@@ -55,7 +55,9 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `kernel.json`: the actual kernel calls, work counts, errors and Catallax's
   `catallax-operation-log/1` entries. Entries retain decision settlement counts,
   marks, refusal codes and timings. Catallax currently reports local tolerances
-  as null. Cached queries can have no numeric operations.
+  as null. Cached queries can have no numeric operations. Nested drawing queries
+  share the outer call's log and work allowance, identified by `log_scope`; their
+  own `work` is null rather than a second charge.
 - `question-*.json`: portable `catallax-question/1` inputs for kernel builds,
   including scratch builds that rejected a proposal. These contain Catallax
   recipes, not numeric body handles or paths into this machine.
