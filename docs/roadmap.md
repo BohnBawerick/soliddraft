@@ -1,34 +1,166 @@
-# Roadmap
+# SolidDraft roadmap
 
-SolidDraft is still being built. The current focus is reliable part modelling,
-assembly documents, drawings and browser builds. This is a list of planned work,
-not a release schedule.
+Written 22 October 2026. This file replaces `docs/roadmap.md`. It is a list of planned work in order, not a release schedule.
 
-## Modelling and documents
+The companion document is [Catallax's roadmap](https://github.com/BohnBawerick/catallax/blob/main/docs/PLAN.md). SolidDraft and Catallax are one project in two repositories: SolidDraft is the application, Catallax is its kernel. This file orders the application work; Catallax's roadmap orders the kernel work. Where an item here needs a kernel item, it names the Catallax stage.
 
-- Add revolve, shell, holes, patterns, mirror and reference geometry to the interface.
-- Expand sketch tools with trim, extend, offset, splines and expressions with units.
-- Add autosave, recovery, thumbnails and a start page for recent documents.
-- Complete assembly editing, drawings of assemblies and Pack and Go.
-- Add STEP, IGES and mesh import and export.
-- Add configurations and in-context references after assembly references are stable.
+## 1. Premise
 
-## Interface
+SolidDraft runs only on Catallax. Catallax is designed for the features SolidDraft's users drive, and SolidDraft grows step by step toward the most usable parts of SolidWorks and nTopology: parametric parts, drawings and assemblies on one side; implicit modelling, lattices, field-driven thickness, topology optimisation and simulation-led shapes on the other. The most usable features come first.
 
-- Share a command registry across the ribbon, shortcuts, assistant, MCP and CLI.
-- Add a command palette, shortcut editor and right-click selection tools.
-- Add on-canvas feature handles, display presets, dark theme and UI scaling.
-- Extend the material library with sources and conditions for individual properties.
+SMLib, the C++ kernel the application runs on today, is removed as soon as the Catallax backend displays the first target part. It is not kept as a fallback. A kernel kept in reserve is the half-commitment that Hanno Braun's Fornjot retrospective names as its project's biggest mistake, and keeping it would also keep the C++ toolchain, the second WebAssembly module and an interface shaped around a kernel we are not building.
 
-## Reliability
+## 2. What removing SMLib means for users
 
-- Fuzz command inputs and test damaged document files.
-- Record replayable command journals for crash reports.
-- Expand interface scenarios and layout checks at several window sizes.
-- Move browser kernel work off the interface thread.
-- Publish installers once the document formats and modelling tools are ready.
+Features the application has today only through SMLib wait for Catallax to land them. Until then:
+
+- the ribbon shows the command disabled, with a tooltip naming the kernel stage it arrives with, following the existing rule that unfinished commands stay visible and say why;
+- an existing part that uses such a feature rebuilds up to it, marks it with a rebuild error, and passes the body through unchanged, which is how the application already treats a feature the kernel cannot build;
+- the works-today list in README.md says which features wait, and for which stage.
+
+On the day SMLib goes, sketches, extrudes, cuts, revolves and booleans keep working on Catallax. Fillets wait for Catallax stage 4 and chamfers for stage 3. Drawings keep working through the polygon-mode hidden-line pass (section 7). STEP and mesh export arrive at the same time, because Catallax already writes STEP AP242 with a proven deviation and shared-edge meshes with proven chord bounds.
+
+## 3. The kernel boundary
+
+The application keeps one boundary between itself and the kernel. Undo, rebuild and caching stay on the application side. What goes is the promise that any kernel can sit behind it.
+
+1. Implement a Catallax backend behind the existing `soliddraft_kernel_api::Kernel` trait, so the application runs unchanged.
+2. Remove the SMLib backend and every part of the trait that exists only because of SMLib: `f64` values with a tolerance, history as tag propagation, `FaceRole::Other`, "modified" as a geometric-change guess, and `validate()` as a guard against false successes.
+3. Widen the trait toward Catallax's shapes one method at a time: exact rationals accepted, recipe origins as the face identity, refusals as typed outcomes with stable codes.
+4. Rename the trait as Catallax's application interface and delete the backend indirection. The trait's contract checks become the application's acceptance tests for Catallax.
+
+Catallax keeps no global state, so the dedicated kernel thread and the plan to move the kernel into a child process both go. A document holds its own model. Safe background threads for rebuilds come from Catallax's own plan.
+
+Rebuild stops replaying the whole feature list on every change. Catallax keeps every intermediate body valid, so a rebuild starts at the first changed feature and reuses the bodies before it.
+
+## 4. One recipe format
+
+New files are written as `catallax-recipe`, following RECIPE.md section 6.2 in the Catallax repository. That section already maps `soliddraft-recipe/1`, including how `nearest` and `within` selectors become names resolved once against a built part. Old files and the existing corpus stay readable through a converter. The converter lives on the Catallax side, so both projects test it; switching the document model's file format is SolidDraft's work. The geometric digest stays as a test tool during the change and goes once agreement on point sets and names replaces it.
+
+Persistent references get simpler. Catallax names faces by the operation that made them and reports origin sets through splits and merges, so the origin becomes the identity and the fingerprint becomes a check. The repair prompt for a genuinely lost reference stays. The face-role heuristic (caps by centroid, a wall if cylindrical, sides in topology order) is deleted.
+
+## 5. The application loop for agents
+
+Agents write most of the code, so the application needs a loop that checks it end to end, fast, with no person at the keyboard. Catallax's roadmap calls it the application loop; the kernel loop is Catallax's `catallax-verify` command.
+
+Headless SolidDraft on Catallax is driven by agents through `soliddraft mcp` and the command line, the same commands the assistant and the ribbon use. A scenario builds and edits parts the way a user does: sketches, features, parameter edits, undo, rollback, drawings. Each run saves a bundle:
+
+- the recipe after every command;
+- rendered views: hidden-line SVG from the existing `view` command, and raster screenshots made without a window by the same renderer the viewport uses;
+- Catallax's per-operation log: how each decision was settled, refusals with their codes, marks, local tolerances and timings;
+- a pass or fail result for each check in the scenario.
+
+Any failure exports the recipe, or the failing step, as a Catallax kernel-loop question, so the fix is checked in seconds with `catallax-verify` and the scenario then runs again through the application. Because it is the same application users run, what the agents test is what users get. Full scenario suites run on GitHub's runners.
+
+## 6. Features in the kernel's order
+
+Application work for a feature, such as its PropertyManager page, ribbon command, tree entry and document-model plumbing, can be built ahead of the kernel. The feature switches on when Catallax lands its operation, and the application loop builds and edits the matching target part.
+
+| Feature | Catallax stage | State when SMLib goes |
+|---|---|---|
+| Sketch on a plane or a planar face; lines, rectangles, circles, arcs, slots | 1 | Works |
+| Extrude, cut, two-sided through all | 1 | Works |
+| Revolve | 1 | Works for rational frames, widening with the foundation |
+| Booleans of bodies | 1 | Works |
+| Mass properties | 1 | Works, computed on request |
+| STEP export, STL and 3MF export | 1 | New |
+| One-sided through all, up to face, up to next | 3 | Waits |
+| Hole and countersink | 3 | Waits |
+| Chamfer | 3 | Waits |
+| Pattern and mirror | 3 | Waits |
+| Shell, offset, thicken | 3 | Waits |
+| Fillet | 4, or 3 if fillets between planes and cylinders come forward | Waits |
+| Draft | 4 | Waits |
+| Sweep, loft; spline, ellipse and text profiles | 5 | Waits |
+| STEP import | 6 | Not available today either |
+| Lattice, gyroid, graded density, field-driven thickness | Field-only track, after stage 3 | Not available today either |
+
+Reference geometry (planes, axes, points) is application-side work and can come at any time.
+
+## 7. Drawings on Catallax
+
+Drawings are SolidDraft's most finished feature, and they depend on hidden-line removal that SMLib provides and Catallax does not. They move to the polygon-mode pass (`mesh_hlr`) over Catallax's shared-edge meshes on the day SMLib goes, so drawings never go dark. Exact silhouettes and sections become Catallax requests: plane sections are booleans Catallax already builds, and silhouettes of cylinders, cones, spheres and tori have closed forms. The drawing crate, its associativity and its exporters are kernel-independent and stay as they are.
+
+## 8. Work that does not depend on the kernel
+
+These items from the previous roadmap continue in parallel.
+
+- Modelling and documents: autosave, recovery, thumbnails and a start page for recent documents; assembly editing, drawings of assemblies and Pack and Go; configurations and in-context references after assembly references are stable. IGES import and export waits until STEP import exists in Catallax.
+- Interface: a shared command registry across the ribbon, shortcuts, assistant, MCP and command line; a command palette, shortcut editor and right-click selection tools; on-canvas feature handles, display presets, dark theme and interface scaling; material property sources and conditions.
+- Reliability: fuzz command inputs and test damaged document files; record replayable command journals for crash reports; interface scenarios and layout checks at several window sizes; kernel work off the interface thread in the browser build; installers once the document formats and modelling tools are ready.
 
 The [SolidCraft](https://github.com/bherbruck/solidcraft) project informed parts of
 this backlog. Ideas do not imply copied code. Any future code reuse must keep the
 upstream licence and attribution in `NOTICE`, including separate licences for its
 vendored dependencies. Do not copy its screenshots, fonts or icons.
+
+## 9. Verdicts
+
+### 9.1 Architecture
+
+| Item | Verdict | Reason and what happens |
+|---|---|---|
+| The SMLib bridge: `soliddraft-kernel-smlib`, `soliddraft-smlib-sys`, the cxx engine, the kernel thread, the `third_party/usd-brep` submodule | Dropped | Removed once the Catallax backend displays the first target part, in the same checkpoint. Not kept as a fallback. The building instructions lose the C++ compiler. |
+| The swappable-kernel trait | Changes | Becomes Catallax's application interface in the four steps of section 3. |
+| `soliddraft-recipe/1` | Changes | Converges on `catallax-recipe`; old files read through the converter. |
+| The remote kernel backend | Changes | The JSON protocol stays as a developer tool for the command line, MCP and tests. The server kernel stops being a product path, because Catallax compiles into the application's own WebAssembly module. |
+| The WebAssembly kernel backend: SMLib under Emscripten as a second module | Dropped | Goes with SMLib, with its Emscripten CI job. Catallax is safe Rust and builds for `wasm32-unknown-unknown` inside the application module. Its findings stay as evidence that the browser side of the application is sound. |
+| Golden digests and the conformance runner | Changes | The SMLib golden files stay as the record of what SMLib answered. The runner replays the corpus on Catallax and lists differences from them, then retires once Catallax's two-kernel check and the SolidWorks comparison corpus cover the same ground. |
+| Kernel thread and process isolation | Dropped | Needed only for SMLib's process-wide state. |
+| `validate()`, per-operation volume checks, `KernelError::InvalidResult` | Changes | Volume checks stay as tests. The runtime gate goes: Catallax never returns a body it has not proven valid, and a refusal is a typed outcome. |
+| Persistent references | Changes | Simplify as section 4 says. |
+| Face-role heuristics | Dropped | Catallax gives every face a defined role. |
+| Tessellation through the kernel | Changes | Catallax's shared-edge meshes with proven chord bounds, face ids and edge polylines. SMLib's five controls collapse to a chord tolerance and a vertex limit. Levels of detail stay an application concern. |
+| Drawing queries | Changes | Polygon mode first, exact silhouettes and sections as Catallax requests, as section 7 says. |
+
+### 9.2 Phases of the previous plan
+
+| Phase | Verdict | Reason |
+|---|---|---|
+| 0, kernel bridge | Done; its premise is retired | Its exit test, identical digests across runs and a failed operation leaving the previous body, becomes the acceptance test for the Catallax backend. |
+| 1, shell and viewport | Stays | Kernel-independent. |
+| 2, modelling | Stays | Fillet and chamfer wait for Catallax stages 4 and 3. References simplify. The sketcher's rational point joining already meets RECIPE.md section 6.2's converter rule. |
+| 3, assistant | Stays | Kernel-independent. MCP and the command line drive the application loop. |
+| 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL and 3MF come from Catallax's meshes. The conformance runner becomes the golden-file replay. |
+
+### 9.3 Queued work
+
+| Work | Verdict | Reason |
+|---|---|---|
+| Release machinery: tagged self-contained builds for three platforms | Stays | Release notes carry the works-today list and name Catallax as the kernel. |
+| Phase 4 as written: a Rust backend, cross-kernel runner, STEP and mesh export | Changes | Rewritten as next items 1, 2 and 6 below. |
+| Cancel superseded CI runs | Stays | Small CI hygiene that saves runner hours. |
+| Feature plumbing: revolve, shell, hole, patterns, mirror, reference geometry | Changes | Ordered by Catallax's stages, as section 6 says. |
+| Sketch depth: polygon, ellipse, spline, text, offset, mirror, trim and extend, patterns, automatic relations | Changes, split | Tools that make lines and arcs come now. Ellipse, spline and text profiles come with Catallax stage 5, so the sketcher and the kernel gain them together. |
+| Settings, display presets, shortcut map, theme and interface scale | Stays | Kernel-independent. |
+| Autosave, recovery, backup files, thumbnails | Stays | Kernel-independent. |
+| Material property sources and conditions | Stays | Kernel-independent. |
+| Depth-ordered picking, click cycling, handles mapped to parameters | Stays, after the Catallax backend | Handles mapped to parameters should use recipe origins from the start. |
+| Command palette and the phase 1 interface halves | Stays | Kernel-independent. |
+| The SolidWorks comparison corpus: recipe generator, comparator, SolidWorks and Onshape runners | Changes | Its comparator targets Catallax. The SMLib column goes with SMLib. The SolidWorks run waits until Catallax builds the first three target parts, so it measures the kernel that ships. |
+| Committing the corpus tooling | Stays | Without it the corpus cannot be rebuilt or extended toward the target parts. |
+| Making the repository public | Stays | Before it opens, README.md's "the kernel can be swapped without changing the app" line is replaced by what is true. |
+
+## 10. Next items
+
+Numbered in priority order.
+
+1. **Catallax backend behind the existing interface.** Build. Pairs with Catallax next item 6. Deliverable: a backend for `soliddraft_kernel_api::Kernel` on Catallax's application entry, chosen in `soliddraft_app::kernel()`. Exit: the bracket recipe builds, displays, picks named faces, edits and rebuilds through Catallax inside Catallax's interactive targets; phase 0's exit test passes on Catallax. By Catallax checkpoint C2.
+2. **Remove SMLib.** Build. Deliverable: the SMLib crates, the `third_party/usd-brep` submodule, the WebAssembly kernel module and its Emscripten job deleted; waiting features marked in the ribbon with their stage; README.md's works-today list rewritten. Exit: a fresh clone builds with Rust alone on all three platforms and in the browser build; CI passes; every waiting command names its stage. Same checkpoint as item 1.
+3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window and Catallax's per-operation log in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. By C2.
+4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, and plane sections. Exit: the bracket drawing with four views and a section regenerates on Catallax; SVG, PDF and DXF output keep their formats. Same checkpoint as item 2.
+5. **One recipe format.** Build. Deliverable: section 4's write and read paths. Exit: every recipe in `recipes/` converts and replays on Catallax, and existing part files open. By C3.
+6. **STEP and mesh export.** Build. Deliverable: STEP AP242 from Catallax with its deviation report; STL and 3MF from Catallax's meshes. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation. By C3.
+7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted. Exit: plate-thickness and boss-radius edits on the bracket keep every reference, and a genuinely lost reference still raises the repair prompt. By C3.
+8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild. Exit: editing the last feature of the bracket rebuilds only that feature, and the result is identical to a full replay. By C4.
+9. **Feature plumbing in the kernel's order.** Build, recurring. Deliverable: each feature in section 6 switched on when its Catallax operation lands. Exit, per feature: the application loop builds and edits the matching target part.
+10. **Sketch depth, first half.** Build. Deliverable: polygon, trim, extend, offset, mirror and patterns of lines and arcs. Exit: profiles made with the new tools build through Catallax.
+11. **The SolidWorks comparison corpus on Catallax.** Build. Waits for a machine with SolidWorks. Deliverable: the comparator pointed at Catallax. Exit: the first comparison report for the first three target parts.
+
+Kernel-independent items from section 8 run alongside, as people and machines allow.
+
+## 11. Open questions
+
+1. **Drawings.** Start with the polygon-mode hidden-line pass so drawings keep working when SMLib goes, as proposed, or wait for exact silhouettes from Catallax.
+2. **Waiting features.** Confirm the behaviour in section 2: disabled ribbon commands that name their stage, and existing parts that stop at a waiting feature with a rebuild error.
+3. **Shared with Catallax's roadmap.** Which target parts; whether the B-rep carries a stand-in for field-only lattices; whether fillets between planes and cylinders come forward.

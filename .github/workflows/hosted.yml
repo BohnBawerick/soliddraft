@@ -8,9 +8,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Line tables keep file and line numbers in backtraces. Full debug info is for a
-  # debugger, which CI does not run, and it makes the cached builds nearly twice as big.
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # Workspace test binaries must fit on GitHub-hosted runners.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_INCREMENTAL: 0
 
 permissions:
   contents: read

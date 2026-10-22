@@ -5,7 +5,8 @@ GitHub-hosted runners and read-only repository permissions.
 
 Linux runs formatting, clippy, the pinned USD BRep check, workspace tests, the browser
 app build and Rust 1.88 compatibility checks. Rust-only crates run on Linux, macOS
-and Windows. The kernel's Emscripten build is checked separately.
+and Windows. CI does not build the kernel's Emscripten module; see
+[the web build](web.md) for the manual build and contract-test commands.
 
 Run the same checks locally with `cargo fmt --all --check`,
 `cargo clippy --workspace --all-targets --all-features -- -D warnings`,

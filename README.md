@@ -28,19 +28,19 @@ Check out my other products at [ZigrawBohnBawerick](https://zigrawbohnbawerick.o
 
 ## Sponsorship
 
-Help fund SolidDraft's development. [SPONSOR LINK]
+Help fund SolidDraft and Catallax through [GitHub Sponsors](https://github.com/sponsors/BohnBawerick) or [Ko-fi](https://ko-fi.com/pedropaiva56920). Both support the same project, started by Pedro De Paiva.
 
 ## What it is
 
-A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle. The geometry kernel sits behind an interface the app owns, so the kernel can be swapped without changing the app.
+A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle.
+
+SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. Today SolidDraft still runs on SMLib through its kernel bridge until the Catallax backend lands. SMLib will then be removed. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
 
 ![SolidDraft with a rebuilt bracket](docs/screenshots/soliddraft.png)
 
 ## What works today
 
-Work in progress. Today the app runs on the C++ SMLib kernel from NVIDIA's USD BRep, through a kernel bridge. Catallax is being developed separately and is not included in this release.
-
-Done so far:
+Work in progress. These features run today on the C++ SMLib kernel from NVIDIA's USD BRep:
 
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
@@ -50,7 +50,7 @@ Done so far:
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
 - A WebAssembly build that runs the whole app, kernel included, in a browser.
 
-In progress: assemblies. Not done: STEP, IGES and mesh import and export (nothing leaves the app today except drawings), surfacing and sheet metal. The roadmap in `docs/roadmap.md` lists what comes next and in what order.
+Not yet: the Catallax backend, STEP, IGES and mesh import and export, surfacing and sheet metal. Assemblies are in progress. Only drawings can be exported today. The [roadmap](docs/roadmap.md) orders the remaining work and names the kernel stages that features will wait for when SMLib goes.
 
 ## Building
 
