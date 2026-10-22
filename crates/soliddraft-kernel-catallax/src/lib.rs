@@ -5,6 +5,7 @@
 //! origin sets; display estimates never decide topology or operation success.
 
 mod convert;
+mod diagnostics;
 mod drawing_queries;
 
 use std::collections::BTreeMap;
@@ -17,18 +18,21 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "a778fb4eec49d0998652293057e3a0cb1d42139d";
+pub const CATALLAX_REVISION: &str = "674d284db928c076b74eac3846670403c38bbad3";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
 pub struct CatallaxKernel {
     state: Mutex<State>,
+    diagnostics: Option<diagnostics::Diagnostics>,
 }
 
 #[derive(Default)]
 struct State {
     next: u64,
     bodies: BTreeMap<BodyId, Stored>,
+    capture: bool,
+    questions: Vec<Value>,
 }
 
 struct Stored {
@@ -56,7 +60,7 @@ impl Solid {
             return Ok(mesh.clone());
         }
         let mesh = Arc::new(
-            mesh_body(&self.app.built.model, self.app.built.result, options, &mut Decider::default())
+            numerical(query, |dec| mesh_body(&self.app.built.model, self.app.built.result, options, dec))
                 .map_err(|e| query_error(query, e))?
                 .value,
         );
@@ -97,6 +101,13 @@ impl State {
         step["id"] = result.clone().into();
         steps.insert(seq, step);
         let input = json!({"format":"soliddraft-recipe/1", "name":"SolidDraft", "steps": steps.values().collect::<Vec<_>>(), "result": result});
+        if self.capture {
+            let problem = catallax_app::soliddraft::convert(&input.to_string())
+                .map(|c| serde_json::to_value(c.recipe).expect("Catallax recipes serialize"));
+            if let Ok(problem) = problem {
+                self.questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
+            }
+        }
         let app = catallax_app::build_soliddraft(&input.to_string(), &MeshOptions::default(), &mut Decider::default())
             .map_err(|e| build_error(op, e))?
             .body;
@@ -132,6 +143,46 @@ impl CatallaxKernel {
         Self::default()
     }
 
+    /// Enables synchronous per-call evidence and deterministic work accounting.
+    pub fn with_diagnostics(max_work: u64) -> Self {
+        Self::capture(Some(max_work))
+    }
+
+    /// Captures evidence without imposing a work allowance on normal application commands.
+    pub fn with_operation_log() -> Self {
+        Self::capture(None)
+    }
+
+    fn capture(max_work: Option<u64>) -> Self {
+        Self {
+            state: Mutex::new(State { capture: true, ..State::default() }),
+            diagnostics: Some(diagnostics::Diagnostics::new(max_work)),
+        }
+    }
+
+    /// Takes completed kernel calls and their portable recipe questions.
+    pub fn take_diagnostics(&self) -> KernelResult<Value> {
+        let mut state = self.state()?;
+        let questions = std::mem::take(&mut state.questions);
+        Ok(json!({"calls": self.diagnostics.as_ref().map(|d| d.take()).unwrap_or_default(),
+            "questions":questions}))
+    }
+
+    /// The legacy recipe that actually constructed a body's current geometry.
+    pub fn body_recipe(&self, body: BodyId) -> KernelResult<Value> {
+        let state = self.state()?;
+        let stored = state.get(body)?;
+        Ok(json!({"format":"soliddraft-recipe/1", "name":"SolidDraft",
+            "steps":stored.steps.values().collect::<Vec<_>>(), "result":stored.result}))
+    }
+
+    fn observe<T>(&self, operation: &str, run: impl FnOnce() -> KernelResult<T>) -> KernelResult<T> {
+        match &self.diagnostics {
+            Some(d) => d.observe(operation, run),
+            None => run(),
+        }
+    }
+
     fn state(&self) -> KernelResult<MutexGuard<'_, State>> {
         self.state.lock().map_err(|_| KernelError::Unavailable("Catallax body arena lock poisoned".into()))
     }
@@ -163,6 +214,17 @@ fn query_error(query: &str, error: catallax_numbers::Refusal) -> KernelError {
     }
 }
 
+fn numerical<T>(
+    operation: &str,
+    run: impl FnOnce(&mut Decider) -> Result<catallax_numbers::Answer<T>, catallax_numbers::Refusal>,
+) -> Result<catallax_numbers::Answer<T>, catallax_numbers::Refusal> {
+    let mut decider = Decider::default();
+    let span = catallax_numbers::OperationSpan::begin("brep", &operation, operation, &decider);
+    let result = run(&mut decider);
+    span.finish(&decider, result.as_ref().err(), result.as_ref().ok().map(|a| &a.marks));
+    result
+}
+
 fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
     let values = [
         params.chord_height,
@@ -190,169 +252,209 @@ impl Kernel for CatallaxKernel {
     }
 
     fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
-        profile.check()?;
-        let mut state = self.state()?;
-        let seq = state.id();
-        let result = format!("op_{seq}");
-        let step = json!({"id":result, "op":"profile", "plane":profile.plane, "loops":{"outer":profile.outer,"holes":profile.holes}});
-        // Conversion validates the exact frame and joined profile without manufacturing a sheet.
-        // The converter requires a body result, so validate with a structural extrusion only.
-        let input = json!({"format":"soliddraft-recipe/1","name":"profile","steps":[step, {"id":"check_body","op":"extrude","profile":result,"distance":1}],"result":"check_body"});
-        catallax_app::soliddraft::convert(&input.to_string())
-            .map_err(|e| build_error(OpKind::Profile, Error::Conversion(e)))?;
-        let record = HistoryRecord {
-            seq,
-            tag: tag.clone(),
-            op: OpKind::Profile,
-            faces: EntityChanges::default(),
-            edges: EntityChanges::default(),
-            vertices: EntityChanges::default(),
-            face_roles: vec![],
-        };
-        let body = BodyId::from_raw(state.id());
-        state.bodies.insert(
-            body,
-            Stored { steps: BTreeMap::from([(seq, step)]), result, history: vec![record.clone()], solid: None },
-        );
-        Ok(OpResult { body, record })
+        self.observe("create_body_from_profile", || {
+            profile.check()?;
+            let mut state = self.state()?;
+            let seq = state.id();
+            let result = format!("op_{seq}");
+            let step = json!({
+                "id":result, "op":"profile", "plane":profile.plane,
+                "loops":{"outer":profile.outer,"holes":profile.holes}
+            });
+            // Conversion validates the exact frame and joined profile without manufacturing a sheet.
+            // The converter requires a body result, so validate with a structural extrusion only.
+            let input = json!({
+                "format":"soliddraft-recipe/1","name":"profile",
+                "steps":[step, {"id":"check_body","op":"extrude","profile":result,"distance":1}],
+                "result":"check_body"
+            });
+            catallax_app::soliddraft::convert(&input.to_string())
+                .map_err(|e| build_error(OpKind::Profile, Error::Conversion(e)))?;
+            let record = HistoryRecord {
+                seq,
+                tag: tag.clone(),
+                op: OpKind::Profile,
+                faces: EntityChanges::default(),
+                edges: EntityChanges::default(),
+                vertices: EntityChanges::default(),
+                face_roles: vec![],
+            };
+            let body = BodyId::from_raw(state.id());
+            state.bodies.insert(
+                body,
+                Stored { steps: BTreeMap::from([(seq, step)]), result, history: vec![record.clone()], solid: None },
+            );
+            Ok(OpResult { body, record })
+        })
     }
 
     fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
-        let mut state = self.state()?;
-        let p = state.get(profile)?;
-        if p.solid.is_some() {
-            return Err(KernelError::InvalidInput("extrude needs a profile".into()));
-        }
-        let step = json!({"op":"extrude","profile":p.result,"distance":params.distance,"direction":params.direction});
-        state.operation(tag, OpKind::Extrude, &[profile], step)
+        self.observe("extrude", || {
+            let mut state = self.state()?;
+            let p = state.get(profile)?;
+            if p.solid.is_some() {
+                return Err(KernelError::InvalidInput("extrude needs a profile".into()));
+            }
+            let step =
+                json!({"op":"extrude","profile":p.result,"distance":params.distance,"direction":params.direction});
+            state.operation(tag, OpKind::Extrude, &[profile], step)
+        })
     }
 
     fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
-        let mut state = self.state()?;
-        let p = state.get(profile)?;
-        if p.solid.is_some() {
-            return Err(KernelError::InvalidInput("revolve needs a profile".into()));
-        }
-        let step = json!({"op":"revolve","profile":p.result,"axis_origin":params.axis_origin,"axis_direction":params.axis_direction,"angle_deg":params.angle_deg});
-        state.operation(tag, OpKind::Revolve, &[profile], step)
+        self.observe("revolve", || {
+            let mut state = self.state()?;
+            let p = state.get(profile)?;
+            if p.solid.is_some() {
+                return Err(KernelError::InvalidInput("revolve needs a profile".into()));
+            }
+            let step = json!({
+                "op":"revolve","profile":p.result,"axis_origin":params.axis_origin,
+                "axis_direction":params.axis_direction,"angle_deg":params.angle_deg
+            });
+            state.operation(tag, OpKind::Revolve, &[profile], step)
+        })
     }
 
     fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
-        let mut state = self.state()?;
-        state.solid(target)?;
-        state.solid(tool)?;
-        let step = json!({"op":"boolean","kind":op,"target":state.get(target)?.result,"tool":state.get(tool)?.result});
-        state.operation(tag, op.kind(), &[target, tool], step)
+        self.observe("boolean", || {
+            let mut state = self.state()?;
+            state.solid(target)?;
+            state.solid(tool)?;
+            let step =
+                json!({"op":"boolean","kind":op,"target":state.get(target)?.result,"tool":state.get(tool)?.result});
+            state.operation(tag, op.kind(), &[target, tool], step)
+        })
     }
 
     fn fillet(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
-        self.solid(body)?;
-        Err(gap("fillet", "4 (or stage 3 if brought forward)"))
+        self.observe("fillet", || {
+            self.solid(body)?;
+            Err(gap("fillet", "4 (or stage 3 if brought forward)"))
+        })
     }
 
     fn chamfer(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
-        self.solid(body)?;
-        Err(gap("chamfer", "3"))
+        self.observe("chamfer", || {
+            self.solid(body)?;
+            Err(gap("chamfer", "3"))
+        })
     }
 
     fn shell(&self, _: &OpTag, body: BodyId, _: &[FaceId], _: f64) -> KernelResult<OpResult> {
-        self.solid(body)?;
-        Err(gap("shell", "3"))
+        self.observe("shell", || {
+            self.solid(body)?;
+            Err(gap("shell", "3"))
+        })
     }
 
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
-        let solid = self.solid(body)?;
-        let options = options(params)?;
-        let mesh = solid.display(&options, "tessellate")?;
-        let rounding_budget = options.chord_tolerance.to_f64_nearest();
-        if mesh.positions.iter().any(|p| {
-            let rounded = p.map(|v| f64::from(v as f32));
-            !rounded.iter().all(|v| v.is_finite()) || Vec3::from(*p).distance(rounded.into()) > rounding_budget
-        }) {
-            return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
-        }
-        Ok(convert::mesh(&solid.app.built.model, &mesh, &solid.ids, params))
+        self.observe("tessellate", || {
+            let solid = self.solid(body)?;
+            let options = options(params)?;
+            let mesh = solid.display(&options, "tessellate")?;
+            let rounding_budget = options.chord_tolerance.to_f64_nearest();
+            if mesh.positions.iter().any(|p| {
+                let rounded = p.map(|v| f64::from(v as f32));
+                !rounded.iter().all(|v| v.is_finite()) || Vec3::from(*p).distance(rounded.into()) > rounding_budget
+            }) {
+                return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
+            }
+            Ok(convert::mesh(&solid.app.built.model, &mesh, &solid.ids, params))
+        })
     }
 
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
-        let solid = self.solid(body)?;
-        let mesh = solid.display(&options(params)?, "tessellate_edges")?;
-        Ok(mesh
-            .edges
-            .iter()
-            .map(|edge| EdgePolyline {
-                edge: solid.ids.edges[&edge.edge],
-                points: edge.vertices.iter().map(|v| mesh.positions[*v].into()).collect(),
-            })
-            .collect())
+        self.observe("tessellate_edges", || {
+            let solid = self.solid(body)?;
+            let mesh = solid.display(&options(params)?, "tessellate_edges")?;
+            Ok(mesh
+                .edges
+                .iter()
+                .map(|edge| EdgePolyline {
+                    edge: solid.ids.edges[&edge.edge],
+                    points: edge.vertices.iter().map(|v| mesh.positions[*v].into()).collect(),
+                })
+                .collect())
+        })
     }
 
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
-        let solid = self.solid(body)?;
-        solid
-            .mass
-            .get_or_init(|| {
-                let mass = catallax_measure::mass_properties(
-                    &solid.app.built.model,
-                    solid.app.built.result,
-                    &catallax_measure::Accuracy::default(),
-                    &mut Decider::default(),
-                )
-                .map_err(|e| query_error("mass_properties", e))?
-                .value;
-                Ok(MassProperties {
-                    volume: convert::midpoint(&mass.volume),
-                    area: convert::midpoint(&mass.area),
-                    centroid: mass
-                        .centroid
-                        .map(|c| Vec3::from(c.each_ref().map(convert::midpoint)))
-                        .ok_or_else(|| gap("centroid of an empty body", "1"))?,
-                    inertia: None,
+        self.observe("mass_properties", || {
+            let solid = self.solid(body)?;
+            solid
+                .mass
+                .get_or_init(|| {
+                    let mass = numerical("mass_properties", |dec| {
+                        catallax_measure::mass_properties(
+                            &solid.app.built.model,
+                            solid.app.built.result,
+                            &catallax_measure::Accuracy::default(),
+                            dec,
+                        )
+                    })
+                    .map_err(|e| query_error("mass_properties", e))?
+                    .value;
+                    Ok(MassProperties {
+                        volume: convert::midpoint(&mass.volume),
+                        area: convert::midpoint(&mass.area),
+                        centroid: mass
+                            .centroid
+                            .map(|c| Vec3::from(c.each_ref().map(convert::midpoint)))
+                            .ok_or_else(|| gap("centroid of an empty body", "1"))?,
+                        inertia: None,
+                    })
                 })
-            })
-            .clone()
+                .clone()
+        })
     }
 
     fn validate(&self, body: BodyId) -> KernelResult<Validation> {
-        let solid = self.solid(body)?;
-        let faults = solid.app.built.model.check(solid.app.built.result);
-        Ok(Validation {
-            valid: faults.is_empty(),
-            kind: BodyKind::Solid,
-            manifold_solid: faults.is_empty(),
-            issues: faults.iter().map(|f| format!("{f:?}")).collect(),
+        self.observe("validate", || {
+            let solid = self.solid(body)?;
+            let faults = solid.app.built.model.check(solid.app.built.result);
+            Ok(Validation {
+                valid: faults.is_empty(),
+                kind: BodyKind::Solid,
+                manifold_solid: faults.is_empty(),
+                issues: faults.iter().map(|f| format!("{f:?}")).collect(),
+            })
         })
     }
 
     fn topology(&self, body: BodyId) -> KernelResult<Topology> {
-        let solid = self.solid(body)?;
-        solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids)).clone()
+        self.observe("topology", || {
+            let solid = self.solid(body)?;
+            solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids)).clone()
+        })
     }
 
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
-        Ok(self.state()?.get(body)?.history.clone())
+        self.observe("history", || Ok(self.state()?.get(body)?.history.clone()))
     }
 
     fn release(&self, body: BodyId) -> KernelResult<()> {
-        self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body))
+        self.observe("release", || self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body)))
     }
 
     fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
-        drawing_queries::view_curves(self, body, spec)
+        self.observe("view_curves", || drawing_queries::view_curves(self, body, spec))
     }
     fn silhouette_curves(&self, _: BodyId, _: Vec3) -> KernelResult<Vec<drawing::ViewCurve>> {
-        Err(gap("exact silhouettes", "1, drawing queries (roadmap section 7)"))
+        self.observe("silhouette_curves", || Err(gap("exact silhouettes", "1, drawing queries (roadmap section 7)")))
     }
     fn section_curves(&self, _: BodyId, _: &Plane) -> KernelResult<Vec<drawing::ViewCurve>> {
-        Err(gap("exact section curves", "1, drawing queries (roadmap section 7)"))
+        self.observe("section_curves", || Err(gap("section curves", "1, drawing queries (roadmap section 7)")))
     }
     fn edge_curve(&self, body: BodyId, edge: EdgeId) -> KernelResult<drawing::Curve3> {
-        drawing_queries::edge_curve(self.solid(body)?.as_ref(), body, edge)
+        self.observe("edge_curve", || drawing_queries::edge_curve(self.solid(body)?.as_ref(), body, edge))
     }
     fn face_loops(&self, body: BodyId, face: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
-        drawing_queries::face_loops(self.solid(body)?.as_ref(), body, face)
+        self.observe("face_loops", || drawing_queries::face_loops(self.solid(body)?.as_ref(), body, face))
     }
     fn lines_and_arcs(&self, _: &drawing::Curve3, _: f64) -> KernelResult<Vec<drawing::Curve3>> {
-        Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))
+        self.observe("lines_and_arcs", || {
+            Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))
+        })
     }
 }

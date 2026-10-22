@@ -35,6 +35,8 @@
 //! `soliddraft mcp [--demo | --open PART.dwprt] [--http PORT]` serves a headless part's command
 //! layer to an MCP client, on stdin and stdout or on a loopback HTTP port.
 //!
+//! `soliddraft screenshot <part.dwprt> --png out.png` captures the viewport without a window.
+//!
 //! `soliddraft commands [--json] [QUERY]` lists or searches the command registry that the
 //! app, the assistant and the MCP server share; see [`commands::USAGE`].
 //!
@@ -46,9 +48,11 @@ mod bench;
 mod commands;
 mod doc;
 mod draw;
+mod evidence;
 mod generate;
 mod material;
 mod quality;
+mod screenshot;
 mod view;
 
 use std::process::ExitCode;
@@ -62,6 +66,7 @@ use soliddraft_recipe::{BodySummary, ReplayReport, StepOutcome};
 const USAGE: &str = "\
 usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft view <recipe.json> [--dir <view>] [--svg <out.svg>] [--json]
+       soliddraft screenshot <part.dwprt> --png <out.png>
        soliddraft part [--json] <part.dwprt>...
        soliddraft mcp [--demo | --open <part.dwprt>] [--http PORT]
        soliddraft commands [--json] [<query>...]
@@ -127,6 +132,7 @@ fn main() -> ExitCode {
         }
         Some("view") => view::run(&args[1..]),
         Some("part") => part(&args[1..]),
+        Some("screenshot") => screenshot::run(&args[1..]),
         Some("mcp") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
             print!("{}", commands::mcp_usage());
             ExitCode::SUCCESS
@@ -369,12 +375,30 @@ fn mcp(args: &[String]) -> ExitCode {
     use soliddraft_app::command_tools::{CommandTools, MCP_INSTRUCTIONS, ProposalBook, Surface};
     use soliddraft_assistant::mcp::{HttpServer, McpSession, serve_stdio};
 
+    let mut bundle = None;
+    let mut max_work = 100_000_000;
     let mut demo = false;
     let mut open = None;
     let mut http = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--bundle" => {
+                bundle = args.get(i + 1).map(std::path::PathBuf::from);
+                if bundle.is_none() {
+                    eprintln!("--bundle needs a new directory");
+                    return ExitCode::from(2);
+                }
+                i += 1;
+            }
+            "--max-work" => {
+                let Some(value) = args.get(i + 1).and_then(|v| v.parse::<u64>().ok()) else {
+                    eprintln!("--max-work needs an unsigned integer");
+                    return ExitCode::from(2);
+                };
+                max_work = value;
+                i += 1;
+            }
             "--demo" => demo = true,
             "--open" => {
                 open = args.get(i + 1).map(std::path::PathBuf::from);
@@ -399,20 +423,35 @@ fn mcp(args: &[String]) -> ExitCode {
         }
         i += 1;
     }
+    if bundle.is_none() && args.iter().any(|a| a == "--max-work") {
+        eprintln!("--max-work requires --bundle");
+        return ExitCode::from(2);
+    }
+    let evidence_kernel =
+        bundle.as_ref().map(|_| Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_diagnostics(max_work)));
+    let kernel: Arc<dyn Kernel> =
+        evidence_kernel.clone().map(|k| k as Arc<dyn Kernel>).unwrap_or_else(soliddraft_app::kernel);
     let mut doc = match open {
-        Some(path) => match soliddraft_app::file::open(&path, soliddraft_app::kernel()) {
+        Some(path) => match soliddraft_app::file::open(&path, kernel.clone()) {
             Ok(doc) => doc,
             Err(e) => {
                 eprintln!("mcp: cannot open {}: {e}", path.display());
                 return ExitCode::FAILURE;
             }
         },
-        None if demo => soliddraft_app::demo_document(),
-        None => soliddraft_app::new_document(),
+        None if demo => soliddraft_app::demo_document_on(kernel.clone()),
+        None => soliddraft_app::document::Document::new("Part1", kernel),
     };
     let mut book = ProposalBook::default();
     let mut session = McpSession::new("soliddraft", env!("CARGO_PKG_VERSION"), MCP_INSTRUCTIONS);
-    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let mut host = match evidence::Evidence::new(host, evidence_kernel, bundle, max_work) {
+        Ok(host) => host,
+        Err(e) => {
+            eprintln!("mcp: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     match http {
         None => match serve_stdio(&mut session, &mut host) {
             Ok(()) => ExitCode::SUCCESS,

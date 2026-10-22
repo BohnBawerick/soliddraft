@@ -196,6 +196,11 @@ fn edges_param() -> (&'static str, Value) {
     ("edges", non_empty_array(string("An edge name, such as Boss-Extrude2 · Edge 5"), "The edges"))
 }
 
+/// The rollback tool's parameters.
+pub fn rollback_params() -> Vec<(&'static str, Value)> {
+    vec![("before", any_of(vec![string("First inactive feature, or null for the end"), json!({"type":"null"})]))]
+}
+
 /// The `sketch` verb's parameters.
 pub fn sketch_params() -> Vec<(&'static str, Value)> {
     vec![
@@ -1307,6 +1312,17 @@ impl ToolHost for CommandTools<'_> {
             "measure" => self.measure(input["a"].as_str().unwrap_or_default(), input["b"].as_str().unwrap_or_default()),
             "propose" => self.propose(&input, caller),
             "apply" => self.apply(input["proposal_id"].as_str().unwrap_or_default(), caller),
+            "rollback" if mcp => (|| {
+                self.doc.rollback = match input["before"].as_str() {
+                    Some(name) => {
+                        let id = feature_by_name(self.doc, name)?;
+                        Some(self.doc.index_of(id).ok_or("feature disappeared")?)
+                    }
+                    None => None,
+                };
+                self.doc.rebuild()?;
+                Ok(json!({"before":input["before"]}))
+            })(),
             "undo" if mcp => self.doc.undo().map(|label| json!({ "undone": label, "undo": self.doc.undo_label() })),
             "redo" if mcp => self.doc.redo().map(|label| json!({ "redone": label })),
             verb if mcp && commands::verbs().any(|v| v.id == verb) => {

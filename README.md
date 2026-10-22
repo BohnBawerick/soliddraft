@@ -85,7 +85,7 @@ The assistant needs an Anthropic API key, from `ANTHROPIC_API_KEY` or the OS key
 printf %s "$KEY" | cargo run --release -p soliddraft-cli -- key set
 ```
 
-Without a key the app runs and the chat panel says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio. See `docs/assistant.md`.
+Without a key the app runs and the chat panel says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio. See `docs/assistant.md`. Agent scenarios, per-command evidence bundles and windowless viewport captures are described in [the application loop](docs/application-loop.md).
 
 ## Command line
 

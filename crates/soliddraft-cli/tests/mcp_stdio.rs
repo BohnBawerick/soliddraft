@@ -97,3 +97,43 @@ fn mcp_over_stdio_builds_measures_and_undoes() {
     let summary = c.call("model_summary", json!({}));
     assert_eq!(summary["structuredContent"]["features"], json!([]));
 }
+
+#[test]
+fn mcp_bundle_keeps_the_part_and_question_after_a_refused_extrusion() {
+    let dir = std::env::temp_dir().join(format!("soliddraft-mcp-evidence-{}", std::process::id()));
+    let mut c = Client::start(&["mcp", "--bundle", dir.to_str().unwrap(), "--max-work", "0"]);
+    c.request(
+        "initialize",
+        json!({"protocolVersion":"2025-06-18","capabilities":{},
+        "clientInfo":{"name":"evidence-test","version":"1"}}),
+    );
+    let sketch = c.call(
+        "sketch",
+        json!({"plane":"top","shapes":[
+            {"shape":"rectangle","center":[0,0,0],"width":40,"height":30}
+        ]}),
+    );
+    assert_eq!(sketch["isError"], false, "{sketch}");
+    let refused = c.call("extrude", json!({"sketch":"Sketch1","depth":10,"flip":false}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    drop(c);
+    let read = |path: &str| std::fs::read_to_string(dir.join(path)).unwrap();
+    assert_eq!(read("0001/part.json"), read("0002/part.json"));
+    let command: Value = serde_json::from_str(&read("0002/command.json")).unwrap();
+    assert_eq!(command["backend"]["name"], "catallax");
+    assert!(command["output"].as_str().unwrap().contains("numbers.operation-budget"));
+    let question: Value = serde_json::from_str(&read("0002/question-0000.json")).unwrap();
+    assert_eq!(question["format"], "catallax-question/1");
+    assert_eq!(question["max_work"], 0);
+    assert_eq!(question["source"], "recipe");
+    assert_eq!(question["problem"]["format"], "catallax-recipe/3");
+    let kernel: Value = serde_json::from_str(&read("0002/kernel.json")).unwrap();
+    assert!(kernel["calls"].as_array().unwrap().iter().any(|call| {
+        call["operation_log"]["operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|op| op["refusal"]["code"] == "numbers.operation-budget")
+    }));
+    std::fs::remove_dir_all(dir).unwrap();
+}

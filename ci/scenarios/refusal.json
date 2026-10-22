@@ -1,0 +1,46 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "refusal",
+  "max_work": 0,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "refusal": "numbers.operation-budget",
+      "render": false,
+      "checks": [
+        {
+          "pointer": "/summary/features/0/name",
+          "equals": "Sketch1"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        }
+      ]
+    }
+  ]
+}

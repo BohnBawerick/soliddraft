@@ -1,6 +1,6 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `a778fb4eec49d0998652293057e3a0cb1d42139d`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `674d284db928c076b74eac3846670403c38bbad3`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
 
 - Stage 1 profiles are definitions, not sheet bodies. The recipe runner now defers profiles and reports loop count, closure and tags without querying sheet topology, mass or validity. An extrusion or revolution creates and releases the backend's temporary profile handle. Direct sheet queries return `Unsupported`.
 - Stage 1 empty boolean results cannot be expressed by the existing solid/sheet `BodyKind` and mandatory centroid. The adapter returns `Unsupported` without changing the operands.
