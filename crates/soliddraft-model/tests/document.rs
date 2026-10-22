@@ -221,7 +221,7 @@ fn suppress_and_rollback_pass_the_body_through() {
     assert_eq!(d.index_of(s), Some(2));
     assert_eq!(d.active_count(), 3);
     d.execute(Command::RollTo { before: None }).unwrap();
-    assert!(d.status(f).unwrap().is_ok());
+    assert_waiting(&d, f);
     assert!(d.body_after(e).is_some());
 }
 

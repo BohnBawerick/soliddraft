@@ -399,8 +399,17 @@ impl Run<'_> {
         let query = |error| RecipeError::Query { step: step.into(), error };
         let topo = self.kernel.topology(body).map_err(query)?;
         let history = self.kernel.history(body).map_err(query)?;
-        let items: Vec<Item<EdgeId>> =
-            topo.edges.iter().map(|e| Item { id: e.id, point: e.midpoint, min: e.bbox.min, max: e.bbox.max }).collect();
+        let items: Vec<Item<EdgeId>> = topo
+            .edges
+            .iter()
+            .map(|e| Item {
+                id: e.id,
+                point: e.midpoint,
+                min: e.bbox.min,
+                max: e.bbox.max,
+                padding: topo.display_chord_height.unwrap_or(0.0),
+            })
+            .collect();
         let chosen = select(sel, &items, &history, |r| &r.edges);
         nonempty(step, sel, chosen)
     }
@@ -409,8 +418,17 @@ impl Run<'_> {
         let query = |error| RecipeError::Query { step: step.into(), error };
         let topo = self.kernel.topology(body).map_err(query)?;
         let history = self.kernel.history(body).map_err(query)?;
-        let items: Vec<Item<FaceId>> =
-            topo.faces.iter().map(|f| Item { id: f.id, point: f.centroid, min: f.bbox.min, max: f.bbox.max }).collect();
+        let items: Vec<Item<FaceId>> = topo
+            .faces
+            .iter()
+            .map(|f| Item {
+                id: f.id,
+                point: f.centroid,
+                min: f.bbox.min,
+                max: f.bbox.max,
+                padding: topo.display_chord_height.unwrap_or(0.0),
+            })
+            .collect();
         let chosen = select(sel, &items, &history, |r| &r.faces);
         nonempty(step, sel, chosen)
     }
@@ -446,6 +464,7 @@ struct Item<Id> {
     point: Vec3,
     min: Vec3,
     max: Vec3,
+    padding: f64,
 }
 
 /// Distance under which a bounding box counts as inside a `within` box.
@@ -472,7 +491,8 @@ fn select<Id: Copy + Eq + std::hash::Hash>(
         Selector::Within { min, max } => items
             .iter()
             .filter(|i| {
-                let inside = |lo: f64, v: f64, hi: f64| v >= lo - WITHIN_TOL && v <= hi + WITHIN_TOL;
+                let tolerance = WITHIN_TOL + i.padding;
+                let inside = |lo: f64, v: f64, hi: f64| v >= lo - tolerance && v <= hi + tolerance;
                 inside(min.x, i.min.x, max.x)
                     && inside(min.y, i.min.y, max.y)
                     && inside(min.z, i.min.z, max.z)
@@ -562,7 +582,7 @@ mod tests {
 
     fn item(id: u64, p: [f64; 3]) -> Item<FaceId> {
         let p = Vec3::from(p);
-        Item { id: FaceId::from_raw(id), point: p, min: p, max: p }
+        Item { id: FaceId::from_raw(id), point: p, min: p, max: p, padding: 0.0 }
     }
 
     #[test]
@@ -589,6 +609,19 @@ mod tests {
         assert_eq!(pick(&top), [2, 3]);
         let both = Selector::AllOf(vec![top, Selector::Nearest(Vec3::new(0.0, 0.0, 11.0))]);
         assert_eq!(pick(&both), [2]);
+    }
+
+    #[test]
+    fn within_accounts_for_the_reported_display_bound() {
+        let item = Item {
+            id: FaceId::from_raw(1),
+            point: Vec3::ZERO,
+            min: Vec3::new(-1.01, -1.01, 9.99),
+            max: Vec3::new(1.01, 1.01, 10.01),
+            padding: 0.01,
+        };
+        let selector = Selector::Within { min: Vec3::new(-1.0, -1.0, 10.0), max: Vec3::new(1.0, 1.0, 10.0) };
+        assert_eq!(select(&selector, &[item], &[], |r| &r.faces), [FaceId::from_raw(1)]);
     }
 
     fn minimal(steps: &str, result: &str) -> String {

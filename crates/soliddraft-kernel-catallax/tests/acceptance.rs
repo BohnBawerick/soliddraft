@@ -231,3 +231,25 @@ fn polygon_face_loops_keep_holes_and_coedge_order() {
         k.release(id).unwrap();
     }
 }
+
+#[test]
+fn axis_aligned_front_extrusions_keep_the_exact_frame_in_both_directions() {
+    let k = CatallaxKernel::new();
+    let profile =
+        Profile::circle(Plane { origin: Vec3::ZERO, normal: -Vec3::Y, x_dir: Vec3::X }, Point2::new(0.0, 0.0), 3.0);
+    let sheet = k.create_body_from_profile(&OpTag::new("front"), &profile).unwrap();
+    for direction in [-Vec3::Y, Vec3::Y] {
+        let body = k
+            .extrude(&OpTag::new("pin"), sheet.body, &Extrude { distance: 20.0, direction: Some(direction) })
+            .unwrap()
+            .body;
+        let mass = k.mass_properties(body).unwrap();
+        assert!((mass.volume - 180.0 * std::f64::consts::PI).abs() < 1e-4);
+        assert!(mass.centroid.distance(direction * 10.0) < 1e-8);
+        let topology = k.topology(body).unwrap();
+        let normals: Vec<_> = topology.faces.iter().filter_map(|f| f.normal).collect();
+        assert!(normals.contains(&Vec3::Y) && normals.contains(&-Vec3::Y), "{normals:?}");
+        k.release(body).unwrap();
+    }
+    k.release(sheet.body).unwrap();
+}

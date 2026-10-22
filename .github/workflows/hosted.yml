@@ -30,6 +30,15 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+  kernel:
+    name: Catallax adapter and recipes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soliddraft-kernel-catallax -p soliddraft-recipe --all-features --locked --no-fail-fast
+
   # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
   test:
     name: Workspace (${{ matrix.os }})

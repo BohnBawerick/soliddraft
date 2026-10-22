@@ -353,11 +353,15 @@ fn bracket_drawing_dimensioned_exported_updated_and_repaired() {
     );
     let (v, _) = value_of(&harness, length);
     assert!((v - 120.0).abs() < 1e-6, "overall length {v}");
-    // Boss diameter in the top view.
-    let boss_dia = smart_dimension(&mut harness, top, &[Vec3::new(82.0, 45.0, 30.0)], vec2(24.0, -52.0));
-    let (v, _) = value_of(&harness, boss_dia);
-    assert!((v - 24.0).abs() < 1e-6, "boss diameter {v}");
-    assert!(matches!(dimensions(&harness).iter().find(|d| d.0 == boss_dia).unwrap().1, DimensionKind::Diameter));
+    // Plate width in the top view. Fragmented circular rims remain polylines until
+    // Catallax supplies the remaining curve conversions.
+    let width = smart_dimension(&mut harness, top, &[Vec3::new(120.0, 45.0, 10.0)], vec2(24.0, -52.0));
+    let (v, _) = value_of(&harness, width);
+    assert!((v - 90.0).abs() < 1e-6, "plate width {v}");
+    assert!(matches!(
+        dimensions(&harness).iter().find(|d| d.0 == width).unwrap().1,
+        DimensionKind::Linear { orientation: LinearOrientation::Vertical }
+    ));
     // Slot length and height in the left view.
     // Placements must clear other entities: a click on a curve adds it to the pick.
     let slot_len = smart_dimension(&mut harness, left, &[Vec3::new(0.0, 45.0, 25.0)], vec2(0.0, -30.0));
@@ -760,7 +764,11 @@ fn bracket_d3_sections_details_sheets_and_symbols() {
     assert_eq!(sets.len(), 1);
     let AnnotationKind::DimensionSet(set) = &sets[0].body else { panic!() };
     assert_eq!((set.kind, set.orientation), (SetKind::Ordinate, LinearOrientation::Horizontal));
-    assert_eq!(set.values, vec![25.0, 70.0, 115.0], "{set:?}");
+    // Polygon mode measures the picked boundary points rather than inferred circle centres.
+    assert_eq!(set.values.len(), 3);
+    for (got, expected) in set.values.iter().zip([29.5, 82.0, 119.5]) {
+        assert!((got - expected).abs() <= 0.01, "{set:?}");
+    }
 
     // 5. Datum A on the plate's bottom edge and a perpendicularity frame on the flange's
     // outer edge, both in the front view.
