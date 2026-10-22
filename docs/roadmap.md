@@ -162,6 +162,6 @@ Kernel-independent items from section 8 run alongside, as people and machines al
 
 ## 11. Open questions
 
-1. **Drawings. Answered.** Use the polygon-mode hidden-line pass so drawings keep working when SMLib goes. Exact silhouettes remain Catallax work.
+1. **Drawings.** The polygon-mode hidden-line pass is implemented as proposed. The question remains open for the project owner. Exact silhouettes remain Catallax work.
 2. **Waiting features.** Confirm the behaviour in section 2: disabled ribbon commands that name their stage, and existing parts that stop at a waiting feature with a rebuild error.
 3. **Shared with Catallax's roadmap. Answered.** Target parts P1 to P10 are confirmed. The B-rep carries the stand-in for field-only lattices. Fillets between planes and cylinders come forward into Catallax stage 3.
