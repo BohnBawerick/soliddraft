@@ -98,6 +98,7 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
     assert_eq!(soliddraft_app::kernel().backend().name, "catallax");
     let doc = bracket();
     let original = volume(&doc);
+    let plate = doc.features.iter().find(|f| f.name == "plate").unwrap().id;
     let flange = doc.features.iter().find(|f| f.name == "flange").unwrap().id;
     let mut harness = Harness::builder()
         .with_size(vec2(1440.0, 900.0))
@@ -129,7 +130,9 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
     let Some(Selection::Face(face)) = doc.selection else {
         panic!("the rendered plate face must be pickable: {:?}", doc.selection)
     };
-    assert!(doc.named_face(face).unwrap().label.contains("plate"));
+    let picked = doc.named_face(face).unwrap();
+    assert_eq!(picked.feature, plate, "picked {picked:?}");
+    assert_eq!(picked.label, "End cap");
     assert!(doc.describe(Selection::Face(face)).unwrap().title.contains("plate"));
     let doc = &mut harness.state_mut().state.doc;
     let FeatureKind::Extrude(mut params) = doc.features.iter().find(|f| f.id == flange).unwrap().kind.clone() else {
@@ -138,7 +141,7 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
     params.depth = 72.0;
     doc.apply(document::Command::EditExtrude { id: flange, params }).unwrap();
     assert!((volume(doc) - original - 10800.0).abs() < 1e-4);
-    assert!(doc.faces.iter().any(|f| f.label.contains("flange") && (f.centroid.z - 72.0).abs() < 1e-5));
+    assert!(doc.faces.iter().any(|f| f.feature == flange && f.label == "End cap" && (f.centroid.z - 72.0).abs() < 1e-5));
     assert!(matches!(doc.model().status(FeatureId(flange.try_into().unwrap())), Some(model::FeatureStatus::Ok)));
     doc.undo().unwrap();
     assert!((volume(doc) - original).abs() < 1e-4);
