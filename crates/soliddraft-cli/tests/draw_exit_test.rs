@@ -2,9 +2,9 @@
 //!
 //! - `soliddraft draw bracket.json --template iso-a3` writes a drawing file, an SVG, a PDF
 //!   and a DXF;
-//! - the SVG matches `recipes/golden/bracket-a3.svg`;
+//! - the SVG matches `recipes/golden/catallax-bracket-a3.svg`;
 //! - the DXF re-reads with the `dxf` crate with the entity counts per layer in
-//!   `recipes/golden/bracket-a3-dxf.json` and no splines;
+//!   `recipes/golden/catallax-bracket-a3-dxf.json` and no splines;
 //! - the PDF has one A3 page and the embedded text "Bracket";
 //! - `soliddraft draw --update` after changing the plate thickness in the recipe reports
 //!   one changed value and none dangling; after deleting the slot it reports two
@@ -80,7 +80,7 @@ fn bracket_drawing_exports_and_follows_the_part() {
     }
 
     // SVG: the golden file.
-    golden("bracket-a3.svg", &std::fs::read_to_string(dir.join("bracket.svg")).unwrap());
+    golden("catallax-bracket-a3.svg", &std::fs::read_to_string(dir.join("bracket.svg")).unwrap());
 
     // DXF: re-reads, golden counts per layer, no splines.
     let dxf = dxf::Drawing::load_file(dir.join("bracket.dxf")).expect("the DXF re-reads");
@@ -100,7 +100,7 @@ fn bracket_drawing_exports_and_follows_the_part() {
     for layer in ["VISIBLE", "DIMENSION", "TEXT", "FORMAT"] {
         assert!(counts.contains_key(layer), "no {layer} entities: {counts:?}");
     }
-    golden("bracket-a3-dxf.json", &(serde_json::to_string_pretty(&counts).unwrap() + "\n"));
+    golden("catallax-bracket-a3-dxf.json", &(serde_json::to_string_pretty(&counts).unwrap() + "\n"));
 
     // PDF: one A3 page with the title in it.
     let pdf = lopdf::Document::load(dir.join("bracket.pdf")).expect("the PDF loads");

@@ -211,4 +211,21 @@ fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
     assert_eq!(section.geometry.hatch.len(), 3);
     assert!(section.geometry.curves.iter().any(|c| c.visible));
     harness.render().expect("Catallax drawing workspace renders its section");
+
+    let doc = &mut harness.state_mut().state.doc;
+    let plate = doc.features.iter().find(|f| f.name == "plate").unwrap();
+    let id = plate.id;
+    let FeatureKind::Extrude(mut params) = plate.kind.clone() else { panic!() };
+    params.depth = 12.0;
+    doc.apply(document::Command::EditExtrude { id, params }).unwrap();
+    harness.run_steps(12);
+    let session = harness.state().state.drawing.session.as_ref().unwrap();
+    let update = session.doc.last_update.as_ref().expect("the drawing regenerated after the plate edit");
+    assert_eq!(update.views, 5);
+    assert!(update.dangling.is_empty());
+    assert!(session.is_up_to_date());
+    let section =
+        session.doc.drawing.sheets[0].views.iter().find(|v| matches!(v.kind, ViewKind::Section { .. })).unwrap();
+    assert_eq!(section.geometry.hatch.len(), 3);
+    harness.render().expect("regenerated Catallax drawing workspace renders");
 }
