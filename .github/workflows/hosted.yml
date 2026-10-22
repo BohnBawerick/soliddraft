@@ -75,10 +75,18 @@ jobs:
       - run: cargo check -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials -p soliddraft-assembly --all-features
 
   catallax-interactive:
-    name: Catallax bracket (render, pick, edit, rebuild)
-    runs-on: ubuntu-latest
+    name: Catallax bracket (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            backend: vulkan
+          - os: macos-latest
+            backend: metal
+    runs-on: ${{ matrix.os }}
     env:
-      WGPU_BACKEND: vulkan
+      WGPU_BACKEND: ${{ matrix.backend }}
       SOLIDDRAFT_REQUIRE_GPU: "1"
       XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
     steps:
@@ -86,6 +94,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install the software Vulkan adapter
+        if: runner.os == 'Linux'
         run: |
           printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
@@ -97,7 +106,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: catallax-drawing-workspace
+          name: catallax-drawing-workspace-${{ matrix.os }}
           path: target/exit-test/catallax-drawing.png
 
   application-loop:
