@@ -41,7 +41,16 @@ fn harness() -> App<'static> {
         .with_render_every_step(true)
         .with_step_dt(1.0 / 60.0)
         .wgpu()
-        .build_eframe(|cc| SolidDraftApp::new(cc, soliddraft_app::new_document(), Automation::default()))
+        .build_eframe(|cc| {
+            SolidDraftApp::new(
+                cc,
+                soliddraft_app::document::Document::new(
+                    "Part1",
+                    std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+                ),
+                Automation::default(),
+            )
+        })
 }
 
 fn save(harness: &mut App<'_>, name: &str) {
@@ -318,7 +327,11 @@ fn demo_part_renders() {
         .with_step_dt(1.0 / 60.0)
         .wgpu()
         .build_eframe(|cc| {
-            let mut app = SolidDraftApp::new(cc, soliddraft_app::demo_document(), Automation::default());
+            let mut app = SolidDraftApp::new(
+                cc,
+                soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())),
+                Automation::default(),
+            );
             let provider = std::sync::Arc::new(MockProvider::new(vec![
                 MockTurn::tools(
                     "",

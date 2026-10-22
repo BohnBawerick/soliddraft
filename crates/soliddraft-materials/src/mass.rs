@@ -26,8 +26,8 @@ pub struct Mass {
     pub volume_mm3: f64,
     /// Centre of mass, mm, in the part's (or assembly's) coordinates.
     pub centre_mm: [f64; 3],
-    /// Inertia tensor about the centre of mass, along the coordinate axes, kg·mm².
-    pub inertia_kg_mm2: [[f64; 3]; 3],
+    /// Inertia tensor about the centre of mass, kg·mm². Absent when unavailable from the kernel.
+    pub inertia_kg_mm2: Option<[[f64; 3]; 3]>,
 }
 
 /// Why a mass is unknown.
@@ -74,7 +74,7 @@ pub fn at_density(props: &MassProperties, density_kg_m3: f64) -> Mass {
         mass_kg: props.volume * k,
         volume_mm3: props.volume,
         centre_mm: [c.x, c.y, c.z],
-        inertia_kg_mm2: props.inertia.map(|row| row.map(|v| v * k)),
+        inertia_kg_mm2: props.inertia.map(|tensor| tensor.map(|row| row.map(|v| v * k))),
     }
 }
 
@@ -113,7 +113,7 @@ pub fn combine(items: impl IntoIterator<Item = Result<Placed, Unknown>>) -> Resu
             let r = p.rotation;
             Mass {
                 centre_mm: add(mul_vec(r, p.mass.centre_mm), p.translation_mm),
-                inertia_kg_mm2: mul(mul(r, p.mass.inertia_kg_mm2), transpose(r)),
+                inertia_kg_mm2: p.mass.inertia_kg_mm2.map(|tensor| mul(mul(r, tensor), transpose(r))),
                 ..p.mass
             }
         })
@@ -133,16 +133,19 @@ pub fn combine(items: impl IntoIterator<Item = Result<Placed, Unknown>>) -> Resu
     };
     let mut inertia = [[0.0; 3]; 3];
     for p in &placed {
+        let Some(tensor) = p.inertia_kg_mm2 else {
+            return Ok(Mass { mass_kg: total, volume_mm3: volume, centre_mm: centre, inertia_kg_mm2: None });
+        };
         let d = [p.centre_mm[0] - centre[0], p.centre_mm[1] - centre[1], p.centre_mm[2] - centre[2]];
         let d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
         for a in 0..3 {
             for b in 0..3 {
                 let delta = if a == b { 1.0 } else { 0.0 };
-                inertia[a][b] += p.inertia_kg_mm2[a][b] + p.mass_kg * (d2 * delta - d[a] * d[b]);
+                inertia[a][b] += tensor[a][b] + p.mass_kg * (d2 * delta - d[a] * d[b]);
             }
         }
     }
-    Ok(Mass { mass_kg: total, volume_mm3: volume, centre_mm: centre, inertia_kg_mm2: inertia })
+    Ok(Mass { mass_kg: total, volume_mm3: volume, centre_mm: centre, inertia_kg_mm2: Some(inertia) })
 }
 
 fn mul(a: [[f64; 3]; 3], b: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
@@ -188,11 +191,11 @@ mod tests {
             volume: v,
             area: 2.0 * (a * b + b * c + a * c),
             centroid: Vec3::new(0.0, 0.0, 0.0),
-            inertia: [
+            inertia: Some([
                 [v * (b * b + c * c) / 12.0, 0.0, 0.0],
                 [0.0, v * (a * a + c * c) / 12.0, 0.0],
                 [0.0, 0.0, v * (a * a + b * b) / 12.0],
-            ],
+            ]),
         }
     }
 
@@ -208,10 +211,22 @@ mod tests {
         // 6000 mm³ of steel: 6e-6 m³ x 7850 kg/m³ = 0.0471 kg.
         assert!(close(m.mass_kg, 0.0471), "{}", m.mass_kg);
         // Ixx = m (b² + c²) / 12 = 0.0471 x 1300 / 12 kg·mm².
-        assert!(close(m.inertia_kg_mm2[0][0], 0.0471 * 1300.0 / 12.0));
+        assert!(close(m.inertia_kg_mm2.unwrap()[0][0], 0.0471 * 1300.0 / 12.0));
         assert_eq!(of_body(&block(), None), Err(Unknown::NoMaterial));
         let oak = Material::new("oak", "Oak");
         assert_eq!(of_body(&block(), Some(&oak)).unwrap_err().to_string(), "Oak has no density");
+    }
+
+    #[test]
+    fn absent_inertia_stays_absent_through_density_and_assembly_transforms() {
+        let mut props = block();
+        props.inertia = None;
+        let mass = at_density(&props, 7850.0);
+        assert!(mass.inertia_kg_mm2.is_none());
+        let placed = Placed { mass, rotation: IDENTITY, translation_mm: [100.0, 20.0, 0.0] };
+        let combined = combine([Ok(placed), Ok(Placed { mass: at_density(&block(), 7850.0), ..placed })]).unwrap();
+        assert!(combined.mass_kg > mass.mass_kg);
+        assert!(combined.inertia_kg_mm2.is_none());
     }
 
     #[test]
@@ -220,8 +235,8 @@ mod tests {
         // A quarter turn about z swaps the x and y moments.
         let quarter = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
         let turned = combine([Ok(Placed { mass: m, rotation: quarter, translation_mm: [0.0; 3] })]).unwrap();
-        assert!(close(turned.inertia_kg_mm2[0][0], m.inertia_kg_mm2[1][1]));
-        assert!(close(turned.inertia_kg_mm2[1][1], m.inertia_kg_mm2[0][0]));
+        assert!(close(turned.inertia_kg_mm2.unwrap()[0][0], m.inertia_kg_mm2.unwrap()[1][1]));
+        assert!(close(turned.inertia_kg_mm2.unwrap()[1][1], m.inertia_kg_mm2.unwrap()[0][0]));
         // Two blocks 100 mm apart along x: centre between them, Iyy and Izz gain
         // 2 m (50 mm)², Ixx unchanged.
         let a = Placed { mass: m, rotation: IDENTITY, translation_mm: [0.0, 0.0, 0.0] };
@@ -229,9 +244,12 @@ mod tests {
         let pair = combine([Ok(a), Ok(b)]).unwrap();
         assert!(close(pair.mass_kg, 12000.0));
         assert_eq!(pair.centre_mm, [50.0, 0.0, 0.0]);
-        assert!(close(pair.inertia_kg_mm2[0][0], 2.0 * m.inertia_kg_mm2[0][0]));
-        assert!(close(pair.inertia_kg_mm2[1][1], 2.0 * m.inertia_kg_mm2[1][1] + 2.0 * 6000.0 * 2500.0));
-        assert_eq!(pair.inertia_kg_mm2[0][1], 0.0);
+        assert!(close(pair.inertia_kg_mm2.unwrap()[0][0], 2.0 * m.inertia_kg_mm2.unwrap()[0][0]));
+        assert!(close(
+            pair.inertia_kg_mm2.unwrap()[1][1],
+            2.0 * m.inertia_kg_mm2.unwrap()[1][1] + 2.0 * 6000.0 * 2500.0
+        ));
+        assert_eq!(pair.inertia_kg_mm2.unwrap()[0][1], 0.0);
         assert_eq!(
             combine([Ok(a), Err(Unknown::NoMaterial), Err(Unknown::NoMaterial)]),
             Err(Unknown::Parts { count: 2 })

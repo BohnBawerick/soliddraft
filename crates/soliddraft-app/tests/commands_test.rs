@@ -32,7 +32,7 @@ fn gpu_available() -> bool {
 type App<'a> = Harness<'a, SolidDraftApp>;
 
 fn harness() -> App<'static> {
-    harness_with(soliddraft_app::demo_document)
+    harness_with(|| soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())))
 }
 
 fn harness_with(doc: fn() -> soliddraft_app::document::Document) -> App<'static> {
@@ -110,7 +110,12 @@ fn a_disabled_command_says_why_instead_of_running() {
         eprintln!("skipping: no GPU adapter");
         return;
     }
-    let mut harness = harness_with(soliddraft_app::new_document);
+    let mut harness = harness_with(|| {
+        soliddraft_app::document::Document::new(
+            "Part1",
+            std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+        )
+    });
     harness.run_steps(3);
     harness.key_press(Key::C);
     harness.run_steps(2);

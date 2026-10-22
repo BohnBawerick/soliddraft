@@ -20,6 +20,7 @@ path = "src/main.rs"
 [dependencies]
 soliddraft-assembly.workspace = true
 soliddraft-kernel-api.workspace = true
+soliddraft-kernel-catallax.workspace = true
 soliddraft-model.workspace = true
 soliddraft-tessellation.workspace = true
 soliddraft-sketch.workspace = true
@@ -79,6 +80,7 @@ web-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+soliddraft-recipe.workspace = true
 egui_kittest.workspace = true
 lopdf = "0.45.0"
 # The version wgpu uses, to check the viewport shader translates to WebGL2's GLSL.

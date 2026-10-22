@@ -399,6 +399,9 @@ fn info(part: &Path, a: &Args) -> Result<bool, String> {
         ),
         Err(e) => println!("  mass: unknown ({e})"),
     }
+    if mass.as_ref().is_ok_and(|m| m.inertia_kg_mm2.is_none()) {
+        println!("  inertia: not available yet from Catallax");
+    }
     println!("  appearance: {} ({})", table.appearances[0].name, table.appearances[0].id);
     for x in &state.appearances {
         let place = match &x.target {

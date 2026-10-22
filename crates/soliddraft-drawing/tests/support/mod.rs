@@ -175,7 +175,7 @@ impl Kernel for BoxKernel {
                 volume: s.x * s.y * s.z,
                 area: 2.0 * (s.x * s.y + s.y * s.z + s.z * s.x),
                 centroid: (b.min + b.max) * 0.5,
-                inertia: [[0.0; 3]; 3],
+                inertia: Some([[0.0; 3]; 3]),
             }
         })
     }
@@ -234,6 +234,7 @@ impl Kernel for BoxKernel {
                 })
                 .collect();
             Topology {
+                display_chord_height: None,
                 kind: BodyKind::Solid,
                 faces,
                 edges,

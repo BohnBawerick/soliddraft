@@ -735,6 +735,116 @@ dependencies = [
 ]
 
 [[package]]
+name = "catallax-app"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-features",
+ "catallax-mesh",
+ "catallax-numbers",
+ "catallax-recipe",
+ "catallax-topology",
+ "libm",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "catallax-boolean"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-intersect",
+ "catallax-numbers",
+ "catallax-recipe",
+ "catallax-shapes",
+ "catallax-topology",
+]
+
+[[package]]
+name = "catallax-features"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-boolean",
+ "catallax-numbers",
+ "catallax-recipe",
+ "catallax-shapes",
+ "catallax-topology",
+]
+
+[[package]]
+name = "catallax-intersect"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-numbers",
+ "catallax-shapes",
+]
+
+[[package]]
+name = "catallax-measure"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-intersect",
+ "catallax-numbers",
+ "catallax-shapes",
+ "catallax-topology",
+]
+
+[[package]]
+name = "catallax-mesh"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-intersect",
+ "catallax-numbers",
+ "catallax-shapes",
+ "catallax-topology",
+ "libm",
+ "spade",
+]
+
+[[package]]
+name = "catallax-numbers"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "num-bigint",
+ "num-integer",
+ "num-traits 0.2.19",
+]
+
+[[package]]
+name = "catallax-recipe"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-numbers",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "catallax-shapes"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-numbers",
+]
+
+[[package]]
+name = "catallax-topology"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=a778fb4eec49d0998652293057e3a0cb1d42139d#a778fb4eec49d0998652293057e3a0cb1d42139d"
+dependencies = [
+ "catallax-numbers",
+ "catallax-recipe",
+ "catallax-shapes",
+]
+
+[[package]]
 name = "cbc"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4333,6 +4443,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "robust"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+
+[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4851,10 +4967,12 @@ dependencies = [
  "soliddraft-document",
  "soliddraft-drawing",
  "soliddraft-kernel-api",
+ "soliddraft-kernel-catallax",
  "soliddraft-kernel-remote",
  "soliddraft-kernel-smlib",
  "soliddraft-materials",
  "soliddraft-model",
+ "soliddraft-recipe",
  "soliddraft-sketch",
  "soliddraft-tessellation",
  "toml",
@@ -4964,6 +5082,22 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "soliddraft-kernel-catallax"
+version = "0.1.0"
+dependencies = [
+ "catallax-app",
+ "catallax-measure",
+ "catallax-mesh",
+ "catallax-numbers",
+ "catallax-recipe",
+ "catallax-shapes",
+ "catallax-topology",
+ "serde_json",
+ "soliddraft-kernel-api",
+ "soliddraft-recipe",
 ]
 
 [[package]]
@@ -5092,6 +5226,18 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "spade"
+version = "2.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9699399fd9349b00b184f5635b074f9ec93afffef30c853f8c875b32c0f8c7fa"
+dependencies = [
+ "hashbrown 0.16.1",
+ "num-traits 0.2.19",
+ "robust",
+ "smallvec",
 ]
 
 [[package]]

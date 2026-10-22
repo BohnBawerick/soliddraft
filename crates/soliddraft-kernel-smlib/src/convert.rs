@@ -124,6 +124,7 @@ pub(crate) fn body_kind(shot: &Shot) -> BodyKind {
 
 pub(crate) fn topology(shot: &Shot) -> Topology {
     Topology {
+        display_chord_height: None,
         kind: body_kind(shot),
         faces: shot
             .faces
@@ -178,6 +179,7 @@ pub(crate) fn tess_params(p: &TessellationParams) -> TessIn {
 pub(crate) fn mesh(out: MeshOut) -> Mesh {
     let triples = |v: &[f32]| v.as_chunks::<3>().0.to_vec();
     Mesh {
+        unavailable_controls: Vec::new(),
         positions: triples(&out.positions),
         normals: triples(&out.normals),
         indices: out.indices,
@@ -204,7 +206,7 @@ pub(crate) fn mass(out: MassOut) -> MassProperties {
         volume: out.volume,
         area: out.area,
         centroid: vec3(out.centroid),
-        inertia: [[m.x, -p.z, -p.y], [-p.z, m.y, -p.x], [-p.y, -p.x, m.z]],
+        inertia: Some([[m.x, -p.z, -p.y], [-p.z, m.y, -p.x], [-p.y, -p.x, m.z]]),
     }
 }
 

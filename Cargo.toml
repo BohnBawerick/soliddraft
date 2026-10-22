@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/soliddraft-kernel-api",
+    "crates/soliddraft-kernel-catallax",
     "crates/soliddraft-kernel-smlib",
     "crates/soliddraft-kernel-remote",
     "crates/soliddraft-server",
@@ -35,6 +36,7 @@ soliddraft-assistant = { path = "crates/soliddraft-assistant" }
 soliddraft-document = { path = "crates/soliddraft-document" }
 soliddraft-drawing = { path = "crates/soliddraft-drawing" }
 soliddraft-kernel-api = { path = "crates/soliddraft-kernel-api" }
+soliddraft-kernel-catallax = { path = "crates/soliddraft-kernel-catallax" }
 soliddraft-materials = { path = "crates/soliddraft-materials" }
 soliddraft-kernel-smlib = { path = "crates/soliddraft-kernel-smlib" }
 soliddraft-kernel-remote = { path = "crates/soliddraft-kernel-remote" }

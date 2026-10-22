@@ -255,6 +255,10 @@ fn print_report(file: &str, r: &ReplayReport, steps: bool) {
                     e[2],
                     e[3]
                 ),
+                StepOutcome::Profile { profile } => println!(
+                    "  {:<14} profile   deferred, {} closed loops, tags {:?}",
+                    s.id, profile.loops, profile.tags
+                ),
                 StepOutcome::ExpectedError { error } => {
                     println!("  {:<14} {:<9} failed as expected, inputs unchanged: {error}", s.id, s.op.name())
                 }
