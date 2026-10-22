@@ -18,7 +18,7 @@ Features the application has today only through SMLib wait for Catallax to land 
 - an existing part that uses such a feature rebuilds up to it, marks it with a rebuild error, and passes the body through unchanged, which is how the application already treats a feature the kernel cannot build;
 - the works-today list in README.md says which features wait, and for which stage.
 
-On the day SMLib goes, sketches, extrudes, cuts, revolves and booleans keep working on Catallax. Fillets wait for Catallax stage 4 and chamfers for stage 3. Drawings keep working through the polygon-mode hidden-line pass (section 7). STEP and mesh export arrive at the same time, because Catallax already writes STEP AP242 with a proven deviation and shared-edge meshes with proven chord bounds.
+On the day SMLib goes, sketches, extrudes, cuts, revolves and booleans keep working on Catallax. Fillets between planes and cylinders and chamfers arrive with Catallax stage 3. Other fillets wait for stage 4. Drawings keep working through the polygon-mode hidden-line pass (section 7). STEP and mesh export arrive at the same time, because Catallax already writes STEP AP242 with a proven deviation and shared-edge meshes with proven chord bounds.
 
 ## 3. The kernel boundary
 
@@ -69,7 +69,8 @@ Application work for a feature, such as its PropertyManager page, ribbon command
 | Chamfer | 3 | Waits |
 | Pattern and mirror | 3 | Waits |
 | Shell, offset, thicken | 3 | Waits |
-| Fillet | 4, or 3 if fillets between planes and cylinders come forward | Waits |
+| Fillet between planes and cylinders | 3 | Waits |
+| Other fillets | 4 | Waits |
 | Draft | 4 | Waits |
 | Sweep, loft; spline, ellipse and text profiles | 5 | Waits |
 | STEP import | 6 | Not available today either |
@@ -100,7 +101,7 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 
 | Item | Verdict | Reason and what happens |
 |---|---|---|
-| The SMLib bridge: `soliddraft-kernel-smlib`, `soliddraft-smlib-sys`, the cxx engine, the kernel thread, the `third_party/usd-brep` submodule | Dropped | Removed once the Catallax backend displays the first target part, in the same checkpoint. Not kept as a fallback. The building instructions lose the C++ compiler. |
+| The SMLib bridge: `soliddraft-kernel-smlib`, `soliddraft-smlib-sys`, the cxx engine, the kernel thread, the `third_party/usd-brep` submodule | Dropped | Removed once the Catallax backend displays the first target part, in the same change. Not kept as a fallback. The building instructions lose the C++ compiler. |
 | The swappable-kernel trait | Changes | Becomes Catallax's application interface in the four steps of section 3. |
 | `soliddraft-recipe/1` | Changes | Converges on `catallax-recipe`; old files read through the converter. |
 | The remote kernel backend | Changes | The JSON protocol stays as a developer tool for the command line, MCP and tests. The server kernel stops being a product path, because Catallax compiles into the application's own WebAssembly module. |
@@ -119,7 +120,7 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 |---|---|---|
 | 0, kernel bridge | Done; its premise is retired | Its exit test, identical digests across runs and a failed operation leaving the previous body, becomes the acceptance test for the Catallax backend. |
 | 1, shell and viewport | Stays | Kernel-independent. |
-| 2, modelling | Stays | Fillet and chamfer wait for Catallax stages 4 and 3. References simplify. The sketcher's rational point joining already meets RECIPE.md section 6.2's converter rule. |
+| 2, modelling | Stays | Fillets between planes and cylinders and chamfers wait for Catallax stage 3; other fillets wait for stage 4. References simplify. The sketcher's rational point joining already meets RECIPE.md section 6.2's converter rule. |
 | 3, assistant | Stays | Kernel-independent. MCP and the command line drive the application loop. |
 | 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL and 3MF come from Catallax's meshes. The conformance runner becomes the golden-file replay. |
 
@@ -145,14 +146,14 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 
 Numbered in priority order.
 
-1. **Catallax backend behind the existing interface.** Build. Pairs with Catallax next item 6. Deliverable: a backend for `soliddraft_kernel_api::Kernel` on Catallax's application entry, chosen in `soliddraft_app::kernel()`. Exit: the bracket recipe builds, displays, picks named faces, edits and rebuilds through Catallax inside Catallax's interactive targets; phase 0's exit test passes on Catallax. By Catallax checkpoint C2.
-2. **Remove SMLib.** Build. Deliverable: the SMLib crates, the `third_party/usd-brep` submodule, the WebAssembly kernel module and its Emscripten job deleted; waiting features marked in the ribbon with their stage; README.md's works-today list rewritten. Exit: a fresh clone builds with Rust alone on all three platforms and in the browser build; CI passes; every waiting command names its stage. Same checkpoint as item 1.
-3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window and Catallax's per-operation log in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. By C2.
-4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, and plane sections. Exit: the bracket drawing with four views and a section regenerates on Catallax; SVG, PDF and DXF output keep their formats. Same checkpoint as item 2.
-5. **One recipe format.** Build. Deliverable: section 4's write and read paths. Exit: every recipe in `recipes/` converts and replays on Catallax, and existing part files open. By C3.
-6. **STEP and mesh export.** Build. Deliverable: STEP AP242 from Catallax with its deviation report; STL and 3MF from Catallax's meshes. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation. By C3.
-7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted. Exit: plate-thickness and boss-radius edits on the bracket keep every reference, and a genuinely lost reference still raises the repair prompt. By C3.
-8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild. Exit: editing the last feature of the bracket rebuilds only that feature, and the result is identical to a full replay. By C4.
+1. **Catallax backend behind the existing interface.** Build. Pairs with Catallax next item 6. Deliverable: a backend for `soliddraft_kernel_api::Kernel` on Catallax's application entry, chosen in `soliddraft_app::kernel()`. Exit: the bracket recipe builds, displays, picks named faces, edits and rebuilds through Catallax inside Catallax's interactive targets; phase 0's exit test passes on Catallax. Depends on Catallax milestone M2.
+2. **Remove SMLib.** Build. Deliverable: the SMLib crates, the `third_party/usd-brep` submodule, the WebAssembly kernel module and its Emscripten job deleted; waiting features marked in the ribbon with their stage; README.md's works-today list rewritten. Exit: a fresh clone builds with Rust alone on all three platforms and in the browser build; CI passes; every waiting command names its stage. Ships with the Catallax backend in item 1.
+3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window and Catallax's per-operation log in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. Depends on Catallax milestone M2.
+4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, and plane sections. Exit: the bracket drawing with four views and a section regenerates on Catallax; SVG, PDF and DXF output keep their formats. Ships with the SMLib removal in item 2.
+5. **One recipe format.** Build. Deliverable: section 4's write and read paths. Exit: every recipe in `recipes/` converts and replays on Catallax, and existing part files open. Depends on Catallax milestone M3.
+6. **STEP and mesh export.** Build. Deliverable: STEP AP242 from Catallax with its deviation report; STL and 3MF from Catallax's meshes. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation. Depends on Catallax milestone M3.
+7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted. Exit: plate-thickness and boss-radius edits on the bracket keep every reference, and a genuinely lost reference still raises the repair prompt. Depends on Catallax milestone M3.
+8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild. Exit: editing the last feature of the bracket rebuilds only that feature, and the result is identical to a full replay. Depends on Catallax milestone M4.
 9. **Feature plumbing in the kernel's order.** Build, recurring. Deliverable: each feature in section 6 switched on when its Catallax operation lands. Exit, per feature: the application loop builds and edits the matching target part.
 10. **Sketch depth, first half.** Build. Deliverable: polygon, trim, extend, offset, mirror and patterns of lines and arcs. Exit: profiles made with the new tools build through Catallax.
 11. **The SolidWorks comparison corpus on Catallax.** Build. Waits for a machine with SolidWorks. Deliverable: the comparator pointed at Catallax. Exit: the first comparison report for the first three target parts.
@@ -163,4 +164,4 @@ Kernel-independent items from section 8 run alongside, as people and machines al
 
 1. **Drawings.** Start with the polygon-mode hidden-line pass so drawings keep working when SMLib goes, as proposed, or wait for exact silhouettes from Catallax.
 2. **Waiting features.** Confirm the behaviour in section 2: disabled ribbon commands that name their stage, and existing parts that stop at a waiting feature with a rebuild error.
-3. **Shared with Catallax's roadmap.** Which target parts; whether the B-rep carries a stand-in for field-only lattices; whether fillets between planes and cylinders come forward.
+3. **Shared with Catallax's roadmap. Answered.** Target parts P1 to P10 are confirmed. The B-rep carries the stand-in for field-only lattices. Fillets between planes and cylinders come forward into Catallax stage 3.
