@@ -1102,7 +1102,10 @@ fn smart_dimension_tool(
             }
             s.picks.push(pick);
             let view_ref = s.sheet().view(view).cloned();
-            s.proposal = view_ref.and_then(|v| resolve::propose(&v, &s.picks));
+            s.proposal = view_ref.and_then(|v| {
+                let circles = s.doc.circles.get(&v.id).map(Vec::as_slice).unwrap_or_default();
+                resolve::propose(&v, &s.picks, circles)
+            });
             if let Some(pr) = &s.proposal {
                 let what = match pr.kind {
                     DimensionKind::Diameter => "diameter",

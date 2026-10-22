@@ -11,7 +11,7 @@ use crate::annotation::{
     Anchor, Attach, DimType, DimValue, Dimension, DimensionKind, DimensionSet, LinearOrientation, SetKind,
 };
 use crate::ids::ViewId;
-use crate::project::ViewTransform;
+use crate::project::{CircleInfo, ViewTransform};
 use crate::view::View;
 
 /// One anchor's geometry for measuring: the entity's exact curve (or, for a face, its
@@ -359,13 +359,23 @@ fn anchor(curve: &crate::Curve2, attach: Attach, at: Point2) -> Anchor {
     Anchor { entity: curve.source.clone(), attach, cached: at }
 }
 
+/// Uses a complete edge's exact circle metadata across visibility fragments.
+pub fn shape_of_curve(curve: &crate::Curve2, circles: &[CircleInfo]) -> CurveShape {
+    if curve.source.kernel_hint.is_some()
+        && let Some(circle) = circles.iter().find(|c| c.entity.kernel_hint == curve.source.kernel_hint)
+    {
+        return CurveShape::Circle { centre: circle.centre, radius: circle.radius };
+    }
+    shape_of(&curve.path)
+}
+
 /// Reads one or two picks the way SolidWorks does: a line gives its length, a circle a
 /// diameter, an arc a radius, two parallel lines a distance, two other lines an angle,
 /// a round and a line the distance from the centre, two ends a point-to-point distance.
-pub fn propose(view: &View, picks: &[Pick]) -> Option<Proposal> {
+pub fn propose(view: &View, picks: &[Pick], circles: &[CircleInfo]) -> Option<Proposal> {
     let curve = |i: usize| view.geometry.curves.get(picks.get(i)?.curve);
     let first = curve(0)?;
-    let s1 = shape_of(&first.path);
+    let s1 = shape_of_curve(first, circles);
     let base = Proposal {
         view: view.id,
         kind: DimensionKind::Linear { orientation: LinearOrientation::Horizontal },
@@ -410,10 +420,13 @@ pub fn propose(view: &View, picks: &[Pick]) -> Option<Proposal> {
         });
     }
     let second = curve(1)?;
-    let s2 = shape_of(&second.path);
+    let s2 = shape_of_curve(second, circles);
     let (p1, p2) = (&picks[0], &picks[1]);
     // Two ends, or an end and a curve: point to point or point to the curve's reference.
     let point_of = |pick: &Pick, shape: CurveShape| -> (Attach, Point2) {
+        if let CurveShape::Circle { centre, .. } = shape {
+            return (Attach::Centre, centre);
+        }
         match pick.end {
             Some(Attach::Start) => (Attach::Start, shape.start()),
             Some(_) => (Attach::End, shape.end()),
