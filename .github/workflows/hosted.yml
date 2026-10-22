@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials --all-features
+      - run: cargo test -p soliddraft-kernel-api -p soliddraft-kernel-catallax -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials --all-features
 
   # The web build: the app compiled to WebAssembly. It does not use the C++ kernel, so it
   # needs no submodule and no ccache.
@@ -85,3 +85,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials -p soliddraft-assembly --all-features
+
+  catallax-interactive:
+    name: Catallax bracket (render, pick, edit, rebuild)
+    runs-on: ubuntu-latest
+    env:
+      WGPU_BACKEND: vulkan
+      SOLIDDRAFT_REQUIRE_GPU: "1"
+      XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture

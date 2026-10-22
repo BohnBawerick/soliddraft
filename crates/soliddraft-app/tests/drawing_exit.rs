@@ -132,7 +132,10 @@ fn circles(list: &[(P2, f64)]) -> Sketch {
 /// plate, a 10 x 90 x 60 flange on its -X end, a 24 mm boss with a 12 mm bore, four
 /// 9 mm holes on a 90 x 44 pattern and a 40 x 12 slot through the flange.
 fn bracket_document() -> Document {
-    let mut doc = soliddraft_app::new_document();
+    let mut doc = soliddraft_app::document::Document::new(
+        "Part1",
+        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+    );
     doc.name = "Bracket".into();
     let sketch_on = |doc: &mut Document, plane: PlaneKind, sketch: Sketch| -> u64 {
         let id = doc.apply(Command::AddSketch { plane: SketchPlane::Reference { plane } }).unwrap().unwrap();
@@ -526,7 +529,10 @@ fn fixture_drawing_renders_with_attention_list() {
         return;
     }
     let _gpu = gpu_lock();
-    let mut harness = harness(soliddraft_app::new_document());
+    let mut harness = harness(soliddraft_app::document::Document::new(
+        "Part1",
+        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+    ));
     harness.run_steps(3);
     let doc = soliddraft_app::drawing::DrawingDoc::new(soliddraft_drawing::fixture::bracket_a3());
     let s = soliddraft_app::drawing::DrawingSession::new(doc);

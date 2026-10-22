@@ -34,13 +34,13 @@ Help fund SolidDraft and Catallax through [GitHub Sponsors](https://github.com/s
 
 A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle.
 
-SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. Today SolidDraft still runs on SMLib through its kernel bridge until the Catallax backend lands. SMLib will then be removed. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
+SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. The desktop and browser application now select Catallax. The SMLib backend and its regression tests remain until the separate removal task. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
 
 ![SolidDraft with a rebuilt bracket](docs/screenshots/soliddraft.png)
 
 ## What works today
 
-Work in progress. These features run today on the C++ SMLib kernel from NVIDIA's USD BRep:
+Work in progress. The list below records the existing application features, including SMLib-only operations. The default Catallax backend supports sketches, extrudes, cuts, booleans and rational-frame revolves. Fillets wait for Catallax stage 4; chamfers and shell wait for stage 3. Exact drawings still require the explicit SMLib paths. See [the backend gaps](docs/needs-catallax.md).
 
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
@@ -50,7 +50,7 @@ Work in progress. These features run today on the C++ SMLib kernel from NVIDIA's
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
 - A WebAssembly build that runs the whole app, kernel included, in a browser.
 
-Not yet: the Catallax backend, STEP, IGES and mesh import and export, surfacing and sheet metal. Assemblies are in progress. Only drawings can be exported today. The [roadmap](docs/roadmap.md) orders the remaining work and names the kernel stages that features will wait for when SMLib goes.
+Not yet: STEP, IGES and mesh import and export, surfacing and sheet metal. Assemblies are in progress. Only drawings can be exported today. The [roadmap](docs/roadmap.md) orders the remaining work and names the kernel stages that features will wait for when SMLib goes.
 
 ## Building
 

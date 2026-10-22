@@ -1,0 +1,16 @@
+# Catallax backend gaps
+
+The backend pins Catallax main revision `a778fb4eec49d0998652293057e3a0cb1d42139d`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+
+- Stage 1 profiles are definitions, not sheet bodies. The recipe runner now defers profiles and reports loop count, closure and tags without querying sheet topology, mass or validity. An extrusion or revolution creates and releases the backend's temporary profile handle. Direct sheet queries return `Unsupported`.
+- Stage 1 empty boolean results cannot be expressed by the existing solid/sheet `BodyKind` and mandatory centroid. The adapter returns `Unsupported` without changing the operands.
+- Stage 1 measurement proves volume, area and centroid enclosures. The adapter returns their midpoints in the existing floating-point interface and leaves inertia absent. SMLib returns its full tensor. Density scaling and assembly transforms preserve absent inertia. Catallax needs proven inertia before it can return a tensor.
+- Stage 1 display proves a chord bound and supplies face handles and edge polylines. The legacy angular, edge-length and aspect-ratio controls have no equivalent guarantee. `Mesh::unavailable_controls` identifies each requested unsupported control. The adapter reserves part of the chord bound for conversion to the trait's float positions and refuses a request that exceeds that rounding budget.
+- Stage 1 topology exposes exact definitions and incidence, but no face-centroid or edge-measurement query. Face areas come from Catallax measurement. Face centroids, edge lengths and midpoints describe the certified display mesh. Bounds include its chord padding. `Topology::display_chord_height` identifies these display estimates; they never decide geometry or operation success. Exact geometric summaries remain Catallax work.
+- Fillet returns `Unsupported`, naming stage 4, or stage 3 if brought forward. Chamfer and shell return `Unsupported`, naming stage 3. Existing parts retain the preceding body and show the rebuild error.
+- Exact drawing visibility, silhouettes, section curves, edge-curve conversion, face-loop conversion and curve approximation return `Unsupported`. These need the stage 1 application queries and drawing work described in roadmap section 7. Moving drawings to polygon mode is a separate roadmap item.
+- Rational frame and operation refusals from the stage 1 converter and evaluator remain errors with Catallax's stable code in the message. The adapter does not approximate a refused construction.
+
+The desktop and browser application select Catallax. The SMLib backend, command-line paths that still explicitly select it, its golden corpus and regression tests remain available until the separate removal task.
+
+The Catallax phase 0 acceptance tests repeat successful box, cylinder, union and subtract recipes and check failure preservation. The successful fillet recipe stays in SMLib's phase 0 suite because Catallax does not implement fillets yet. Profile steps now report deferred-profile facts on both backends; every solid-producing step retains the full topology, mass, validity and digest summary.

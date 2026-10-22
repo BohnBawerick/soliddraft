@@ -74,7 +74,7 @@ fn is_ok(o: &Outcome) -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Command {
-    /// A planar profile body.
+    /// A deferred closed profile definition.
     Profile {
         /// The sketch plane.
         plane: PlaneSpec,

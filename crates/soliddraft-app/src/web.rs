@@ -1,16 +1,5 @@
-//! The browser side of the web build: the kernel, the assistant through the server the
-//! page came from, and files by upload and download.
-//!
-//! The kernel runs in the page when the page loaded the kernel's own WebAssembly module
-//! (`crates/soliddraft-kernel-wasm`), and on the server otherwise. Either way it is the
-//! SMLib kernel behind the protocol of `soliddraft-kernel-remote`. The kernel trait is
-//! synchronous and the app calls it from its frame, so a server kernel call is a
-//! synchronous HTTP request: the browser allows that on the page's own thread, and each
-//! call blocks the page for its round trip, a few milliseconds on a home network.
-//!
-//! The assistant streams for seconds at a time, so its requests use `fetch` and run in
-//! the background. Every request goes to a path relative to the page (`api/...`), so the
-//! app works wherever the server mounts it.
+//! The browser application uses Catallax in its own WebAssembly module.
+//! Assistant requests still use the server and stream in the background.
 
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
@@ -20,7 +9,6 @@ use soliddraft_assistant::relay::{LineReader, RelayLine};
 use soliddraft_assistant::wire::ChatRequest;
 use soliddraft_assistant::{Delivery, Provider, ProviderError, ProviderResponse, StreamEvent};
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_remote::{RemoteKernel, Transport};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -120,57 +108,13 @@ fn request(method: &str, url: &str, body: Option<&str>) -> Result<(u16, String),
     Ok((status, text))
 }
 
-/// Kernel calls as synchronous requests to `api/kernel`.
-struct ServerTransport;
-
-impl Transport for ServerTransport {
-    fn call(&self, body: &str) -> Result<String, String> {
-        match request("POST", "api/kernel", Some(body))? {
-            (200, text) => Ok(text),
-            (0, _) => Err("cannot reach the SolidDraft server".into()),
-            (status, text) => Err(refusal(status, &text)),
-        }
-    }
-}
-
-/// Kernel calls to the kernel's own WebAssembly module in the page, through the
-/// `soliddraftKernelCall` function the page's loader defines.
-struct PageTransport;
-
-fn page_kernel() -> Option<js_sys::Function> {
-    js_sys::Reflect::get(&window(), &"soliddraftKernelCall".into()).ok()?.dyn_into::<js_sys::Function>().ok()
-}
-
-impl Transport for PageTransport {
-    fn call(&self, body: &str) -> Result<String, String> {
-        let call = page_kernel().ok_or("the kernel module is not loaded")?;
-        let reply = call
-            .call1(&JsValue::NULL, &JsValue::from_str(body))
-            .map_err(|e| format!("the kernel module failed: {}", js_error(e)))?;
-        reply.as_string().ok_or_else(|| "the kernel module returned no text".to_owned())
-    }
-}
-
-/// The kernel in the page when the page loaded its module, else the kernel on the server.
+/// The browser's in-process Catallax backend.
 pub fn kernel() -> Arc<dyn Kernel> {
-    if page_kernel().is_some() {
-        log::info!("kernel: SMLib in the browser");
-        Arc::new(RemoteKernel::new(Box::new(PageTransport)))
-    } else {
-        log::info!("kernel: SMLib on the server");
-        Arc::new(RemoteKernel::new(Box::new(ServerTransport)))
-    }
+    crate::kernel()
 }
 
-/// Waits for the page's loader to settle on a kernel: the module in the page, or the
-/// server when the module is missing, fails to load, or `?kernel=server` asks for it.
-pub async fn kernel_ready() {
-    if let Ok(ready) = js_sys::Reflect::get(&window(), &"soliddraftKernelReady".into())
-        && let Ok(promise) = ready.dyn_into::<js_sys::Promise>()
-    {
-        let _ = JsFuture::from(promise).await;
-    }
-}
+/// Catallax is compiled into the application and needs no separate module to load.
+pub async fn kernel_ready() {}
 
 /// What the server says about itself.
 #[derive(Clone, Debug, Default, Deserialize)]

@@ -122,11 +122,19 @@ mod tests {
                 vertices: vec![],
             })
             .collect();
-        Topology { kind: BodyKind::Solid, faces, edges, vertex_count: 8, vertices: vec![], bbox }
+        Topology {
+            display_chord_height: None,
+            kind: BodyKind::Solid,
+            faces,
+            edges,
+            vertex_count: 8,
+            vertices: vec![],
+            bbox,
+        }
     }
 
     fn mass() -> MassProperties {
-        MassProperties { volume: 1000.0, area: 600.0, centroid: Vec3::new(5.0, 5.0, 5.0), inertia: [[0.0; 3]; 3] }
+        MassProperties { volume: 1000.0, area: 600.0, centroid: Vec3::new(5.0, 5.0, 5.0), inertia: Some([[0.0; 3]; 3]) }
     }
 
     #[test]

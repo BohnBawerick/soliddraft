@@ -11,7 +11,10 @@ use soliddraft_tessellation::{Level, Projection, Quality};
 /// A disc 200 mm across and 50 mm thick: large enough that the chord height, not the
 /// 15 degree angle, decides the standard and fine levels.
 fn disc() -> Document {
-    let mut doc = soliddraft_app::new_document();
+    let mut doc = soliddraft_app::document::Document::new(
+        "Part1",
+        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+    );
     let params = ExtrudeParams {
         sketch: None,
         profile: ProfileKind::Circle { diameter: 200.0 },

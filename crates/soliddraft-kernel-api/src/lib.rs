@@ -120,6 +120,9 @@ pub struct Mesh {
     pub indices: Vec<u32>,
     /// The source face of each triangle.
     pub triangle_faces: Vec<FaceId>,
+    /// Requested controls this backend cannot guarantee. The mesh still meets its supported controls.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unavailable_controls: Vec<String>,
 }
 
 impl Mesh {
@@ -248,6 +251,10 @@ pub struct Topology {
     pub vertices: Vec<VertexInfo>,
     /// Bounding box of the whole body.
     pub bbox: Aabb,
+    /// Chord tolerance when centroids, bounds and edge measures describe the display mesh.
+    /// Absent when these are kernel geometric queries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_chord_height: Option<f64>,
 }
 
 impl Topology {
@@ -287,8 +294,9 @@ pub struct MassProperties {
     /// Centre of mass. For a sheet, the area centroid.
     pub centroid: Vec3,
     /// Inertia tensor about the centroid, along world axes, at unit density.
-    /// All zero for a sheet.
-    pub inertia: [[f64; 3]; 3],
+    /// Absent when the backend cannot yet compute inertia.
+    #[serde(default)]
+    pub inertia: Option<[[f64; 3]; 3]>,
 }
 
 /// The result of [`Kernel::validate`].
@@ -398,7 +406,9 @@ pub trait Kernel: Send + Sync {
     /// Which backend this is.
     fn backend(&self) -> BackendInfo;
 
-    /// Builds a planar sheet body from a closed profile.
+    /// Registers a closed profile for an extrusion or revolution.
+    /// SMLib also exposes sheet queries on this handle. Catallax defers its geometry
+    /// until a sweep and reports sheet queries as unsupported.
     fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult>;
 
     /// Sweeps a profile body along a straight line into a solid.

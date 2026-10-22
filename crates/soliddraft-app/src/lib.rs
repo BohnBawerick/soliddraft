@@ -39,18 +39,9 @@ use soliddraft_kernel_api::Kernel;
 use soliddraft_tessellation::{Advanced, Quality};
 use std::sync::Arc;
 
-/// The kernel backend the app runs on. This is the one place a backend is chosen;
-/// everything else talks to `soliddraft_kernel_api::Kernel`. The web build reaches the
-/// kernel on its server.
+/// The Catallax backend used by both the desktop and browser application.
 pub fn kernel() -> Arc<dyn Kernel> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        web::kernel()
-    }
+    Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new())
 }
 
 /// Hands the drawing library the sheet templates, sheet formats and drafting styles
@@ -74,7 +65,12 @@ pub fn new_document() -> Document {
 
 /// The sample part used by `--demo` and the screenshots: a base plate, a flange and a boss.
 pub fn demo_document() -> Document {
-    let mut doc = new_document();
+    demo_document_on(kernel())
+}
+
+/// Builds the sample on an explicitly supplied backend, also used by backend regression tests.
+pub fn demo_document_on(kernel: Arc<dyn Kernel>) -> Document {
+    let mut doc = Document::new("Part1", kernel);
     for params in [
         ExtrudeParams {
             sketch: None,

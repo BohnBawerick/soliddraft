@@ -78,10 +78,26 @@ pub struct BodySummary {
     pub digest: String,
 }
 
+/// Application-side facts about a deferred profile. No kernel body has been built.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfileSummary {
+    /// Number of boundary loops, including holes.
+    pub loops: usize,
+    /// Whether every loop passes the application's closure check.
+    pub closed: bool,
+    /// Tags retained for the operation that will consume this profile.
+    pub tags: Vec<OpTag>,
+}
+
 /// What a step did.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum StepOutcome {
+    /// A profile is stored until an extrusion or revolution consumes it.
+    Profile {
+        /// Application-side profile facts.
+        profile: ProfileSummary,
+    },
     /// The step produced a body.
     Ok {
         /// The body.
@@ -192,7 +208,7 @@ pub fn replay(kernel: &dyn Kernel, recipe: &Recipe) -> Result<ReplayReport, Reci
 /// owns and releases. Every other body the replay creates is released.
 pub fn build(kernel: &dyn Kernel, recipe: &Recipe) -> Result<(ReplayReport, BodyId), RecipeError> {
     check(recipe)?;
-    let mut run = Run { kernel, bodies: BTreeMap::new() };
+    let mut run = Run { kernel, bodies: BTreeMap::new(), profiles: BTreeMap::new() };
     let result = run.all(recipe).map(|report| (report, run.body(&recipe.result)));
     let keep = result.as_ref().ok().map(|(_, body)| *body);
     for body in run.bodies.values() {
@@ -206,18 +222,54 @@ pub fn build(kernel: &dyn Kernel, recipe: &Recipe) -> Result<(ReplayReport, Body
 struct Run<'k> {
     kernel: &'k dyn Kernel,
     bodies: BTreeMap<String, BodyId>,
+    profiles: BTreeMap<String, (OpTag, Profile)>,
 }
 
 impl Run<'_> {
     fn all(&mut self, recipe: &Recipe) -> Result<ReplayReport, RecipeError> {
+        if matches!(
+            recipe.steps.iter().find(|s| s.id == recipe.result).map(|s| &s.command),
+            Some(Command::Profile { .. })
+        ) {
+            return Err(RecipeError::Invalid(
+                "the result must be a body-producing step, not a deferred profile".into(),
+            ));
+        }
         let mut steps = Vec::new();
         for step in &recipe.steps {
             let tag = OpTag::new(&step.id);
+            if let Command::Profile { plane, shape } = &step.command {
+                let profile = match shape {
+                    Shape::Rectangle { center, width, height } => {
+                        Profile::rectangle(plane.plane(), *center, *width, *height)
+                    }
+                    Shape::Circle { center, radius } => Profile::circle(plane.plane(), *center, *radius),
+                    Shape::Loops { outer, holes } => {
+                        Profile { plane: plane.plane(), outer: outer.clone(), holes: holes.clone() }
+                    }
+                };
+                let checked = profile.check();
+                let outcome = match (step.expect, checked) {
+                    (Outcome::Ok, Ok(())) => {
+                        let summary =
+                            ProfileSummary { loops: profile.loops().count(), closed: true, tags: vec![tag.clone()] };
+                        self.profiles.insert(step.id.clone(), (tag, profile));
+                        StepOutcome::Profile { profile: summary }
+                    }
+                    (Outcome::Error, Err(error)) => StepOutcome::ExpectedError { error: error.to_string() },
+                    (Outcome::Error, Ok(())) => return Err(RecipeError::UnexpectedSuccess(step.id.clone())),
+                    (Outcome::Ok, Err(error)) => {
+                        return Err(RecipeError::StepFailed { step: step.id.clone(), error: error.into() });
+                    }
+                };
+                steps.push(StepReport { id: step.id.clone(), op: OpKind::Profile, outcome });
+                continue;
+            }
             let before: Vec<(String, String)> = if step.expect == Outcome::Error {
                 step.command
                     .inputs()
                     .into_iter()
-                    .map(|input| Ok((input.to_string(), self.summary(input)?.digest)))
+                    .map(|input| Ok((input.to_string(), self.snapshot(input)?)))
                     .collect::<Result<_, RecipeError>>()?
             } else {
                 Vec::new()
@@ -249,7 +301,7 @@ impl Run<'_> {
                         other => return Err(other),
                     };
                     for (input, digest) in before {
-                        if self.summary(&input)?.digest != digest {
+                        if self.snapshot(&input)? != digest {
                             return Err(RecipeError::InputChanged { step: step.id.clone(), input });
                         }
                     }
@@ -272,6 +324,28 @@ impl Run<'_> {
         })
     }
 
+    fn snapshot(&self, id: &str) -> Result<String, RecipeError> {
+        if let Some(profile) = self.profiles.get(id) {
+            return Ok(serde_json::to_string(profile)?);
+        }
+        Ok(self.summary(id)?.digest)
+    }
+
+    fn sweep(
+        &self,
+        id: &str,
+        op: impl FnOnce(BodyId) -> Result<OpResult, KernelError>,
+    ) -> Result<OpResult, KernelError> {
+        let (tag, profile) = self
+            .profiles
+            .get(id)
+            .ok_or_else(|| KernelError::InvalidInput(format!("{id} is not a deferred profile")))?;
+        let sheet = self.kernel.create_body_from_profile(tag, profile)?;
+        let result = op(sheet.body);
+        let _ = self.kernel.release(sheet.body);
+        result
+    }
+
     fn body(&self, id: &str) -> BodyId {
         // `check` guarantees every input is an earlier successful step.
         self.bodies[id]
@@ -285,24 +359,22 @@ impl Run<'_> {
         let k = self.kernel;
         let fail = |error| RecipeError::StepFailed { step: id.into(), error };
         let op = op_kind(command);
+        if !matches!(command, Command::Extrude { .. } | Command::Revolve { .. })
+            && command.inputs().iter().any(|id| self.profiles.contains_key(*id))
+        {
+            return Err(fail(KernelError::InvalidInput("this operation needs a solid, not a deferred profile".into())));
+        }
         let result = match command {
-            Command::Profile { plane, shape } => {
-                let plane = plane.plane();
-                let profile = match shape {
-                    Shape::Rectangle { center, width, height } => Profile::rectangle(plane, *center, *width, *height),
-                    Shape::Circle { center, radius } => Profile::circle(plane, *center, *radius),
-                    Shape::Loops { outer, holes } => Profile { plane, outer: outer.clone(), holes: holes.clone() },
-                };
-                k.create_body_from_profile(tag, &profile)
-            }
-            Command::Extrude { profile, distance, direction } => {
-                k.extrude(tag, self.body(profile), &Extrude { distance: *distance, direction: *direction })
-            }
-            Command::Revolve { profile, axis_origin, axis_direction, angle_deg } => k.revolve(
-                tag,
-                self.body(profile),
-                &Revolve { axis_origin: *axis_origin, axis_direction: *axis_direction, angle_deg: *angle_deg },
-            ),
+            Command::Profile { .. } => unreachable!("profiles are deferred in all"),
+            Command::Extrude { profile, distance, direction } => self
+                .sweep(profile, |body| k.extrude(tag, body, &Extrude { distance: *distance, direction: *direction })),
+            Command::Revolve { profile, axis_origin, axis_direction, angle_deg } => self.sweep(profile, |body| {
+                k.revolve(
+                    tag,
+                    body,
+                    &Revolve { axis_origin: *axis_origin, axis_direction: *axis_direction, angle_deg: *angle_deg },
+                )
+            }),
             Command::Boolean { kind, target, tool } => k.boolean(tag, *kind, self.body(target), self.body(tool)),
             Command::Fillet { body, edges, radius } => {
                 let b = self.body(body);

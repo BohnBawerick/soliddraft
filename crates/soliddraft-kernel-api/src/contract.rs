@@ -316,8 +316,10 @@ pub fn mass_properties_match_closed_form(k: &dyn Kernel) {
     assert!(m.centroid.distance(Vec3::new(0.0, 0.0, 5.0)) < 1e-6);
     let mass = 12000.0;
     let expect = [mass * (900.0 + 100.0) / 12.0, mass * (1600.0 + 100.0) / 12.0, mass * (1600.0 + 900.0) / 12.0];
-    for (i, e) in expect.iter().enumerate() {
-        assert!(close(m.inertia[i][i], *e, 1e-4), "I{i}{i} = {} expected {e}", m.inertia[i][i]);
+    if let Some(inertia) = m.inertia {
+        for (i, e) in expect.iter().enumerate() {
+            assert!(close(inertia[i][i], *e, 1e-4), "I{i}{i} = {} expected {e}", inertia[i][i]);
+        }
     }
     k.release(b).unwrap();
 }

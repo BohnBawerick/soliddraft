@@ -403,6 +403,7 @@ mod tests {
     #[test]
     fn triangles_are_grouped_by_face() {
         let mesh = Mesh {
+            unavailable_controls: Vec::new(),
             positions: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
             normals: vec![[0.0, 0.0, 1.0]; 4],
             indices: vec![0, 1, 2, 1, 3, 2, 0, 2, 1],
