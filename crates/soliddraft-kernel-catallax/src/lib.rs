@@ -124,7 +124,13 @@ impl State {
                 steps,
                 result,
                 history: history.into_values().collect(),
-                solid: Some(Arc::new(Solid { app, ids, display: Mutex::new(None), topology: OnceLock::new(), mass: OnceLock::new() })),
+                solid: Some(Arc::new(Solid {
+                    app,
+                    ids,
+                    display: Mutex::new(None),
+                    topology: OnceLock::new(),
+                    mass: OnceLock::new(),
+                })),
             },
         );
         Ok(OpResult { body, record })

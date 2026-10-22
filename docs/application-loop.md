@@ -22,11 +22,9 @@ successful and failed bundles as `application-loop`.
 `bracket.json` builds the plate, flange, bored boss, four mounting holes and flange
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
 rolls back to the plate and returns to the end. Its final step makes a drawing.
-SVG views and drawing output currently use SMLib; their checks record that
-backend explicitly. Model commands and viewport screenshots use Catallax.
-The existing polygon hidden-line method still requires exact edge queries that
-Catallax's application interface does not provide. Moving those drawing queries
-onto Catallax is separate work.
+Model commands, viewport screenshots, SVG views and drawing output use Catallax.
+The view and drawing checks require that backend. Views use the same polygon
+hidden-line method as the drawing workspace.
 
 `refusal.json` sets the deterministic per-call work allowance to zero. The
 extrusion refuses with `numbers.operation-budget`, leaves the part unchanged,
@@ -64,6 +62,9 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `view.svg` and `viewport.png`, for rendered steps. The PNG comes from the
   viewport's `ViewportRenderer`, shader and camera. The adjacent `viewport.json`
   records the adapter and kernel calls made while reopening the saved part.
+  `view.svg.kernel.json` retains the view command's kernel calls. A drawing step
+  also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`, collected
+  by `soliddraft draw --kernel-log`.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 

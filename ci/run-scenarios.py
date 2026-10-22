@@ -166,6 +166,7 @@ def run(args):
                     rendered = json.loads((directory / "view.stdout").read_text())
                     view["backend"] = rendered["backend"]
                     view["method"] = rendered["method"]
+                    view["pass"] &= rendered["backend"].startswith("catallax ")
                 checks.append(view)
                 checks.append(cli(args.soliddraft, ["screenshot", directory / "part.dwprt", "--png", directory / "viewport.png"],
                     directory, "screenshot", args.timeout))
@@ -173,8 +174,11 @@ def run(args):
                     checks.append({"check": "SVG contains curves", "pass": "<path " in (directory / "view.svg").read_text()})
             if step.get("drawing"):
                 drawing = cli(args.soliddraft, ["draw", directory / "part.dwprt", "--template", "iso-a3",
-                    "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--json"], directory, "drawing", args.timeout)
-                drawing["backend"] = "smlib"
+                    "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--kernel-log", directory / "drawing.kernel.json", "--json"], directory, "drawing", args.timeout)
+                if drawing["pass"]:
+                    rendered = json.loads((directory / "drawing.stdout").read_text())
+                    drawing["backend"] = rendered["backend"]
+                    drawing["pass"] &= rendered["backend"].startswith("catallax ")
                 checks.append(drawing)
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)

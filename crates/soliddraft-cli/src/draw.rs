@@ -109,6 +109,7 @@ references; nothing is deleted unless asked:
   --keep-as-note  replace an annotation by a note with its text (repeatable)
   --reattach      attach end <end> of annotation <id> to the edge nearest the
                   model point x,y,z (repeatable)
+  --kernel-log    write Catallax per-call evidence to this JSON file
   --search        another folder to look for the part in (repeatable)
 ";
 
@@ -125,6 +126,7 @@ struct Options {
     date: Option<String>,
     outs: Vec<String>,
     json: bool,
+    kernel_log: Option<PathBuf>,
     accept: bool,
     delete: Vec<u32>,
     freeze: Vec<u32>,
@@ -390,6 +392,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
         date: None,
         outs: Vec::new(),
         json: false,
+        kernel_log: None,
         accept: false,
         delete: Vec::new(),
         freeze: Vec::new(),
@@ -433,6 +436,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
             "--out" => o.outs.push(value("--out")?),
             "--search" => o.search.push(PathBuf::from(value("--search")?)),
             "--json" => o.json = true,
+            "--kernel-log" => o.kernel_log = Some(PathBuf::from(value("--kernel-log")?)),
             "--accept" => o.accept = true,
             "--delete" => o.delete.push(id(value("--delete")?, "--delete")?),
             "--keep-as-note" => o.freeze.push(id(value("--keep-as-note")?, "--keep-as-note")?),
@@ -488,6 +492,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
 /// The JSON report of `draw`.
 #[derive(Serialize)]
 struct CreateReport<'a> {
+    backend: &'a str,
     drawing: &'a str,
     template: &'a str,
     scale: String,
@@ -512,7 +517,7 @@ struct LocationOut {
 fn create(o: &Options) -> Result<(), String> {
     let source_path = PathBuf::from(o.source.as_deref().expect("parse checks"));
     let template = Template::by_id(&o.template).ok_or(format!("unknown template {}", o.template))?;
-    with_part(&source_path, |part, source| {
+    with_part(&source_path, o.kernel_log.as_deref(), |part, source| {
         let stem = source_path.file_stem().and_then(|s| s.to_str()).unwrap_or("drawing").to_owned();
         let outs = if o.outs.is_empty() {
             [file::EXTENSION, "svg", "pdf", "dxf"].iter().map(|e| format!("{stem}.{e}")).collect()
@@ -554,6 +559,7 @@ fn create(o: &Options) -> Result<(), String> {
         let name = drawing_path.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
         if o.json {
             let report = CreateReport {
+                backend: &source.backend,
                 drawing: &name,
                 template: &o.template,
                 scale: drawing.sheets[0].scale.to_string(),
@@ -607,10 +613,19 @@ pub(crate) struct Source {
 
 /// Opens the part file at `path` (or replays the recipe there) on the Catallax kernel and
 /// runs `f` on the part.
-pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>) -> Result<R, String> {
-    match DocKind::of_path(path) {
+fn with_part<R>(
+    path: &Path,
+    kernel_log: Option<&Path>,
+    f: impl FnOnce(&Part<'_>, &Source) -> Result<R, String>,
+) -> Result<R, String> {
+    let kernel = std::sync::Arc::new(if kernel_log.is_some() {
+        CatallaxKernel::with_diagnostics(100_000_000)
+    } else {
+        CatallaxKernel::new()
+    });
+    let result = (|| match DocKind::of_path(path) {
         Some(DocKind::Part) => {
-            let doc = soliddraft_app::file::open(path, std::sync::Arc::new(CatallaxKernel::new()))?;
+            let doc = soliddraft_app::file::open(path, kernel.clone())?;
             let ctx = PartContext::new(&doc).ok_or_else(|| format!("{}: the part has no body", path.display()))?;
             let backend = doc.kernel().backend();
             let source = Source {
@@ -628,14 +643,19 @@ pub(crate) fn with_part<R>(path: &Path, f: impl FnOnce(&Part<'_>, &Source) -> Re
             let value: serde_json::Value =
                 serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
             let revision = ContentHash::of_json(&value);
-            let kernel = CatallaxKernel::new();
             let (part, backend) = build(&kernel, &recipe, path, revision.clone())?;
             let source = Source { id: None, revision, name: recipe.name.clone(), backend };
             let out = f(&part, &source);
             let _ = kernel.release(part.body);
             out
         }
+    })();
+    if let Some(path) = kernel_log {
+        let log = kernel.take_diagnostics().map_err(|e| e.to_string())?;
+        let text = serde_json::to_string(&log).expect("diagnostics serialize");
+        std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     }
+    result
 }
 
 /// The JSON report of `draw --update`.
@@ -687,7 +707,7 @@ fn update(o: &Options) -> Result<(), String> {
         }
     };
     let source_path = target.path().expect("a file was found").to_path_buf();
-    with_part(&source_path, |part, source| {
+    with_part(&source_path, o.kernel_log.as_deref(), |part, source| {
         let mut stack = soliddraft_drawing::UndoStack::new();
         let report = stack
             .run(&mut drawing, &Command::UpdateFromModel, Some(part))

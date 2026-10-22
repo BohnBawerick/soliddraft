@@ -116,7 +116,7 @@ jobs:
   application-loop:
     name: Application scenarios (MCP, viewport, kernel replay)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       WGPU_BACKEND: vulkan
       XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
