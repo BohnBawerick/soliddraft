@@ -1,8 +1,7 @@
 //! The phase D0 exit test, through the `soliddraft view` binary as separate processes:
 //!
 //! The bracket's four Catallax views repeat across runs and match the polygon golden.
-//! SVG output carries visible and hidden line work. SMLib remains the independent
-//! visibility comparison for the generic mesh pass.
+//! SVG output carries visible and hidden line work.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

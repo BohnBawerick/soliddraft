@@ -11,7 +11,7 @@
 
 use serde_json::{Value, json};
 use soliddraft_app::chat::{ChatState, Role};
-use soliddraft_app::command_tools::{Line, ProposalStatus, Shape, board_bracket_on};
+use soliddraft_app::command_tools::{Line, ProposalStatus, Shape, board_bracket};
 use soliddraft_app::document::{Document, FeatureStatus, Selection};
 use soliddraft_app::state::AppState;
 use soliddraft_assistant::mcp::HttpClient;
@@ -131,7 +131,7 @@ fn apply_and_undo(st: &mut AppState, id: &str, prompt: &str, volume_change: f64,
 
 #[test]
 fn the_three_board_exchanges_with_the_mock_provider() {
-    let doc = board_bracket_on(Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
+    let doc = board_bracket();
     let corner = inside_corner(&doc);
     let provider = Arc::new(MockProvider::new(vec![
         // Fillet: the model looks at the flange, then proposes on the concave edge.
@@ -193,7 +193,7 @@ fn the_three_board_exchanges_with_the_real_model() {
     let how = choice.source.describe();
     let provider = choice.connect().expect("provider");
     eprintln!("real-model exit test on {} {} with the {how}", provider.name(), provider.model());
-    let mut st = AppState::new(board_bracket_on(Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new())));
+    let mut st = AppState::new(board_bracket());
     st.chat = ChatState::connected(provider, &how);
     let mut transcript = String::new();
     let check = |st: &mut AppState, prompt: &str, change: f64, tolerance: f64, transcript: &mut String| {
@@ -231,7 +231,7 @@ fn the_three_board_exchanges_with_the_real_model() {
 
 #[test]
 fn an_outside_agent_drives_the_same_commands_over_mcp() {
-    let doc = board_bracket_on(Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
+    let doc = board_bracket();
     let corner = inside_corner(&doc);
     let features = doc.features.len();
     let v0 = volume(&doc);

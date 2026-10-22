@@ -32,9 +32,7 @@ fn gpu_available() -> bool {
 type App<'a> = Harness<'a, SolidDraftApp>;
 
 fn harness() -> App<'static> {
-    harness_with(|| {
-        soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()))
-    })
+    harness_with(|| soliddraft_app::demo_document())
 }
 
 fn harness_with(doc: fn() -> soliddraft_app::document::Document) -> App<'static> {

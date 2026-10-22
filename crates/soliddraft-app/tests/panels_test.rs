@@ -37,15 +37,7 @@ fn harness() -> App<'static> {
         .with_render_every_step(true)
         .with_step_dt(1.0 / 60.0)
         .wgpu()
-        .build_eframe(|cc| {
-            SolidDraftApp::new(
-                cc,
-                soliddraft_app::demo_document_on(
-                    std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
-                ),
-                Automation::default(),
-            )
-        })
+        .build_eframe(|cc| SolidDraftApp::new(cc, soliddraft_app::demo_document(), Automation::default()))
 }
 
 fn save(harness: &mut App<'_>, name: &str) {

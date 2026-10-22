@@ -40,15 +40,7 @@ fn harness() -> App<'static> {
         .with_render_every_step(true)
         .with_step_dt(1.0 / 60.0)
         .wgpu()
-        .build_eframe(|cc| {
-            SolidDraftApp::new(
-                cc,
-                soliddraft_app::demo_document_on(
-                    std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
-                ),
-                Automation::default(),
-            )
-        })
+        .build_eframe(|cc| SolidDraftApp::new(cc, soliddraft_app::demo_document(), Automation::default()))
 }
 
 fn save(harness: &mut App<'_>, name: &str) {
@@ -201,8 +193,7 @@ fn drawing_opens_pinned_rebuilds_repairs_and_lists_locations() {
     //    with the repair dialog, listing the impostor as a candidate.
     push(&mut harness, AppAction::NewPart);
     std::fs::rename(&part_file, elsewhere.join("bracket.dwprt")).unwrap();
-    let mut other =
-        soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
+    let mut other = soliddraft_app::demo_document();
     soliddraft_app::file::save(&mut other, &part_file).unwrap();
     assert_ne!(other.model().id(), part_id);
     push(&mut harness, AppAction::Open(Some(drawing_file.clone())));

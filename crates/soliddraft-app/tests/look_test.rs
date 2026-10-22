@@ -58,13 +58,7 @@ fn the_bracket_in_each_look() {
         .with_step_dt(1.0 / 60.0)
         .wgpu()
         .build_eframe(|cc| {
-            SolidDraftApp::new(
-                cc,
-                soliddraft_app::command_tools::board_bracket_on(std::sync::Arc::new(
-                    soliddraft_kernel_catallax::CatallaxKernel::new(),
-                )),
-                Automation::default(),
-            )
+            SolidDraftApp::new(cc, soliddraft_app::command_tools::board_bracket(), Automation::default())
         });
     assert_eq!(harness.state().state.viewport.preset, Preset::Studio, "Studio is the default look");
     {

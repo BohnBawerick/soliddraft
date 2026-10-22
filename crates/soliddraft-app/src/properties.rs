@@ -815,11 +815,16 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             }
             Selection::Edge(_) => {
-                if ui.button("Fillet").clicked() {
-                    state.push(AppAction::StartFillet);
-                }
-                if ui.button("Chamfer").clicked() {
-                    state.push(AppAction::StartChamfer);
+                for id in ["fillet", "chamfer"] {
+                    let command = crate::commands::get(id).expect("registered finishing command");
+                    if ui
+                        .add_enabled(command.is_enabled(state), egui::Button::new(command.label))
+                        .on_disabled_hover_text(command.tip(state))
+                        .clicked()
+                        && let Some(action) = command.action_now(state)
+                    {
+                        state.push(action);
+                    }
                 }
             }
             Selection::Vertex(_) => {}
