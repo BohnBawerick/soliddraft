@@ -324,10 +324,10 @@ impl Kernel for CatallaxKernel {
         Err(gap("exact section curves", "1, drawing queries (roadmap section 7)"))
     }
     fn edge_curve(&self, body: BodyId, edge: EdgeId) -> KernelResult<drawing::Curve3> {
-        drawing_queries::edge_curve(&self.solid(body)?, body, edge)
+        drawing_queries::edge_curve(self.solid(body)?.as_ref(), body, edge)
     }
     fn face_loops(&self, body: BodyId, face: FaceId) -> KernelResult<Vec<Vec<drawing::Curve3>>> {
-        drawing_queries::face_loops(&self.solid(body)?, body, face)
+        drawing_queries::face_loops(self.solid(body)?.as_ref(), body, face)
     }
     fn lines_and_arcs(&self, _: &drawing::Curve3, _: f64) -> KernelResult<Vec<drawing::Curve3>> {
         Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))
