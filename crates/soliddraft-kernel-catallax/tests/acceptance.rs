@@ -234,7 +234,7 @@ fn polygon_face_loops_keep_holes_and_coedge_order() {
 
 #[test]
 fn axis_aligned_front_extrusions_keep_the_exact_frame_in_both_directions() {
-    let k = CatallaxKernel::new();
+    let k = CatallaxKernel::with_operation_log();
     let profile =
         Profile::circle(Plane { origin: Vec3::ZERO, normal: -Vec3::Y, x_dir: Vec3::X }, Point2::new(0.0, 0.0), 3.0);
     let sheet = k.create_body_from_profile(&OpTag::new("front"), &profile).unwrap();
@@ -249,6 +249,12 @@ fn axis_aligned_front_extrusions_keep_the_exact_frame_in_both_directions() {
         let topology = k.topology(body).unwrap();
         let normals: Vec<_> = topology.faces.iter().filter_map(|f| f.normal).collect();
         assert!(normals.contains(&Vec3::Y) && normals.contains(&-Vec3::Y), "{normals:?}");
+        let evidence = k.take_diagnostics().unwrap();
+        let questions = evidence["questions"].as_array().unwrap();
+        let recipe: catallax_recipe::Recipe =
+            serde_json::from_value(questions.last().unwrap()["problem"].clone()).unwrap();
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("captured question must replay the exact frame used by the application");
         k.release(body).unwrap();
     }
     k.release(sheet.body).unwrap();
