@@ -259,3 +259,34 @@ fn axis_aligned_front_extrusions_keep_the_exact_frame_in_both_directions() {
     }
     k.release(sheet.body).unwrap();
 }
+
+#[test]
+fn face_frame_normal_sweeps_use_the_certified_frame_without_changing_other_directions() {
+    let k = CatallaxKernel::with_operation_log();
+    let plane = Plane {
+        origin: Vec3::new(-3.5164312091753774e-36, -2.1476647763447118e-17, 0.0),
+        normal: Vec3::new(-1.6373277840689282e-19, -1.0, 0.0),
+        x_dir: Vec3::new(1.0, -1.6373277840689282e-19, 0.0),
+    };
+    let profile = Profile::circle(plane, Point2::new(0.0, 0.0), 3.0);
+    let sheet = k.create_body_from_profile(&OpTag::new("front_face"), &profile).unwrap().body;
+    for direction in [plane.normal, -plane.normal] {
+        let body =
+            k.extrude(&OpTag::new("pin"), sheet, &Extrude { distance: 20.0, direction: Some(direction) }).unwrap().body;
+        let mass = k.mass_properties(body).unwrap();
+        assert!((mass.volume - 180.0 * std::f64::consts::PI).abs() < 1e-4);
+        assert!(mass.centroid.distance(plane.origin + direction * 10.0) < 1e-8);
+        let evidence = k.take_diagnostics().unwrap();
+        let recipe: catallax_recipe::Recipe =
+            serde_json::from_value(evidence["questions"].as_array().unwrap().last().unwrap()["problem"].clone())
+                .unwrap();
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("the captured normal sweep must replay");
+        k.release(body).unwrap();
+    }
+    let error = k
+        .extrude(&OpTag::new("independent_direction"), sheet, &Extrude { distance: 20.0, direction: Some(-Vec3::Y) })
+        .unwrap_err();
+    assert!(error.to_string().contains("features.unsupported-elliptic-cylinder"), "{error}");
+    k.release(sheet).unwrap();
+}

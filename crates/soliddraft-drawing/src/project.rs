@@ -708,17 +708,22 @@ pub fn project(index: &PartIndex, curves: &ViewCurves, xf: &ViewTransform, diges
             continue;
         }
         let (source, kind) = source_ref(index, c);
-        if let Curve3::Circle { center, normal, radius } = c.curve
+        // Visibility fragments keep the complete edge's exact circle metadata.
+        let geometry = match c.source {
+            CurveSource::Edge(edge) => index.edge_curve(edge).unwrap_or(&c.curve),
+            _ => &c.curve,
+        };
+        if let Curve3::Circle { center, normal, radius } = geometry
             && normal.cross(xf.frame.direction).length() < 1e-6
             && matches!(c.source, CurveSource::Edge(_))
             && !circles.iter().any(|k| k.entity.kernel_hint == source.kernel_hint)
         {
             circles.push(CircleInfo {
                 entity: source.clone(),
-                centre: xf.point(center),
+                centre: xf.point(*center),
                 radius: radius * xf.scale,
-                model_centre: center,
-                model_radius: radius,
+                model_centre: *center,
+                model_radius: *radius,
             });
         }
         out.push(Curve2 { path, source, visible: c.visible, kind, tangent: c.smooth });

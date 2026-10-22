@@ -1,7 +1,8 @@
-//! Exact rotations for the application's axis-aligned sketch frames.
+//! Exact rotations and normal sweeps for the application's sketch frames.
 
-use catallax_recipe::Number;
-use soliddraft_kernel_api::Plane;
+use catallax_numbers::Rational;
+use catallax_recipe::{Number, Vector3};
+use soliddraft_kernel_api::{Plane, Vec3};
 
 pub(super) fn rotation(plane: Plane) -> Option<[Number; 4]> {
     let x = [plane.x_dir.x, plane.x_dir.y, plane.x_dir.z];
@@ -28,10 +29,27 @@ pub(super) fn rotation(plane: Plane) -> Option<[Number; 4]> {
     None
 }
 
+/// A sweep defined by the source frame follows that frame after certified conversion.
+pub(super) fn normal_sweep(plane: Plane, rotation: &[Number; 4], direction: Vec3) -> Option<Vector3> {
+    let sign = if direction == plane.normal {
+        1
+    } else if direction == -plane.normal {
+        -1
+    } else {
+        return None;
+    };
+    let r = rotation.each_ref().map(Number::value);
+    let d = r.iter().map(|v| *v * *v).fold(Rational::zero(), |a, b| a + b);
+    let [w, a, b, c] = r;
+    let two = Rational::from_i64(2);
+    let normal = [&two * &((a * c) + (w * b)), &two * &((b * c) - (w * a)), w * w - a * a - b * b + c * c];
+    let scale = &Rational::from_i64(sign) / &d;
+    Some(Vector3(normal.map(|v| Number::from(&v * &scale))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soliddraft_kernel_api::Vec3;
 
     #[test]
     fn a_nearly_axis_aligned_frame_is_not_snapped() {

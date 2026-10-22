@@ -194,17 +194,37 @@ fn gap(what: &str, stage: &str) -> KernelError {
 fn build(input: &Value, op: OpKind, questions: Option<&mut Vec<Value>>) -> KernelResult<ApplicationBody> {
     let mut converted =
         catallax_app::soliddraft::convert(&input.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
-    for source in input["steps"].as_array().expect("generated recipe steps") {
+    let sources = input["steps"].as_array().expect("generated recipe steps");
+    let mut planes = BTreeMap::new();
+    for source in sources {
         if source["op"] != "profile" {
             continue;
         }
         let plane: Plane = serde_json::from_value(source["plane"].clone())
             .map_err(|e| KernelError::InvalidInput(format!("stored profile frame: {e}")))?;
-        if let Some(rotation) = frames::rotation(plane) {
+        let name = source["id"].as_str().expect("generated step id");
+        let id = &converted.steps[name];
+        let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted profile step");
+        if let catallax_recipe::Operation::Sketch { plane: pose, .. } = &mut step.op {
+            if let Some(rotation) = frames::rotation(plane) {
+                pose.rotation = rotation;
+            }
+            planes.insert(name, (plane, pose.rotation.clone()));
+        }
+    }
+    for source in sources {
+        if source["op"] != "extrude" || source["direction"].is_null() {
+            continue;
+        }
+        let direction: Vec3 = serde_json::from_value(source["direction"].clone())
+            .map_err(|e| KernelError::InvalidInput(format!("stored sweep direction: {e}")))?;
+        let profile = source["profile"].as_str().expect("generated profile id");
+        let (plane, rotation) = &planes[profile];
+        if let Some(direction) = frames::normal_sweep(*plane, rotation, direction) {
             let id = &converted.steps[source["id"].as_str().expect("generated step id")];
-            let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted profile step");
-            if let catallax_recipe::Operation::Sketch { plane, .. } = &mut step.op {
-                plane.rotation = rotation;
+            let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted extrusion step");
+            if let catallax_recipe::Operation::Extrude { direction: sweep, .. } = &mut step.op {
+                *sweep = Some(direction);
             }
         }
     }
