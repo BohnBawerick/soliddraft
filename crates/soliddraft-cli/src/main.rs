@@ -439,7 +439,11 @@ fn mcp(args: &[String]) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         },
-        None if demo => soliddraft_app::demo_document_on(kernel.clone()),
+        None if demo => {
+            let mut doc = soliddraft_app::document::Document::new("Part1", kernel);
+            soliddraft_app::populate_demo(&mut doc);
+            doc
+        }
         None => soliddraft_app::document::Document::new("Part1", kernel),
     };
     let mut book = ProposalBook::default();

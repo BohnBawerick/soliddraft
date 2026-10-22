@@ -66,7 +66,13 @@ pub fn new_document() -> Document {
 
 /// The sample part used by `--demo` and the screenshots: a base plate, a flange and a boss.
 pub fn demo_document() -> Document {
-    let mut doc = Document::new("Part1", kernel());
+    let mut doc = new_document();
+    populate_demo(&mut doc);
+    doc
+}
+
+/// Adds the sample features to a document, retaining its Catallax diagnostics.
+pub fn populate_demo(doc: &mut Document) {
     for params in [
         ExtrudeParams {
             sketch: None,
@@ -94,7 +100,6 @@ pub fn demo_document() -> Document {
     }
     doc.selection = None;
     doc.dirty = false;
-    doc
 }
 
 /// One body tessellated to well over 10,000 triangles, for the frame-time benchmark.

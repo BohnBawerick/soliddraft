@@ -35,21 +35,18 @@ fn out_dir() -> PathBuf {
 type App<'a> = Harness<'a, SolidDraftApp>;
 
 fn harness() -> App<'static> {
+    harness_on(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()))
+}
+
+fn harness_on(kernel: std::sync::Arc<soliddraft_kernel_catallax::CatallaxKernel>) -> App<'static> {
     Harness::builder()
         .with_size(vec2(1440.0, 900.0))
         .with_pixels_per_point(1.0)
         .with_render_every_step(true)
         .with_step_dt(1.0 / 60.0)
         .wgpu()
-        .build_eframe(|cc| {
-            SolidDraftApp::new(
-                cc,
-                soliddraft_app::document::Document::new(
-                    "Part1",
-                    std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
-                ),
-                Automation::default(),
-            )
+        .build_eframe(move |cc| {
+            SolidDraftApp::new(cc, soliddraft_app::document::Document::new("Part1", kernel), Automation::default())
         })
 }
 
@@ -399,7 +396,8 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     soliddraft_app::file::set_config_dir(Some(dir.clone()));
-    let mut harness = harness();
+    let kernel = std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_operation_log());
+    let mut harness = harness_on(kernel.clone());
     harness.run_steps(3);
 
     // 1. Base: a 120 x 90 rectangle on the Top plane, fully defined, extruded 10 mm.
@@ -467,6 +465,15 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     harness.key_press(Key::Enter);
     settle(&mut harness);
     assert_eq!(feature_names(&harness), ["Sketch1", "Boss-Extrude1", "Sketch2", "Boss-Extrude2"]);
+    let model = harness.state().state.doc.model();
+    for feature in model.features() {
+        eprintln!("flange source on {}: {feature:?}", std::env::consts::OS);
+        if let Some(sketch) = model.built_sketch(feature.id) {
+            eprintln!("flange sketch frame on {}: {:?}", std::env::consts::OS, sketch.plane);
+        }
+    }
+    let evidence = kernel.take_diagnostics().unwrap();
+    eprintln!("flange native questions on {}: {}", std::env::consts::OS, evidence["questions"]);
     assert_eq!(feature_status(&harness, "Boss-Extrude2"), FeatureStatus::Ok);
     let v_l = volume(&harness);
     assert!((v_l - (120.0 * 90.0 * 10.0 + 120.0 * 50.0 * 10.0)).abs() < 1.0, "L volume {v_l}");
