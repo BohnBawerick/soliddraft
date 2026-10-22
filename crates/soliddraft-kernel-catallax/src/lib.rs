@@ -41,8 +41,29 @@ struct Stored {
 struct Solid {
     app: ApplicationBody,
     ids: convert::Ids,
+    display: Mutex<Option<(Rational, Arc<catallax_mesh::Mesh>)>>,
     topology: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
+}
+
+impl Solid {
+    fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
+        let mut cached =
+            self.display.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
+        if let Some((chord, mesh)) = cached.as_ref()
+            && chord == &options.chord_tolerance
+        {
+            return Ok(mesh.clone());
+        }
+        let mesh = Arc::new(
+            mesh_body(&self.app.built.model, self.app.built.result, options, &mut Decider::default())
+                .map_err(|e| query_error(query, e))?
+                .value,
+        );
+        // Keep one tolerance per immutable body so triangles and edges share the same mesh.
+        *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
+        Ok(mesh)
+    }
 }
 
 impl State {
@@ -92,7 +113,13 @@ impl State {
                 steps,
                 result,
                 history: history.into_values().collect(),
-                solid: Some(Arc::new(Solid { app, ids, topology: OnceLock::new(), mass: OnceLock::new() })),
+                solid: Some(Arc::new(Solid {
+                    app,
+                    ids,
+                    display: Mutex::new(None),
+                    topology: OnceLock::new(),
+                    mass: OnceLock::new(),
+                })),
             },
         );
         Ok(OpResult { body, record })
@@ -236,30 +263,26 @@ impl Kernel for CatallaxKernel {
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         let solid = self.solid(body)?;
         let options = options(params)?;
-        let mesh = mesh_body(&solid.app.built.model, solid.app.built.result, &options, &mut Decider::default())
-            .map_err(|e| query_error("tessellate", e))?;
+        let mesh = solid.display(&options, "tessellate")?;
         let rounding_budget = options.chord_tolerance.to_f64_nearest();
-        if mesh.value.positions.iter().any(|p| {
+        if mesh.positions.iter().any(|p| {
             let rounded = p.map(|v| f64::from(v as f32));
             !rounded.iter().all(|v| v.is_finite()) || Vec3::from(*p).distance(rounded.into()) > rounding_budget
         }) {
             return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
         }
-        Ok(convert::mesh(&solid.app.built.model, &mesh.value, &solid.ids, params))
+        Ok(convert::mesh(&solid.app.built.model, &mesh, &solid.ids, params))
     }
 
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
         let solid = self.solid(body)?;
-        let mesh =
-            mesh_body(&solid.app.built.model, solid.app.built.result, &options(params)?, &mut Decider::default())
-                .map_err(|e| query_error("tessellate_edges", e))?;
+        let mesh = solid.display(&options(params)?, "tessellate_edges")?;
         Ok(mesh
-            .value
             .edges
             .iter()
             .map(|edge| EdgePolyline {
                 edge: solid.ids.edges[&edge.edge],
-                points: edge.vertices.iter().map(|v| mesh.value.positions[*v].into()).collect(),
+                points: edge.vertices.iter().map(|v| mesh.positions[*v].into()).collect(),
             })
             .collect())
     }

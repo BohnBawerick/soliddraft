@@ -114,3 +114,8 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: catallax-drawing-workspace
+          path: target/exit-test/catallax-drawing.png

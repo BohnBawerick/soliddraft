@@ -227,5 +227,8 @@ fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
     let section =
         session.doc.drawing.sheets[0].views.iter().find(|v| matches!(v.kind, ViewKind::Section { .. })).unwrap();
     assert_eq!(section.geometry.hatch.len(), 3);
-    harness.render().expect("regenerated Catallax drawing workspace renders");
+    let image = harness.render().expect("regenerated Catallax drawing workspace renders");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/exit-test/catallax-drawing.png");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    image.save(path).expect("save the Catallax drawing workspace proof");
 }
