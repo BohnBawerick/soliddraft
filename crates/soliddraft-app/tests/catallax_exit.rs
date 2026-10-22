@@ -139,7 +139,7 @@ fn bracket_renders_picks_a_named_face_edits_and_undoes_on_catallax() {
     doc.apply(document::Command::EditExtrude { id: flange, params }).unwrap();
     assert!((volume(doc) - original - 10800.0).abs() < 1e-4);
     assert!(doc.faces.iter().any(|f| f.label.contains("flange") && (f.centroid.z - 72.0).abs() < 1e-5));
-    assert!(matches!(doc.model().status(FeatureId(flange)), Some(model::FeatureStatus::Ok)));
+    assert!(matches!(doc.model().status(FeatureId(flange.try_into().unwrap())), Some(model::FeatureStatus::Ok)));
     doc.undo().unwrap();
     assert!((volume(doc) - original).abs() < 1e-4);
     harness.run_steps(5);
