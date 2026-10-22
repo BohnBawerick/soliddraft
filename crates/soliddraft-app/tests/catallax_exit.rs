@@ -187,6 +187,18 @@ fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
     let session = harness.state().state.drawing.session.as_ref().unwrap();
     assert_eq!(session.doc.drawing.sheets[0].views.len(), 4);
     assert!(session.doc.drawing.sheets[0].views.iter().all(|v| !v.geometry.curves.is_empty()));
+    {
+        let ctx = soliddraft_app::drawing::part::PartContext::new(&harness.state().state.doc).unwrap();
+        let part = ctx.part();
+        let index = soliddraft_drawing::PartIndex::build(&part).unwrap();
+        for curve in session.doc.drawing.sheets[0].views.iter().flat_map(|v| &v.geometry.curves) {
+            assert!(
+                matches!(index.resolve(&curve.source), soliddraft_drawing::Resolution::Found(_)),
+                "new view reference does not resolve: {:?}",
+                curve.source
+            );
+        }
+    }
     let top = session.doc.drawing.sheets[0]
         .views
         .iter()
@@ -216,13 +228,18 @@ fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
     let plate = doc.features.iter().find(|f| f.name == "plate").unwrap();
     let id = plate.id;
     let FeatureKind::Extrude(mut params) = plate.kind.clone() else { panic!() };
-    params.depth = 12.0;
+    // The hole tools end at Z=11; keep this edit through-hole to preserve the referenced rims.
+    params.depth = 10.5;
     doc.apply(document::Command::EditExtrude { id, params }).unwrap();
     harness.run_steps(12);
     let session = harness.state().state.drawing.session.as_ref().unwrap();
     let update = session.doc.last_update.as_ref().expect("the drawing regenerated after the plate edit");
     assert_eq!(update.views, 5);
-    assert!(update.dangling.is_empty());
+    assert!(
+        update.dangling.is_empty(),
+        "annotation states: {:?}",
+        session.doc.drawing.sheets[0].annotations.iter().map(|a| (a.id, &a.state)).collect::<Vec<_>>()
+    );
     assert!(session.is_up_to_date());
     let section =
         session.doc.drawing.sheets[0].views.iter().find(|v| matches!(v.kind, ViewKind::Section { .. })).unwrap();
