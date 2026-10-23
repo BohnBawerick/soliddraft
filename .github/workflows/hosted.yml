@@ -42,6 +42,9 @@ jobs:
   # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
   test:
     name: Workspace (${{ matrix.os }})
+    env:
+      # Workspace numeric code must share the dependency optimization level.
+      CARGO_PROFILE_TEST_OPT_LEVEL: 2
     strategy:
       fail-fast: false
       matrix:

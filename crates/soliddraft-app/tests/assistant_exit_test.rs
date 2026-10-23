@@ -241,7 +241,7 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
         let (mut c, init) = HttpClient::connect(&url, "exit-test-agent").unwrap();
         assert_eq!(init["serverInfo"]["name"], "soliddraft");
         let call = |c: &mut HttpClient, name: &str, args: Value| {
-            let r = c.call_tool(name, args).unwrap();
+            let r = c.call_tool(name, args).unwrap_or_else(|error| panic!("{name}: {error}"));
             assert_eq!(r["isError"], false, "{name}: {r}");
             r["structuredContent"].clone()
         };
