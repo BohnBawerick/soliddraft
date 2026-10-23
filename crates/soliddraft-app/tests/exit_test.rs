@@ -540,6 +540,19 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     click_button(&mut harness, "Cut");
     harness.key_press(Key::Enter);
     settle(&mut harness);
+    if feature_status(&harness, "Cut-Extrude2") != FeatureStatus::Ok {
+        let part = harness.state().state.doc.model().part_json();
+        std::fs::write(out_dir().join("slot-cut-failure.part.json"), &part).unwrap();
+        let kernel = std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_operation_log());
+        let replay = soliddraft_model::Document::from_part_json(&part, kernel.clone());
+        let evidence = serde_json::json!({
+            "status": format!("{:?}", feature_status(&harness, "Cut-Extrude2")),
+            "read_error": replay.err().map(|error| error.to_string()),
+            "kernel": kernel.take_diagnostics().unwrap(),
+        });
+        std::fs::write(out_dir().join("slot-cut-failure.kernel.json"), serde_json::to_vec_pretty(&evidence).unwrap())
+            .unwrap();
+    }
     assert_eq!(
         feature_status(&harness, "Cut-Extrude2"),
         FeatureStatus::Ok,
