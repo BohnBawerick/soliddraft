@@ -174,7 +174,15 @@ jobs:
       - name: Replay the captured manual slot question
         run: |
           mkdir -p "$RUNNER_TEMP/application-loop/slot-replay"
-          target/debug/catallax-verify replay crates/soliddraft-kernel-catallax/tests/fixtures/slot-native-question.json --out "$RUNNER_TEMP/application-loop/slot-replay/evidence" > "$RUNNER_TEMP/application-loop/slot-replay/response.json"
+          target/debug/catallax-verify about > "$RUNNER_TEMP/application-loop/slot-replay/about.json"
+          python3 - "$RUNNER_TEMP/application-loop/slot-replay" <<'PYTHON'
+          import json, pathlib, sys
+          directory = pathlib.Path(sys.argv[1])
+          question = json.loads(pathlib.Path("crates/soliddraft-kernel-catallax/tests/fixtures/slot-native-question.json").read_text())
+          question["max_work"] = json.loads((directory / "about.json").read_text())["default_work"]
+          (directory / "question.json").write_text(json.dumps(question))
+          PYTHON
+          target/debug/catallax-verify replay "$RUNNER_TEMP/application-loop/slot-replay/question.json" --out "$RUNNER_TEMP/application-loop/slot-replay/evidence" > "$RUNNER_TEMP/application-loop/slot-replay/response.json"
           python3 - "$RUNNER_TEMP/application-loop/slot-replay/response.json" <<'PYTHON'
           import json, sys
           response = json.load(open(sys.argv[1]))
