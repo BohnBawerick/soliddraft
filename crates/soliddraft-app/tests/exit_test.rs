@@ -540,33 +540,6 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     click_button(&mut harness, "Cut");
     harness.key_press(Key::Enter);
     settle(&mut harness);
-    if feature_status(&harness, "Cut-Extrude2") != FeatureStatus::Ok {
-        let model = harness.state().state.doc.model();
-        std::fs::write(out_dir().join("slot-failure.part.json"), model.part_json()).unwrap();
-        let sketch = model.features().iter().rev().find_map(|feature| model.built_sketch(feature.id)).unwrap();
-        let profile = sketch.regions.as_ref().unwrap()[0].to_profile(sketch.plane);
-        std::fs::write(out_dir().join("slot-failure.profile.json"), serde_json::to_string_pretty(&profile).unwrap())
-            .unwrap();
-        let kernel = soliddraft_kernel_catallax::CatallaxKernel::with_operation_log();
-        let sheet = soliddraft_kernel_api::Kernel::create_body_from_profile(
-            &kernel,
-            &soliddraft_kernel_api::OpTag::new("slot_profile"),
-            &profile,
-        )
-        .unwrap();
-        let result = soliddraft_kernel_api::Kernel::extrude(
-            &kernel,
-            &soliddraft_kernel_api::OpTag::new("slot"),
-            sheet.body,
-            &soliddraft_kernel_api::Extrude { distance: 10.0, direction: None },
-        );
-        let evidence = serde_json::json!({
-            "error": result.err().map(|error| error.to_string()),
-            "evidence": kernel.take_diagnostics().unwrap(),
-        });
-        std::fs::write(out_dir().join("slot-failure.kernel.json"), serde_json::to_string_pretty(&evidence).unwrap())
-            .unwrap();
-    }
     assert_eq!(
         feature_status(&harness, "Cut-Extrude2"),
         FeatureStatus::Ok,
