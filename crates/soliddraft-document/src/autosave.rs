@@ -42,9 +42,9 @@ pub struct Trigger {
 }
 
 impl Trigger {
-    /// Counts an edit made at `now`.
-    pub fn edited(&mut self, now: Instant) {
-        self.edits = self.edits.saturating_add(1);
+    /// Counts `count` edits made by `now`.
+    pub fn edited(&mut self, now: Instant, count: u32) {
+        self.edits = self.edits.saturating_add(count);
         self.since.get_or_insert(now);
     }
 
@@ -87,15 +87,15 @@ mod tests {
         let mut trigger = Trigger::default();
         assert!(!trigger.due(&POLICY, t0 + Duration::from_secs(3600)), "nothing to save");
         assert_eq!(trigger.wait(&POLICY, t0), None);
-        trigger.edited(t0);
+        trigger.edited(t0, 1);
         assert!(!trigger.due(&POLICY, t0 + Duration::from_secs(59)));
         assert_eq!(trigger.wait(&POLICY, t0 + Duration::from_secs(45)), Some(Duration::from_secs(15)));
         // A later edit does not push the copy back.
-        trigger.edited(t0 + Duration::from_secs(50));
+        trigger.edited(t0 + Duration::from_secs(50), 1);
         assert!(trigger.due(&POLICY, t0 + Duration::from_secs(60)));
         trigger.reset();
         assert!(!trigger.due(&POLICY, t0 + Duration::from_secs(120)), "written: wait for the next edit");
-        trigger.edited(t0 + Duration::from_secs(130));
+        trigger.edited(t0 + Duration::from_secs(130), 1);
         assert!(!trigger.due(&POLICY, t0 + Duration::from_secs(189)));
         assert!(trigger.due(&POLICY, t0 + Duration::from_secs(190)));
     }
@@ -104,10 +104,10 @@ mod tests {
     fn enough_edits_write_before_the_interval() {
         let t0 = Instant::now();
         let mut trigger = Trigger::default();
-        trigger.edited(t0);
-        trigger.edited(t0);
+        trigger.edited(t0, 1);
+        trigger.edited(t0, 1);
         assert!(!trigger.due(&POLICY, t0));
-        trigger.edited(t0);
+        trigger.edited(t0, 1);
         assert_eq!(trigger.pending(), 3);
         assert!(trigger.due(&POLICY, t0), "the third edit");
         let interval_only = AutosavePolicy { edits: 0, ..POLICY };
@@ -119,7 +119,7 @@ mod tests {
     fn disabled_autosave_is_never_due_and_a_zero_interval_is_a_second() {
         let t0 = Instant::now();
         let mut trigger = Trigger::default();
-        (0..10).for_each(|_| trigger.edited(t0));
+        trigger.edited(t0, 10);
         let off = AutosavePolicy { enabled: false, ..POLICY };
         assert!(!trigger.due(&off, t0 + Duration::from_secs(3600)));
         assert_eq!(trigger.wait(&off, t0), None);

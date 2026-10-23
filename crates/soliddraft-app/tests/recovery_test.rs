@@ -144,7 +144,7 @@ fn copies_follow_saves_and_only_newer_ones_are_offered() {
     assert!(!copy.exists());
     let saved = std::fs::read(&user).unwrap();
 
-    // More work, a copy, and a crash.
+    // Two edits in one frame write a copy, then a crash.
     doc.redo().unwrap();
     doc.apply(block(8.0)).unwrap();
     session.tick(&doc, None, KERNEL, t0);

@@ -349,7 +349,7 @@ fn watch(
         }
         *w = Watch { id, edits: seen.map_or(0, |(_, edits, _)| edits), ..Watch::default() };
         if seen.is_some_and(|(_, _, dirty)| dirty) {
-            w.trigger.edited(now);
+            w.trigger.edited(now, 1);
         }
     }
     let Some((id, edits, dirty)) = seen else { return false };
@@ -364,8 +364,9 @@ fn watch(
         return false;
     }
     if edits != w.edits {
+        // A frame can carry several edits, such as a script's batch of commands.
+        w.trigger.edited(now, u32::try_from(edits.abs_diff(w.edits)).unwrap_or(u32::MAX));
         w.edits = edits;
-        w.trigger.edited(now);
     }
     if w.trigger.due(policy, now) {
         w.trigger.reset();
