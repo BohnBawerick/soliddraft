@@ -218,6 +218,17 @@ mod tests {
     }
 
     #[test]
+    fn a_recorded_source_leaves_the_mass_as_it_was() {
+        use crate::provenance::{Property, PropertySource, Provenance};
+        let mut steel = Material::new("steel", "Steel");
+        steel.density_kg_m3 = Some(7850.0);
+        let before = of_body(&block(), Some(&steel)).unwrap();
+        let handbook = PropertySource::Reference { citation: "MIL-HDBK-5J".into() };
+        steel.set_value(Property::Density, Some(7850.0), Provenance::from_source(handbook));
+        assert_eq!(of_body(&block(), Some(&steel)).unwrap(), before);
+    }
+
+    #[test]
     fn absent_inertia_stays_absent_through_density_and_assembly_transforms() {
         let mut props = block();
         props.inertia = None;

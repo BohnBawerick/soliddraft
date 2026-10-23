@@ -169,7 +169,7 @@ fn show(c: &Catalog, id: &str, json_out: bool) -> Result<bool, String> {
             println!("{}", json!({"library": l.name, "material": m}));
         } else {
             println!("{} ({}), material in {}", m.name, m.id, l.name);
-            print!("{}", fields(m));
+            print!("{}", material_fields(m));
         }
         return Ok(true);
     }
@@ -178,17 +178,36 @@ fn show(c: &Catalog, id: &str, json_out: bool) -> Result<bool, String> {
             println!("{}", json!({"library": l.name, "appearance": a}));
         } else {
             println!("{} ({}), appearance in {}", a.name, a.id, l.name);
-            print!("{}", fields(a));
+            print!("{}", fields(a, &[]));
         }
         return Ok(true);
     }
     Err(format!("no library has a material or appearance {id}"))
 }
 
-/// An entry's values, one per line, without its id and name.
-fn fields(v: &impl serde::Serialize) -> String {
+/// An entry's values, one per line, without its id, its name and the fields `skip` names.
+fn fields(v: &impl serde::Serialize, skip: &[&str]) -> String {
     let Value::Object(map) = serde_json::to_value(v).expect("entries serialise") else { return String::new() };
-    map.iter().filter(|(k, _)| *k != "id" && *k != "name").map(|(k, v)| format!("  {k} = {v}\n")).collect()
+    map.iter()
+        .filter(|(k, _)| *k != "id" && *k != "name" && !skip.contains(&k.as_str()))
+        .map(|(k, v)| format!("  {k} = {v}\n"))
+        .collect()
+}
+
+/// A material's fields, then each value it has with its unit, its source and the
+/// conditions it holds under.
+fn material_fields(m: &Material) -> String {
+    use soliddraft_materials::Property;
+    let mut skip = Property::ALL.map(Property::field).to_vec();
+    skip.push("provenance");
+    let mut out = fields(m, &skip);
+    for p in Property::ALL {
+        if let Some(v) = m.value(p) {
+            let unit = if p.unit().is_empty() { String::new() } else { format!(" {}", p.unit()) };
+            out += &format!("  {p} = {v}{unit} ({})\n", m.provenance_of(p));
+        }
+    }
+    out
 }
 
 fn appearances(c: &Catalog, json_out: bool) -> bool {

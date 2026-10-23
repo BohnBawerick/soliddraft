@@ -112,6 +112,49 @@ mod tests {
         assert_eq!(serde_json::to_string(&s).unwrap(), "{}");
     }
 
+    /// The `snapshots` key of a part saved before values recorded their source.
+    const SAVED: &str = r##"{"materials":[{"id":"aluminium-6061-t6","name":"Aluminium 6061-T6","category":"Aluminium alloys","source":"MIL-HDBK-5J, table 3.6.2.0(b)","density_kg_m3":2712.0,"youngs_modulus_pa":68260000000.0,"poisson":0.33,"yield_pa":241300000.0,"default_appearance":"aluminium-machined","hatch":"ANSI38"}],"appearances":[{"id":"aluminium-machined","name":"Aluminium, machined","base_color":"#d6d8da","metallic":1.0,"roughness":0.35,"opacity":1.0}]}"##;
+
+    #[test]
+    fn a_saved_document_reads_and_writes_as_it_was() {
+        use crate::provenance::Property;
+        let s: Snapshots = serde_json::from_str(SAVED).unwrap();
+        assert_eq!(serde_json::to_string(&s).unwrap(), SAVED, "the same bytes come back");
+        let m = &s.materials[0];
+        assert_eq!(m.density_kg_m3, Some(2712.0));
+        for p in Property::ALL {
+            assert!(m.source_of(p).is_unknown(), "{p} reads as unknown, not as the entry's source text");
+        }
+    }
+
+    #[test]
+    fn sources_and_conditions_round_trip_through_a_document() {
+        use crate::provenance::{Conditions, Property, PropertySource, Provenance};
+        let mut s: Snapshots = serde_json::from_str(SAVED).unwrap();
+        let mut m = s.materials[0].clone();
+        m.set_value(
+            Property::Yield,
+            Some(2.413e8),
+            Provenance {
+                source: PropertySource::Reference { citation: "MIL-HDBK-5J, table 3.6.2.0(b)".into() },
+                conditions: Conditions {
+                    temperature_k: Some(294.0),
+                    treatment: Some("T6".into()),
+                    ..Conditions::default()
+                },
+            },
+        );
+        m.set_override(Property::Density, Some(2700.0), None);
+        s.put_material(m);
+        let json = serde_json::to_string(&s).unwrap();
+        let back: Snapshots = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, s);
+        let m = &back.materials[0];
+        assert_eq!(m.provenance_of(Property::Yield).conditions.treatment.as_deref(), Some("T6"));
+        assert_eq!(m.source_of(Property::Density), &PropertySource::UserOverride { note: None });
+        assert!(m.source_of(Property::Poisson).is_unknown());
+    }
+
     #[test]
     fn hand_written_repeats_keep_the_last() {
         let mut s = Snapshots {

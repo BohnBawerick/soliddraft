@@ -444,6 +444,60 @@ base_color = "#1f4e8c"
     }
 
     #[test]
+    fn sources_and_conditions_round_trip_through_a_library_file() {
+        use crate::provenance::{Conditions, Property, PropertySource, Provenance};
+        let text = format!(
+            "{TEXT}\n{}",
+            r#"
+[[material]]
+id = "w-2024"
+name = "Aluminium 2024-T3"
+density_kg_m3 = 2768.0
+yield_pa = 3.31e8
+
+[material.provenance.yield_pa]
+source = { kind = "reference", citation = "MIL-HDBK-5J, table 3.2.3.0(b)" }
+conditions = { temperature_k = 294.0, form = "sheet", treatment = "T3", direction = "longitudinal" }
+
+[material.provenance.density_kg_m3.source]
+kind = "user_override"
+note = "weighed"
+"#
+        );
+        let lib = Library::parse(&text, Origin::User, None).unwrap();
+        let m = lib.material(&MaterialId("w-2024".into())).unwrap();
+        assert_eq!(
+            m.provenance_of(Property::Yield),
+            Provenance {
+                source: PropertySource::Reference { citation: "MIL-HDBK-5J, table 3.2.3.0(b)".into() },
+                conditions: Conditions {
+                    temperature_k: Some(294.0),
+                    form: Some("sheet".into()),
+                    treatment: Some("T3".into()),
+                    direction: Some("longitudinal".into()),
+                    ..Conditions::default()
+                },
+            }
+        );
+        assert_eq!(m.source_of(Property::Density), &PropertySource::UserOverride { note: Some("weighed".into()) });
+        assert_eq!(m.source, Some("Supplier data sheets".into()), "the entry's source text is still inherited");
+        assert!(
+            lib.materials[0].source_of(Property::Density).is_unknown(),
+            "the library's source text is not a value's"
+        );
+        let back = Library::parse(&lib.to_toml(), Origin::User, None).unwrap();
+        assert_eq!(back, lib);
+        assert!(lib.problems().is_empty());
+    }
+
+    #[test]
+    fn built_in_entries_write_as_before() {
+        for lib in crate::Catalog::built_in_libraries() {
+            assert!(!lib.to_toml().contains("provenance"), "{} gained provenance", lib.name);
+        }
+    }
+
+    #[test]
     fn other_formats_and_bad_toml_are_refused() {
         let old = TEXT.replace(FORMAT, "draftwell-library/1");
         let lib = Library::parse(&old, Origin::User, None).unwrap();
