@@ -5,6 +5,7 @@ pub mod assembly;
 pub mod camera;
 pub mod environment;
 pub mod look;
+pub mod offscreen;
 pub mod pick;
 pub mod render;
 

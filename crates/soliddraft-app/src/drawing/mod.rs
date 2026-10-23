@@ -945,7 +945,7 @@ pub fn create_drawing(state: &AppState, new: &NewDrawing) -> Result<DrawingSessi
             state: AnnotationState::Ok,
         });
     }
-    doc.dirty = true;
+    doc.touch();
     let mut session = DrawingSession::new(doc);
     session.seen_version = state.doc.mesh_version;
     session.part_seen = Some(state.doc.model().id());
@@ -1122,6 +1122,17 @@ fn open_file(state: &mut AppState, dock: &mut DockState<Tab>, path: PathBuf) {
             return;
         }
     };
+    crate::file::remember(&path);
+    state.recent = crate::file::recent();
+    show_opened(state, dock, doc, "Opened");
+}
+
+/// Shows a drawing restored from a recovery copy, as an opened one is shown.
+pub fn restore(state: &mut AppState, dock: &mut DockState<Tab>, doc: DrawingDoc) {
+    show_opened(state, dock, doc, "Restored");
+}
+
+fn show_opened(state: &mut AppState, dock: &mut DockState<Tab>, doc: DrawingDoc, verb: &str) {
     let mut session = DrawingSession::new(doc);
     // Let the frame hook see the open part as first contact.
     session.seen_version = u64::MAX;
@@ -1131,8 +1142,6 @@ fn open_file(state: &mut AppState, dock: &mut DockState<Tab>, path: PathBuf) {
     state.drawing.repair = None;
     state.drawing.active = true;
     show_drawing_tab(dock);
-    crate::file::remember(&path);
-    state.recent = crate::file::recent();
     reference::refresh(state);
     let Some(session) = state.drawing.session.as_ref() else { return };
     let part_open = session.model_is(state.doc.model().id());
@@ -1144,7 +1153,7 @@ fn open_file(state: &mut AppState, dock: &mut DockState<Tab>, path: PathBuf) {
         LinkState::Unverified => "the source is not a SolidDraft document",
         LinkState::Unknown => "the part is not resolved",
     };
-    state.note(format!("Opened {title} · {views} view{} · {words}", if views == 1 { "" } else { "s" }), NoteKind::Ok);
+    state.note(format!("{verb} {title} · {views} view{} · {words}", if views == 1 { "" } else { "s" }), NoteKind::Ok);
     if link == LinkState::Missing {
         state.drawing.repair = RepairDialog::new(state, false);
     } else if !part_open {
@@ -1182,7 +1191,7 @@ fn repair_model(state: &mut AppState, path: PathBuf, replace: bool) {
     let was = session.doc.drawing.model.id;
     match soliddraft_document::resolve::repair(&mut session.doc.drawing.model, &drawing_path, &path, replace) {
         Ok(identity) => {
-            session.doc.dirty = true;
+            session.doc.touch();
             session.link = None;
             session.marker_dismissed = false;
             let what = if was.is_some_and(|w| w != identity.id) { "Model replaced" } else { "Reference repaired" };
@@ -1651,9 +1660,12 @@ fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {
     }
     let kernel = state.doc.kernel().backend();
     match s.doc.save(&path, &format!("{} {}", kernel.name, kernel.version)) {
-        Ok(()) => {
+        Ok(warning) => {
             s.say(format!("Saved {}", path.display()));
-            state.note(format!("Saved {}", path.display()), NoteKind::Ok);
+            match warning {
+                Some(w) => state.note(format!("Saved {} · {w}", path.display()), NoteKind::Error),
+                None => state.note(format!("Saved {}", path.display()), NoteKind::Ok),
+            }
         }
         Err(e) => state.note(e, NoteKind::Error),
     }

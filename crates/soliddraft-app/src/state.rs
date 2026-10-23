@@ -88,6 +88,12 @@ pub enum AppAction {
     TogglePanel(crate::panels::Side),
     ShowShortcuts,
     ShowAbout,
+    /// Opens the Recover documents window.
+    ShowRecovery,
+    /// Opens the document in a recovery copy, in place of the open one of its kind.
+    RestoreRecovery(PathBuf),
+    /// Deletes a recovery copy the user does not want.
+    DiscardRecovery(PathBuf),
     Quit,
     /// Everything the drawing tab does.
     Drawing(crate::drawing::DrawingAction),
@@ -417,6 +423,9 @@ pub struct AppState {
     pub revisions: Arc<dyn soliddraft_document::RevisionStore>,
     /// The commands run lately and the pinned ones, for the command search.
     pub commands: crate::commands::History,
+    /// Autosave and the copies found after a crash. `None` until the app starts it, and
+    /// in tests and automated runs that do not.
+    pub recovery: Option<crate::recovery::Recovery>,
     actions: Vec<AppAction>,
 }
 
@@ -450,6 +459,7 @@ impl AppState {
             layout: crate::panels::Layout::load(),
             revisions: Arc::new(soliddraft_document::CacheOnlyStore::new()),
             commands: crate::settings::command_history(),
+            recovery: None,
             actions: Vec::new(),
         }
     }

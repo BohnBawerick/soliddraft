@@ -21,6 +21,7 @@ pub mod locations;
 pub mod panels;
 pub mod platform;
 pub mod properties;
+pub mod recovery;
 pub mod ribbon;
 pub mod settings;
 pub mod sketcher;

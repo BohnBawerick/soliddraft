@@ -67,6 +67,13 @@ The drawing file has `drawing.json` (required), `cache/views/<id>.json` (optiona
 view's line work) and `thumbnail.png` (optional). Entries carry a fixed timestamp, so the
 same document gives the same bytes.
 
+`thumbnail.png` is the same optional section in every kind: a small picture a start page
+or a file browser can show without opening the document
+(`soliddraft_document::thumbnail`). A drawing's is its first sheet, 512 pixels wide. A
+part saved from the app gets a 512 by 384 picture from the viewport's own renderer,
+drawn into a texture with the part fitted from the default view; a part saved without a
+GPU, or from the command line, has none. Thumbnails are outside both hashes.
+
 ## Hashes
 
 The semantic hash is the document's revision. It is BLAKE3 over the canonical JSON of the
@@ -229,6 +236,56 @@ Every document writer, the drawing exports and the settings file go through
 `save_atomic`: the bytes go to a hidden temporary file in the target's folder, are flushed,
 and the temporary file is renamed over the target. A failed save leaves the previous file
 whole.
+
+## Backups
+
+Saving from the app keeps the previous version of the file when the new bytes differ
+(`soliddraft_document::Backups`). Backup 1 is the newest; older ones move up a number and
+those past the count are deleted. Saving unchanged bytes keeps the backups as they are.
+Backups sit beside the document as `bracket.dwprt.1.bak`, or in a backup folder as
+`bracket.dwprt.<folder tag>.1.bak`, where the tag tells apart documents with the same
+name in different folders. The `.bak` ending keeps a backup out of the folder index, so a
+reference never resolves to one. A backup that cannot be made does not stop the save;
+the status bar says so.
+
+## Autosave and recovery
+
+While a part or drawing has unsaved changes, autosave writes a recovery copy of it into
+this run's session folder, `recovery/session-<pid>-<time>/` in the config directory. A
+copy is due when the interval has passed since the first unsaved edit, or sooner after
+the set number of edits (`soliddraft_document::autosave`). The copy is made without the
+display meshes or the drawing's thumbnail, and a writer thread puts it on disk, so the
+interface does not wait. It is written atomically and never touches the user's file.
+Saving a document, or replacing it with New or Open, deletes its copy; quitting deletes
+the session folder.
+
+A recovery copy, `<id>.dwprt.recovery` or `<id>.dwdrw.recovery`, is a zip of
+`recovery.json` (`soliddraft-recovery/1`: id, kind, name, the file's path, when it was
+written, its revision) and `document`, the document file's bytes.
+
+Each running app holds a lock on its session folder's `session.lock`. At start, a session
+folder whose lock is free belonged to an app that ended without quitting. Its copies are
+offered for restore when the document was never saved, its file is gone or unreadable,
+or the file has another revision and was saved before the copy was written. Copies whose
+work the file already holds are deleted. Damaged copies are reported once and moved to
+`recovery/damaged/`. A restored document opens with unsaved changes at its old path, and
+its copy stays protected until it is saved. Offers left undecided stay for the next
+start.
+
+The settings file holds the policy under `documents`:
+
+```json
+{
+  "documents": {
+    "autosave": { "enabled": true, "interval_seconds": 120, "edits": 10 },
+    "recovery_folder": "/fast/disk/soliddraft-recovery",
+    "backups": { "count": 1, "folder": "/backups/soliddraft" }
+  }
+}
+```
+
+Every key is optional. `edits: 0` waits for the interval only, and `count: 0` keeps no
+backups. The browser build has no autosave or backups: its files are downloads.
 
 ## Command line
 

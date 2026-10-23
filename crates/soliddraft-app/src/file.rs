@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use soliddraft_document::DocKind;
-pub use soliddraft_model::file::{EXTENSION, FORMAT, LEGACY_EXTENSION};
+pub use soliddraft_model::file::{EXTENSION, Extras, FORMAT, LEGACY_EXTENSION};
 
 /// The extensions the Open dialog offers: parts and drawings, current and old names.
 pub const OPEN_EXTENSIONS: [&str; 4] = [
@@ -22,19 +22,43 @@ pub const OPEN_EXTENSIONS: [&str; 4] = [
 const RECENT_LIMIT: usize = 8;
 
 /// Saves the part atomically, under `.dwprt` when `path` names a `.dwpart` or has no
-/// extension. The part keeps its id, whatever the name.
-pub fn save(doc: &mut Document, path: &Path) -> Result<(), String> {
+/// extension, keeping backups as the settings say. The part keeps its id, whatever the
+/// name. Returns a warning when the backup could not be made.
+pub fn save(doc: &mut Document, path: &Path) -> Result<Option<String>, String> {
+    save_with(doc, path, &Extras::default())
+}
+
+/// Saves the part as [`save`] does, with what `extras` adds, such as a thumbnail.
+pub fn save_with(doc: &mut Document, path: &Path, extras: &Extras<'_>) -> Result<Option<String>, String> {
     let path = &with_extension(path);
-    #[cfg(not(target_arch = "wasm32"))]
-    doc.model().save(path).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-    // The browser downloads the file instead.
-    #[cfg(target_arch = "wasm32")]
-    crate::platform::write_file(path, &doc.model().to_bytes().map_err(|e| format!("cannot save the part: {e}"))?)?;
+    let bytes = doc.model().to_bytes_with(extras).map_err(|e| format!("cannot save the part: {e}"))?;
+    let warning = write_document(path, &bytes)?;
     doc.path = Some(path.to_path_buf());
     doc.name = part_name(path);
     doc.dirty = false;
     remember(path);
-    Ok(())
+    Ok(warning)
+}
+
+/// Writes the file of a document the user saved: atomically, keeping backups of the
+/// previous version as the settings say (`settings::documents`). A backup that cannot
+/// be made does not stop the save; the warning returned says so. The browser downloads
+/// the file instead.
+pub fn write_document(path: &Path, bytes: &[u8]) -> Result<Option<String>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let backups = crate::settings::documents().backups;
+        match backups.save(path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))? {
+            soliddraft_document::BackupOutcome::Failed(e) => {
+                Ok(Some(format!("no backup of the previous version: {e}")))
+            }
+            _ => Ok(None),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        crate::platform::write_file(path, bytes).map(|()| None)
+    }
 }
 
 /// Opens a part file and rebuilds it. A part with a broken feature still opens;
