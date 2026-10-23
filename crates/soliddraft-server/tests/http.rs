@@ -44,16 +44,18 @@ impl Transport for Http {
     }
 }
 
-fn web_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("soliddraft-server-http-{}", std::process::id()));
+/// A web directory of the test's own. Tests run in parallel, and `fs::write` empties a file
+/// before it fills it, so a shared page could be served empty while another test rewrites it.
+fn web_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("soliddraft-server-http-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("index.html"), "<canvas id=soliddraft></canvas>").unwrap();
     dir
 }
 
-fn start(provider: Result<Arc<dyn Provider>, String>) -> String {
+fn start(name: &str, provider: Result<Arc<dyn Provider>, String>) -> String {
     let config = Config {
-        web_dir: web_dir(),
+        web_dir: web_dir(name),
         kernel: Arc::new(SmlibKernel::new()),
         provider,
         session_idle: Duration::from_secs(600),
@@ -69,7 +71,7 @@ fn remote(base: &str, session: &str) -> RemoteKernel {
 
 #[test]
 fn the_kernel_contract_holds_over_http() {
-    let base = start(Err("off".into()));
+    let base = start("contract", Err("off".into()));
     let k = remote(&base, "contract-session-1");
     contract::operations_build_what_they_say(&k);
     contract::failed_operations_return_errors(&k);
@@ -79,7 +81,7 @@ fn the_kernel_contract_holds_over_http() {
 
 #[test]
 fn closing_a_session_releases_its_bodies() {
-    let base = start(Err("off".into()));
+    let base = start("close", Err("off".into()));
     let mine = remote(&base, "session-mine-1");
     let theirs = remote(&base, "session-theirs-1");
     let block = contract::block(&mine);
@@ -95,7 +97,7 @@ fn closing_a_session_releases_its_bodies() {
 
 #[test]
 fn a_request_without_a_session_is_refused() {
-    let base = start(Err("off".into()));
+    let base = start("no-session", Err("off".into()));
     let client = reqwest::blocking::Client::builder().no_proxy().build().unwrap();
     let resp = client.post(format!("{base}/api/kernel")).body(r#"{"op":"backend"}"#).send().unwrap();
     assert_eq!(resp.status().as_u16(), 400);
@@ -116,7 +118,7 @@ fn chat() -> String {
 fn the_assistant_streams_through_the_relay() {
     let provider: Arc<dyn Provider> =
         Arc::new(MockProvider::new(vec![MockTurn::text("A 6 mm hole through the flange.")]));
-    let base = start(Ok(provider));
+    let base = start("relay", Ok(provider));
     let info = Http::new(&base, "info-session").client.get(format!("{base}/api/info")).send().unwrap().text().unwrap();
     let info: serde_json::Value = serde_json::from_str(&info).unwrap();
     assert_eq!(info["assistant"]["on"], true);
@@ -141,7 +143,7 @@ fn the_assistant_streams_through_the_relay() {
 
 #[test]
 fn without_a_model_the_assistant_says_why() {
-    let base = start(Err("no key here".into()));
+    let base = start("no-model", Err("no key here".into()));
     let resp = Http::new(&base, "chat-session-2").post("/api/assistant", &chat());
     assert_eq!(resp.status().as_u16(), 503);
     assert_eq!(resp.text().unwrap(), "no key here");
@@ -149,7 +151,7 @@ fn without_a_model_the_assistant_says_why() {
 
 #[test]
 fn the_page_is_served_and_paths_stay_inside() {
-    let base = start(Err("off".into()));
+    let base = start("page", Err("off".into()));
     let client = reqwest::blocking::Client::builder().no_proxy().build().unwrap();
     let page = client.get(format!("{base}/")).send().unwrap();
     assert_eq!(page.status().as_u16(), 200);
@@ -160,7 +162,7 @@ fn the_page_is_served_and_paths_stay_inside() {
 
 #[test]
 fn version_names_the_commit() {
-    let base = start(Err("off".into()));
+    let base = start("version", Err("off".into()));
     let client = reqwest::blocking::Client::builder().no_proxy().build().unwrap();
     let resp = client.get(format!("{base}/version")).send().unwrap();
     assert_eq!(resp.status().as_u16(), 200);
