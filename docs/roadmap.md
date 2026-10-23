@@ -140,7 +140,7 @@ vendored dependencies. Do not copy its screenshots, fonts or icons.
 | Command palette and the phase 1 interface halves | Stays | Kernel-independent. |
 | The SolidWorks comparison corpus: recipe generator, comparator, SolidWorks and Onshape runners | Changes | Its comparator targets Catallax. The SMLib column goes with SMLib. The SolidWorks run waits until Catallax builds the first three target parts, so it measures the kernel that ships. |
 | Committing the corpus tooling | Stays | Without it the corpus cannot be rebuilt or extended toward the target parts. |
-| Making the repository public | Stays | Before it opens, README.md's "the kernel can be swapped without changing the app" line is replaced by what is true. |
+| Making the repository public | Done | Before it opened, README.md's "the kernel can be swapped without changing the app" line was replaced by what is true. |
 
 ## 10. Next items
 

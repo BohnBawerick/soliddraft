@@ -95,7 +95,7 @@ The other `DRAFTWELL_*` runtime variables remain aliases for the matching
 If a provider has no `soliddraft` keychain entry, the app reads its old `draftwell`
 entry. Saving a key writes only `soliddraft`; deleting it removes both entries.
 
-Packaged releases have no environment variables, so keys are entered in the app: Provider on the Assistant tab opens the assistant settings, with one key row per provider beside the provider picker. Saving a key stores it in the OS keychain at once; the row then shows only its last four characters, with Replace and Delete. A key from the environment shows the same way and says it overrides the keychain. Save and reconnect starts using the change.
+An app started without environment variables, as a packaged release will be, takes its keys in the app: Provider on the Assistant tab opens the assistant settings, with one key row per provider beside the provider picker. Saving a key stores it in the OS keychain at once; the row then shows only its last four characters, with Replace and Delete. A key from the environment shows the same way and says it overrides the keychain. Save and reconnect starts using the change.
 
 From the command line:
 
