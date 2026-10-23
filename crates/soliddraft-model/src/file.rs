@@ -21,6 +21,8 @@
 //!   display data and the part has a body: its meshes at two display levels, so it can
 //!   be shown without a rebuild (see [`display`](crate::display)). Optional, outside both
 //!   hashes.
+//! - `thumbnail.png`, when the app saved the part with one: a small picture of the part
+//!   for a start page or a file browser. Optional, outside both hashes.
 //!
 //! Files from before the envelope (`.dwpart`, `soliddraft-part/1`) hold the same truth
 //! as `recipe.json` beside a `meta.json`. They still open, with an id derived from their
@@ -177,6 +179,10 @@ impl Document {
 
     /// The part's manifest as this version writes it.
     pub fn manifest(&self) -> Manifest {
+        self.manifest_for(&Extras::default())
+    }
+
+    fn manifest_for(&self, extras: &Extras<'_>) -> Manifest {
         let backend = self.kernel.backend();
         let mut m = Manifest::new(self.id, DocKind::Part, self.semantic_hash());
         m.kernel = Some(format!("{} {}", backend.name, backend.version));
@@ -185,27 +191,36 @@ impl Document {
         if !self.settings.is_default() {
             m.sections.push(Section::optional(settings::ENTRY));
         }
-        if self.saves_display_data() {
+        if self.saves_display_data(extras) {
             m.sections.push(Section::optional(display::FOLDER));
+        }
+        if extras.thumbnail.is_some() {
+            m.sections.push(Section::optional(manifest::THUMBNAIL));
         }
         m
     }
 
-    /// True when saving writes display data: the settings ask for it and there is a body.
-    fn saves_display_data(&self) -> bool {
-        self.settings.save_display_data && self.body().is_some()
+    /// True when saving writes display data: the settings ask for it, the save does not
+    /// leave it out and there is a body.
+    fn saves_display_data(&self, extras: &Extras<'_>) -> bool {
+        self.settings.save_display_data && !extras.no_display_data && self.body().is_some()
     }
 
     /// The part file's bytes. With display data on, the part is tessellated at its
     /// coarse and standard levels; a kernel that cannot do it leaves the data out
     /// rather than failing the save.
     pub fn to_bytes(&self) -> Result<Vec<u8>, FileError> {
+        self.to_bytes_with(&Extras::default())
+    }
+
+    /// The part file's bytes, with what `extras` adds or leaves out.
+    pub fn to_bytes_with(&self, extras: &Extras<'_>) -> Result<Vec<u8>, FileError> {
         let mut entries = vec![Entry::new(PART, self.part_json().into_bytes())];
         if !self.settings.is_default() {
             entries.push(Entry::new(settings::ENTRY, self.settings.to_json().into_bytes()));
         }
-        let mut m = self.manifest();
-        if self.saves_display_data() {
+        let mut m = self.manifest_for(extras);
+        if self.saves_display_data(extras) {
             match self.display_data(&self.settings.viewport, &display::SAVED) {
                 Some(Ok(data)) => {
                     for d in data {
@@ -214,6 +229,9 @@ impl Document {
                 }
                 _ => m.sections.retain(|s| s.name != display::FOLDER),
             }
+        }
+        if let Some(png) = extras.thumbnail {
+            entries.push(Entry::stored(manifest::THUMBNAIL, png));
         }
         Ok(manifest::write_package(&m, &entries)?)
     }
@@ -298,6 +316,16 @@ impl Document {
     pub fn open(path: impl AsRef<Path>, kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
         Self::from_bytes(&std::fs::read(path)?, kernel)
     }
+}
+
+/// What a save adds to the part file or leaves out of it, beyond the truth.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Extras<'a> {
+    /// A PNG of the part to store as `thumbnail.png`.
+    pub thumbnail: Option<&'a [u8]>,
+    /// Leave out the display meshes whatever the settings say, for a quick copy such as
+    /// autosave's recovery copy. The part opens from it with a rebuild.
+    pub no_display_data: bool,
 }
 
 /// Removes every `label` key: the words a reference keeps for repair prompts.
