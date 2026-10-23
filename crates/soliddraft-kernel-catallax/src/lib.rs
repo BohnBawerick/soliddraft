@@ -60,11 +60,13 @@ impl Solid {
         {
             return Ok(mesh.clone());
         }
-        let mesh = Arc::new(
+        let mesh = Arc::new(if options.chord_tolerance == MeshOptions::default().chord_tolerance {
+            self.app.display.value.clone()
+        } else {
             numerical(query, |dec| mesh_body(&self.app.built.model, self.app.built.result, options, dec))
                 .map_err(|e| query_error(query, e))?
-                .value,
-        );
+                .value
+        });
         // Keep one tolerance per immutable body so triangles and edges share the same mesh.
         *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
         Ok(mesh)
@@ -111,6 +113,7 @@ impl State {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(self.id());
+        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
         self.bodies.insert(
             body,
             Stored {
@@ -120,7 +123,7 @@ impl State {
                 solid: Some(Arc::new(Solid {
                     app,
                     ids,
-                    display: Mutex::new(None),
+                    display: Mutex::new(Some(display)),
                     topology: OnceLock::new(),
                     mass: OnceLock::new(),
                 })),
@@ -463,6 +466,7 @@ impl Kernel for CatallaxKernel {
     fn topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.observe("topology", || {
             let solid = self.solid(body)?;
+            // Topology uses the original certified display, independent of later mesh requests.
             solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids)).clone()
         })
     }

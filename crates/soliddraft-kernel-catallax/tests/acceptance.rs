@@ -302,3 +302,50 @@ fn face_frame_normal_sweeps_use_the_certified_frame_without_changing_other_direc
     assert_eq!(direction.0[0], catallax_recipe::Number::parse("2e-19").unwrap());
     k.release(sheet).unwrap();
 }
+
+#[test]
+fn certified_application_display_serves_matching_requests_and_preserves_finer_meshing() {
+    let k = CatallaxKernel::with_operation_log();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    k.take_diagnostics().unwrap();
+    let topology = k.topology(body).unwrap();
+    assert_eq!(topology.display_chord_height, Some(0.01));
+    let log = k.take_diagnostics().unwrap();
+    assert!(log["calls"].as_array().unwrap().iter().all(|call| {
+        call["operation_log"]["operations"].as_array().unwrap().iter().all(|op| op["operation"] == "face_area")
+    }));
+
+    // Half the requested chord is reserved for the unchanged f32 rounding check.
+    let params = TessellationParams { chord_height: 0.02, ..Default::default() };
+    let original = k.tessellate(body, &params).unwrap();
+    let edges = k.tessellate_edges(body, &params).unwrap();
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"].as_array().unwrap().len(), 2);
+    assert!(
+        log["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|call| call["operation_log"]["operations"].as_array().unwrap().is_empty())
+    );
+
+    let finer = TessellationParams { chord_height: 0.005, ..params };
+    let refined = k.tessellate(body, &finer).unwrap();
+    assert!(refined.triangle_count() > original.triangle_count());
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"][0]["operation_log"]["operations"][0]["operation"], "tessellate");
+
+    assert_eq!(k.tessellate(body, &params).unwrap(), original);
+    assert_eq!(k.tessellate_edges(body, &params).unwrap(), edges);
+    assert_eq!(k.topology(body).unwrap(), topology);
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"].as_array().unwrap().len(), 3);
+    assert!(
+        log["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|call| call["operation_log"]["operations"].as_array().unwrap().is_empty())
+    );
+    k.release(body).unwrap();
+}
