@@ -349,3 +349,14 @@ fn certified_application_display_serves_matching_requests_and_preserves_finer_me
     );
     k.release(body).unwrap();
 }
+
+#[test]
+fn captured_manual_slot_question_builds_without_changing_its_geometry() {
+    let question: serde_json::Value = serde_json::from_str(include_str!("fixtures/slot-native-question.json")).unwrap();
+    let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();
+    let body =
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("the captured manual slot must build with its original squared radii");
+    assert!(body.built.model.check(body.built.result).is_empty());
+    assert!(!body.display.value.triangles.is_empty());
+}
