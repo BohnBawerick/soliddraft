@@ -12,9 +12,9 @@ Extrudes, cuts, booleans and rational-frame revolves use Catallax stage 1. A ref
 
 ## Display and drawings
 
-Catallax supplies shared-edge display meshes with chord bounds, face handles and edge polylines. The adapter reserves part of the chord bound for conversion to float display positions and refuses a request that cannot survive that conversion. Legacy angular, edge-length and aspect-ratio controls have no equivalent guarantee and are reported in `Mesh::unavailable_controls`.
+Catallax supplies shared-edge display meshes with chord bounds, face handles and edge polylines. The adapter reserves part of the chord bound for conversion to float display positions and refuses a request that cannot survive that conversion. The adapter does not yet forward Catallax's angular and edge-length controls or convert its aspect-ratio report. It lists those requested controls in `Mesh::unavailable_controls`.
 
-Topology contains exact definitions and incidence. Face centroids, edge lengths, midpoints and bounds use the display mesh where the application entry lacks exact queries. `Topology::display_chord_height` identifies those estimates. They never decide geometry or operation success.
+Topology contains exact definitions and incidence. Face centroids, edge lengths, midpoints and bounds still use the display mesh until the adapter wires Catallax's proven queries. `Topology::display_chord_height` identifies those estimates. They never decide geometry or operation success.
 
 Drawings use polygon hidden-line removal on the meshes and Catallax booleans for plane sections. Whole lines and untrimmed circles keep their geometry after polygon visibility. Other curves retain polylines until conversion queries arrive. Drawing documents and SVG, PDF and DXF exports keep their formats.
 
