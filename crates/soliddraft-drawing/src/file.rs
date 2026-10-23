@@ -47,7 +47,7 @@ const THUMBNAIL_PX: u32 = 512;
 
 const DRAWING: &str = "drawing.json";
 const VIEWS: &str = "cache/views/";
-const THUMBNAIL: &str = "thumbnail.png";
+const THUMBNAIL: &str = manifest::THUMBNAIL;
 
 /// What the envelope says about a drawing file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -112,6 +112,12 @@ pub fn manifest(drawing: &Drawing, meta: &FileMeta) -> Result<Manifest, DrawingE
 
 /// The file's bytes. Always this version's format, whatever `meta.format` says.
 pub fn to_bytes(drawing: &Drawing, meta: &FileMeta) -> Result<Vec<u8>, DrawingError> {
+    to_bytes_with(drawing, meta, true)
+}
+
+/// The file's bytes, with the thumbnail or without it. Autosave's recovery copies leave
+/// it out: it is the slowest part of the file to make.
+pub fn to_bytes_with(drawing: &Drawing, meta: &FileMeta, thumbnail: bool) -> Result<Vec<u8>, DrawingError> {
     let mut bare = drawing.clone();
     for v in bare.sheets.iter_mut().flat_map(|s| s.views.iter_mut()) {
         v.geometry = ViewGeometry::default();
@@ -120,7 +126,7 @@ pub fn to_bytes(drawing: &Drawing, meta: &FileMeta) -> Result<Vec<u8>, DrawingEr
     for v in drawing.sheets.iter().flat_map(|s| &s.views) {
         entries.push(Entry::new(format!("{VIEWS}{}.json", v.id.0), serde_json::to_vec(&v.geometry)?));
     }
-    if !drawing.sheets.is_empty() {
+    if thumbnail && !drawing.sheets.is_empty() {
         let png = export::thumbnail::png(&display::layout_sheet(drawing, 0), THUMBNAIL_PX)?;
         entries.push(Entry::stored(THUMBNAIL, png));
     }

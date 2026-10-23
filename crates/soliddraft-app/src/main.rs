@@ -109,6 +109,10 @@ fn main() -> eframe::Result {
         i += 1;
     }
 
+    // Benchmarks and screenshots leave autosave off, so they never offer a recovery.
+    let documents = soliddraft_app::settings::documents();
+    let recovery = documents.recovery_folder().filter(|_| !automation.bench && automation.screenshot.is_none());
+
     let doc = if automation.bench {
         soliddraft_app::bench_document()
     } else if demo {
@@ -143,6 +147,9 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let mut app = SolidDraftApp::new(cc, doc, automation);
+            if let Some(root) = recovery {
+                app.start_recovery(&root, documents.autosave);
+            }
             if let Some(path) = open {
                 soliddraft_app::app::open_at_start(&mut app, path);
             }

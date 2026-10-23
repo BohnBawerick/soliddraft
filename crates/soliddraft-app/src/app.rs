@@ -245,6 +245,10 @@ pub struct SolidDraftApp {
     bench: Option<Bench>,
     screenshot_requested: bool,
     title: String,
+    /// The GPU the window draws with, for part thumbnails. Desktop only.
+    render_state: Option<egui_wgpu::RenderState>,
+    /// The renderer part thumbnails are drawn with, made at the first save.
+    offscreen: Option<crate::viewport::offscreen::Offscreen>,
 }
 
 impl SolidDraftApp {
@@ -300,6 +304,81 @@ impl SolidDraftApp {
             bench,
             screenshot_requested: false,
             title: String::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            render_state: cc.wgpu_render_state.clone(),
+            #[cfg(target_arch = "wasm32")]
+            render_state: None,
+            offscreen: None,
+        }
+    }
+
+    /// Starts autosave with its session folder under `root`, and opens the Recover
+    /// documents window when a session that ended without quitting left copies. The
+    /// desktop binary calls it; tests and automated runs leave autosave off.
+    pub fn start_recovery(&mut self, root: &std::path::Path, policy: soliddraft_document::AutosavePolicy) {
+        match crate::recovery::Recovery::start(root, policy) {
+            Ok(recovery) => self.state.recovery = Some(recovery),
+            Err(e) => self.state.note(format!("Autosave is off: {e}"), NoteKind::Error),
+        }
+    }
+
+    /// A PNG of the part as the viewport would first show it, for its file. `None` when
+    /// there is no body or no GPU, or the picture failed; the save goes on without it.
+    fn thumbnail(&mut self) -> Option<Vec<u8>> {
+        let rs = self.render_state.as_ref()?;
+        let doc = &self.state.doc;
+        if doc.display_body().is_none() || doc.meshes.is_empty() {
+            return None;
+        }
+        let offscreen = self.offscreen.get_or_insert_with(|| {
+            let tier = Tier::of(rs.adapter.get_info().backend);
+            crate::viewport::offscreen::Offscreen::new(&rs.device, &rs.queue, tier)
+        });
+        let picture = offscreen.capture(&rs.device, &rs.queue, doc, crate::viewport::offscreen::THUMBNAIL);
+        match picture.and_then(|p| p.png()) {
+            Ok(png) => Some(png),
+            Err(e) => {
+                log::warn!("no thumbnail for the part: {e}");
+                None
+            }
+        }
+    }
+
+    /// Opens the document in a recovery copy in place of the open one of its kind.
+    fn restore(&mut self, file: &std::path::Path) {
+        use soliddraft_document::DocKind;
+        let Some(recovery) = self.state.recovery.as_mut() else { return };
+        let (record, bytes) = match recovery.restore(file) {
+            Ok(taken) => taken,
+            Err(e) => return self.state.note(e, NoteKind::Error),
+        };
+        match record.kind {
+            DocKind::Drawing => match crate::drawing::document::DrawingDoc::from_bytes(&bytes) {
+                Ok(mut doc) => {
+                    doc.path = record.path.clone();
+                    doc.touch();
+                    let edits = doc.edits;
+                    crate::drawing::restore(&mut self.state, &mut self.dock, doc);
+                    if let Some(r) = self.state.recovery.as_mut() {
+                        r.restored(record.id, DocKind::Drawing, edits);
+                    }
+                }
+                Err(e) => self.state.note(format!("cannot restore {}: {e}", record.name), NoteKind::Error),
+            },
+            _ => match file::open_bytes(&record.name, &bytes, self.state.doc.kernel().clone()) {
+                Ok(mut doc) => {
+                    doc.name = record.name.clone();
+                    doc.path = record.path.clone();
+                    doc.touch();
+                    let edits = doc.edits;
+                    self.opened(Ok(doc));
+                    self.state.note(format!("Restored {} · not saved yet", record.name), NoteKind::Ok);
+                    if let Some(r) = self.state.recovery.as_mut() {
+                        r.restored(record.id, DocKind::Part, edits);
+                    }
+                }
+                Err(e) => self.state.note(format!("cannot restore {}: {e}", record.name), NoteKind::Error),
+            },
         }
     }
 
@@ -401,6 +480,12 @@ impl SolidDraftApp {
                 ui.separator();
                 menu_command(ui, st, "save", "Save");
                 menu_command(ui, st, "save_as", "Save as…");
+                if st.recovery.as_ref().is_some_and(|r| !r.offers.is_empty())
+                    && ui.button("Recover documents…").clicked()
+                {
+                    st.push(AppAction::ShowRecovery);
+                    ui.close();
+                }
                 ui.separator();
                 menu_command(ui, st, "quit", "Quit");
             });
@@ -1106,11 +1191,16 @@ impl SolidDraftApp {
                 });
                 let Some(path) = path else { return };
                 let path = file::with_extension(&path);
-                match file::save(&mut self.state.doc, &path) {
-                    Ok(()) => {
+                let thumbnail = self.thumbnail();
+                let extras = file::Extras { thumbnail: thumbnail.as_deref(), ..Default::default() };
+                match file::save_with(&mut self.state.doc, &path, &extras) {
+                    Ok(warning) => {
                         self.state.remember_revision();
                         self.state.recent = file::recent();
-                        self.state.note(format!("Saved {}", path.display()), NoteKind::Ok);
+                        match warning {
+                            Some(w) => self.state.note(format!("Saved {} · {w}", path.display()), NoteKind::Error),
+                            None => self.state.note(format!("Saved {}", path.display()), NoteKind::Ok),
+                        }
                     }
                     Err(e) => self.state.note(e, NoteKind::Error),
                 }
@@ -1141,6 +1231,17 @@ impl SolidDraftApp {
             }
             AppAction::ShowShortcuts => self.state.show_shortcuts = true,
             AppAction::ShowAbout => self.state.show_about = true,
+            AppAction::ShowRecovery => {
+                if let Some(r) = self.state.recovery.as_mut() {
+                    r.show = true;
+                }
+            }
+            AppAction::RestoreRecovery(file) => self.restore(&file),
+            AppAction::DiscardRecovery(file) => {
+                if let Some(Err(e)) = self.state.recovery.as_mut().map(|r| r.discard(&file)) {
+                    self.state.note(e, NoteKind::Error);
+                }
+            }
             AppAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }
@@ -1242,6 +1343,7 @@ impl SolidDraftApp {
         self.assistant_settings(ctx);
         crate::drawing::reference::window(ctx, &mut self.state);
         crate::locations::window(ctx, &mut self.state);
+        crate::recovery::window(ctx, &mut self.state);
     }
 
     /// The assistant settings dialog: the provider, an API key per provider and the models.
@@ -1530,7 +1632,33 @@ pub fn open_at_start(app: &mut SolidDraftApp, path: PathBuf) {
     app.state.push(AppAction::Open(Some(path)));
 }
 
+impl SolidDraftApp {
+    /// Hands autosave the documents as this frame left them, notes any copy that failed,
+    /// and wakes the app when the next copy is due.
+    fn autosave(&mut self, ctx: &egui::Context) {
+        let Some(recovery) = self.state.recovery.as_mut() else { return };
+        let backend = self.state.doc.kernel().backend();
+        let kernel = format!("{} {}", backend.name, backend.version);
+        let drawing = self.state.drawing.session.as_ref().map(|s| &s.doc);
+        let wait = recovery.tick(&self.state.doc, drawing, &kernel, std::time::Instant::now());
+        let failures = std::mem::take(&mut recovery.failures);
+        if let Some(wait) = wait {
+            ctx.request_repaint_after(wait);
+        }
+        if let Some(failure) = failures.into_iter().last() {
+            self.state.note(failure, NoteKind::Error);
+        }
+    }
+}
+
 impl eframe::App for SolidDraftApp {
+    /// A clean exit: autosave finishes and deletes this session's recovery copies.
+    fn on_exit(&mut self) {
+        if let Some(recovery) = self.state.recovery.take() {
+            recovery.close();
+        }
+    }
+
     fn ui(&mut self, root: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = &root.ctx().clone();
         log::debug!("ui frame {}", self.frame);
@@ -1594,6 +1722,7 @@ impl eframe::App for SolidDraftApp {
             self.state.layout.save();
             self.saved_layout = self.state.layout;
         }
+        self.autosave(ctx);
         self.automation_step(ctx, frame);
         if self.state.note.as_ref().is_some_and(|n| n.at.elapsed() < Duration::from_secs(6)) {
             ctx.request_repaint_after(Duration::from_millis(500));

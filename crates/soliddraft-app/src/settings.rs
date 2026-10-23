@@ -1,8 +1,8 @@
 //! The app's settings file, `settings.json` in the config directory next to the
 //! recent-files list. It holds the assistant's provider and model, which side areas are
 //! shown and how wide, the pinned and recent commands, File locations: the folders and
-//! files where reference files are found (`soliddraft_document::locations`), and the
-//! viewport's default look. The user's own material library sits beside it
+//! files where reference files are found (`soliddraft_document::locations`), the
+//! viewport's default look, and autosave, recovery and backups ([`DocumentSettings`]). The user's own material library sits beside it
 //! ([`user_library_path`]).
 //!
 //! Saving rewrites only the sections the app knows and keeps every other key, so a
@@ -13,7 +13,7 @@ use crate::panels::Layout;
 use crate::viewport::look::Preset;
 use serde_json::Value;
 use soliddraft_assistant::AssistantSettings;
-use soliddraft_document::FileLocations;
+use soliddraft_document::{AutosavePolicy, Backups, FileLocations};
 use soliddraft_materials::{Catalog, Library, Origin};
 use std::path::{Path, PathBuf};
 
@@ -157,6 +157,41 @@ fn view_in(file: &Path) -> ViewSettings {
     serde_json::from_value(read(file)["view"].clone()).unwrap_or_default()
 }
 
+/// How documents are protected: autosave's interval and edit count, where recovery
+/// copies go, and how many backups a save keeps and where. The `documents` key of the
+/// settings file.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct DocumentSettings {
+    pub autosave: AutosavePolicy,
+    /// Where recovery copies go. `None` is `recovery` in the config directory.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_folder: Option<PathBuf>,
+    pub backups: Backups,
+}
+
+impl DocumentSettings {
+    /// The recovery folder: the one set, or `recovery` in the config directory.
+    pub fn recovery_folder(&self) -> Option<PathBuf> {
+        self.recovery_folder.clone().or_else(|| crate::file::config_dir().map(|d| d.join("recovery")))
+    }
+}
+
+/// The document settings, or the defaults when the file is missing or unreadable.
+pub fn documents() -> DocumentSettings {
+    crate::file::config_read_file("settings.json").map(|f| documents_in(&f)).unwrap_or_default()
+}
+
+/// Saves the document settings.
+pub fn save_documents(documents: &DocumentSettings) -> Result<(), String> {
+    let Some(file) = settings_file() else { return Err("no config directory".into()) };
+    save_section_in(&file, "documents", documents)
+}
+
+fn documents_in(file: &Path) -> DocumentSettings {
+    serde_json::from_value(read(file)["documents"].clone()).unwrap_or_default()
+}
+
 /// Rewrites one section atomically and keeps the others as they are.
 fn save_section_in(file: &Path, key: &str, value: &impl serde::Serialize) -> Result<(), String> {
     let source = if settings_file().as_deref() == Some(file) {
@@ -222,6 +257,25 @@ mod tests {
         assert_eq!(view_in(&file).preset, Preset::Realistic);
         let all: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(all["view"]["preset"], "realistic");
+        assert_eq!(all["theme"], "dark");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn document_settings_default_and_persist() {
+        let dir = std::env::temp_dir().join(format!("soliddraft-documents-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("settings.json");
+        std::fs::write(&file, r#"{"documents":{"autosave":{"interval_seconds":30}},"theme":"dark"}"#).unwrap();
+        let mut d = documents_in(&file);
+        assert_eq!(d.autosave, AutosavePolicy { interval_seconds: 30, ..Default::default() }, "missing keys default");
+        assert_eq!(d.backups, Backups::default());
+        d.backups = Backups { count: 3, folder: Some(dir.join("backups")) };
+        d.recovery_folder = Some(dir.join("recovery"));
+        save_section_in(&file, "documents", &d).unwrap();
+        assert_eq!(documents_in(&file), d);
+        assert_eq!(d.recovery_folder(), Some(dir.join("recovery")));
+        let all: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(all["theme"], "dark");
         let _ = std::fs::remove_dir_all(dir);
     }

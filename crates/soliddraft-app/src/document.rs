@@ -633,6 +633,8 @@ pub struct Document {
     pub edges: Vec<NamedEdge>,
     /// Changes since the last save.
     pub dirty: bool,
+    /// Counts every change, so autosave can tell edits apart from redraws.
+    pub edits: u64,
     /// Pick id (index + 1) to entity, rebuilt with the meshes.
     picks: Vec<PickEntry>,
     model: model::Document,
@@ -666,6 +668,7 @@ impl Document {
             faces: Vec::new(),
             edges: Vec::new(),
             dirty: false,
+            edits: 0,
             picks: Vec::new(),
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
@@ -674,6 +677,12 @@ impl Document {
         doc.sync();
         doc.refresh_display();
         doc
+    }
+
+    /// Marks a change: unsaved, and one more edit for autosave.
+    pub fn touch(&mut self) {
+        self.dirty = true;
+        self.edits += 1;
     }
 
     /// The part behind the interface.
@@ -786,14 +795,14 @@ impl Document {
 
     pub fn undo(&mut self) -> Result<String, String> {
         let label = self.model.undo().map_err(|e| e.to_string())?;
-        self.dirty = true;
+        self.touch();
         self.after_change();
         Ok(label)
     }
 
     pub fn redo(&mut self) -> Result<String, String> {
         let label = self.model.redo().map_err(|e| e.to_string())?;
-        self.dirty = true;
+        self.touch();
         self.after_change();
         Ok(label)
     }
@@ -805,7 +814,7 @@ impl Document {
         let label = command.label();
         let commands = self.to_model(command)?;
         let done = self.model.execute(model::Command::Batch { label, commands }).map_err(|e| e.to_string())?;
-        self.dirty = true;
+        self.touch();
         self.after_change();
         let created = done.created.map(app_id);
         if let Some(id) = created
@@ -1021,7 +1030,7 @@ impl Document {
     ) -> Result<(), String> {
         let scope = soliddraft_document::ConfigScope::All;
         self.model.execute(model::Command::SetAppearance { target, appearance, scope }).map_err(|e| e.to_string())?;
-        self.dirty = true;
+        self.touch();
         self.apply_appearances();
         self.mesh_version += 1;
         Ok(())
@@ -1089,7 +1098,7 @@ impl Document {
         }
         self.model.set_settings(settings)?;
         self.quality.set_quality(&quality);
-        self.dirty = true;
+        self.touch();
         Ok(())
     }
 
@@ -1102,7 +1111,7 @@ impl Document {
         let quality = settings.viewport;
         self.model.set_settings(settings)?;
         self.quality.set_quality(&quality);
-        self.dirty = true;
+        self.touch();
         Ok(())
     }
 

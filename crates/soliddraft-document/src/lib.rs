@@ -24,27 +24,39 @@
 //!   phase 0 has the [`CacheOnlyStore`] ([`store`]).
 //! - **File locations.** Where reference files are found: libraries, templates, sheet
 //!   formats, styles, configuration tables, search folders ([`locations`]).
-//! - **Atomic saves.** [`save_atomic`] for every writer ([`save`]).
+//! - **Atomic saves.** [`save_atomic`] for every writer ([`save`]), and backups of the
+//!   previous version when a save replaces a file ([`backup`]).
+//! - **Recovery.** Autosave's recovery copies, written beside nothing the user owns,
+//!   and which of them to offer after a crash ([`recovery`]); when autosave writes one
+//!   ([`autosave`]).
+//! - **Thumbnails.** A small preview image inside the saved document, for a start page
+//!   ([`manifest::THUMBNAIL`], [`thumbnail`]).
 //!
 //! The schema is documented in `docs/documents.md`.
 
+pub mod autosave;
+pub mod backup;
 pub mod hash;
 pub mod id;
 pub mod index;
 pub mod kind;
 pub mod locations;
 pub mod manifest;
+pub mod recovery;
 pub mod reference;
 pub mod resolve;
 pub mod save;
 pub mod store;
 
+pub use autosave::{AutosavePolicy, Trigger};
+pub use backup::{BackupOutcome, Backups};
 pub use hash::ContentHash;
 pub use id::{ConfigScope, ConfigurationId, DisplayStateId, DocumentId};
 pub use index::{FolderIndex, IndexEntry};
 pub use kind::{DRAWING_EXTENSION, DocKind, LEGACY_DRAWING_EXTENSION, LEGACY_PART_EXTENSION, PART_EXTENSION};
 pub use locations::{FileLocations, LocationKind};
-pub use manifest::{EnvelopeError, Identity, Manifest, Package, Section, identify, identify_file};
+pub use manifest::{EnvelopeError, Identity, Manifest, Package, Section, identify, identify_file, thumbnail};
+pub use recovery::{RecoveryCopy, Standing};
 pub use reference::DocRef;
 pub use resolve::{Location, OpenDocument, RefStatus, Resolution, Resolver, Target, Via};
 pub use save::save_atomic;

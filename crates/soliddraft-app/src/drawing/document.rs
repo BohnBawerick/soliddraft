@@ -38,6 +38,8 @@ pub struct DrawingDoc {
     pub drawing: Drawing,
     pub path: Option<PathBuf>,
     pub dirty: bool,
+    /// Counts every change, so autosave can tell edits apart from redraws.
+    pub edits: u64,
     stack: UndoStack,
     /// Model-to-view transforms of the views, from the last projection. Not saved.
     pub transforms: HashMap<ViewId, ViewTransform>,
@@ -59,6 +61,7 @@ impl DrawingDoc {
             drawing,
             path: None,
             dirty: false,
+            edits: 0,
             stack: UndoStack::new(),
             transforms: HashMap::new(),
             circles: HashMap::new(),
@@ -94,13 +97,13 @@ impl DrawingDoc {
 
     pub fn undo(&mut self) -> Option<String> {
         let name = self.stack.undo(&mut self.drawing)?;
-        self.dirty = true;
+        self.touch();
         Some(name.to_owned())
     }
 
     pub fn redo(&mut self) -> Option<String> {
         let name = self.stack.redo(&mut self.drawing)?;
-        self.dirty = true;
+        self.touch();
         Some(name.to_owned())
     }
 
@@ -153,7 +156,7 @@ impl DrawingDoc {
             _ => None,
         };
         let report = self.stack.run(&mut self.drawing, &cmd, p.as_ref()).map_err(|e| e.to_string())?;
-        self.dirty = true;
+        self.touch();
         if let (Some(id), Some(p)) = (remade, p.as_ref())
             && let Ok(index) = soliddraft_drawing::PartIndex::build(p)
             && let Ok(ctx) = project::ViewContext::compute(&self.drawing, p, &index, id)
@@ -245,15 +248,35 @@ impl DrawingDoc {
         display_text(d, &self.style().symbols)
     }
 
-    /// Writes the drawing file and remembers where. The id is kept: saving under
-    /// another name is a rename, not a copy.
-    pub fn save(&mut self, path: &Path, kernel: &str) -> Result<(), String> {
+    /// Marks a change: unsaved, and one more edit for autosave.
+    pub fn touch(&mut self) {
+        self.dirty = true;
+        self.edits += 1;
+    }
+
+    /// The drawing file's bytes, with line work from `kernel`, and the thumbnail unless
+    /// `thumbnail` is false.
+    pub fn to_bytes(&self, kernel: &str, thumbnail: bool) -> Result<Vec<u8>, String> {
         let meta = FileMeta { id: self.id, ..FileMeta::new(kernel, self.drawing.meta.units) };
-        let bytes = file::to_bytes(&self.drawing, &meta).map_err(|e| e.to_string())?;
-        crate::platform::write_file(path, &bytes)?;
+        file::to_bytes_with(&self.drawing, &meta, thumbnail).map_err(|e| e.to_string())
+    }
+
+    /// Writes the drawing file, keeping backups as the settings say, and remembers
+    /// where. The id is kept: saving under another name is a rename, not a copy.
+    /// Returns a warning when the backup could not be made.
+    pub fn save(&mut self, path: &Path, kernel: &str) -> Result<Option<String>, String> {
+        let warning = crate::file::write_document(path, &self.to_bytes(kernel, true)?)?;
         self.path = Some(path.to_path_buf());
         self.dirty = false;
-        Ok(())
+        Ok(warning)
+    }
+
+    /// A drawing from the bytes of a drawing file, such as a recovery copy.
+    pub fn from_bytes(bytes: &[u8]) -> Result<DrawingDoc, String> {
+        let (drawing, meta) = file::from_bytes(bytes).map_err(|e| e.to_string())?;
+        let mut doc = DrawingDoc::new(drawing);
+        doc.id = meta.id;
+        Ok(doc)
     }
 
     /// Opens a drawing file. It shows the part revision it is pinned at; whether the

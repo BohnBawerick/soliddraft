@@ -26,6 +26,9 @@ use crate::reference::DocRef;
 pub const ENVELOPE: &str = "soliddraft-document/1";
 /// The manifest's entry name.
 pub const MANIFEST: &str = "manifest.json";
+/// The optional preview image entry: a PNG a start page or a file browser can show
+/// without opening the document.
+pub const THUMBNAIL: &str = "thumbnail.png";
 
 /// Why a document file could not be read or written.
 #[derive(Debug, thiserror::Error)]
@@ -307,6 +310,11 @@ pub fn identify<R: Read + Seek>(reader: R) -> Result<Identity, EnvelopeError> {
 /// The identity of a document file on disk.
 pub fn identify_file(path: &Path) -> Result<Identity, EnvelopeError> {
     identify(std::io::BufReader::new(std::fs::File::open(path)?))
+}
+
+/// The thumbnail PNG of a document file, or `None` when it has none.
+pub fn thumbnail(path: &Path) -> Result<Option<Vec<u8>>, EnvelopeError> {
+    Package::new(std::io::BufReader::new(std::fs::File::open(path)?))?.read(THUMBNAIL)
 }
 
 /// The truth entry of a part file from before the envelope.
