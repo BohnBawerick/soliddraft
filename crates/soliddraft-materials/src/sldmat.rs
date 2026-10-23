@@ -14,11 +14,17 @@
 //! SolidWorks writes 0 for an empty field. Values outside what any solid has (a density
 //! under 50 or over 25 000 kg/m³) are kept as the file says and warned about, because
 //! they usually mean a library written in other units.
+//!
+//! Every value read records the file as its source, with the material's
+//! `propertysource` when the file gives one, so an imported value never reads as from
+//! an unknown source. The file states no conditions SolidDraft keeps, so none are
+//! recorded.
 
 use crate::appearance::{Appearance, AppearanceId};
 use crate::colour::Srgb;
 use crate::library::{Library, Origin, slug, unique};
 use crate::material::{Material, MaterialId};
+use crate::provenance::{Property, PropertySource, Provenance};
 
 /// Why a `.sldmat` file could not be imported.
 #[derive(Debug, thiserror::Error)]
@@ -54,11 +60,12 @@ pub fn import(bytes: &[u8], name: &str) -> Result<Imported, SldmatError> {
     }
     let mut library = Library::new(name, Origin::File);
     library.source = Some(format!("Imported from the SolidWorks library {name}.sldmat"));
+    let file = format!("{name}.sldmat");
     let mut warnings = Vec::new();
     for class in root.children().filter(|n| n.has_tag_name("classification")) {
         let category = class.attribute("name").unwrap_or_default();
         for node in class.children().filter(|n| n.has_tag_name("material")) {
-            let (material, appearance) = read_material(node, category, &library, &mut warnings);
+            let (material, appearance) = read_material(node, category, &file, &library, &mut warnings);
             if let Some(a) = appearance {
                 library.appearances.push(a);
             }
@@ -91,6 +98,7 @@ fn decode(bytes: &[u8]) -> Result<String, SldmatError> {
 fn read_material(
     node: roxmltree::Node,
     category: &str,
+    file: &str,
     library: &Library,
     warnings: &mut Vec<String>,
 ) -> (Material, Option<Appearance>) {
@@ -102,6 +110,8 @@ fn read_material(
         m.source = Some(s.to_owned());
     }
     let child = |tag: &str| node.children().find(|n| n.has_tag_name(tag));
+    let source =
+        Provenance::from_source(PropertySource::Sldmat { file: file.to_owned(), property_source: m.source.clone() });
     if let Some(props) = child("physicalproperties") {
         for p in props.children().filter(roxmltree::Node::is_element) {
             let tag = p.tag_name().name();
@@ -110,24 +120,24 @@ fn read_material(
                 warnings.push(format!("{name}: {tag} {value:?} is not a number"));
                 continue;
             };
-            let slot = match tag {
-                "EX" => &mut m.youngs_modulus_pa,
-                "NUXY" => &mut m.poisson,
-                "GXY" => &mut m.shear_modulus_pa,
-                "DENS" => &mut m.density_kg_m3,
-                "SIGXT" => &mut m.tensile_pa,
-                "SIGXC" => &mut m.compressive_pa,
-                "SIGYLD" => &mut m.yield_pa,
-                "ALPX" => &mut m.thermal_expansion_per_k,
-                "KX" => &mut m.conductivity_w_mk,
-                "C" => &mut m.specific_heat_j_kgk,
+            let property = match tag {
+                "EX" => Property::YoungsModulus,
+                "NUXY" => Property::Poisson,
+                "GXY" => Property::ShearModulus,
+                "DENS" => Property::Density,
+                "SIGXT" => Property::Tensile,
+                "SIGXC" => Property::Compressive,
+                "SIGYLD" => Property::Yield,
+                "ALPX" => Property::ThermalExpansion,
+                "KX" => Property::Conductivity,
+                "C" => Property::SpecificHeat,
                 "materialmodel" | "REFTEMP" => continue,
                 other => {
                     warnings.push(format!("{name}: {other} is not carried over"));
                     continue;
                 }
             };
-            *slot = (v != 0.0).then_some(v);
+            m.set_value(property, (v != 0.0).then_some(v), source.clone());
         }
     }
     if let Some(d) = m.density_kg_m3
@@ -190,6 +200,7 @@ mod tests {
     <material name="ABS" propertysource="Supplier sheet 4">
       <shaders><pwshader2 path="\plastic\high gloss\abs.p2m"/></shaders>
       <swatchcolor RGB="F0F0E6"/>
+      <physicalproperties><DENS value="1050"/></physicalproperties>
     </material>
   </classification>
 </mstns:materials>"#;
@@ -212,6 +223,16 @@ mod tests {
         let abs = &lib.materials[2];
         assert_eq!(abs.source.as_deref(), Some("Supplier sheet 4"));
         assert_eq!(lib.appearance(abs.default_appearance.as_ref().unwrap()).unwrap().metallic, 0.0);
+        let from_file = PropertySource::Sldmat { file: "Cast irons.sldmat".into(), property_source: None };
+        assert_eq!(ggg.source_of(Property::Density), &from_file);
+        assert_eq!(ggg.source_of(Property::YoungsModulus), &from_file);
+        assert!(ggg.source_of(Property::Compressive).is_unknown(), "a value not given has no source");
+        assert!(!ggg.provenance.contains_key(&Property::Compressive));
+        let sheet = PropertySource::Sldmat {
+            file: "Cast irons.sldmat".into(),
+            property_source: Some("Supplier sheet 4".into()),
+        };
+        assert_eq!(abs.source_of(Property::Density), &sheet, "the file's own property source is kept");
         assert_eq!(out.warnings.len(), 2, "{:?}", out.warnings);
         assert!(out.warnings[0].contains("VISC"));
         assert!(out.warnings[1].contains("unlike any solid"));

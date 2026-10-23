@@ -19,6 +19,10 @@
 //! - Assignments carry a configuration scope ([`scope`]).
 //! - Mass comes from the kernel's unit-density properties and the material's density;
 //!   with no density it is unknown ([`mass`]).
+//! - Each value of a material can record its source (a library, a user override, an
+//!   imported `.sldmat`, a standard reference) and the conditions it holds under, such
+//!   as a temperature, form or treatment. A value that records none has an unknown
+//!   source ([`provenance`]).
 //! - SolidWorks `.sldmat` libraries import as SolidDraft libraries ([`sldmat`]).
 //!
 //! The schema and the rules are in `docs/materials.md`.
@@ -30,6 +34,7 @@ pub mod library;
 pub mod mass;
 pub mod material;
 pub mod problem;
+pub mod provenance;
 pub mod scope;
 pub mod sldmat;
 pub mod snapshot;
@@ -41,4 +46,5 @@ pub use library::{Library, LibraryError, Origin};
 pub use mass::{Mass, Placed, Unknown};
 pub use material::{Material, MaterialId};
 pub use problem::Problem;
+pub use provenance::{Conditions, Property, PropertySource, Provenance};
 pub use snapshot::Snapshots;

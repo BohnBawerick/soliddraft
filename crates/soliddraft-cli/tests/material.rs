@@ -146,6 +146,13 @@ fn a_solidworks_library_imports_into_my_library() {
     assert_eq!(shown["library"], "My library");
     assert_eq!(shown["material"]["hatch"], "ANSI32");
     assert_eq!(shown["material"]["category"], "Plastics");
+    assert_eq!(shown["material"]["provenance"]["density_kg_m3"]["source"]["kind"], "sldmat");
+    assert_eq!(shown["material"]["provenance"]["density_kg_m3"]["source"]["file"], "Shop.sldmat");
+    let (ok, stdout, stderr) = run(&dir, &["material", "show", "shop-steel"]);
+    assert!(ok, "{stderr}");
+    assert!(stdout.contains("density_kg_m3 = 7850 kg/m³ (imported from Shop.sldmat)"), "{stdout}");
+    let (_, stdout, _) = run(&dir, &["material", "show", "steel-aisi-4130"]);
+    assert!(stdout.contains("density_kg_m3 = 7833 kg/m³ (source unknown)"), "{stdout}");
 
     let (ok, stdout, _) = run(&dir, &["material", "check", library.to_str().unwrap()]);
     assert!(ok, "{stdout}");

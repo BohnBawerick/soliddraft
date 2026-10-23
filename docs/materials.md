@@ -33,6 +33,59 @@ exact sRGB curve. Textures come later.
 a Poisson's ratio outside -1 to 0.5, a factor outside 0 to 1, a value that is not a
 number. Commands refuse an entry with problems.
 
+## Where values come from
+
+Each value can record its source and the conditions it holds under, in the material's
+`provenance` table, keyed by the value's field name:
+
+```toml
+[[material]]
+id = "workshop-2024-t3"
+name = "Aluminium 2024-T3"
+density_kg_m3 = 2768.0
+yield_pa = 3.31e8
+
+[material.provenance.yield_pa]
+source = { kind = "reference", citation = "MIL-HDBK-5J, table 3.2.3.0(b)" }
+conditions = { temperature_k = 294.0, form = "sheet", treatment = "T3", direction = "longitudinal" }
+
+[material.provenance.density_kg_m3]
+source = { kind = "user_override", note = "weighed" }
+```
+
+The source `kind` is one of:
+
+| `kind` | Fields | Meaning |
+|---|---|---|
+| `unknown` | | nobody recorded where the value comes from |
+| `library` | `library` | taken from another library's entry, which records nothing more |
+| `user_override` | `note` (optional) | typed in by the user in place of what the source gave |
+| `sldmat` | `file`, `property_source` (optional) | read from a SolidWorks `.sldmat` file |
+| `reference` | `citation` | a standard, handbook or data sheet, cited precisely enough to check |
+
+The conditions are all optional: `temperature_k` (K, the bottom of the range when
+`temperature_to_k` is given), `temperature_to_k` (K), `form` ("sheet", "casting"),
+`treatment` ("T6", "annealed") and `direction` ("longitudinal", "along the grain"). A
+condition left out is not stated. It is not assumed to be room temperature or anything
+else.
+
+A value with no entry in `provenance` has an unknown source. It is not read from the
+material's `source` text, nor from the library the material sits in. Materials and parts
+written before values recorded a source therefore load unchanged, with every source
+unknown, and a part's copies write back the same bytes. `provenance` changes no value: mass and
+everything else read the value fields as before.
+
+`problems()` also reports an entry for a value the material does not have, and a
+temperature that is not above 0 K or a range whose top is below its bottom.
+
+In code, `Material::value(Property)` reads a value, `provenance_of` and `source_of` give
+its record, `set_value` sets a value with its record and `set_override` sets one the user
+typed in. Setting or removing a value replaces or drops its record, so a source never
+outlives the value it describes.
+
+The built-in library records no per-value sources yet. Each entry's `source` cites the
+table its values come from.
+
 ## Libraries
 
 A library is a TOML file:
@@ -195,8 +248,10 @@ library, or into the file `--into` names. The importer reads:
 | `xhatch` | the hatch pattern's name (`ANSI38`) |
 | `swatchcolor RGB` | an appearance the material names as its default, metallic when its shader is under `\metal\` |
 
-A property written as 0 is read as not given, since SolidWorks writes 0 for an empty
-field. Properties with no SolidDraft field are listed as warnings. So is a density no
+Every value read records `kind = "sldmat"` with the file's name and the material's
+`propertysource`, when the file gives one, as its source. The file states no conditions
+SolidDraft keeps, so none are recorded. A property written as 0 is read as not given,
+since SolidWorks writes 0 for an empty field. Properties with no SolidDraft field are listed as warnings. So is a density no
 solid has (under 50 or over 25 000 kg/m³), which usually means a library written in
 other units. `.sldmat` files in UTF-8 or UTF-16 both read. FreeCAD's `.FCMat` cards come
 later.
@@ -228,6 +283,9 @@ The materials panel and the appearance picker build on these:
   `materials()`, `appearances()`, `libraries` and `issues`), `user_library()` and
   `Library::save`, `put_material`, `remove_material`, `fresh_material_id` and `merge`;
 - "differs from library": `Catalog::match_material` and `match_appearance`;
+- each value's source and conditions: `Material::provenance_of`, `source_of` and
+  `set_override`, with `Display` on `Provenance`, `PropertySource` and `Conditions` for
+  the text beside a field (`soliddraft material show` prints it);
 - the tree's Material row and the mass properties panel: `Document::material` and
   `Document::mass`;
 - the viewport: `Document::appearance_table`, which gives every face's
