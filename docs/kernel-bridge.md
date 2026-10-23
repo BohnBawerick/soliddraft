@@ -286,5 +286,6 @@ Windows match the Linux golden file. Upstream builds SMLib on both platforms wit
 own scripts, so the sources are known to compile there; the open risks are this crate's
 flags (in particular the MSVC export macros in a static library) and floating-point
 differences between platforms that move a value across a rounding boundary of the
-digest. Building the kernel on macOS and Windows runners costs several times the Linux
-minutes on a private repository, so CI runs only the Rust-only crates there for now.
+digest. Building the kernel on macOS and Windows runners cost several times the Linux
+minutes while the repository was private, so CI runs only the Rust-only crates there
+for now.

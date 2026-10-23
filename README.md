@@ -2,6 +2,8 @@
 
 A parametric CAD application written in Rust, free for everyone, for ever.
 
+**Status:** SolidDraft is not released for download yet. A release with the features below is coming soon. For now it is research grade only.
+
 ## Why this is free
 
 Nearly every commercial CAD program you can buy runs on one of a handful of closed geometry kernels. Parasolid, ACIS, CGM and a few others sit under SolidWorks, Inventor, Fusion, NX, CATIA and most of the rest. Their owners licence them, meter them and can withdraw them. The maths inside is a century old and the algorithms are published. What is closed is the code, and the code is kept closed by law.
