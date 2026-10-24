@@ -7,9 +7,9 @@ replays run as child commands. The runner needs Python 3 and the two built
 executables. It opens no window.
 
 ```sh
-cargo build -p soliddraft-cli
+cargo build --release --locked -p soliddraft-cli
 python3 ci/run-scenarios.py ci/scenarios/bracket.json \
-  --soliddraft target/debug/soliddraft \
+  --soliddraft target/release/soliddraft \
   --catallax-verify /path/to/pinned/catallax-verify \
   --out /tmp/bracket-run
 ```
@@ -19,6 +19,11 @@ Build `catallax-verify` from `CATALLAX_REVISION` in
 revision and builds its `catallax-cli` package. A verifier from a different
 revision is not evidence of matching behavior. The workflow uploads both
 successful and failed bundles as `application-loop`.
+
+Click budgets measure release executables, as users run them. Debug builds are
+useful for diagnosis but are not the acceptance measurement. Hosted CI builds
+both executables with `--release` and caches that profile's Cargo artifacts with
+`Swatinem/rust-cache` under the `application-loop-release` cache key.
 
 `bracket.json` builds the plate, flange, bored boss, four mounting holes and flange
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
