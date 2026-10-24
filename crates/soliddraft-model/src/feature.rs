@@ -3,7 +3,7 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use soliddraft_kernel_api::{Plane, Vec3};
+use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip, Plane, Vec3};
 use soliddraft_sketch::{P2, Sketch};
 
 use crate::reference::{EdgeRef, FaceRef};
@@ -56,6 +56,14 @@ pub enum FeatureKind {
     Fillet(BlendFeature),
     /// Bevels edges.
     Chamfer(BlendFeature),
+    /// Drills holes into a planar face of the part.
+    Hole(HoleFeature),
+    /// Copies the part's body along a line or around an axis.
+    Pattern(PatternFeature),
+    /// Reflects the part's body in a plane.
+    Mirror(MirrorFeature),
+    /// Tilts faces of the part away from a pull direction.
+    Draft(DraftFeature),
 }
 
 impl FeatureKind {
@@ -67,6 +75,13 @@ impl FeatureKind {
             FeatureKind::Extrude(_) => "Boss-Extrude",
             FeatureKind::Fillet(_) => "Fillet",
             FeatureKind::Chamfer(_) => "Chamfer",
+            FeatureKind::Hole(_) => "Hole",
+            FeatureKind::Pattern(p) => match p.layout {
+                PatternSpec::Linear { .. } => "LPattern",
+                PatternSpec::Circular { .. } => "CirPattern",
+            },
+            FeatureKind::Mirror(_) => "Mirror",
+            FeatureKind::Draft(_) => "Draft",
         }
     }
 
@@ -84,9 +99,25 @@ impl FeatureKind {
                 if let ProfileSource::Sketch { feature } = e.profile {
                     out.push(feature);
                 }
+                if let EndCondition::UpToFace { face } = &e.end {
+                    out.push(face.feature);
+                }
             }
             FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) => {
                 out.extend(b.edges.iter().flat_map(|e| e.faces.iter().map(|f| f.feature)));
+            }
+            FeatureKind::Hole(h) => out.push(h.face.feature),
+            FeatureKind::Pattern(_) => {}
+            FeatureKind::Mirror(m) => {
+                if let PlaneRef::Face { face } = &m.plane {
+                    out.push(face.feature);
+                }
+            }
+            FeatureKind::Draft(d) => {
+                out.extend(d.faces.iter().map(|f| f.feature));
+                if let PlaneRef::Face { face } = &d.neutral {
+                    out.push(face.feature);
+                }
             }
         }
         out.sort();
@@ -169,7 +200,7 @@ pub enum ExtrudeOp {
 }
 
 /// How far an extrusion goes.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EndCondition {
     /// A fixed depth from the sketch plane.
@@ -179,6 +210,13 @@ pub enum EndCondition {
     },
     /// Through everything beyond the sketch plane, in the extrusion direction.
     ThroughAll,
+    /// To the first place the sweep crosses the part's boundary.
+    UpToNext,
+    /// To the first hit on a face of the part.
+    UpToFace {
+        /// The face, by persistent name.
+        face: FaceRef,
+    },
 }
 
 /// Where an extrusion's profile comes from.
@@ -255,4 +293,99 @@ pub struct BlendFeature {
     pub edges: Vec<EdgeRef>,
     /// Fillet radius or chamfer distance, in millimetres.
     pub size: f64,
+}
+
+/// Holes drilled into a planar face, one per point.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HoleFeature {
+    /// The planar face the holes start on. They drill against its outward normal.
+    pub face: FaceRef,
+    /// Hole centres in the face's sketch frame (see
+    /// [`plane_on_face`](crate::plane_on_face)), in millimetres.
+    pub points: Vec<P2>,
+    /// Diameter of the main wall.
+    pub diameter: f64,
+    /// How deep the main wall goes.
+    pub depth: HoleDepth,
+    /// The bottom of a blind hole.
+    pub tip: HoleTip,
+    /// A counterbore or countersink at the entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<HoleHead>,
+}
+
+/// Where a pattern's copies go.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatternSpec {
+    /// Copies along a direction.
+    Linear {
+        /// The direction, of any length.
+        direction: Vec3,
+        /// Distance between neighbouring copies, in millimetres.
+        spacing: f64,
+        /// Number of copies, including the original.
+        count: u32,
+    },
+    /// Copies around an axis.
+    Circular {
+        /// A point on the axis.
+        axis_origin: Vec3,
+        /// The axis direction; positive angles turn counter-clockwise about it.
+        axis_direction: Vec3,
+        /// Number of copies, including the original.
+        count: u32,
+        /// Angle between neighbouring copies, in degrees.
+        angle: f64,
+    },
+}
+
+/// Copies of the part's body, united with it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PatternFeature {
+    /// Where the copies go.
+    pub layout: PatternSpec,
+}
+
+/// A plane a feature reads: a reference plane or a planar face of the part.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "on", rename_all = "snake_case")]
+pub enum PlaneRef {
+    /// A reference plane, moved along its normal by `offset` millimetres.
+    Datum {
+        /// Which reference plane.
+        datum: DatumPlane,
+        /// Distance along the plane's normal.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        offset: f64,
+    },
+    /// A planar face of the part, with its outward normal.
+    Face {
+        /// The face.
+        face: FaceRef,
+    },
+}
+
+/// The part's body reflected in a plane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MirrorFeature {
+    /// The mirror plane.
+    pub plane: PlaneRef,
+    /// Unites the reflection with the original when true; keeps only the reflection
+    /// when false.
+    pub keep_original: bool,
+}
+
+/// Faces tilted by an angle about a neutral plane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DraftFeature {
+    /// The faces to tilt.
+    pub faces: Vec<FaceRef>,
+    /// Where the drafted faces keep their place. The pull direction is its normal.
+    pub neutral: PlaneRef,
+    /// Draft angle in degrees, in (-90, 90).
+    pub angle: f64,
+    /// Pull against the neutral plane's normal instead of along it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reverse: bool,
 }

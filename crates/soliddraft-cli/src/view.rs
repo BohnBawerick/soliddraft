@@ -1,20 +1,24 @@
-//! `soliddraft view`: hidden-line views of a recipe's result, as SVG or JSON.
+//! `soliddraft view`: hidden-line views of a recipe's result or a part, as SVG or JSON.
 
 use std::fmt::Write as _;
+use std::path::Path;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Serialize;
+use soliddraft_document::DocKind;
 use soliddraft_kernel_api::drawing::{Curve3, CutRegion, SectionSpec, StandardView, ViewCurves, ViewFrame, ViewSpec};
-use soliddraft_kernel_api::{Kernel, Vec3};
+use soliddraft_kernel_api::{BackendInfo, BodyId, Kernel, Vec3};
 use soliddraft_kernel_catallax::CatallaxKernel;
 
 pub(crate) const USAGE: &str = "\
-usage: soliddraft view <recipe.json> [--dir <view>[,<view>...]] [--up x,y,z]
+usage: soliddraft view <recipe.json | part.dwprt> [--dir <view>[,<view>...]] [--up x,y,z]
                       [--seams] [--smooth] [--tolerance <mm>] [--mesh]
                       [--section x,y,z] [--svg <out.svg>] [--json] [--curves]
 
-Replays a recipe on the Catallax kernel and computes hidden-line views of its result:
+Replays a recipe, or rebuilds a part file, on the Catallax kernel and computes
+hidden-line views of its result:
 visible curves solid, hidden curves dashed, each tagged with the edge or face it
 comes from.
 
@@ -125,6 +129,26 @@ fn parse(args: &[String]) -> Result<Options, String> {
     Ok(o)
 }
 
+/// A body to view and what made it. A part keeps its document, which owns the body.
+struct Loaded {
+    name: String,
+    backend: BackendInfo,
+    body: BodyId,
+    _part: Option<soliddraft_model::Document>,
+}
+
+fn load(file: &str, kernel: &Arc<CatallaxKernel>) -> Result<Loaded, String> {
+    if DocKind::of_path(Path::new(file)) == Some(DocKind::Part) {
+        let part = soliddraft_model::Document::open(file, kernel.clone()).map_err(|e| e.to_string())?;
+        let body = part.body().ok_or("the part has no body")?;
+        return Ok(Loaded { name: part.name().to_owned(), backend: kernel.backend(), body, _part: Some(part) });
+    }
+    let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+    let recipe = soliddraft_recipe::parse(&text).map_err(|e| e.to_string())?;
+    let (report, body) = soliddraft_recipe::build(kernel.as_ref(), &recipe).map_err(|e| e.to_string())?;
+    Ok(Loaded { name: report.recipe, backend: report.backend, body, _part: None })
+}
+
 pub(crate) fn run(args: &[String]) -> ExitCode {
     let o = match parse(args) {
         Ok(o) => o,
@@ -133,18 +157,15 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let kernel = if o.svg.is_some() { CatallaxKernel::with_operation_log() } else { CatallaxKernel::new() };
-    let built = std::fs::read_to_string(&o.file)
-        .map_err(|e| e.to_string())
-        .and_then(|text| soliddraft_recipe::parse(&text).map_err(|e| e.to_string()))
-        .and_then(|recipe| soliddraft_recipe::build(&kernel, &recipe).map_err(|e| e.to_string()));
-    let (report, body) = match built {
+    let kernel = Arc::new(if o.svg.is_some() { CatallaxKernel::with_operation_log() } else { CatallaxKernel::new() });
+    let built = match load(&o.file, &kernel) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("{}: {e}", o.file);
             return ExitCode::FAILURE;
         }
     };
+    let (source_name, backend, body) = (built.name.clone(), built.backend.clone(), built.body);
     let mut ok = true;
     for (name, spec) in &o.views {
         let start = Instant::now();
@@ -174,8 +195,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         let (visible, hidden) = curves.counts();
         if o.json {
             let summary = Summary {
-                recipe: &report.recipe,
-                backend: format!("{} {}", report.backend.name, report.backend.version),
+                recipe: &source_name,
+                backend: format!("{} {}", backend.name, backend.version),
                 view: name.clone(),
                 method: "mesh",
                 visible,
@@ -194,8 +215,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         } else {
             let cut = regions.as_ref().map(|r| format!(", {} cut regions", r.len())).unwrap_or_default();
             println!(
-                "{} view {name}: {visible} visible, {hidden} hidden{cut}, digest {}, {millis:.1} ms",
-                report.recipe,
+                "{source_name} view {name}: {visible} visible, {hidden} hidden{cut}, digest {}, {millis:.1} ms",
                 curves.digest()
             );
         }

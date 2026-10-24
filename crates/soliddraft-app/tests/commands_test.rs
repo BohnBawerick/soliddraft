@@ -121,7 +121,7 @@ fn a_disabled_command_says_why_instead_of_running() {
     harness.run_steps(2);
     let state = &harness.state().state;
     assert!(state.editor.is_none(), "no chamfer without a body");
-    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Arrives with Catallax stage 3"));
+    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Chamfer needs a body"));
 }
 
 #[test]

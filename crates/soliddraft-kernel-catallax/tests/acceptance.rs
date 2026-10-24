@@ -95,11 +95,9 @@ fn bracket_builds_displays_picks_named_faces_and_edits_through_the_trait() {
                 .iter()
                 .any(|f| topology.face(*f).is_some_and(|f| (f.centroid.z - height).abs() < 1e-8))
         );
-        assert!(kernel.mass_properties(body).unwrap().inertia.is_none());
+        assert!(kernel.mass_properties(body).unwrap().inertia.is_some());
         let before = summarize(&kernel, body).unwrap();
-        assert!(
-            matches!(kernel.fillet(&OpTag::new("finish"), body, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 4"))
-        );
+        assert!(matches!(kernel.fillet(&OpTag::new("finish"), body, &[], 1.0), Err(KernelError::InvalidInput(_))));
         assert_eq!(before, summarize(&kernel, body).unwrap());
         kernel.release(body).unwrap();
         assert!(matches!(kernel.topology(body), Err(KernelError::UnknownBody(_))));
@@ -146,9 +144,7 @@ fn refused_extrusion_does_not_change_its_profile_and_handles_stay_owned() {
     );
     assert_eq!(before, summarize(&k, b).unwrap());
     assert!(k.validate(b).unwrap().valid);
-    assert!(
-        matches!(k.chamfer(&OpTag::new("bevel"), b, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 3"))
-    );
+    assert!(matches!(k.chamfer(&OpTag::new("bevel"), b, &[], 1.0), Err(KernelError::InvalidInput(_))));
     assert!(
         matches!(k.shell(&OpTag::new("shell"), b, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 3"))
     );
@@ -315,13 +311,16 @@ fn certified_application_display_serves_matching_requests_and_preserves_finer_me
     k.take_diagnostics().unwrap();
     let topology = k.topology(body).unwrap();
     assert_eq!(topology.display_chord_height, Some(0.01));
+    // Ordinary topology proves face areas only, and never asks for a new display.
     let log = k.take_diagnostics().unwrap();
     assert!(log["calls"].as_array().unwrap().iter().all(|call| {
         call["operation_log"]["operations"].as_array().unwrap().iter().all(|op| op["operation"] == "face_area")
     }));
 
-    // Half the requested chord is reserved for the unchanged f32 rounding check.
-    let params = TessellationParams { chord_height: 0.02, ..Default::default() };
+    // Half the requested chord is reserved for the unchanged f32 rounding check. Without
+    // angle controls the request matches the build's own display.
+    let params =
+        TessellationParams { chord_height: 0.02, curve_angle_deg: 0.0, surface_angle_deg: 0.0, ..Default::default() };
     let original = k.tessellate(body, &params).unwrap();
     let edges = k.tessellate_edges(body, &params).unwrap();
     let log = k.take_diagnostics().unwrap();

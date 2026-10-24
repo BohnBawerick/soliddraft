@@ -1,0 +1,79 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "drill-point",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              15,
+              15,
+              0
+            ],
+            "width": 30,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 9000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Boss-Extrude1 \u00b7 End cap",
+        "points": [
+          [
+            15,
+            15,
+            10
+          ]
+        ],
+        "diameter": 5,
+        "depth": 6,
+        "tip_angle": 118
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 8872.358717,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "drill point build"
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole1",
+        "diameter": 4,
+        "depth": 7
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 8907.001648,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "drill point edit"
+    }
+  ]
+}

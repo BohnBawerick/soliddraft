@@ -1,0 +1,146 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "hole",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              30,
+              20,
+              0
+            ],
+            "width": 60,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Boss-Extrude1 \u00b7 End cap",
+        "points": [
+          [
+            10,
+            12,
+            5
+          ],
+          [
+            50,
+            12,
+            5
+          ],
+          [
+            10,
+            32,
+            5
+          ],
+          [
+            50,
+            32,
+            5
+          ]
+        ],
+        "diameter": 4
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11748.672588,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "hole build"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              30,
+              22,
+              5
+            ],
+            "diameter": 16
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13759.291886,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole1",
+        "diameter": 4.5,
+        "depth": 3
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13819.767545,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "hole edit"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13759.291886,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13819.767545,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ]
+}

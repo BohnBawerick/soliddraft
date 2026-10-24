@@ -10,7 +10,7 @@ use soliddraft_materials::{Appearance, AppearanceId, Catalog, Material, Material
 use soliddraft_sketch::{ConstraintId, SolveStatus};
 
 use crate::document::Document;
-use crate::feature::{DatumPlane, Feature, FeatureId, FeatureKind};
+use crate::feature::{DatumPlane, Feature, FeatureId, FeatureKind, PatternSpec};
 use crate::materials::{AppearanceAssignment, AppearanceTarget, MaterialAssignment, PartMaterials};
 
 /// A change to a document.
@@ -387,6 +387,27 @@ impl Document {
             }
             FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) if b.edges.is_empty() => {
                 Err(CommandError::Invalid("a fillet or chamfer needs at least one edge".into()))
+            }
+            FeatureKind::Hole(h) if !(h.diameter.is_finite() && h.diameter > 0.0) => {
+                Err(CommandError::Invalid(format!("hole diameter must be positive, got {}", h.diameter)))
+            }
+            FeatureKind::Hole(h) if h.points.is_empty() => {
+                Err(CommandError::Invalid("a hole needs at least one point".into()))
+            }
+            FeatureKind::Pattern(p) => match p.layout {
+                PatternSpec::Linear { count, .. } | PatternSpec::Circular { count, .. } if count < 2 => {
+                    Err(CommandError::Invalid(format!("a pattern needs at least 2 copies, got {count}")))
+                }
+                PatternSpec::Linear { spacing, .. } if !(spacing.is_finite() && spacing > 0.0) => {
+                    Err(CommandError::Invalid(format!("pattern spacing must be positive, got {spacing}")))
+                }
+                _ => Ok(()),
+            },
+            FeatureKind::Draft(d) if d.faces.is_empty() => {
+                Err(CommandError::Invalid("a draft needs at least one face".into()))
+            }
+            FeatureKind::Draft(d) if !(d.angle.is_finite() && d.angle.abs() < 90.0 && d.angle != 0.0) => {
+                Err(CommandError::Invalid(format!("draft angle must be between -90 and 90 and not 0, got {}", d.angle)))
             }
             _ => Ok(()),
         }

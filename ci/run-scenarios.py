@@ -19,7 +19,7 @@ BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
 DRAWING_VIEW_BUDGET_MS = 1000
 PHASES = ("construction", "edit", "display", "measurement", "refusal")
 DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "view_curves", "section_view"}
-MEASUREMENT = {"mass_properties", "face_area", "face_centroid", "face_bounding_box",
+MEASUREMENT = {"mass_properties", "measured_topology", "face_area", "face_centroid", "face_bounding_box",
                "bounding_box", "edge_length", "edge_midpoint", "inertia"}
 TREND_NOISE_MS = 25
 
@@ -350,6 +350,12 @@ def replay_question(verifier, question, directory, timeout):
     return result
 
 
+def timings(steps):
+    """Labelled steps' click times, such as a feature's build and edit."""
+    return [{"label": s["label"], "tool": s["tool"], "elapsed_ms": s.get("timing", {}).get("elapsed_ms"),
+             "pass": s["pass"]} for s in steps if "label" in s]
+
+
 def run(args):
     scenario = json.loads(args.scenario.read_text())
     if scenario["format"] != "soliddraft-scenario/1" or not scenario.get("steps"):
@@ -373,6 +379,8 @@ def run(args):
         prepared = False
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
+            if "label" in step:
+                entry["label"] = step["label"]
             report["steps"].append(entry)
             arguments = substitute(step.get("arguments", {}), args.out)
             started = time.perf_counter_ns()
@@ -483,6 +491,13 @@ def run(args):
                     measurement = json.loads((directory / "measurement.json").read_text())
                 evidence = {**command, "measurement": measurement}
             checks.extend(check(evidence, spec) for spec in step.get("checks", []))
+            # Exports run after the click is timed, as a user's separate request would.
+            for extension in step.get("export", []):
+                exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
+                    "--out", directory / f"part.{extension}"], directory, f"export-{extension}", args.timeout)
+                if exported["pass"]:
+                    exported["report"] = json.loads((directory / f"export-{extension}.stdout").read_text())["report"]
+                checks.append(exported)
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)
@@ -494,6 +509,7 @@ def run(args):
         report["trends"] = trend_checks(scenario.get("trends", []), report["steps"])
         report["pass"] = (len(report["steps"]) == len(scenario["steps"])
             and all(s["pass"] for s in report["steps"]) and all(t["pass"] for t in report["trends"]))
+        report["timings"] = timings(report["steps"])
     except Exception as error:
         report["error"] = str(error)
     finally:
@@ -505,7 +521,8 @@ def run(args):
             report["pass"] = False
         write(args.out / "protocol.json", client.transcript if client else [])
         write(args.out / "result.json", report)
-    print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error")}))
+    print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error"),
+                      "timings": report.get("timings", [])}))
     return 0 if report["pass"] else 1
 
 
