@@ -178,6 +178,14 @@ offer. Browser storage requires a secure origin with Web Locks and writable
 localStorage. Storage failures are shown, and a failed writer never resumes with
 a silent gap.
 
+Browser startup discovers saved reports and installs read-only export and discard
+controls before writing a new journal header. If storage cannot accept that
+header, the editor does not start. The controls remain available through failed
+retries and reloads. Export uses the same path-redacted download as the recovery
+window and keeps the saved report. Discard removes only the selected report,
+after checking that no live tab owns it. Free space, then choose **Retry journal
+startup** to start editing with a new persisted header.
+
 The report copy replaces POSIX, Windows, UNC and relative reference paths with
 stable report-local tokens, including paths inside command JSON and error text.
 The raw local journal is never offered or changed by export. Geometry, feature
@@ -213,3 +221,7 @@ Commands in the journal are the same data these tools accept.
 then replays it through the application loop. It compares the actual mutated
 part, edited drawing, earlier refusal and panic message. Storage tests cover
 live-session exclusion, torn writes, path replacement and clean-close retention.
+`ci/browser-journal.js` fills real Chromium localStorage until even a header is
+refused, reloads the compiled application, exports or discards the saved report,
+and starts the editor after storage becomes writable. It checks retained records,
+path redaction and unrelated storage, including another retry while still full.
