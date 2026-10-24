@@ -1142,6 +1142,9 @@ fn registry() -> Vec<CommandSpec> {
         cmd("export_3mf", "3MF", Icon::Save, "Export the part's mesh as 3MF at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::ThreeMf, path: None })
             .when(has_body),
+        cmd("export_obj", "OBJ", Icon::Save, "Export the part's mesh as OBJ at the export tolerance")
+            .run(|_| AppAction::Export { format: ExportFormat::Obj, path: None })
+            .when(has_body),
         cmd("quit", "Quit", Icon::Close, "Quit SolidDraft")
             .both()
             .key(Scope::App, ctrl, Key::Q)

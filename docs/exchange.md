@@ -1,6 +1,6 @@
 # Part export
 
-SolidDraft exports a part as STEP AP242, STL or 3MF. The code is the `soliddraft-exchange` crate. The kernel call is `Kernel::export_step`, described in [kernel-bridge.md](kernel-bridge.md). Every export returns the file and a report of how far the file may lie from the exact part.
+SolidDraft exports a part as STEP AP242, STL, 3MF or OBJ. The code is the `soliddraft-exchange` crate. The kernel call is `Kernel::export_step`, described in [kernel-bridge.md](kernel-bridge.md). Every export returns the file and a report of how far the file may lie from the exact part.
 
 ## Formats
 
@@ -9,6 +9,7 @@ SolidDraft exports a part as STEP AP242, STL or 3MF. The code is the `soliddraft
 | STEP AP242 (`.step`, `.stp`) | the exact B-rep, written by Catallax's exporter | Catallax's proven largest distance between written and exact geometry, rounded up |
 | STL (`.stl`, binary) | the kernel's mesh at the part's export tolerance | the export chord height |
 | 3MF (`.3mf`, core specification) | the same mesh, which must be closed | the export chord height |
+| OBJ (`.obj`, Wavefront) | the display mesh, retaining face groups and normals | the export chord height |
 
 STEP writes exact planes, cylinders, cones, spheres, tori, lines and circles. Intersection curves that have no exact STEP form are fitted splines, and the report counts them. The requested tolerance is 0.0000001 mm. If decimal rounding or spline fitting cannot meet it, the export still writes the file. The report then says the bound is over the tolerance and carries Catallax's warning, and the app shows the message as an error.
 
@@ -18,9 +19,11 @@ Meshes use the export tolerance in the part's `settings.json`, 0.01 mm and 10 de
 
 The kernel's display mesh repeats a position on every face that meets there, so each face keeps its own normals. Catallax's meshes share edges exactly, so `mesh::weld` merges vertices whose 32-bit coordinates are bit for bit equal. That restores the shared mesh without a distance tolerance. A triangle left with a repeated vertex has no area and is dropped.
 
-The mesh report says whether the welded mesh is closed: every edge joins exactly two triangles that run it in opposite directions. 3MF requires a closed mesh, so a 3MF export of an open mesh is refused. STL has no such rule; its report still says whether the mesh is closed.
+The mesh report says whether the welded mesh is closed: every edge joins exactly two triangles that run it in opposite directions. 3MF requires a closed mesh, so a 3MF export of an open mesh is refused. STL and OBJ have no such rule; their reports still say whether the mesh is closed.
 
 Binary STL headers never start with `solid` in any case, because some readers then take the file for ASCII STL. 3MF packages carry a fixed timestamp, so the same mesh always gives the same bytes.
+
+OBJ writes the part name in an `o` record and the source face IDs in `g face_<id>` groups, following Catallax's OBJ convention. It writes the existing display mesh through the same kernel boundary as STL and 3MF, without rebuilding a Catallax mesh just to call its writer. Per-face vertices and `vn` records preserve sharp-face normals. Coordinates round-trip to the display mesh's 32-bit values, and triangles retain their outward winding. A comment records the chord height in millimetres. OBJ has no standard unit field, so the header states millimetres. Control characters in the part name become spaces to keep the name on one line. As with STL and 3MF, triangles collapsed to repeated positions are dropped.
 
 ## Refusals
 
@@ -28,8 +31,8 @@ A part with a feature that needs a repair, is blocked or failed is refused, so n
 
 ## Where to export
 
-- In the app, File > Export offers STEP AP242, STL and 3MF. The status bar shows each export's report in one line.
-- On the command line, `soliddraft export <part.dwprt | recipe.json> --out bracket.step --out bracket.3mf` writes each file; `--json` prints each export report. It does not measure the body for acceptance checks.
+- In the app, File > Export offers STEP AP242, STL, 3MF and OBJ. The status bar shows each export's report in one line.
+- On the command line, `soliddraft export <part.dwprt | recipe.json> --out bracket.step --out bracket.3mf --out bracket.obj` writes each file; `--json` prints each export report. It does not measure the body for acceptance checks.
 
 ## The OpenCASCADE check
 

@@ -1,6 +1,6 @@
 # SolidDraft roadmap
 
-Written 22 October 2026. This file replaces `docs/roadmap.md`. It is a list of planned work in order, not a release schedule.
+This is a list of planned work in dependency order, not a release schedule. Progress is recorded by completed work, never by dates.
 
 The companion document is [Catallax's roadmap](https://github.com/BohnBawerick/catallax/blob/main/docs/PLAN.md). SolidDraft and Catallax are one project in two repositories: SolidDraft is the application, Catallax is its kernel. This file orders the application work; Catallax's roadmap orders the kernel work. Where an item here needs a kernel item, it names the Catallax stage.
 
@@ -72,7 +72,9 @@ Application work for a feature, such as its PropertyManager page, ribbon command
 | Revolve | 1 | Works for rational frames, widening with the foundation |
 | Booleans of bodies | 1 | Works |
 | Mass properties | 1 | Works, computed on request |
-| STEP export, STL and 3MF export | 1 | New |
+| STEP AP242, STL and 3MF export | 1 | Done |
+| OBJ export | 1 | Done with this change |
+| IGES export | After STEP export, before STEP and IGES import | Planned; needs Catallax's exact-surface IGES writer |
 | One-sided through all, up to face, up to next | 3 | Waits |
 | Hole and countersink | 3 | Waits |
 | Chamfer | 3 | Waits |
@@ -82,10 +84,12 @@ Application work for a feature, such as its PropertyManager page, ribbon command
 | Other fillets | 4 | Waits |
 | Draft | 4 | Waits |
 | Sweep, loft; spline, ellipse and text profiles | 5 | Waits |
-| STEP import | 6 | Not available today either |
+| STEP import, then IGES import | 6 | Waits for Catallax's importers |
 | Lattice, gyroid, graded density, field-driven thickness | Field-only track, after stage 3 | Not available today either |
 
 Reference geometry (planes, axes, points) is application-side work and can come at any time.
+
+The export set is STEP, IGES, STL, 3MF and OBJ. STEP AP242, STL and 3MF are complete; OBJ is complete with this change. IGES export comes next in the exchange work, once Catallax provides an exact-surface writer like its STEP writer. It does not depend on STEP import or IGES import.
 
 ## 7. Drawings on Catallax
 
@@ -97,7 +101,7 @@ Every curve in a drawing says how accurate it is. Whole lines and untrimmed circ
 
 These items from the previous roadmap continue in parallel.
 
-- Modelling and documents: autosave, recovery, thumbnails and a start page for recent documents; assembly editing, drawings of assemblies and Pack and Go; configurations and in-context references after assembly references are stable. IGES import and export waits until STEP import exists in Catallax.
+- Modelling and documents: autosave, recovery, thumbnails and a start page for recent documents; assembly editing, drawings of assemblies and Pack and Go; configurations and in-context references after assembly references are stable. Exchange work follows section 6's kernel dependencies.
 - Interface: a shortcut editor and right-click selection tools (the shared command registry and a minimal command palette, opened with Ctrl+Shift+P, are in; `crates/soliddraft-cli/tests/entry_points.rs` checks every entry point against the registry); on-canvas feature handles, display presets, dark theme and interface scaling; material property sources and conditions.
 - Reliability: fuzz command inputs and test damaged document files; record replayable command journals for crash reports; interface scenarios and layout checks at several window sizes; kernel work off the interface thread in the browser build; installers once the document formats and modelling tools are ready.
 
@@ -132,7 +136,7 @@ Some of these items were informed by public work on other open-source CAD projec
 | 1, shell and viewport | Stays | Kernel-independent. |
 | 2, modelling | Stays | Fillets between planes and cylinders and chamfers wait for Catallax stage 3; other fillets wait for stage 4. References simplify. The sketcher's rational point joining already meets RECIPE.md section 6.2's converter rule. |
 | 3, assistant | Stays | Kernel-independent. MCP and the command line drive the application loop. |
-| 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL and 3MF come from Catallax's meshes. The recipe runner and Catallax drawing baselines remain. |
+| 4, second kernel and exchange | Changes | Becomes the Catallax backend and the SMLib removal. STEP comes from Catallax, not from an OpenCASCADE bridge, which also avoids its LGPL dependency. STL, 3MF and OBJ come from Catallax's meshes. IGES export waits for Catallax's exact-surface writer, not for import. The recipe runner and Catallax drawing baselines remain. |
 
 ### 9.3 Queued work
 
@@ -161,7 +165,9 @@ Numbered in priority order.
 3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window, Catallax's per-operation log and the split timings the runner takes in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; the bundle reports each command's time split into construction, edit, display, measurement and refusal, and a step over its budget fails the scenario; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. Depends on Catallax milestone M2.
 4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, plane sections, and section 7's accuracy labels on every curve. Exit: the bracket drawing with four views and a section regenerates on Catallax; an application-loop scenario makes that drawing, edits a parameter, regenerates it and writes SVG, PDF and DXF, with each curve's accuracy label in the bundle; SVG, PDF and DXF output keep their formats. Ships with the SMLib removal in item 2.
 5. **One recipe format.** Build. Deliverable: section 4's write and read paths. Exit: every recipe in `recipes/` converts and replays on Catallax, and existing part files open. Depends on Catallax milestone M3.
-6. **STEP and mesh export.** Build. Deliverable: STEP AP242 from Catallax with its deviation report; STL and 3MF from Catallax's meshes. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation. Depends on Catallax milestone M3.
+6. **STEP and mesh export.** Done for STEP AP242, STL, 3MF and, with this change, OBJ. STEP carries Catallax's deviation report; meshes carry their chord tolerance, and OBJ retains the object name, face groups and normals. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation; its mesh exports retain the triangles within their recorded chord tolerance. Depends on Catallax milestone M3.
+
+   **Next exchange work: IGES export.** Planned after STEP export and before STEP and IGES import. Deliverable: exact surfaces through a Catallax IGES writer, like the STEP writer. Depends on that Catallax writer, not on an importer. Exit: the exported bracket opens in an independent IGES reader with its exact surfaces and reported deviation preserved.
 7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted, and section 4's survival scenario in the application loop. Exit: plate-thickness and boss-radius edits on the bracket keep every reference; the survival scenario keeps every reference across rename, split, merge, suppress and restore, undo and redo, and save and reopen; a genuinely lost reference still raises the repair prompt. Depends on Catallax milestone M3.
 8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild, and a rebuild report, written by the development build into each application-loop command's bundle, that counts features recomputed, meshes rebuilt and bodies placed; the counting stays out of the rebuild path. Exit: editing the last feature of the bracket rebuilds only that feature and rebuilds no unrelated mesh or placement; renaming a feature recomputes nothing; restoring the previous value reuses the earlier bodies; in each case the result is identical to a full replay in bodies, face names and refusals. Depends on Catallax milestone M4.
 9. **Feature plumbing in the kernel's order.** Build, recurring. Deliverable: each feature in section 6 switched on when its Catallax operation lands. Exit, per feature: the application loop builds and edits the matching target part.

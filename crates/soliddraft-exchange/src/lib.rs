@@ -1,4 +1,4 @@
-//! Part export: STEP AP242 from the kernel's exact body, STL and 3MF from its meshes.
+//! Part export: STEP AP242 from the kernel's exact body, STL, 3MF and OBJ from its meshes.
 //!
 //! Every export returns the file and a report of how far the file may lie from the exact
 //! body. A STEP report carries the kernel's proven deviation. A mesh report carries the
@@ -8,6 +8,7 @@
 //! See `docs/exchange.md`.
 
 pub mod mesh;
+mod obj;
 mod stl;
 mod three_mf;
 
@@ -29,11 +30,13 @@ pub enum Format {
     Stl,
     /// 3MF core, one closed mesh in millimetres.
     ThreeMf,
+    /// Wavefront OBJ, triangles with face groups and vertex normals.
+    Obj,
 }
 
 impl Format {
     /// Every format, in menu order.
-    pub const ALL: [Format; 3] = [Format::Step, Format::Stl, Format::ThreeMf];
+    pub const ALL: [Format; 4] = [Format::Step, Format::Stl, Format::ThreeMf, Format::Obj];
 
     /// The file extension written, without the dot.
     pub fn extension(self) -> &'static str {
@@ -41,6 +44,7 @@ impl Format {
             Format::Step => "step",
             Format::Stl => "stl",
             Format::ThreeMf => "3mf",
+            Format::Obj => "obj",
         }
     }
 
@@ -50,6 +54,7 @@ impl Format {
             Format::Step => "STEP AP242",
             Format::Stl => "STL",
             Format::ThreeMf => "3MF",
+            Format::Obj => "OBJ",
         }
     }
 
@@ -60,6 +65,7 @@ impl Format {
             "step" | "stp" => Some(Format::Step),
             "stl" => Some(Format::Stl),
             "3mf" => Some(Format::ThreeMf),
+            "obj" => Some(Format::Obj),
             _ => None,
         }
     }
@@ -70,7 +76,7 @@ impl Format {
 pub struct MeshReport {
     /// Triangles written.
     pub triangles: usize,
-    /// Distinct vertices: positions shared by the triangles that meet there.
+    /// Vertices in the indexed mesh, shared across faces except where OBJ keeps normals separate.
     pub vertices: usize,
     /// The kernel's bound, in millimetres, on the distance between the mesh and the exact
     /// surface, after rounding to the file's 32-bit coordinates.
@@ -159,23 +165,24 @@ pub fn export(
             let step = kernel.export_step(body, &options)?;
             Ok(Export { bytes: step.text.into_bytes(), report: Report::Step(step.report) })
         }
-        Format::Stl | Format::ThreeMf => {
+        Format::Stl | Format::ThreeMf | Format::Obj => {
             tolerance.check().map_err(ExportError::Invalid)?;
             let mesh = kernel.tessellate(body, &tolerance.params())?;
             let welded = mesh::weld(&mesh);
+            let closed = welded.is_closed();
+            let bytes = match format {
+                Format::Obj => obj::write(&mesh, name, tolerance.chord_height),
+                Format::Stl => stl::write(&welded, name),
+                Format::ThreeMf if closed => three_mf::write(&welded, name)?,
+                Format::ThreeMf => return Err(ExportError::NotClosed),
+                Format::Step => unreachable!(),
+            };
             let report = MeshReport {
                 triangles: welded.triangles.len(),
-                vertices: welded.positions.len(),
+                vertices: if format == Format::Obj { mesh.positions.len() } else { welded.positions.len() },
                 chord_height: tolerance.chord_height,
-                closed: welded.is_closed(),
+                closed,
                 unavailable_controls: mesh.unavailable_controls,
-            };
-            let bytes = if format == Format::Stl {
-                stl::write(&welded, name)
-            } else if report.closed {
-                three_mf::write(&welded, name)?
-            } else {
-                return Err(ExportError::NotClosed);
             };
             Ok(Export { bytes, report: Report::Mesh(report) })
         }

@@ -104,7 +104,7 @@ Without a key the app runs and the chat panel says the assistant is off. `--mcp 
 cargo run --release -p soliddraft-cli -- replay --steps recipes/union.json
 cargo run --release -p soliddraft-cli -- view recipes/bracket.json --dir front,top,right,iso --svg 'bracket-{view}.svg'
 cargo run --release -p soliddraft-cli -- part bracket.dwprt
-cargo run --release -p soliddraft-cli -- export recipes/bracket.json --out bracket.step --out bracket.3mf
+cargo run --release -p soliddraft-cli -- export recipes/bracket.json --out bracket.step --out bracket.3mf --out bracket.obj
 cargo run --release -p soliddraft-cli -- draw recipes/bracket.json --template iso-a3
 ```
 

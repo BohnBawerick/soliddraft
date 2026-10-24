@@ -1,6 +1,6 @@
 [package]
 name = "soliddraft-exchange"
-description = "SolidDraft part export: STEP AP242 from the kernel's exact body with its proven deviation, and STL and 3MF from the kernel's meshes."
+description = "SolidDraft part export: STEP AP242 from the kernel's exact body with its proven deviation, and STL, 3MF and OBJ from the kernel's meshes."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
