@@ -52,6 +52,7 @@ impl<'a> Evidence<'a> {
             write_json(dir.join("recipe.json"), &kernel.body_recipe(body)?)?;
         }
         let summary = self.host.summary();
+        let references = references(doc.model());
         let mut diagnostics = kernel.take_diagnostics()?;
         if let Some(questions) = diagnostics["questions"].as_array_mut() {
             for (i, question) in questions.iter_mut().enumerate() {
@@ -64,7 +65,7 @@ impl<'a> Evidence<'a> {
             dir.join("command.json"),
             &json!({
                 "tool":name,"arguments":input,"is_error":output.is_error,"output":output.content,
-                "backend":doc.kernel().backend(),"summary":summary,"references":references(doc.model()),
+                "backend":doc.kernel().backend(),"summary":summary,"references":references,
                 "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
