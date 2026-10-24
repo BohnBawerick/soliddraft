@@ -18,8 +18,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -52,8 +51,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -85,8 +83,7 @@
             "diameter": 24
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -118,8 +115,7 @@
             "diameter": 12
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -153,8 +149,7 @@
             "height": 100
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -188,7 +183,6 @@
           }
         ]
       },
-      "render": false,
       "checks": [
         { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
       ]
@@ -225,8 +219,7 @@
             "height": 20
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -259,7 +252,6 @@
           }
         ]
       },
-      "render": false,
       "checks": [
         { "pointer": "/references/7/carrier_origin_counts/0", "contains": 2 }
       ]
@@ -394,7 +386,6 @@
           { "shape": "circle", "center": [20, 20, 0], "diameter": 2 }
         ]
       },
-      "render": false,
       "checks": [
         { "pointer": "/summary/features/16/plane", "equals": "Mounting plane" }
       ]

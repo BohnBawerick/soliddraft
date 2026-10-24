@@ -225,7 +225,7 @@ const HIDDEN_STYLE: &str = r##"fill="none" stroke="#000" stroke-width="0.25" str
 /// The view as an SVG drawing at 1:1 in millimetres. Lines, and arcs whose plane faces
 /// the eye, are written exactly; other curves as polylines within 0.01 mm. Cut regions
 /// are hatched at 45 degrees, 3 mm apart.
-fn svg(curves: &ViewCurves, regions: &[CutRegion], frame: &ViewFrame) -> String {
+pub(crate) fn svg(curves: &ViewCurves, regions: &[CutRegion], frame: &ViewFrame) -> String {
     let margin = 5.0;
     let [x0, y0, x1, y1] = curves.bbox_2d;
     let (w, h) = (x1 - x0 + 2.0 * margin, y1 - y0 + 2.0 * margin);

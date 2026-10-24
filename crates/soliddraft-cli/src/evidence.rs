@@ -19,6 +19,7 @@ pub(crate) struct Evidence<'a> {
     sequence: usize,
     max_work: u64,
     failed: bool,
+    renderer: Option<crate::screenshot::Renderer>,
 }
 
 impl<'a> Evidence<'a> {
@@ -36,7 +37,7 @@ impl<'a> Evidence<'a> {
         if let Some(w) = &work {
             w.take();
         }
-        Ok(Self { host, kernel, work, directory, sequence: 0, max_work, failed: false })
+        Ok(Self { host, kernel, work, directory, sequence: 0, max_work, failed: false, renderer: None })
     }
 
     fn snapshot(&mut self, name: &str, input: &Value, output: &ToolOutput) -> Result<(), Box<dyn std::error::Error>> {
@@ -75,6 +76,31 @@ impl<'a> Evidence<'a> {
             w.take();
         }
         Ok(())
+    }
+
+    fn scenario_capture(&mut self, prepare: bool) -> Result<Value, Box<dyn std::error::Error>> {
+        let root = self.directory.as_ref().ok_or("scenario capture requires --bundle")?;
+        if prepare {
+            self.renderer = Some(pollster::block_on(crate::screenshot::Renderer::new())?);
+            return Ok(json!({"prepared":true}));
+        }
+        let dir = root.join(format!("{:04}", self.sequence));
+        let doc = &*self.host.doc;
+        let body = doc.display_body().ok_or("part has no displayed solid")?;
+        self.renderer
+            .as_mut()
+            .ok_or("call scenario_prepare before capture")?
+            .capture(doc, &dir.join("viewport.png"))?;
+        let spec =
+            soliddraft_kernel_api::drawing::ViewSpec::standard(soliddraft_kernel_api::drawing::StandardView::Isometric);
+        let curves = doc.kernel().view_curves(body, &spec)?;
+        let frame = spec.frame().ok_or("invalid scenario view frame")?;
+        std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
+        let diagnostics = self.kernel.as_ref().ok_or("capture kernel missing")?.take_diagnostics()?;
+        write_json(dir.join("display.kernel.json"), &diagnostics)?;
+        let result = json!({"backend":doc.kernel().backend(),"method":"mesh","live_document":true});
+        write_json(dir.join("display.json"), &result)?;
+        Ok(result)
     }
 }
 
@@ -198,12 +224,36 @@ fn write_json(path: PathBuf, value: &Value) -> Result<(), std::io::Error> {
 
 impl ToolHost for Evidence<'_> {
     fn tools(&self) -> Vec<ToolSpec> {
-        self.host.tools()
+        let mut tools = self.host.tools();
+        if self.directory.is_some() {
+            for (name, description) in [
+                ("scenario_prepare", "Prepare the retained offscreen renderer before scenario timing."),
+                ("scenario_display", "Capture the live document's viewport and SVG without reopening a file."),
+            ] {
+                tools.push(ToolSpec {
+                    name: name.into(),
+                    description: description.into(),
+                    input_schema: json!({"type":"object","properties":{},"required":[],"additionalProperties":false}),
+                });
+            }
+        }
+        tools
     }
 
     fn call(&mut self, name: &str, input: Value, caller: &Caller) -> ToolOutput {
         if self.failed {
             return ToolOutput::error("bundle write failed; start a new run");
+        }
+        if self.directory.is_some() && matches!(name, "scenario_prepare" | "scenario_display") {
+            let capture = self.scenario_capture(name == "scenario_prepare");
+            // Evidence rendering is not the next command's rebuild work.
+            if let Some(work) = &self.work {
+                work.take();
+            }
+            return match capture {
+                Ok(result) => ToolOutput::json(&result),
+                Err(error) => ToolOutput::error(format!("scenario capture failed: {error}")),
+            };
         }
         let result = self.host.call(name, input.clone(), caller);
         if let Err(error) = self.snapshot(name, &input, &result) {

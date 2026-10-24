@@ -54,8 +54,7 @@
             "boundary": 1
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",

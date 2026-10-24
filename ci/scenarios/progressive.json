@@ -1,0 +1,2097 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "progressive",
+  "trends": [
+    {
+      "tool": "sketch",
+      "from_step": 3
+    },
+    {
+      "tool": "cut",
+      "from_step": 3
+    },
+    {
+      "tool": "undo",
+      "from_step": 3
+    },
+    {
+      "tool": "redo",
+      "from_step": 3
+    }
+  ],
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              160,
+              10,
+              0
+            ],
+            "width": 320,
+            "height": 20
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 64000,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 64000,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch3",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch4",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch5",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch6",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch7",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch8",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch9",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch10",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch11",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch12",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch13",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch14",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch15",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch16",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch17",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch18",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch19",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch20",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch21",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch22",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch23",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch24",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch25",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch26",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch27",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch28",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch29",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch30",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              10,
+              10,
+              0
+            ],
+            "width": 2,
+            "height": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch31",
+        "depth": 12,
+        "flip": true,
+        "through_all": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 10
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 63920,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    }
+  ]
+}
