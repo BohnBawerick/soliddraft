@@ -45,6 +45,8 @@ ezpz = { git = "https://github.com/KittyCAD/ezpz", rev = "915882cc731da31042ce49
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sha2 = "0.10.9"
+# Property tests of the command layer, the MCP protocol and the command line (dev only).
+proptest = { version = "1.9", default-features = false, features = ["std"] }
 thiserror = "2.0.18"
 zip = { version = "9.0.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 egui = "0.36.2"

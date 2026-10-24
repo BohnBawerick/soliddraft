@@ -78,6 +78,7 @@ web-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+proptest.workspace = true
 soliddraft-kernel-api = { workspace = true, features = ["counting"] }
 soliddraft-recipe.workspace = true
 egui_kittest.workspace = true

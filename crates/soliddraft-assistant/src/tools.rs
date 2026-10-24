@@ -34,10 +34,28 @@ impl ToolOutput {
         Self { content: serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string()), is_error: false }
     }
 
-    /// A failed call with a reason the model or client can act on.
+    /// A failed call with a reason the model or client can act on. A reason longer than
+    /// [`MAX_ERROR_BYTES`] is cut: see [`clip_error`].
     pub fn error(msg: impl Into<String>) -> Self {
-        Self { content: msg.into(), is_error: true }
+        Self { content: clip_error(msg.into()), is_error: true }
     }
+}
+
+/// The longest error text a tool or the protocol returns before it is cut.
+pub const MAX_ERROR_BYTES: usize = 8 * 1024;
+
+/// Cuts an error message to [`MAX_ERROR_BYTES`]. Errors echo what the caller sent, and a
+/// name of a few megabytes must not come back as an error of the same size.
+pub fn clip_error(mut message: String) -> String {
+    if message.len() > MAX_ERROR_BYTES {
+        let mut end = MAX_ERROR_BYTES;
+        while !message.is_char_boundary(end) {
+            end -= 1;
+        }
+        message.truncate(end);
+        message.push_str(" ... (the message was cut here)");
+    }
+    message
 }
 
 /// Who is calling a tool. The host decides what each caller may do: the assistant may
@@ -310,6 +328,15 @@ mod tests {
             ("note", optional(string("why"))),
             ("op", any_of(vec![constant("fillet"), constant("chamfer")])),
         ])
+    }
+
+    #[test]
+    fn long_errors_are_cut_on_a_character_boundary() {
+        let echoed = format!("no feature named `{}`", "é".repeat(MAX_ERROR_BYTES));
+        let out = ToolOutput::error(echoed);
+        assert!(out.is_error && out.content.len() < MAX_ERROR_BYTES + 64, "{}", out.content.len());
+        assert!(out.content.starts_with("no feature named `éé") && out.content.ends_with("(the message was cut here)"));
+        assert_eq!(ToolOutput::error("short").content, "short");
     }
 
     #[test]
