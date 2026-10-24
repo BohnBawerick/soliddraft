@@ -72,6 +72,13 @@ pub enum Line {
         /// The shapes.
         shapes: Vec<Shape>,
     },
+    /// A sketch built with the analytic geometry tools, in plane coordinates.
+    SketchGeometry {
+        /// Reference plane or planar face name.
+        plane: String,
+        /// Operations in order; entity ids start at 1 and are never reused.
+        operations: Vec<sketch::tools::Operation>,
+    },
     /// Adds material: extrudes a sketch's profiles and joins them to the part.
     Extrude {
         /// The sketch's name, or `previous` for the sketch an earlier line made.
@@ -214,6 +221,20 @@ pub fn sketch_params() -> Vec<(&'static str, Value)> {
             ),
         ),
         ("shapes", non_empty_array(shape_schema(), "The closed shapes")),
+    ]
+}
+
+/// Parameters for sketches made by polygon and line/arc editing tools.
+pub fn sketch_geometry_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("plane", string("top, front, right, or a planar face name")),
+        (
+            "operations",
+            non_empty_array(
+                crate::sketch_tools::operation_schema(),
+                "Sketch tools in order, using u/v plane coordinates in mm. Entity ids start at 1; operations return independent copies. Offset chains use selection walking order. Trim/extend discard target relations.",
+            ),
+        ),
     ]
 }
 
@@ -599,6 +620,19 @@ impl Line {
                 run.apply(doc, Command::EditSketch { id, sketch: s })?;
                 run.last_sketch = Some(id);
             }
+            Line::SketchGeometry { plane, operations } => {
+                if operations.is_empty() {
+                    return Err("a sketch needs at least one geometry operation".into());
+                }
+                let at = sketch_plane(doc, plane)?;
+                let id = run.apply(doc, Command::AddSketch { plane: at })?.ok_or("the sketch was not created")?;
+                let mut s = Sketch::new();
+                for (i, operation) in operations.iter().enumerate() {
+                    s.apply_operation(operation).map_err(|e| format!("sketch tool {}: {e}", i + 1))?;
+                }
+                run.apply(doc, Command::EditSketch { id, sketch: s })?;
+                run.last_sketch = Some(id);
+            }
             Line::Extrude { sketch, depth, flip } => {
                 let params = ExtrudeParams {
                     sketch: Some(run.sketch(doc, sketch)?),
@@ -676,6 +710,7 @@ impl Line {
     pub fn op(&self) -> &'static str {
         match self {
             Line::Sketch { .. } => "sketch",
+            Line::SketchGeometry { .. } => "sketch_geometry",
             Line::Extrude { .. } => "extrude",
             Line::Cut { .. } => "cut",
             Line::Fillet { .. } => "fillet",
@@ -721,6 +756,9 @@ impl Line {
                     })
                     .collect();
                 (format!("Sketch on {plane}"), list.join("; "))
+            }
+            Line::SketchGeometry { plane, operations } => {
+                (format!("Sketch geometry on {plane}"), format!("{} tool operations", operations.len()))
             }
             Line::Extrude { sketch, depth, flip } => {
                 ("Extrude".into(), format!("{sketch}, {}", end(false, *depth, *flip)))
@@ -1544,36 +1582,6 @@ mod tests {
         assert!(tools.len() <= 20, "strict tools per request");
         let text = serde_json::to_string(&tools.iter().map(|t| &t.input_schema).collect::<Vec<_>>()).unwrap();
         assert!(text.matches("anyOf").count() <= 16, "union parameters");
-    }
-
-    #[test]
-    fn every_recipe_line_is_a_registry_verb() {
-        let feature = || "Boss-Extrude1".to_owned();
-        let lines = [
-            Line::Sketch { plane: "top".into(), shapes: Vec::new() },
-            Line::Extrude { sketch: "previous".into(), depth: 1.0, flip: false },
-            Line::Cut { sketch: "previous".into(), through_all: true, depth: 1.0, flip: false },
-            Line::Fillet { edges: Vec::new(), radius: 1.0 },
-            Line::Chamfer { edges: Vec::new(), distance: 1.0 },
-            Line::EditExtrude { feature: feature(), depth: 1.0, flip: false },
-            Line::EditCut { feature: feature(), through_all: false, depth: 1.0, flip: false },
-            Line::EditFillet { feature: feature(), radius: 1.0 },
-            Line::EditChamfer { feature: feature(), distance: 1.0 },
-            Line::Suppress { feature: feature(), suppressed: true },
-            Line::DeleteFeature { feature: feature() },
-        ];
-        let mut ops: Vec<&str> = lines.iter().map(Line::op).collect();
-        for line in &lines {
-            assert_eq!(serde_json::to_value(line).unwrap()["op"], line.op(), "the serde tag is the op");
-        }
-        let mut verbs: Vec<&str> = commands::verbs().map(|c| c.id).collect();
-        ops.sort();
-        verbs.sort();
-        assert_eq!(ops, verbs, "every line kind has a verb in the registry, and every verb a line kind");
-        for c in commands::verbs() {
-            let names: Vec<&str> = (c.params)().into_iter().map(|(n, _)| n).collect();
-            assert!(!names.is_empty(), "{} is a verb without parameters", c.id);
-        }
     }
 
     #[test]

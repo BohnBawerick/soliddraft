@@ -1,0 +1,81 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "sketch-linear-pattern",
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": 0,
+                "v": 0
+              },
+              "start": {
+                "u": 5,
+                "v": 0
+              },
+              "end": {
+                "u": -5,
+                "v": 0
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": -5,
+                "v": 0
+              },
+              "b": {
+                "u": 5,
+                "v": 0
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "linear_pattern",
+            "entities": [
+              1,
+              2
+            ],
+            "step": {
+              "u": 15,
+              "v": 0
+            },
+            "count": 3
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 235.61944901923448,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 2,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}

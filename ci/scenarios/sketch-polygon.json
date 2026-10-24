@@ -1,0 +1,47 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "sketch-polygon",
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "polygon",
+            "center": {
+              "u": 0,
+              "v": 0
+            },
+            "vertex": {
+              "u": 5,
+              "v": 0
+            },
+            "sides": 4
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 100,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 2,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}

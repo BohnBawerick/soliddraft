@@ -249,3 +249,56 @@ fn drawing_workspace(harness: &mut Harness<'_, SolidDraftApp>) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     image.save(path).expect("save the Catallax drawing workspace proof");
 }
+
+#[test]
+fn polygon_controls_commit_undo_redo_and_extrude_on_catallax() {
+    use soliddraft_app::document::{Command, ExtrudeParams, PlaneKind, SketchPlane};
+    use soliddraft_app::state::AppAction;
+
+    let instance = egui_wgpu::wgpu::Instance::default();
+    if pollster::block_on(instance.enumerate_adapters(egui_wgpu::wgpu::Backends::all())).is_empty() {
+        assert!(std::env::var_os("SOLIDDRAFT_REQUIRE_GPU").is_none(), "CI requires a GPU adapter");
+        return;
+    }
+    let mut harness = Harness::builder()
+        .with_size(vec2(1440.0, 1000.0))
+        .with_pixels_per_point(1.0)
+        .with_render_every_step(true)
+        .wgpu()
+        .build_eframe(|cc| SolidDraftApp::new(cc, soliddraft_app::new_document(), Automation::default()));
+    harness.state_mut().state.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: PlaneKind::Top }));
+    harness.run_steps(5);
+    harness.get_by_label("Polygon and modify").scroll_to_me();
+    harness.run_steps(3);
+    harness.get_by_label("Polygon and modify").click();
+    harness.run_steps(4);
+    harness.get_by_label("Apply sketch tool").scroll_to_me();
+    harness.run_steps(3);
+    harness.get_by_label("Apply sketch tool").click();
+    harness.run_steps(5);
+    let sketch_id = harness.state().state.sketch.as_ref().unwrap().feature;
+    let area = 150.0 * 3.0_f64.sqrt();
+    let sketch_area = |h: &Harness<'_, SolidDraftApp>| {
+        h.state().state.sketch.as_ref().unwrap().sketch.regions().unwrap().iter().map(|r| r.area()).sum::<f64>()
+    };
+    assert!((sketch_area(&harness) - area).abs() < 1e-5);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, Key::Z);
+    harness.run_steps(4);
+    assert!(harness.state().state.sketch.as_ref().unwrap().sketch.is_empty());
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, Key::Y);
+    harness.run_steps(4);
+    assert!((sketch_area(&harness) - area).abs() < 1e-5);
+    let image = harness.render().expect("polygon numeric controls render");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/exit-test/sketch-polygon.png");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    image.save(path).unwrap();
+    harness.state_mut().state.push(AppAction::ExitSketch(None));
+    harness.run_steps(4);
+    let doc = &mut harness.state_mut().state.doc;
+    doc.apply(Command::AddExtrude {
+        params: ExtrudeParams { sketch: Some(sketch_id), depth: 2.0, ..Default::default() },
+        via_assistant: false,
+    })
+    .unwrap();
+    assert!((volume(doc) - area * 2.0).abs() < 0.01);
+}

@@ -1,0 +1,82 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "sketch-circular-pattern",
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": 10,
+                "v": 0
+              },
+              "start": {
+                "u": 12,
+                "v": 0
+              },
+              "end": {
+                "u": 8,
+                "v": 0
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 8,
+                "v": 0
+              },
+              "b": {
+                "u": 12,
+                "v": 0
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "circular_pattern",
+            "entities": [
+              1,
+              2
+            ],
+            "center": {
+              "u": 0,
+              "v": 0
+            },
+            "angle_degrees": 90,
+            "count": 4
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 50.26548245743669,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 2,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}

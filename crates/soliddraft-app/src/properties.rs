@@ -559,6 +559,8 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             });
             section_gap(ui);
+            crate::sketch_tools::panel(ui, s, &mut actions);
+            section_gap(ui);
 
             // Selection.
             let selection = s.selection.clone();

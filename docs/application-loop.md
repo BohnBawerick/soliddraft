@@ -43,6 +43,27 @@ and exports its actual Catallax recipe and allowance. The runner calls
 `catallax-verify replay` and requires the same refusal code and a complete
 response. A crash, timeout, invalid input or missing response fails the scenario.
 
+The seven `sketch-*.json` scenarios create profiles using `sketch_geometry`, then
+extrude them through Catallax and check volume and extrusion height. They cover a
+regular polygon, line and arc trim, line and arc extend, a mixed line/arc offset,
+mirror, linear pattern and circular pattern. Rendered steps retain the SVG view
+and viewport PNG through the same runner as the bracket.
+
+`sketch_geometry` accepts `plane` and an ordered `operations` array. Operations
+use the same `soliddraft_sketch::tools::Operation` implementation as the sketch
+properties panel. `add` supplies seed line, arc, circle or point entities;
+`polygon`, `trim`, `extend`, `offset`, `mirror`, `linear_pattern` and
+`circular_pattern` operate on those entities. Coordinates are `{ "u": ..., "v": ... }`
+in the sketch plane, not world coordinates. Entity ids start at 1 in insertion
+order and are never reused. Trim keeps the target id for the first surviving
+piece and allocates another id only when it splits a curve. Copies receive new
+ids. See the scenarios for complete requests, including construction boundaries.
+
+Sketch arithmetic remains tolerance-based. These scenarios prove the resulting
+profiles work through Catallax's existing exact conversion, not that sketch
+intersections, offsets or rotations use rational arithmetic.
+
+
 ## Files and checks
 
 A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step

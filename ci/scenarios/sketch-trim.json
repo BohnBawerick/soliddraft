@@ -1,0 +1,85 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "sketch-trim",
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": 0,
+                "v": 0
+              },
+              "start": {
+                "u": 5,
+                "v": 0
+              },
+              "end": {
+                "u": 0,
+                "v": -5
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": -7,
+                "v": 0
+              },
+              "b": {
+                "u": 5,
+                "v": 0
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "trim",
+            "entity": 1,
+            "at": {
+              "u": -3,
+              "v": -4
+            }
+          },
+          {
+            "tool": "trim",
+            "entity": 2,
+            "at": {
+              "u": -6,
+              "v": 0
+            }
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 78.53981633974483,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 2,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}
