@@ -486,6 +486,7 @@ impl Document {
             id: self.id,
             name: self.name.clone(),
             features: self.features.clone(),
+            datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_id: self.next_id,
             materials: self.materials.clone(),
