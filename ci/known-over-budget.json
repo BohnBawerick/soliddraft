@@ -1,13 +1,4 @@
 {
   "format": "soliddraft-known-over-budget/1",
-  "steps": [
-    {
-      "scenario": "bracket",
-      "step": 6,
-      "tool": "extrude",
-      "last_measured_ms": 2355.201842,
-      "measured_revision": "728a5bdc2efefaf0074d287b20878d0d3afe1f0d",
-      "approved_on": "2026-10-24"
-    }
-  ]
+  "steps": []
 }

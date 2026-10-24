@@ -162,6 +162,11 @@ Each tolerance has its own build lock. Background refinement cannot hold the cac
 lock while a query reads an already available mesh at another tolerance. A refused
 mesh request is not cached as a permanent failure.
 
+A zero chord control leaves Catallax's certified default unchanged and reuses that
+body display. Only an explicitly positive chord bound is halved to reserve room for
+conversion to the interface's `f32` positions. Disabled controls must not trigger an
+unrequested finer remesh.
+
 ## Display data in part files
 
 A part file keeps its coarse and standard levels in `cache/mesh/coarse.bin` and

@@ -355,11 +355,12 @@ fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
     }
     let mut options = MeshOptions::default();
     if params.chord_height > 0.0 {
-        options.chord_tolerance =
+        let requested =
             Rational::parse(&params.chord_height.to_string()).map_err(|e| KernelError::InvalidInput(e.to_string()))?;
+        // Only an explicit bound needs room for the trait's f32 positions.
+        // Zero disables this control; keep the already-certified native default.
+        options.chord_tolerance = &requested / &Rational::from_i64(2);
     }
-    // Reserve half the requested chord bound for the trait's f32 display positions.
-    options.chord_tolerance = &options.chord_tolerance / &Rational::from_i64(2);
     Ok(options)
 }
 
