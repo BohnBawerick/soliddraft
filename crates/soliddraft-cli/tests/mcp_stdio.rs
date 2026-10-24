@@ -9,19 +9,23 @@ struct Client {
     child: std::process::Child,
     out: BufReader<std::process::ChildStdout>,
     next: u64,
+    config: std::path::PathBuf,
 }
 
 impl Client {
     fn start(args: &[&str]) -> Self {
+        let config =
+            std::env::temp_dir().join(format!("soliddraft-mcp-config-{}", soliddraft_document::DocumentId::new()));
         let mut child = Command::new(env!("CARGO_BIN_EXE_soliddraft"))
             .args(args)
+            .env("SOLIDDRAFT_CONFIG_DIR", &config)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
             .expect("start soliddraft mcp");
         let out = BufReader::new(child.stdout.take().unwrap());
-        Self { child, out, next: 0 }
+        Self { child, out, next: 0, config }
     }
 
     fn send(&mut self, msg: &Value) {
@@ -51,6 +55,7 @@ impl Drop for Client {
     fn drop(&mut self) {
         drop(self.child.stdin.take());
         let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.config);
     }
 }
 

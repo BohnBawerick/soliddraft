@@ -136,4 +136,71 @@ To collect the same evidence from another agent, start
 `soliddraft mcp --bundle /tmp/new-agent-run`. `--max-work N` sets its per-call
 kernel allowance. View, drawing and screenshot logging impose no work allowance.
 Normal MCP sessions without `--bundle` keep their existing
-kernel behavior and do not collect diagnostic data.
+kernel behavior and do not collect kernel diagnostic data.
+
+## Command journals
+
+Desktop and MCP document sessions write an always-on command journal under the
+configured recovery folder's `journals/` directory. Browser sessions write the
+same records to localStorage, one item per record. Native file locks and browser
+Web Locks keep live sessions out of crash-report offers. No heartbeat is used.
+
+A journal is `soliddraft-journal/1` JSON Lines. Each document instance starts with
+its authored state, identity and settings, without part display caches. Part
+baselines also keep any existing undo and redo commands. Subsequent records hold
+the command intent and its returned refusal or success. The intent is written
+synchronously before entering the handler, so a process crash leaves the failing
+command readable. Native writes are unbuffered, not a guarantee against power
+loss. An incomplete final record is ignored, including a torn UTF-8 character.
+A malformed complete record is an error.
+
+Part editors, undo, redo, rollback, drawing edits and MCP tools use these hooks.
+An MCP call is recorded once, including a refused proposal. Its speculative
+model calls are not separate edits in the journal. A scratch fork never writes
+its own document journal. Document replacement starts a new instance in the
+same session rather than losing the preceding commands.
+
+The journal contains commands and their outcomes, not durations, rebuild counts,
+survival checks or per-edit state hashes. Normal close removes only the current
+session's journal. A crash leaves it for the next start, even with autosave off.
+The recovery window offers **Save crash report journal** and **Discard journal**.
+Browser reports download; desktop reports use a save dialog. Later keeps the
+offer. Browser storage requires a secure origin with Web Locks and writable
+localStorage. Storage failures are shown, and a failed writer never resumes with
+a silent gap.
+
+The report copy replaces POSIX, Windows, UNC and relative reference paths with
+stable report-local tokens, including paths inside command JSON and error text.
+The raw local journal is never offered or changed by export. Geometry, feature
+names, notes and other authored content remain in the report. Review the copy
+before sharing it.
+
+```sh
+soliddraft journal export /tmp/local-session.jsonl /tmp/crash-report.jsonl
+soliddraft journal replay /tmp/crash-report.jsonl --out /tmp/replayed.json
+```
+
+Replay uses the application's document and tool handlers with Catallax, without
+a window or access to the original part files. Use the same application revision
+and kernel version as the crashed run. An explicitly configured deterministic
+work allowance from `mcp --bundle --max-work` is restored automatically.
+`replayed.json` contains the reconstructed
+parts and drawings, command outcomes, the interrupted command number and any
+reproduced panic. A changed refusal or reproduced panic exits unsuccessfully.
+An unmatched final intent is executed, never replaced by a synthetic crash. If
+it returns normally, the report keeps `interrupted` set and does not claim that
+the original process failure was reproduced. Replay reports are developer
+output, not automatic crash-report attachments. Existing output files are not
+overwritten.
+
+MCP's `document_command` accepts canonical part commands in `command_json`,
+including `app_command`, `app_undo`, `app_redo`, `app_rebuild` and the model's
+`execute`, `undo`, `redo`, `rollback`, `settings`, `group_undo` and `abandon`.
+`drawing_command` accepts drawing `execute`, `undo` and `redo`.
+`soliddraft mcp --open part.dwprt --drawing sheet.dwdrw` opens both documents.
+Commands in the journal are the same data these tools accept.
+
+`journal_replay` deliberately panics a child session during an extrusion edit,
+then replays it through the application loop. It compares the actual mutated
+part, edited drawing, earlier refusal and panic message. Storage tests cover
+live-session exclusion, torn writes, path replacement and clean-close retention.

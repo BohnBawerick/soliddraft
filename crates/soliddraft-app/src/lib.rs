@@ -18,6 +18,9 @@ pub mod drag;
 pub mod drawing;
 pub mod file;
 pub mod icons;
+pub mod journal;
+#[cfg(target_arch = "wasm32")]
+pub mod journal_browser;
 pub mod locations;
 pub mod palette;
 pub mod panels;

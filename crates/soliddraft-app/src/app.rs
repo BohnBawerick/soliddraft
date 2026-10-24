@@ -489,7 +489,12 @@ impl SolidDraftApp {
                     menu_command(ui, st, "export_3mf", "3MF…");
                     menu_command(ui, st, "export_obj", "OBJ…");
                 });
-                if st.recovery.as_ref().is_some_and(|r| !r.offers.is_empty())
+                #[cfg(target_arch = "wasm32")]
+                if crate::journal_browser::has_offers() && ui.button("Crash report journals…").clicked() {
+                    st.push(AppAction::ShowRecovery);
+                    ui.close();
+                }
+                if st.recovery.as_ref().is_some_and(|r| !r.offers.is_empty() || !r.journals.is_empty())
                     && ui.button("Recover documents…").clicked()
                 {
                     st.push(AppAction::ShowRecovery);
@@ -1267,11 +1272,29 @@ impl SolidDraftApp {
                 if let Some(r) = self.state.recovery.as_mut() {
                     r.show = true;
                 }
+                #[cfg(target_arch = "wasm32")]
+                crate::journal_browser::show();
             }
             AppAction::RestoreRecovery(file) => self.restore(&file),
             AppAction::DiscardRecovery(file) => {
                 if let Some(Err(e)) = self.state.recovery.as_mut().map(|r| r.discard(&file)) {
                     self.state.note(e, NoteKind::Error);
+                }
+            }
+            AppAction::ExportCrashJournal(source) => {
+                if let Some(path) = crate::platform::save_path(
+                    "Save crash report journal",
+                    "Command journal",
+                    "jsonl",
+                    "crash-report.jsonl",
+                ) {
+                    match soliddraft_document::journal::export(&source, &path) {
+                        Ok(()) => self.state.note(
+                            "Crash report journal saved with personal paths replaced. Review it before sharing.",
+                            NoteKind::Ok,
+                        ),
+                        Err(e) => self.state.note(format!("Cannot save crash report journal: {e}"), NoteKind::Error),
+                    }
                 }
             }
             AppAction::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
@@ -1377,6 +1400,8 @@ impl SolidDraftApp {
         crate::drawing::reference::window(ctx, &mut self.state);
         crate::locations::window(ctx, &mut self.state);
         crate::recovery::window(ctx, &mut self.state);
+        #[cfg(target_arch = "wasm32")]
+        crate::journal_browser::window(ctx, &mut self.state);
     }
 
     /// The assistant settings dialog: the provider, an API key per provider and the models.

@@ -112,6 +112,11 @@ fn main() -> eframe::Result {
     // Benchmarks and screenshots leave autosave off, so they never offer a recovery.
     let documents = soliddraft_app::settings::documents();
     let recovery = documents.recovery_folder().filter(|_| !automation.bench && automation.screenshot.is_none());
+    let journal = recovery
+        .as_ref()
+        .map(|root| soliddraft_document::journal::Session::start(&root.join("journals")))
+        .transpose()
+        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
 
     let doc = if automation.bench {
         soliddraft_app::bench_document()
@@ -142,7 +147,7 @@ fn main() -> eframe::Result {
         wgpu_options,
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "soliddraft",
         options,
         Box::new(move |cc| {
@@ -155,5 +160,11 @@ fn main() -> eframe::Result {
             }
             Ok(Box::new(app))
         }),
-    )
+    );
+    if result.is_ok()
+        && let Some(journal) = journal
+    {
+        journal.close();
+    }
+    result
 }

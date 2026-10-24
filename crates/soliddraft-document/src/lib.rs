@@ -39,6 +39,7 @@ pub mod backup;
 pub mod hash;
 pub mod id;
 pub mod index;
+pub mod journal;
 pub mod kind;
 pub mod locations;
 pub mod manifest;

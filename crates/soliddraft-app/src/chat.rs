@@ -334,7 +334,8 @@ impl AppState {
             return;
         }
         let summary =
-            CommandTools { doc: &mut self.doc, book: &mut self.chat.book, surface: Surface::Assistant }.summary();
+            CommandTools { doc: &mut self.doc, book: &mut self.chat.book, surface: Surface::Assistant, drawing: None }
+                .summary();
         let context = format!("<model_summary>\n{summary}\n</model_summary>");
         let Link::Connected(conversation) = &mut self.chat.link else { return };
         match conversation.send(&text, Some(&context)) {
@@ -362,7 +363,7 @@ impl AppState {
     pub fn poll_assistant(&mut self) {
         let crate::chat::ChatState { link, book, .. } = &mut self.chat;
         let Link::Connected(conversation) = link else { return };
-        let mut host = CommandTools { doc: &mut self.doc, book, surface: Surface::Assistant };
+        let mut host = CommandTools { doc: &mut self.doc, book, surface: Surface::Assistant, drawing: None };
         let events = conversation.poll(&mut host);
         for e in events {
             self.chat_event(e);
@@ -373,7 +374,7 @@ impl AppState {
     pub fn wait_assistant(&mut self) {
         let crate::chat::ChatState { link, book, .. } = &mut self.chat;
         let Link::Connected(conversation) = link else { return };
-        let mut host = CommandTools { doc: &mut self.doc, book, surface: Surface::Assistant };
+        let mut host = CommandTools { doc: &mut self.doc, book, surface: Surface::Assistant, drawing: None };
         let events = conversation.wait(&mut host);
         for e in events {
             self.chat_event(e);
@@ -566,7 +567,12 @@ impl AppState {
         let mut changed = false;
         while let Ok(call) = mcp.calls.try_recv() {
             let before = self.doc.mesh_version;
-            let mut host = CommandTools { doc: &mut self.doc, book: &mut self.chat.book, surface: Surface::Mcp };
+            let mut host = CommandTools {
+                doc: &mut self.doc,
+                book: &mut self.chat.book,
+                surface: Surface::Mcp,
+                drawing: self.drawing.session.as_mut().map(|s| &mut s.doc),
+            };
             let reply = mcp.session.handle(&mut host, call.message.clone());
             call.respond(reply);
             changed |= self.doc.mesh_version != before;

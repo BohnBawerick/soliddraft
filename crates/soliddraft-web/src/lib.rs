@@ -15,6 +15,7 @@ use wasm_bindgen::prelude::*;
 pub fn start() {
     let _ = eframe::WebLogger::init(log::LevelFilter::Info);
     std::panic::set_hook(Box::new(|info| {
+        soliddraft_app::journal_browser::mark_crashed();
         let message = format!("SolidDraft stopped: {info}");
         web_sys::console::error_1(&message.clone().into());
         show_status(&message);
@@ -30,6 +31,10 @@ pub fn start() {
         .find_map(|p| p.strip_prefix("preset="))
         .and_then(soliddraft_app::viewport::look::Preset::parse);
     wasm_bindgen_futures::spawn_local(async move {
+        if let Err(error) = soliddraft_app::journal_browser::start().await {
+            show_status(&format!("SolidDraft could not start its command journal: {error}"));
+            return;
+        }
         let started = eframe::WebRunner::new()
             .start(
                 canvas,

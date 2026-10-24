@@ -102,6 +102,8 @@ pub enum AppAction {
     RestoreRecovery(PathBuf),
     /// Deletes a recovery copy the user does not want.
     DiscardRecovery(PathBuf),
+    /// Saves a path-redacted journal for a crash report.
+    ExportCrashJournal(PathBuf),
     Quit,
     /// Everything the drawing tab does.
     Drawing(crate::drawing::DrawingAction),
