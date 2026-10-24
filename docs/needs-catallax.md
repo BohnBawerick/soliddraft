@@ -1,14 +1,16 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `621287a71cc198c1a7921bd39d7f7e033e229f7e`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `603a9e7b8860cfa62194606020267ef9370e3df7`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
 
 Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
 For a new solid, the adapter merges operand recipes, selects the longest operand that
 is a matching leading prefix, and calls `catallax_app::build_incremental`. Independent
 tool recipes are not assumed to be leading prefixes. The selected checkpoint is cloned
 outside the body arena lock, preserving earlier immutable bodies for undo, branches
-and concurrent queries. Catallax validates native step definitions and numerical policy
-before resuming; a mismatch restarts evaluation rather than accepting stale geometry.
+and concurrent queries. Catallax shares the immutable checkpoint build and continues
+with persistent geometry, topology and fact storage rather than copying all history.
+It validates native step definitions and numerical policy before resuming; a mismatch
+restarts evaluation rather than accepting stale geometry.
 The document's first-changed-feature cache supplies earlier bodies for parameter edits,
 so both model-feature reuse and native prefix reuse apply to the changed suffix.
 
