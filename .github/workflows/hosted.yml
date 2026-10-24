@@ -58,6 +58,35 @@ jobs:
           path: recipes/golden/catallax-*
           if-no-files-found: error
 
+  # The bracket's STEP opens in OpenCASCADE with the exact body's face count and a volume
+  # within the reported deviation. OpenCASCADE is a test tool; the application never links it.
+  step-opencascade:
+    name: Bracket STEP in OpenCASCADE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install cadquery-ocp==7.9.3.1.1
+      - run: cargo build --locked -p soliddraft-cli
+      - name: Export the bracket and check its STEP in OpenCASCADE
+        run: |
+          out="$RUNNER_TEMP/bracket-export"
+          mkdir -p "$out"
+          target/debug/soliddraft export recipes/bracket.json --json \
+            --out "$out/bracket.step" --out "$out/bracket.stl" --out "$out/bracket.3mf" > "$out/reports.jsonl"
+          cat "$out/reports.jsonl"
+          grep '"format":"step"' "$out/reports.jsonl" > "$out/step-report.json"
+          python3 ci/check-step.py "$out/bracket.step" "$out/step-report.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bracket-export
+          path: ${{ runner.temp }}/bracket-export
+
   # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
   test:
     name: Workspace (${{ matrix.os }})

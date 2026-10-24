@@ -215,6 +215,23 @@ impl Document {
         Some(soliddraft_tessellation::report(self.kernel.as_ref(), self.body()?, &self.settings.viewport))
     }
 
+    /// Exports the part's body as `format`, meshes at the part's export tolerance. A part
+    /// with a feature that did not build is refused, so no file shows a body the part does
+    /// not have; suppressed and rolled-back features are fine.
+    pub fn export(&self, format: soliddraft_exchange::Format) -> Result<soliddraft_exchange::Export, String> {
+        if let Some(f) = self.features.iter().find(|f| {
+            matches!(
+                self.status(f.id),
+                Some(FeatureStatus::RepairNeeded(_) | FeatureStatus::Blocked(_) | FeatureStatus::Failed(_))
+            )
+        }) {
+            return Err(format!("{} did not build; repair or suppress it before exporting", f.name));
+        }
+        let body = self.body().ok_or("the part has no body to export")?;
+        soliddraft_exchange::export(self.kernel.as_ref(), body, &self.name, format, &self.settings.export)
+            .map_err(|e| e.to_string())
+    }
+
     /// The kernel the document builds on.
     pub fn kernel(&self) -> &Arc<dyn Kernel> {
         &self.kernel

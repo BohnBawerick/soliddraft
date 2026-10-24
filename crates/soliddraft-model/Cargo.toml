@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 soliddraft-document.workspace = true
+soliddraft-exchange.workspace = true
 soliddraft-kernel-api.workspace = true
 soliddraft-materials.workspace = true
 soliddraft-sketch.workspace = true

@@ -1018,3 +1018,26 @@ pub fn view_curves_match_mesh_hlr(k: &dyn Kernel) {
         assert!(*worst <= 0.02, "{name}: {what} ({:.2} percent)", worst * 100.0);
     }
 }
+
+// Exchange.
+
+/// The bracket's STEP export writes one solid with the body's faces, a proven deviation
+/// within the requested tolerance and an AP242 header, and leaves the body unchanged.
+pub fn step_export_reports_what_it_wrote(k: &dyn Kernel) {
+    let body = bracket(k);
+    let before = fixed(k, body);
+    let options = crate::StepOptions { product_name: "bracket".into(), ..crate::StepOptions::default() };
+    let step = k.export_step(body, &options).expect("bracket STEP export");
+    let r = &step.report;
+    assert_eq!((r.solids, r.faces), (1, before.topology.faces.len()), "STEP solids and faces");
+    assert!(r.within_tolerance && r.warnings.is_empty(), "STEP deviation within tolerance: {r:?}");
+    assert!(r.max_deviation_mm >= 0.0 && r.max_deviation_mm <= options.tolerance, "STEP deviation {r:?}");
+    assert!(step.text.starts_with("ISO-10303-21;"), "STEP header");
+    assert!(step.text.contains("AP242"), "STEP schema");
+    assert!(step.text.contains("'bracket'"), "STEP product name");
+    assert_eq!(step.text.matches("ADVANCED_FACE(").count(), r.faces, "STEP faces in the file");
+    assert_eq!(fixed(k, body), before, "STEP export leaves the body unchanged");
+
+    let refused = k.export_step(body, &crate::StepOptions { tolerance: 0.0, ..options });
+    assert!(matches!(refused, Err(KernelError::InvalidInput(_))), "zero tolerance refused: {refused:?}");
+}

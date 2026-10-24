@@ -16,6 +16,7 @@ path = "src/main.rs"
 soliddraft-assembly.workspace = true
 soliddraft-document.workspace = true
 soliddraft-drawing.workspace = true
+soliddraft-exchange.workspace = true
 # Counting writes each application-loop command's rebuild report.
 soliddraft-kernel-api = { workspace = true, features = ["counting"] }
 soliddraft-kernel-catallax.workspace = true
