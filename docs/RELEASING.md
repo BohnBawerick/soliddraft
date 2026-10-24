@@ -42,6 +42,8 @@ gh workflow run release.yml --ref main
 
 `workflow_dispatch` always builds without creating a release, deploying Pages, signing with repository credentials or publishing attestations. It takes no publish switch. A pull request that changes release configuration also runs the same complete packaging path. This lets a new workflow be tested before GitHub permits manual dispatch from the default branch.
 
+Branch dry runs cancel their superseded runs. Each run on `main` or a version tag has its own concurrency group and cannot cancel or replace another protected run. A manual check against a release tag must not interrupt publishing.
+
 Download these run artifacts:
 
 - `release-dry-run`, the exact seven packages, SBOM, notes and SHA256SUMS.
