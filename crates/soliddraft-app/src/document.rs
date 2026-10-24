@@ -215,7 +215,7 @@ impl FeatureKind {
 
     /// The model's definition of the feature. A sketch's plane comes from the
     /// panels; a sketch is stored as the panels solved it.
-    fn to_model(&self) -> model::FeatureKind {
+    pub(crate) fn to_model(&self) -> model::FeatureKind {
         match self {
             FeatureKind::Sketch(s) => {
                 model::FeatureKind::Sketch(model::SketchFeature { plane: s.plane.to_model(), sketch: s.sketch.clone() })
@@ -635,6 +635,8 @@ pub struct Document {
     pub dirty: bool,
     /// Counts every change, so autosave can tell edits apart from redraws.
     pub edits: u64,
+    /// Counts every rebuild of the tree, undo and redo included; see [`Document::revision`].
+    revision: u64,
     /// Pick id (index + 1) to entity, rebuilt with the meshes.
     picks: Vec<PickEntry>,
     model: model::Document,
@@ -669,6 +671,7 @@ impl Document {
             edges: Vec::new(),
             dirty: false,
             edits: 0,
+            revision: 0,
             picks: Vec::new(),
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
@@ -683,6 +686,12 @@ impl Document {
     pub fn touch(&mut self) {
         self.dirty = true;
         self.edits += 1;
+    }
+
+    /// Changes whenever the tree is rebuilt: a command, undo, redo or a rollback. Work
+    /// started at one revision, such as a drag preview, is obsolete at the next.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// The part behind the interface.
@@ -965,6 +974,7 @@ impl Document {
     /// Mirrors the model and refreshes the display, keeping the selection by name.
     fn after_change(&mut self) {
         let started = web_time::Instant::now();
+        self.revision += 1;
         let previous_selection = self.selection.and_then(|s| self.describe(s)).map(|i| (i.feature, i.title));
         self.sync();
         self.refresh_display();
@@ -1312,20 +1322,12 @@ impl Document {
     }
 
     fn mesh_of(&self, body: BodyId) -> Result<Arc<DisplayMesh>, String> {
-        let topology = self.kernel().topology(body).map_err(|e| e.to_string())?;
-        let mesh = self.kernel().tessellate(body, &self.tess_params).map_err(|e| e.to_string())?;
-        let edges = self.edge_polylines(body);
-        let mut picks = Vec::new();
-        Ok(Arc::new(display_mesh(0, &mesh, &edges, &topology, &HashMap::new(), &mut picks)))
+        preview_mesh(self.kernel().as_ref(), body, &self.tess_params)
     }
 
-    /// The body's edges sampled along their curves. A kernel that cannot sample them
-    /// leaves the body without edges rather than without faces.
+    /// The body's edges at the shown level's parameters.
     fn edge_polylines(&self, body: BodyId) -> Vec<EdgePolyline> {
-        self.kernel().tessellate_edges(body, &self.tess_params).unwrap_or_else(|e| {
-            log::warn!("edges of body {body:?}: {e}");
-            Vec::new()
-        })
+        edge_polylines(self.kernel().as_ref(), body, &self.tess_params)
     }
 
     /// A persistent reference to an edge of the part, for fillets and chamfers.
@@ -1550,6 +1552,29 @@ fn view_status(
                 .collect(),
         ),
     }
+}
+
+/// The display mesh of a body that is only previewed: no picks, so nothing in it can be
+/// selected or confused with the document's own body.
+pub(crate) fn preview_mesh(
+    kernel: &dyn Kernel,
+    body: BodyId,
+    params: &TessellationParams,
+) -> Result<Arc<DisplayMesh>, String> {
+    let topology = kernel.topology(body).map_err(|e| e.to_string())?;
+    let mesh = kernel.tessellate(body, params).map_err(|e| e.to_string())?;
+    let edges = edge_polylines(kernel, body, params);
+    let mut picks = Vec::new();
+    Ok(Arc::new(display_mesh(0, &mesh, &edges, &topology, &HashMap::new(), &mut picks)))
+}
+
+/// The body's edges sampled along their curves. A kernel that cannot sample them
+/// leaves the body without edges rather than without faces.
+fn edge_polylines(kernel: &dyn Kernel, body: BodyId, params: &TessellationParams) -> Vec<EdgePolyline> {
+    kernel.tessellate_edges(body, params).unwrap_or_else(|e| {
+        log::warn!("edges of body {body:?}: {e}");
+        Vec::new()
+    })
 }
 
 /// Builds the display mesh and registers its faces, edges and corners as picks.

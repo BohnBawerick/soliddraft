@@ -45,6 +45,7 @@ SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and
 Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/needs-catallax.md) for the limits of the current application entry.
 
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
+- Dragging a selected feature's depth previews the rebuilt part off the interface thread and applies the final value as one undo step.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
 - Extrudes, cuts, two-sided through all, booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
 - Drawings use Catallax meshes for polygon hidden-line removal and Catallax booleans for plane sections. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.

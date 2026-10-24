@@ -1,11 +1,14 @@
 //! PropertyManager: the open sketch, the feature editor while a feature is
 //! being created or edited, otherwise the selected entity's properties.
 
-use crate::document::{Command, FeatureStatus, PlaneKind, ProfileKind, Selection, SketchPlane, fmt_mm};
+use crate::document::{
+    Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, ProfileKind, Selection, SketchPlane, fmt_mm,
+};
+use crate::drag::Dimension;
 use crate::icons::{self, Icon};
 use crate::sketch::{ConstraintKind, EntityKind, fmt_value, solve};
 use crate::sketcher;
-use crate::state::{AppAction, AppState, EditorParams, ExitInto, SketchSel, Tool};
+use crate::state::{AppAction, AppState, DragStep, EditorParams, ExitInto, SketchSel, Tool};
 use crate::theme;
 use egui::{Align2, CornerRadius, Rect, Sense, Stroke, pos2, vec2};
 
@@ -83,7 +86,19 @@ pub fn mm_field(ui: &mut egui::Ui, label: &str, value: &mut f64) -> bool {
 }
 
 fn unit_field(ui: &mut egui::Ui, label: &str, value: &mut f64, unit: &str) -> bool {
-    let mut changed = false;
+    unit_value(ui, label, value, unit, true).changed()
+}
+
+/// A labelled number field with its unit. Without `update_while_editing`, a typed value
+/// counts only when Enter or a click elsewhere ends the typing.
+fn unit_value(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut f64,
+    unit: &str,
+    update_while_editing: bool,
+) -> egui::Response {
+    let mut response = None;
     ui.horizontal(|ui| {
         ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0)));
         field_frame().show(ui, |ui| {
@@ -95,19 +110,52 @@ fn unit_field(ui: &mut egui::Ui, label: &str, value: &mut f64, unit: &str) -> bo
                 ui.visuals_mut().widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
                 ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
                 ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
-                let r = ui.add(egui::DragValue::new(value).speed(0.5).range(0.01..=100_000.0).fixed_decimals(2));
+                let r = ui.add(
+                    egui::DragValue::new(value)
+                        .speed(0.5)
+                        .range(0.01..=100_000.0)
+                        .fixed_decimals(2)
+                        .update_while_editing(update_while_editing),
+                );
                 // Named apart from the caption so automation can find the field itself.
                 r.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
                 });
-                changed |= r.changed();
+                response = Some(r);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(unit).size(11.0).italics().color(theme::MUTED));
                 });
             });
         });
     });
-    changed
+    response.expect("the field is always added")
+}
+
+/// The selected feature's dimension. Dragging it previews the part off the interface
+/// thread and applies the value where the drag ends as one undo step; a typed value
+/// applies on Enter.
+fn dimension_field(ui: &mut egui::Ui, state: &mut AppState, id: FeatureId, kind: &FeatureKind) {
+    let Some(dimension) = Dimension::of(kind) else { return };
+    let Some(applied) = dimension.get(kind) else { return };
+    let mut value = match &state.drag_preview {
+        Some(d) if d.feature() == id => d.value(),
+        _ => applied,
+    };
+    ui.add_space(8.0);
+    let r = unit_value(ui, dimension.label(), &mut value, "mm", false);
+    if r.drag_started() {
+        state.push(AppAction::DragDimension(DragStep::Start { feature: id, dimension }));
+    }
+    if r.changed() {
+        if r.dragged() || r.drag_started() {
+            state.push(AppAction::DragDimension(DragStep::Move(value)));
+        } else if let Some(command) = crate::drag::edit_command(id, dimension.with(kind, value)) {
+            state.push(AppAction::Command(command));
+        }
+    }
+    if r.drag_stopped() {
+        state.push(AppAction::DragDimension(DragStep::Finish));
+    }
 }
 
 fn section_gap(ui: &mut egui::Ui) {
@@ -754,6 +802,11 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                 ui.end_row();
             }
         });
+        if let (Selection::Feature(id), Some(f)) = (sel, feature)
+            && f.status != FeatureStatus::Inactive
+        {
+            dimension_field(ui, state, id, &f.kind);
+        }
         if let Some(FeatureStatus::NeedsRepair(items)) = &status
             && let Some(id) = info.feature
         {

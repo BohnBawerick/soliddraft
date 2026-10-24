@@ -18,7 +18,7 @@ use crate::document::{Command, Selection};
 use crate::drawing::{DrawingAction, DrawingSel, DrawingSession, DrawingTab, DrawingTool, LinkState, PlaceKind};
 use crate::icons::Icon;
 use crate::panels::Side;
-use crate::state::{AppAction, AppState, EditorParams, ExitInto, RibbonTab, Tool};
+use crate::state::{AppAction, AppState, DragStep, EditorParams, ExitInto, RibbonTab, Tool};
 use crate::viewport::camera::StandardView;
 use crate::viewport::look::Preset;
 use crate::viewport::render::DisplayMode;
@@ -1203,19 +1203,26 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::Command(Command::Rollback(None)))
             .when(|s| s.doc.rollback.is_some()),
         // Keys that do what the moment needs.
-        cmd("cancel", "Cancel", Icon::Close, "Cancel the open feature, leave the sketch, or clear the selection")
-            .key(Scope::Part, none, Key::Escape)
-            .run(|s| {
-                if s.drawing.new.is_some() {
-                    AppAction::Drawing(DrawingAction::CancelNewDrawing)
-                } else if s.editor.is_some() {
-                    AppAction::CancelEditor
-                } else if s.in_sketch() {
-                    AppAction::ExitSketch(None)
-                } else {
-                    AppAction::Select(None)
-                }
-            }),
+        cmd(
+            "cancel",
+            "Cancel",
+            Icon::Close,
+            "Cancel a drag or the open feature, leave the sketch, or clear the selection",
+        )
+        .key(Scope::Part, none, Key::Escape)
+        .run(|s| {
+            if s.drawing.new.is_some() {
+                AppAction::Drawing(DrawingAction::CancelNewDrawing)
+            } else if s.editor.is_some() {
+                AppAction::CancelEditor
+            } else if s.in_sketch() {
+                AppAction::ExitSketch(None)
+            } else if s.drag_preview.is_some() {
+                AppAction::DragDimension(DragStep::Cancel)
+            } else {
+                AppAction::Select(None)
+            }
+        }),
         cmd("confirm", "OK", Icon::Check, "Apply the open feature or new drawing, or leave the sketch")
             .key(Scope::Part, none, Key::Enter)
             .run(|s| {

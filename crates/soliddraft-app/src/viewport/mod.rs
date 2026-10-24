@@ -44,6 +44,9 @@ pub struct Overlay<'a> {
     pub sketch: Option<&'a mut SketchSession>,
     /// A closed sketch to show quietly on its plane.
     pub passive_sketch: Option<(Plane, &'a Sketch)>,
+    /// What a drag preview shows, painted over the top of the viewport, and whether it
+    /// reports a failure.
+    pub preview_label: Option<(String, bool)>,
 }
 
 pub struct ViewportState {
@@ -109,7 +112,7 @@ impl ViewportState {
         selection: Option<Selection>,
         hover_label: Option<&str>,
     ) -> ViewportEvents {
-        let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
+        let Overlay { ghost, preview, sketch, passive_sketch, preview_label } = overlay;
         let sketching = sketch.is_some();
         let mut events = ViewportEvents::default();
         let rect = ui.available_rect_before_wrap();
@@ -230,6 +233,9 @@ impl ViewportState {
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
         self.paint_pills(ui, rect, hover_label);
+        if let Some((label, failed)) = preview_label {
+            paint_preview_label(ui, rect, &label, failed);
+        }
         events
     }
 
@@ -449,6 +455,17 @@ impl ViewportState {
         painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
         painter.galley(r.center() - galley.size() / 2.0, galley, color);
     }
+}
+
+/// Says over the top of the viewport that the body shown is a preview, not the part.
+fn paint_preview_label(ui: &egui::Ui, rect: Rect, label: &str, failed: bool) {
+    let color = if failed { theme::ERROR } else { theme::ACCENT };
+    let painter = ui.painter();
+    let galley = painter.layout_no_wrap(label.to_owned(), theme::font(11.5), color);
+    let size = galley.size() + vec2(18.0, 7.0);
+    let r = Rect::from_min_size(pos2(rect.center().x - size.x / 2.0, rect.top() + 52.0), size);
+    painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, color), StrokeKind::Inside);
+    painter.galley(r.center() - galley.size() / 2.0, galley, color);
 }
 
 enum HudItem {

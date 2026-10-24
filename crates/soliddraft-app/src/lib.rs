@@ -14,6 +14,7 @@ pub mod command_tools;
 pub mod commands;
 pub mod display_quality;
 pub mod document;
+pub mod drag;
 pub mod drawing;
 pub mod file;
 pub mod icons;

@@ -3,7 +3,7 @@
 //! double-click edits, F2 or a slow second click renames, drag reorders,
 //! right-click offers the rest.
 
-use crate::document::{Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane};
+use crate::document::{Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane, fmt_mm};
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, EditorParams, Rename};
 use crate::theme;
@@ -126,7 +126,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 chevron: child.map(|_| state.expanded.contains(&f.id)),
                 icon,
                 name: f.name.clone(),
-                sub: f.summary(),
+                // A dragged dimension shows as a preview until the drag applies it.
+                sub: match &state.drag_preview {
+                    Some(d) if d.feature() == f.id => format!("Preview {} mm", fmt_mm(d.value())),
+                    _ => f.summary(),
+                },
                 status: f.status.clone(),
                 suppressed: f.suppressed,
                 via_assistant: f.via_assistant,
