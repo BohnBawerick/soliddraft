@@ -1,13 +1,16 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `621287a71cc198c1a7921bd39d7f7e033e229f7e`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
 
-The adapter still merges its operands' recipe steps and calls `catallax_app::build`
-for each new solid. The pinned application entry evaluates that complete recipe before
-meshing it. SolidDraft's first-changed-feature cache avoids unchanged model features,
-but one new boolean still replays the earlier Catallax operations inside that call.
-A reusable-prefix application build entry is needed to remove that remaining growth;
-display caching and keeping successful proposal builds do not change this kernel path.
+Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
+For a new solid, the adapter merges operand recipes, selects the longest operand that
+is a matching leading prefix, and calls `catallax_app::build_incremental`. Independent
+tool recipes are not assumed to be leading prefixes. The selected checkpoint is cloned
+outside the body arena lock, preserving earlier immutable bodies for undo, branches
+and concurrent queries. Catallax validates native step definitions and numerical policy
+before resuming; a mismatch restarts evaluation rather than accepting stale geometry.
+The document's first-changed-feature cache supplies earlier bodies for parameter edits,
+so both model-feature reuse and native prefix reuse apply to the changed suffix.
 
 - Stage 1 profiles are definitions, not sheet bodies. The recipe runner now defers profiles and reports loop count, closure and tags without querying sheet topology, mass or validity. An extrusion or revolution creates and releases the backend's temporary profile handle. Direct sheet queries return `Unsupported`.
 - Stage 1 empty boolean results cannot be expressed by the existing solid/sheet `BodyKind` and mandatory centroid. The adapter returns `Unsupported` without changing the operands.

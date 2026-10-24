@@ -1,6 +1,6 @@
 //! STEP AP242 export through Catallax's exporter, with its proven deviation report.
 
-use catallax_app::ApplicationBody;
+use catallax_app::IncrementalApplicationBody;
 use catallax_numbers::Rational;
 use soliddraft_kernel_api::{KernelError, KernelResult, StepExport, StepOptions, StepReport};
 
@@ -8,7 +8,7 @@ use crate::{numerical, query_error};
 
 /// Writes the exact body as STEP. The deviation is Catallax's proven bound, rounded up to
 /// a decimal and to the next `f64`, never down.
-pub(super) fn export(app: &ApplicationBody, options: &StepOptions) -> KernelResult<StepExport> {
+pub(super) fn export(app: &IncrementalApplicationBody, options: &StepOptions) -> KernelResult<StepExport> {
     if !options.tolerance.is_finite() || options.tolerance <= 0.0 {
         return Err(KernelError::InvalidInput(format!(
             "the STEP tolerance is {} mm; it must be more than zero",
@@ -23,8 +23,9 @@ pub(super) fn export(app: &ApplicationBody, options: &StepOptions) -> KernelResu
         ..catallax_step::StepOptions::default()
     };
     let mut bytes = Vec::new();
+    let built = app.checkpoint.built();
     let answer = numerical("export_step", |dec| {
-        catallax_step::write_step(&app.built.model, &[app.built.result], &catallax_options, dec, &mut bytes)
+        catallax_step::write_step(&built.model, &[built.result], &catallax_options, dec, &mut bytes)
     })
     .map_err(|e| query_error("export_step", e))?;
     let text = String::from_utf8(bytes).map_err(|e| KernelError::QueryFailed {
