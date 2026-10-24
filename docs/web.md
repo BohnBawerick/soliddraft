@@ -43,3 +43,5 @@ cargo run --release -p soliddraft-server -- --web target/web-dist
 Open <http://127.0.0.1:8766/>. The kernel runs locally in the browser, including when the assistant is off.
 
 Hosted CI builds the complete application module. The Docker image builds the Rust server and uses trunk for the browser application. See [continuous integration](ci.md) for the native and browser checks.
+
+The [release workflow](RELEASING.md) also produces a static browser zip and a GitHub Pages payload. Pages deployment remains off until the owner approves it. Static hosting runs the kernel locally without the assistant relay; it does not need the Rust server or a public self-hosted service.
