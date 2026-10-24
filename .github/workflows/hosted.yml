@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       refresh_catallax_views:
-        description: Generate the Catallax view baseline as an artifact for review
+        description: Generate Catallax view and drawing baselines as artifacts for review
         type: boolean
         default: false
 
@@ -43,16 +43,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p soliddraft-kernel-catallax -p soliddraft-recipe --all-features --locked --no-fail-fast
-      - name: Generate the requested Catallax view baseline
+      - name: Generate the requested Catallax view and drawing baselines
         if: inputs.refresh_catallax_views
         env:
           SOLIDDRAFT_BLESS: "1"
-        run: cargo test -p soliddraft-cli --test view_exit_test bracket_catallax_views_match_golden_across_runs --locked -- --exact
+        run: |
+          cargo test -p soliddraft-cli --test view_exit_test bracket_catallax_views_match_golden_across_runs --locked -- --exact
+          cargo test -p soliddraft-cli --test draw_exit_test bracket_drawing_exports_and_follows_the_part --locked -- --exact
+          cargo test -p soliddraft-cli --test d3_exit_test bracket_sections_details_and_sheets --locked -- --exact
       - uses: actions/upload-artifact@v4
         if: inputs.refresh_catallax_views
         with:
           name: catallax-view-baseline
-          path: recipes/golden/catallax-views.json
+          path: recipes/golden/catallax-*
           if-no-files-found: error
 
   # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
