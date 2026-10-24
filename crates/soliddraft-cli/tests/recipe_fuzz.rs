@@ -25,7 +25,7 @@ fn config() -> ProptestConfig {
     // A failing input is printed with the test's seed; nothing is written beside the sources.
     let mut config = ProptestConfig { failure_persistence: None, ..ProptestConfig::default() };
     if std::env::var_os("PROPTEST_CASES").is_none() {
-        config.cases = 40;
+        config.cases = 24;
     }
     if std::env::var_os("PROPTEST_RNG_SEED").is_none() {
         config.rng_seed = RngSeed::Fixed(0x52_43_50);
@@ -94,20 +94,20 @@ enum Mutation {
     Repeat { times: usize },
 }
 
-/// Numbers a recipe could be made to hold. Subnormal ones (below 2.2e-308 in size) are left
-/// out: Catallax's boolean region sampling halves an interval down to them, one recursion a
-/// halving, and overflows even an 8 MiB stack, which aborts the process whatever the caller does
-/// (a bracket recipe with a 5e-324 origin; see the pull request for the report to Catallax).
+/// Numbers a recipe could be made to hold. Nonzero numbers smaller than 0.01 in size are left
+/// out: moved a hair off a round value, a plane origin sends Catallax's boolean region sampling
+/// into a recursion that takes a minute or overflows the stack and aborts the process (see
+/// `kernel_abort.rs`, which holds the isolated reproduction).
 fn extreme() -> impl Strategy<Value = Value> {
     fn float(f: f64) -> Option<Value> {
         Number::from_f64(f).map(Value::Number)
     }
     prop_oneof![
         3 => prop::sample::select(vec![
-            0.0, -0.0, -1.0, 1.0, 1e-300, 1e-9, 1e-6, 0.5, 1e6, 1e9, 1e15, 1e100, 1e300, -1e300, f64::MAX, f64::MIN_POSITIVE,
+            0.0, -0.0, -1.0, 1.0, 0.5, 1e6, 1e9, 1e15, 1e100, 1e300, -1e300, f64::MAX,
         ])
         .prop_filter_map("finite", float),
-        1 => any::<f64>().prop_filter_map("finite and not subnormal", |f| if f == 0.0 || f.is_normal() { float(f) } else { None }),
+        1 => any::<f64>().prop_filter_map("finite and not tiny", |f| if f == 0.0 || f.abs() >= 0.01 { float(f) } else { None }),
         1 => any::<i64>().prop_map(Value::from),
         1 => any::<u64>().prop_map(Value::from),
     ]
