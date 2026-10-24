@@ -10,7 +10,7 @@ mod drawing_queries;
 mod frames;
 mod step;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use catallax_app::{ApplicationBody, Error};
@@ -47,18 +47,41 @@ struct Stored {
 struct Solid {
     app: ApplicationBody,
     ids: convert::Ids,
-    display: Mutex<Option<(Rational, Arc<catallax_mesh::Mesh>)>>,
+    display: Mutex<VecDeque<Arc<CachedMesh>>>,
     topology: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
 }
 
+struct CachedMesh {
+    chord: Rational,
+    value: Mutex<Option<Arc<catallax_mesh::Mesh>>>,
+}
+
 impl Solid {
     fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
-        let mut cached =
-            self.display.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
-        if let Some((chord, mesh)) = cached.as_ref()
-            && chord == &options.chord_tolerance
-        {
+        let entry = {
+            let mut cached = self
+                .display
+                .lock()
+                .map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
+            let entry = if let Some(i) = cached.iter().position(|entry| entry.chord == options.chord_tolerance) {
+                cached.remove(i).expect("the cached tolerance exists")
+            } else {
+                // Three viewport levels, the certified mesh and a drawing tolerance coexist.
+                const MESHES: usize = 5;
+                if cached.len() == MESHES {
+                    cached.pop_front();
+                }
+                Arc::new(CachedMesh { chord: options.chord_tolerance.clone(), value: Mutex::new(None) })
+            };
+            cached.push_back(entry.clone());
+            entry
+        };
+        // Only requests for this tolerance wait for its build. Background refinement
+        // must not lock out a viewport or file query for an already available mesh.
+        let mut value =
+            entry.value.lock().map_err(|_| KernelError::Unavailable("Catallax mesh cache lock poisoned".into()))?;
+        if let Some(mesh) = value.as_ref() {
             return Ok(mesh.clone());
         }
         let mesh = Arc::new(if options.chord_tolerance == MeshOptions::default().chord_tolerance {
@@ -68,8 +91,7 @@ impl Solid {
                 .map_err(|e| query_error(query, e))?
                 .value
         });
-        // Keep one tolerance per immutable body so triangles and edges share the same mesh.
-        *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
+        *value = Some(mesh.clone());
         Ok(mesh)
     }
 }
@@ -185,7 +207,10 @@ impl CatallaxKernel {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
-        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
+        let display = Arc::new(CachedMesh {
+            chord: MeshOptions::default().chord_tolerance,
+            value: Mutex::new(Some(Arc::new(app.display.value.clone()))),
+        });
         state.bodies.insert(
             body,
             Stored {
@@ -195,7 +220,7 @@ impl CatallaxKernel {
                 solid: Some(Arc::new(Solid {
                     app,
                     ids,
-                    display: Mutex::new(Some(display)),
+                    display: Mutex::new(VecDeque::from([display])),
                     topology: OnceLock::new(),
                     mass: OnceLock::new(),
                 })),
@@ -532,10 +557,14 @@ impl Kernel for CatallaxKernel {
             let brep = solid.app.built.bodies.len().max(1) * (display.faces.len() * FACE + display.edges.len() * EDGE);
             bytes += brep + mesh_bytes(display);
             // The display cache holds its own copy, even of the certified mesh.
-            if let Ok(cached) = solid.display.lock()
-                && let Some((_, mesh)) = cached.as_ref()
-            {
-                bytes += mesh_bytes(mesh);
+            if let Ok(cached) = solid.display.lock() {
+                for entry in cached.iter() {
+                    if let Ok(value) = entry.value.try_lock()
+                        && let Some(mesh) = value.as_ref()
+                    {
+                        bytes += mesh_bytes(mesh);
+                    }
+                }
             }
         }
         Ok(bytes as u64)

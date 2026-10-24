@@ -603,14 +603,14 @@ impl Command {
     }
 }
 
-/// A body's display mesh and picks as it was last shown.
+/// A body's display geometry and picks as it was last shown.
 struct Shown {
     body: BodyId,
-    /// The feature the body was shown after; picks name it.
-    feature: FeatureId,
     params: TessellationParams,
     mesh: Arc<DisplayMesh>,
     picks: Vec<PickEntry>,
+    faces: Vec<NamedFace>,
+    edges: Vec<NamedEdge>,
 }
 
 /// Ghost geometry of an unapplied feature.
@@ -635,9 +635,8 @@ pub struct Document {
     pub tess_params: TessellationParams,
     /// Display meshes keyed by body. Replaced when the displayed body changes.
     pub meshes: HashMap<BodyId, Arc<DisplayMesh>>,
-    /// Bumped on every rebuild so the renderer knows to re-upload.
+    /// Bumped when display geometry or shading changes, so the renderer re-uploads.
     pub mesh_version: u64,
-    pub rebuild_ms: f32,
     /// Features past this index are not built. `None` builds all. Setting it
     /// and calling [`Document::rebuild`] rolls the display back without an
     /// undo entry, as the feature editors do; [`Command::Rollback`] is the
@@ -654,8 +653,10 @@ pub struct Document {
     revision: u64,
     /// Pick id (index + 1) to entity, rebuilt with the meshes.
     picks: Vec<PickEntry>,
-    /// The body `meshes` and `picks` show, and the feature it was shown after.
-    shown: Option<(BodyId, FeatureId)>,
+    /// The immutable body `meshes` and `picks` show.
+    shown: Option<BodyId>,
+    /// Assignments used by the currently shown mesh.
+    shading: model::PartMaterials,
     /// Bodies shown before, latest last, kept while the part keeps them.
     recent: Vec<Shown>,
     model: model::Document,
@@ -684,7 +685,6 @@ impl Document {
             tess_params: TessellationParams::default(),
             meshes: HashMap::new(),
             mesh_version: 0,
-            rebuild_ms: 0.0,
             rollback: None,
             faces: Vec::new(),
             edges: Vec::new(),
@@ -693,6 +693,7 @@ impl Document {
             revision: 0,
             picks: Vec::new(),
             shown: None,
+            shading: model.materials().clone(),
             recent: Vec::new(),
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
@@ -701,6 +702,32 @@ impl Document {
         doc.sync();
         doc.refresh_display();
         doc
+    }
+
+    /// A proposal copy shares display buffers as well as immutable kernel builds.
+    pub(crate) fn fork(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            path: None,
+            features: self.features.clone(),
+            selection: None,
+            tess_params: self.tess_params,
+            meshes: self.meshes.clone(),
+            mesh_version: self.mesh_version,
+            rollback: self.rollback,
+            faces: self.faces.clone(),
+            edges: self.edges.clone(),
+            dirty: self.dirty,
+            edits: self.edits,
+            revision: self.revision,
+            picks: self.picks.clone(),
+            shown: self.shown,
+            shading: self.shading.clone(),
+            recent: Vec::new(),
+            model: self.model.fork(),
+            quality: self.quality.fork(self.kernel().clone()),
+            assistant_mark: self.assistant_mark,
+        }
     }
 
     /// Marks a change: unsaved, and one more edit for autosave.
@@ -718,6 +745,14 @@ impl Document {
     /// The part behind the interface.
     pub fn model(&self) -> &model::Document {
         &self.model
+    }
+
+    pub(crate) fn into_model(self) -> model::Document {
+        self.model
+    }
+
+    pub(crate) fn reuse_builds_from(&mut self, source: &model::Document) {
+        self.model.reuse_builds_from(source);
     }
 
     pub fn kernel(&self) -> &Arc<dyn Kernel> {
@@ -997,12 +1032,10 @@ impl Document {
 
     /// Mirrors the model and refreshes the display, keeping the selection by name.
     fn after_change(&mut self) {
-        let started = web_time::Instant::now();
         self.revision += 1;
         let previous_selection = self.selection.and_then(|s| self.describe(s)).map(|i| (i.feature, i.title));
         self.sync();
         self.refresh_display();
-        self.rebuild_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.restore_selection(previous_selection);
     }
 
@@ -1032,36 +1065,31 @@ impl Document {
             .collect();
     }
 
-    /// Tessellates and names the displayed body. The level the camera last asked for is
-    /// tessellated at once; the worker makes the other two. A body already shown keeps
-    /// its mesh: the same body only has its faces named again, and a recent body the
-    /// part still keeps, such as the one undo brings back, shows its kept mesh.
+    /// Shows a new body at the requested level. Unchanged bodies keep their display
+    /// geometry and GPU buffers; undo and redo restore recent bodies' meshes and picks.
     fn refresh_display(&mut self) {
+        let next = self.display_body();
+        if next.is_some() && next == self.shown && !self.meshes.is_empty() {
+            if self.shading != *self.model.materials() {
+                self.apply_appearances();
+                self.mesh_version += 1;
+            }
+            return;
+        }
         let model = &self.model;
         self.quality.retain(|b| model.keeps(b));
         self.recent.retain(|s| model.keeps(s.body));
-        let next = self.display_index().and_then(|i| Some((self.features[i].body?, self.features[i].id)));
-        if let Some((body, _)) = next
-            && next == self.shown
-            && !self.meshes.is_empty()
-        {
-            if let Ok(topology) = self.kernel().topology(body) {
-                self.name_entities(body, &topology);
-            }
-            self.apply_appearances();
-            self.mesh_version += 1;
-            return;
-        }
-        if let Some((body, feature)) = self.shown.take()
+        if let Some(body) = self.shown.take()
             && let Some(mesh) = self.meshes.get(&body).cloned()
         {
             self.recent.retain(|s| s.body != body);
             self.recent.push(Shown {
                 body,
-                feature,
                 params: self.tess_params,
                 mesh,
                 picks: std::mem::take(&mut self.picks),
+                faces: std::mem::take(&mut self.faces),
+                edges: std::mem::take(&mut self.edges),
             });
             if self.recent.len() > display_quality::RECENT {
                 self.recent.remove(0);
@@ -1069,29 +1097,32 @@ impl Document {
         }
         self.faces.clear();
         self.edges.clear();
-        self.meshes = HashMap::new();
-        self.picks = Vec::new();
-        if let Some((body, feature)) = next
+        self.meshes.clear();
+        self.picks.clear();
+        if let Some(body) = next
             && let Ok(topology) = self.kernel().topology(body)
         {
-            self.name_entities(body, &topology);
             self.tess_params = self.quality.retarget(body, &topology, &self.model.settings().viewport);
-            let kept =
-                self.recent.iter().position(|s| s.body == body && s.feature == feature && s.params == self.tess_params);
+            let kept = self.recent.iter().position(|s| s.body == body && s.params == self.tess_params);
             let cached = self.quality.reuse(body);
             if let (Some(i), Some(_)) = (kept, &cached) {
                 let s = self.recent.remove(i);
-                self.meshes = HashMap::from([(body, s.mesh)]);
+                self.meshes.insert(body, s.mesh);
                 self.picks = s.picks;
+                self.faces = s.faces;
+                self.edges = s.edges;
                 self.apply_appearances();
                 self.shown = next;
-            } else if let Some(mesh) = cached {
-                self.show_mesh(body, &topology, &mesh);
-                self.shown = next;
-            } else if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
-                self.show_mesh(body, &topology, &mesh);
-                self.quality.made(body, mesh);
-                self.shown = next;
+            } else {
+                self.name_entities(body, &topology);
+                if let Some(mesh) = cached {
+                    self.show_mesh(body, &topology, &mesh);
+                    self.shown = next;
+                } else if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
+                    self.show_mesh(body, &topology, &mesh);
+                    self.quality.made(body, mesh);
+                    self.shown = next;
+                }
             }
         } else {
             self.quality.clear();
@@ -1118,9 +1149,22 @@ impl Document {
     /// Fills each display mesh's appearance table and per-vertex index from the part's
     /// appearance assignments, resolved by the model for its default configuration.
     fn apply_appearances(&mut self) {
+        self.shading = self.model.materials().clone();
         let resolved = self.model.appearance_table(None);
         let table: Vec<Shading> = resolved.appearances.iter().map(Appearance::shading).collect();
         for mesh in self.meshes.values_mut() {
+            if mesh.appearances == table
+                && mesh.face_picks.iter().zip(&mesh.face_appearances).all(|(&pick, &appearance)| {
+                    let wanted = match self.picks.get((pick as usize).wrapping_sub(1)) {
+                        Some(PickEntry::Face(_, face)) => resolved.faces.get(face).copied().unwrap_or(0),
+                        _ => 0,
+                    };
+                    appearance == wanted
+                })
+                && mesh.face_picks.len() == mesh.face_appearances.len()
+            {
+                continue;
+            }
             let m = Arc::make_mut(mesh);
             m.face_appearances = m
                 .face_picks

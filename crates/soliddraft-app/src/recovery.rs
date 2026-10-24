@@ -4,9 +4,9 @@
 //! `<recovery folder>/session-<pid>-<nanos>/`, and holds a lock on its `session.lock`
 //! while it runs. Autosave writes the open part's and the open drawing's recovery copies
 //! there (`soliddraft_document::recovery`) when [`Trigger`] says one is due. The bytes
-//! are made on the interface thread without the slow entries (display meshes, the
-//! drawing's thumbnail); a writer thread puts them on disk, so the interface never
-//! waits for it. Saving a document deletes its copy, and so does replacing it with
+//! are serialized and written on a worker without the slow entries (display meshes,
+//! the drawing's thumbnail). The interface only hands over an immutable snapshot.
+//! Saving a document deletes its copy, and so does replacing it with
 //! another (New, Open). Quitting deletes the session folder.
 //!
 //! At start, a session folder whose lock is free belonged to an app that ended without
@@ -36,7 +36,8 @@ const DAMAGED: &str = "damaged";
 const SESSION_PREFIX: &str = "session-";
 
 enum Job {
-    Write(Record, Vec<u8>),
+    Part { snapshot: Box<soliddraft_model::file::Snapshot>, name: String, path: Option<PathBuf> },
+    Drawing { drawing: Box<soliddraft_drawing::Drawing>, id: DocumentId, path: Option<PathBuf>, kernel: String },
     Remove(DocumentId, DocKind),
     Flush(Sender<()>),
 }
@@ -124,28 +125,22 @@ impl Recovery {
         };
         let id = part.model().id();
         if watch(&mut self.part, DocKind::Part, Some((id, part.edits, part.dirty)), &policy, now, &send) {
-            let model = part.model();
-            let extras = soliddraft_model::file::Extras { no_display_data: true, ..Default::default() };
-            match model.to_bytes_with(&extras) {
-                Ok(bytes) => {
-                    let record =
-                        Record::new(id, DocKind::Part, &part.name, part.path.as_deref(), model.semantic_hash());
-                    send(Job::Write(record, bytes));
-                }
-                Err(e) => self.failures.push(format!("Autosave could not copy {}: {e}", part.name)),
-            }
+            send(Job::Part {
+                snapshot: Box::new(part.model().snapshot()),
+                name: part.name.clone(),
+                path: part.path.clone(),
+            });
         }
         let seen = drawing.map(|d| (d.id, d.edits, d.dirty));
         if watch(&mut self.drawing, DocKind::Drawing, seen, &policy, now, &send)
             && let Some(d) = drawing
         {
-            match d.to_bytes(kernel, false).and_then(|bytes| {
-                let revision = d.drawing.semantic_hash().map_err(|e| e.to_string())?;
-                Ok((Record::new(d.id, DocKind::Drawing, &d.drawing.meta.title, d.path.as_deref(), revision), bytes))
-            }) {
-                Ok((record, bytes)) => send(Job::Write(record, bytes)),
-                Err(e) => self.failures.push(format!("Autosave could not copy {}: {e}", d.drawing.meta.title)),
-            }
+            send(Job::Drawing {
+                drawing: Box::new(d.drawing.clone()),
+                id: d.id,
+                path: d.path.clone(),
+                kernel: kernel.to_owned(),
+            });
         }
         [&self.part, &self.drawing].into_iter().filter_map(|w| w.trigger.wait(&policy, now)).min()
     }
@@ -311,9 +306,31 @@ fn writer(dir: PathBuf) -> (Sender<Job>, Receiver<String>, JoinHandle<()>) {
         .spawn(move || {
             for job in inbox {
                 let failed = match job {
-                    Job::Write(record, bytes) => recovery::write(&dir, &record, &bytes)
+                    Job::Part { snapshot, name, path } => snapshot
+                        .encode()
+                        .map_err(|e| e.to_string())
+                        .and_then(|(manifest, bytes)| {
+                            let record =
+                                Record::new(manifest.id, DocKind::Part, &name, path.as_deref(), manifest.semantic_hash);
+                            recovery::write(&dir, &record, &bytes).map_err(|e| e.to_string())
+                        })
                         .err()
-                        .map(|e| format!("Autosave could not write the recovery copy of {}: {e}", record.name)),
+                        .map(|e| format!("Autosave could not copy {name}: {e}")),
+                    Job::Drawing { drawing, id, path, kernel } => {
+                        let name = &drawing.meta.title;
+                        let meta = soliddraft_drawing::file::FileMeta {
+                            id,
+                            ..soliddraft_drawing::file::FileMeta::new(&kernel, drawing.meta.units)
+                        };
+                        let copy = || {
+                            let revision = drawing.semantic_hash().map_err(|e| e.to_string())?;
+                            let record = Record::new(id, DocKind::Drawing, name, path.as_deref(), revision);
+                            let bytes = soliddraft_drawing::file::to_bytes_with(&drawing, &meta, false)
+                                .map_err(|e| e.to_string())?;
+                            recovery::write(&dir, &record, &bytes).map_err(|e| e.to_string())
+                        };
+                        copy().err().map(|e| format!("Autosave could not copy {name}: {e}"))
+                    }
                     Job::Remove(id, kind) => recovery::remove(&dir, id, kind)
                         .err()
                         .map(|e| format!("Autosave could not delete a recovery copy: {e}")),

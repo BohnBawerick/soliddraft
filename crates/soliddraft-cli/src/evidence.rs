@@ -47,7 +47,8 @@ impl<'a> Evidence<'a> {
         std::fs::create_dir(&dir)?;
         let doc = &*self.host.doc;
         std::fs::write(dir.join("part.json"), doc.model().part_json())?;
-        doc.model().save(dir.join("part.dwprt"))?;
+        let (_, bytes) = doc.model().snapshot().encode()?;
+        soliddraft_document::save_atomic(&dir.join("part.dwprt"), &bytes)?;
         if let Some(body) = doc.display_body() {
             write_json(dir.join("recipe.json"), &kernel.body_recipe(body)?)?;
         }

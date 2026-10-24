@@ -2,6 +2,13 @@
 
 The backend pins Catallax main revision `0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
 
+The adapter still merges its operands' recipe steps and calls `catallax_app::build`
+for each new solid. The pinned application entry evaluates that complete recipe before
+meshing it. SolidDraft's first-changed-feature cache avoids unchanged model features,
+but one new boolean still replays the earlier Catallax operations inside that call.
+A reusable-prefix application build entry is needed to remove that remaining growth;
+display caching and keeping successful proposal builds do not change this kernel path.
+
 - Stage 1 profiles are definitions, not sheet bodies. The recipe runner now defers profiles and reports loop count, closure and tags without querying sheet topology, mass or validity. An extrusion or revolution creates and releases the backend's temporary profile handle. Direct sheet queries return `Unsupported`.
 - Stage 1 empty boolean results cannot be expressed by the existing solid/sheet `BodyKind` and mandatory centroid. The adapter returns `Unsupported` without changing the operands.
 - Stage 1 measurement proves volume, area and centroid enclosures. The adapter returns their midpoints in the existing floating-point interface and leaves inertia absent. Density scaling and assembly transforms preserve absent inertia. The adapter has not wired Catallax's proven inertia query.

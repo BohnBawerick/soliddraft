@@ -141,10 +141,10 @@ three levels:
 
 - A rebuild tessellates the level the camera last asked for at once, so the viewport
   never waits for the worker to show a new shape. The worker then makes the other two.
-- A rebuild that leaves the shown body as it was, such as a rename, keeps its meshes
-  and picks; only the face names are read again. The meshes of the last four bodies
-  shown stay while the part keeps those bodies, so undo, redo and a value put back show
-  the earlier mesh without tessellating.
+- A rebuild that leaves the shown body unchanged, including a new datum sketch or an
+  edit to an unconsumed sketch, keeps its meshes, names, picks and GPU upload. Only
+  changed appearance assignments update shading. The last four shown bodies keep their
+  complete display geometry while the part keeps them, so undo and redo restore it.
 - Each frame, `Document::update_display(projection, dt)` moves the level choice on with
   the viewport's pixels per millimetre (`ViewportState::projection`) and swaps in a finer
   or coarser mesh when it is ready. It returns true while the worker still owes a level,
@@ -154,6 +154,13 @@ three levels:
   new one arrives, and nothing rebuilds.
 - `Document::display_quality()` says which level is shown and wanted, and each level's
   parameters, for the quality slider.
+
+The Catallax adapter keeps five exact chord tolerances per immutable body in LRU order.
+The certified display, three viewport levels and drawing mesh can coexist: a file save
+must not evict the viewport mesh just to ask for its coarse and standard levels.
+Each tolerance has its own build lock. Background refinement cannot hold the cache
+lock while a query reads an already available mesh at another tolerance. A refused
+mesh request is not cached as a permanent failure.
 
 ## Display data in part files
 

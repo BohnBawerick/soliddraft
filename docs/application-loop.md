@@ -100,6 +100,8 @@ MCP tool call has a numbered directory under `commands/` containing:
   worker finished during the command, so scenarios do not check it.
 - `part.json` and `part.dwprt`: the application's complete feature recipe and
   saved part after the command, including undo, rejected proposals and rollback.
+  The archive omits optional display caches and thumbnails, as recovery snapshots do.
+  Collecting command evidence must not request more meshes of an unchanged body.
 - `recipe.json`, when a solid exists: the recipe that constructed the displayed
   body, for the existing view command.
 - `kernel.json`: the actual kernel calls, work counts, errors and Catallax's

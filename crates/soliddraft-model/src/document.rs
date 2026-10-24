@@ -502,6 +502,15 @@ impl Document {
         }
     }
 
+    /// Reuses a fork's successful builds on this kernel without changing the document.
+    /// Exact input keys decide reuse even if the document changed after the dry run.
+    pub fn reuse_builds_from(&mut self, source: &Document) {
+        if self.id == source.id && Arc::ptr_eq(&self.kernel, &source.kernel) {
+            self.cache.import(&source.cache);
+            self.cache.trim(&self.built);
+        }
+    }
+
     /// True while the document keeps `body`: a feature build it holds made it. A body
     /// no document keeps is released and does not come back.
     pub fn keeps(&self, body: BodyId) -> bool {
