@@ -366,3 +366,235 @@ fn removing_features_asks_for_repairs_instead_of_guessing() {
     assert_all_ok(&doc);
     let _ = ids.slot_sketch;
 }
+
+/// Rebuild from the first changed feature: an edit builds from the feature it changed,
+/// a rename builds nothing, a value put back reuses the bodies built for it, and every
+/// result is the one a full replay of the saved part gives.
+mod rebuild {
+    use std::collections::{BTreeSet, HashMap};
+
+    use soliddraft_kernel_api::counting::{Counting, Work};
+    use soliddraft_kernel_api::{BodyId, FaceId, TessellationParams};
+    use soliddraft_model::feature_of_tag;
+
+    use super::*;
+
+    fn counting() -> Arc<Counting> {
+        Arc::new(Counting::new(kernel()))
+    }
+
+    /// The features whose operations ran, and how many meshes were made.
+    fn recomputed(work: &[Work]) -> (BTreeSet<FeatureId>, usize) {
+        let features = work
+            .iter()
+            .filter_map(|w| match w {
+                Work::Operation(tag) => Some(feature_of_tag(tag).unwrap_or_else(|| panic!("untagged operation {tag}"))),
+                Work::Mesh(_) => None,
+            })
+            .collect();
+        (features, work.iter().filter(|w| matches!(w, Work::Mesh(_))).count())
+    }
+
+    /// The part without kernel ids, one line per fact: every feature's status, its
+    /// faces' names and its body's face count; then the final body's faces and edges by
+    /// name with their measures, its mass properties, its validation and its mesh.
+    fn picture(doc: &Document) -> Vec<String> {
+        let k = doc.kernel();
+        let mut out = Vec::new();
+        for f in doc.features() {
+            let names: Vec<String> =
+                doc.generated_faces(f.id).iter().map(|n| format!("{:?} {}", n.generator, n.ordinal)).collect();
+            let faces = doc.body_after(f.id).map(|b| k.topology(b).unwrap().faces.len());
+            out.push(format!("{} {}: {:?}, faces {names:?}, body faces {faces:?}", f.id, f.name, doc.status(f.id)));
+        }
+        let body = doc.body().unwrap();
+        let t = k.topology(body).unwrap();
+        let labels: HashMap<FaceId, String> = doc
+            .face_labels(body)
+            .into_iter()
+            .map(|(id, l)| (id, l.map_or_else(|| "unnamed".to_owned(), |l| l.text)))
+            .collect();
+        for f in &t.faces {
+            out.push(format!(
+                "face {}: {:?} area {:?} centroid {:?} normal {:?} {} edges",
+                labels[&f.id],
+                f.surface,
+                f.area,
+                f.centroid,
+                f.normal,
+                f.edges.len()
+            ));
+        }
+        for e in &t.edges {
+            let faces: Vec<&String> = e.faces.iter().map(|f| &labels[f]).collect();
+            out.push(format!("edge {:?} length {:?} midpoint {:?} between {faces:?}", e.curve, e.length, e.midpoint));
+        }
+        out.push(format!("{} vertices, box {:?}", t.vertex_count, t.bbox));
+        out.push(format!("mass {:?}", k.mass_properties(body).unwrap()));
+        out.push(format!("validation {:?}", k.validate(body).unwrap()));
+        let mesh = k.tessellate(body, &TessellationParams::default()).unwrap();
+        out.push(format!("mesh positions {:?}", mesh.positions));
+        out.push(format!("mesh normals {:?}", mesh.normals));
+        out.push(format!("mesh indices {:?}", mesh.indices));
+        let faces: Vec<&String> = mesh.triangle_faces.iter().map(|f| &labels[f]).collect();
+        out.push(format!("mesh faces {faces:?}, uncertified controls {:?}", mesh.unavailable_controls));
+        out
+    }
+
+    /// Asserts that `doc` is what replaying its saved file from nothing gives.
+    fn assert_matches_full_replay(doc: &Document, when: &str) {
+        let replay = Document::from_bytes(&doc.to_bytes().unwrap(), kernel()).unwrap();
+        let (got, want) = (picture(doc), picture(&replay));
+        assert_eq!(got.len(), want.len(), "{when}: the incremental part and the full replay differ in size");
+        for (g, w) in got.iter().zip(&want) {
+            assert!(
+                g == w,
+                "{when}: the incremental part differs from a full replay\n  got:  {g:.400}\n  want: {w:.400}"
+            );
+        }
+    }
+
+    fn bodies(doc: &Document) -> Vec<Option<BodyId>> {
+        doc.features().iter().map(|f| doc.body_after(f.id)).collect()
+    }
+
+    fn cut(sketch: FeatureId, end: EndCondition) -> FeatureKind {
+        extrude(sketch, ExtrudeOp::Cut, end, true)
+    }
+
+    #[test]
+    fn editing_the_last_feature_rebuilds_only_that_feature() {
+        let kernel = counting();
+        let mut doc = Document::new("Mount bracket", kernel.clone());
+        let ids = build_bracket(&mut doc);
+        let slot = doc.features().last().unwrap().id;
+        let through = doc.feature(slot).unwrap().kind.clone();
+        assert_eq!(through, cut(ids.slot_sketch, EndCondition::ThroughAll));
+        kernel.take();
+        let built = bodies(&doc);
+        let last = built.len() - 1;
+
+        // A pocket instead of a slot through the flange: only the slot is built again,
+        // on the body the features above it left, and nothing is tessellated.
+        doc.execute(Command::EditFeature { id: slot, kind: cut(ids.slot_sketch, blind(5.0)) }).unwrap();
+        assert_eq!(recomputed(&kernel.take()), ([slot].into(), 0), "the edit built only the slot");
+        let pocket = bodies(&doc);
+        assert_eq!(pocket[..last], built[..last], "the features above the slot kept their bodies");
+        assert_ne!(pocket[last], built[last]);
+        assert_all_ok(&doc);
+        assert_matches_full_replay(&doc, "after the edit");
+        kernel.take();
+
+        // A depth one unit in the last place away is another input, never rounded to the
+        // first one.
+        let nudged = cut(ids.slot_sketch, blind(5.0 + 4.0 * f64::EPSILON));
+        doc.execute(Command::EditFeature { id: slot, kind: nudged }).unwrap();
+        assert_eq!(recomputed(&kernel.take()).0, [slot].into(), "a different depth is built");
+        doc.undo().unwrap();
+        assert_eq!(bodies(&doc), pocket);
+        kernel.take();
+
+        // Putting the slot back through, as a new edit, reuses the bodies built for it.
+        doc.execute(Command::EditFeature { id: slot, kind: through.clone() }).unwrap();
+        assert_eq!(kernel.take(), [], "the restored value built nothing");
+        assert_eq!(bodies(&doc), built);
+
+        // Undo and redo build nothing either.
+        doc.undo().unwrap();
+        assert_eq!(kernel.take(), [], "undo built nothing");
+        assert_eq!(bodies(&doc), pocket);
+        assert_matches_full_replay(&doc, "after undo");
+        kernel.take();
+        doc.redo().unwrap();
+        assert_eq!(kernel.take(), [], "redo built nothing");
+        assert_eq!(bodies(&doc), built);
+
+        // Renaming builds nothing, and the new names show in labels as a replay's do.
+        for (id, name) in [(ids.slot_sketch, "Slot outline"), (slot, "Slot cut"), (ids.base, "Plate")] {
+            doc.execute(Command::RenameFeature { id, name: name.into() }).unwrap();
+        }
+        assert_eq!(kernel.take(), [], "renames built nothing");
+        assert_eq!(bodies(&doc), built);
+        let labels = doc.face_labels(doc.body().unwrap());
+        assert!(
+            labels
+                .iter()
+                .any(|(_, l)| l.as_ref().is_some_and(|l| l.feature == slot && l.text.starts_with("Slot cut · ")))
+        );
+        assert_matches_full_replay(&doc, "after the renames");
+        kernel.take();
+
+        // Save and reopen: the reopened part replays in full and matches; editing its
+        // last feature again builds only that feature, and undo builds nothing.
+        let dir = std::env::temp_dir().join(format!("soliddraft-rebuild-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bracket.dwprt");
+        doc.save(&path).unwrap();
+        let mut reopened = Document::open(&path, kernel.clone()).unwrap();
+        assert_eq!(picture(&reopened), picture(&doc), "the reopened part is the edited one");
+        kernel.take();
+        let reopened_built = bodies(&reopened);
+        reopened.execute(Command::EditFeature { id: slot, kind: cut(ids.slot_sketch, blind(5.0)) }).unwrap();
+        assert_eq!(recomputed(&kernel.take()), ([slot].into(), 0), "the reopened part built only the slot");
+        assert_eq!(bodies(&reopened)[..last], reopened_built[..last]);
+        assert_matches_full_replay(&reopened, "after editing the reopened part");
+        kernel.take();
+        reopened.undo().unwrap();
+        assert_eq!(kernel.take(), [], "undo in the reopened part built nothing");
+        assert_eq!(bodies(&reopened), reopened_built);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_suppressed_feature_comes_back_without_building() {
+        let kernel = counting();
+        let mut doc = Document::new("Mount bracket", kernel.clone());
+        let ids = build_bracket(&mut doc);
+        let built = bodies(&doc);
+        kernel.take();
+
+        // Suppressing the boss builds everything below it on the plate without a boss.
+        doc.execute(Command::SetSuppressed { id: ids.boss, suppressed: true }).unwrap();
+        let (features, meshes) = recomputed(&kernel.take());
+        assert!(!features.contains(&ids.base) && !features.contains(&ids.boss) && meshes == 0, "{features:?}");
+        assert_matches_full_replay(&doc, "with the boss suppressed");
+        kernel.take();
+
+        // Unsuppressing, and rolling back and forward, reuse what was built.
+        doc.execute(Command::SetSuppressed { id: ids.boss, suppressed: false }).unwrap();
+        assert_eq!(kernel.take(), [], "unsuppressing built nothing");
+        assert_eq!(bodies(&doc), built);
+        doc.execute(Command::RollTo { before: Some(ids.bore_sketch) }).unwrap();
+        doc.execute(Command::RollTo { before: None }).unwrap();
+        assert_eq!(kernel.take(), [], "rolling back and forward built nothing");
+        assert_eq!(bodies(&doc), built);
+        assert_matches_full_replay(&doc, "after rolling forward");
+    }
+
+    #[test]
+    fn the_cache_keeps_to_its_budget() {
+        let kernel = counting();
+        let mut doc = Document::new("Mount bracket", kernel.clone());
+        let ids = build_bracket(&mut doc);
+        let slot = doc.features().last().unwrap().id;
+        let built = bodies(&doc);
+        doc.execute(Command::EditFeature { id: slot, kind: cut(ids.slot_sketch, blind(5.0)) }).unwrap();
+        let pocket = doc.body().unwrap();
+        let (retained, budget) = doc.rebuild_cache_usage();
+        assert!(retained > 0 && retained <= budget, "{retained} of {budget} bytes");
+        assert!(doc.keeps(pocket) && doc.keeps(built.last().unwrap().unwrap()));
+
+        // With no budget only the current tree's builds stay: the through slot is
+        // released, so undo builds it again, and the result is still a replay's.
+        doc.set_rebuild_budget(0);
+        assert!(doc.keeps(pocket), "the current tree is always kept");
+        assert!(!doc.keeps(built.last().unwrap().unwrap()), "the slot through the flange was released");
+        assert!(doc.rebuild_cache_usage().0 < retained);
+        kernel.take();
+        doc.undo().unwrap();
+        assert_eq!(recomputed(&kernel.take()).0, [slot].into(), "the released build was made again");
+        assert!(!doc.keeps(pocket), "the pocket left the tree and the budget");
+        assert_eq!(bodies(&doc)[..built.len() - 1], built[..built.len() - 1]);
+        assert_matches_full_replay(&doc, "after rebuilding a released build");
+    }
+}

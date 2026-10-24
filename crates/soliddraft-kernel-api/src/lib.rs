@@ -21,6 +21,8 @@
 
 #[cfg(feature = "contract")]
 pub mod contract;
+#[cfg(feature = "counting")]
+pub mod counting;
 pub mod drawing;
 mod geometry;
 mod history;
@@ -459,6 +461,14 @@ pub trait Kernel: Send + Sync {
 
     /// Frees a body. Its handle becomes unknown.
     fn release(&self, body: BodyId) -> KernelResult<()>;
+
+    /// About how many bytes the backend keeps for `body`, for callers that budget the
+    /// bodies they keep. An estimate, not a measurement. The default reports
+    /// `Unsupported`.
+    fn retained_bytes(&self, body: BodyId) -> KernelResult<u64> {
+        let _ = body;
+        Err(KernelError::Unsupported("retained_bytes".into()))
+    }
 
     // Drawing queries. Each has a default that reports `Unsupported`, so a backend can
     // add them one at a time; [`drawing::mesh_hlr`] gives any backend approximate views.

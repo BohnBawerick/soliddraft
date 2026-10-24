@@ -118,3 +118,54 @@ fn a_quality_change_swaps_the_mesh_without_a_rebuild() {
     assert_eq!(reopened.display_quality().levels(), doc.display_quality().levels());
     assert_eq!(triangles(&reopened), triangles(&doc));
 }
+
+#[test]
+fn an_unchanged_body_keeps_its_mesh_and_undo_shows_the_earlier_one_again() {
+    use soliddraft_kernel_api::counting::{Counting, Work};
+
+    let kernel =
+        std::sync::Arc::new(Counting::new(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new())));
+    let mut doc = Document::new("Part1", kernel.clone());
+    let params = ExtrudeParams {
+        sketch: None,
+        profile: ProfileKind::Circle { diameter: 200.0 },
+        plane: PlaneKind::Top,
+        depth: 50.0,
+        flip: false,
+    };
+    let id = doc.apply(Command::AddExtrude { params, via_assistant: false }).unwrap().unwrap();
+    let middle = Projection::Orthographic { pixels_per_mm: 1.0 };
+    settle(&mut doc, &middle);
+    let disc = doc.display_body().unwrap();
+    let disc_triangles = triangles(&doc);
+    kernel.take();
+
+    // A rename builds and tessellates nothing: the body and its mesh stay.
+    doc.apply(Command::Rename { id, name: "Disc".into() }).unwrap();
+    assert_eq!(kernel.take(), [], "the rename built or tessellated something");
+    assert_eq!(doc.display_body(), Some(disc));
+    assert_eq!(triangles(&doc), disc_triangles);
+
+    // A deeper disc is a new body: it is built and tessellated, and nothing else is.
+    doc.apply(Command::EditExtrude { id, params: ExtrudeParams { depth: 60.0, ..params } }).unwrap();
+    let deeper = doc.display_body().unwrap();
+    assert_ne!(deeper, disc);
+    let work = kernel.take();
+    assert!(work.iter().any(|w| matches!(w, Work::Operation(_))), "{work:?}");
+    assert!(work.iter().all(|w| !matches!(w, Work::Mesh(b) if *b != deeper)), "{work:?}");
+    settle(&mut doc, &middle);
+    kernel.take();
+
+    // Undo shows the first disc again with its kept body and meshes, and redo the
+    // deeper one: nothing is built or tessellated, now or by the worker.
+    doc.undo().unwrap();
+    assert_eq!(doc.display_body(), Some(disc));
+    assert_eq!(triangles(&doc), disc_triangles);
+    settle(&mut doc, &middle);
+    assert_eq!(kernel.take(), [], "undo built or tessellated something");
+    doc.redo().unwrap();
+    assert_eq!(doc.display_body(), Some(deeper));
+    settle(&mut doc, &middle);
+    assert_eq!(kernel.take(), [], "redo built or tessellated something");
+    assert!(!doc.faces.is_empty() && doc.pick_of_face(doc.faces[0].id).is_some(), "the kept picks are in place");
+}

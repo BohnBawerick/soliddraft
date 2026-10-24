@@ -59,6 +59,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::Kernel;
+use soliddraft_kernel_api::counting::Counting;
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::{Document, FeatureStatus};
 use soliddraft_recipe::{BodySummary, ReplayReport, StepOutcome};
@@ -429,8 +430,9 @@ fn mcp(args: &[String]) -> ExitCode {
     }
     let evidence_kernel =
         bundle.as_ref().map(|_| Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_diagnostics(max_work)));
-    let kernel: Arc<dyn Kernel> =
-        evidence_kernel.clone().map(|k| k as Arc<dyn Kernel>).unwrap_or_else(soliddraft_app::kernel);
+    // A bundle counts the work each command asks of the kernel, outside the application.
+    let counting = evidence_kernel.clone().map(|k| Arc::new(Counting::new(k)));
+    let kernel: Arc<dyn Kernel> = counting.clone().map(|k| k as Arc<dyn Kernel>).unwrap_or_else(soliddraft_app::kernel);
     let mut doc = match open {
         Some(path) => match soliddraft_app::file::open(&path, kernel.clone()) {
             Ok(doc) => doc,
@@ -449,7 +451,7 @@ fn mcp(args: &[String]) -> ExitCode {
     let mut book = ProposalBook::default();
     let mut session = McpSession::new("soliddraft", env!("CARGO_PKG_VERSION"), MCP_INSTRUCTIONS);
     let host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
-    let mut host = match evidence::Evidence::new(host, evidence_kernel, bundle, max_work) {
+    let mut host = match evidence::Evidence::new(host, evidence_kernel, counting, bundle, max_work) {
         Ok(host) => host,
         Err(e) => {
             eprintln!("mcp: {e}");

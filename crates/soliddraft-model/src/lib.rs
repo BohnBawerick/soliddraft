@@ -8,9 +8,10 @@
 //! - **Commands.** Every change is a [`Command`] run by [`Document::execute`], one undo
 //!   entry each; [`Document::undo`] and [`Document::redo`] walk the stack. The ribbon,
 //!   the assistant and scripts all go through the same commands.
-//! - **Rebuild.** Each feature's resulting body is cached, so a command rebuilds only from
-//!   the first feature it changed. Suppressed features and features below the rollback
-//!   bar pass the body through unchanged.
+//! - **Rebuild.** A command rebuilds only from the first feature it changed, and every
+//!   feature build is kept by its exact inputs (see [`rebuild`]), so a rename builds
+//!   nothing and undo, redo or a value put back reuse the earlier bodies. Suppressed
+//!   features and features below the rollback bar pass the body through unchanged.
 //! - **Persistent references.** Features name faces and edges by origin, never by kernel
 //!   id (see [`reference`]). A reference that no longer resolves to exactly one matching
 //!   entity stops its feature with [`FeatureStatus::RepairNeeded`] instead of guessing.
@@ -25,9 +26,11 @@
 mod command;
 pub mod display;
 mod document;
+mod exact;
 mod feature;
 pub mod file;
 pub mod materials;
+pub mod rebuild;
 pub mod reference;
 
 pub use command::{Command, CommandError, Executed};

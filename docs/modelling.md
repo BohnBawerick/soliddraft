@@ -88,8 +88,32 @@ allowed; the features that read it report what broke.
 
 ## Rebuild
 
-Each feature's resulting body is cached. A command rebuilds from the first feature it
-changed: renaming rebuilds nothing, editing a fillet keeps the bodies above it.
+A command rebuilds from the first feature it changed, and editing a fillet keeps the
+bodies above it. Every feature build is also kept by its exact inputs: the feature, the
+exact bytes of its definition, the body it starts from and, for an extrusion, the build
+of the sketch it sweeps. Floats count by bit pattern and are never rounded. Kernel bodies are
+immutable and a body handle is never reused, so the input body stands for everything
+that built it. A rebuild asks for the kept build before building, so:
+
+- renaming a feature builds nothing; checks whose messages name another feature run
+  again, without the kernel;
+- undo, redo, a value put back, unsuppressing and rolling forward reuse the bodies built
+  for those inputs;
+- the result is the one a full replay of the saved part gives.
+
+The document owns the kept bodies and releases them when it drops a build. It keeps
+them within a budget of retained bytes, 256 MiB unless `Document::set_rebuild_budget`
+says otherwise, using the kernel's `retained_bytes` estimate for each body. The builds of the
+current tree are always kept; beyond the budget the least recently used others go, with
+every build that started from a body they held.
+
+Tests count the work, not the rebuild. `soliddraft_kernel_api::counting::Counting`,
+behind the `counting` feature, wraps a backend and writes down every operation's tag
+and every tessellation. The bracket exit test edits the last feature and checks that only it
+was built, that a value put back, undo, redo and renames build nothing, and that each
+result, save and reopen included, matches a full replay in statuses, face names,
+measures, validation and mesh.
+
 Suppressed features and features below the rollback bar pass the body through
 unchanged. A feature's state after a rebuild is one of:
 

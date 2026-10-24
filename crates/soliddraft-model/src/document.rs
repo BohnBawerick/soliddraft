@@ -18,6 +18,7 @@ use crate::feature::{
     SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
+use crate::rebuild::BuildCache;
 use crate::reference::{
     self, EdgeRef, FaceRef, Generator, NameMap, NamedFace, NamingError, ReferenceSlot, RepairNeeded, RepairReason, View,
 };
@@ -68,21 +69,24 @@ pub struct BuiltSketch {
 }
 
 /// One feature's rebuild result.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Built {
     pub status: FeatureStatus,
     /// The part body after this feature.
     pub output: Option<BodyId>,
-    /// The body this feature made, which the document releases when it rebuilds.
+    /// The body this feature made. The rebuild cache owns it and releases it.
     pub owned: Option<BodyId>,
     /// The faces this feature generated, named.
     pub names: Vec<NamedFace>,
     pub sketch: Option<BuiltSketch>,
+    /// Which kept build this is, so a feature that reads it can key on it. Zero for a
+    /// result the cache does not keep.
+    pub version: u64,
 }
 
 impl Built {
     fn pass(status: FeatureStatus, current: Option<BodyId>) -> Built {
-        Built { status, output: current, owned: None, names: Vec::new(), sketch: None }
+        Built { status, output: current, owned: None, names: Vec::new(), sketch: None, version: 0 }
     }
 
     fn failed(current: Option<BodyId>, message: impl Into<String>) -> Built {
@@ -108,8 +112,9 @@ pub struct FaceLabel {
 /// A part: an ordered feature list, its rebuild, its undo history.
 ///
 /// The document never stores kernel state. It stores features and rebuilds them through
-/// [`Kernel`], caching one body per feature so an edit rebuilds only from the first
-/// changed feature down.
+/// [`Kernel`]. A rebuild starts at the first changed feature, and every feature build is
+/// kept by its exact inputs, so undo, redo and a value put back reuse the bodies built
+/// for them; see [`crate::rebuild`].
 pub struct Document {
     /// The document's identity, kept in its file's manifest.
     pub(crate) id: DocumentId,
@@ -127,6 +132,8 @@ pub struct Document {
     pub(crate) built: Vec<Built>,
     /// Index of the first feature whose cached build is stale.
     pub(crate) dirty: usize,
+    /// Feature builds by exact inputs; owns every body the builds made.
+    pub(crate) cache: BuildCache,
     pub(crate) undo: Vec<UndoEntry>,
     pub(crate) redo: Vec<UndoEntry>,
     pub(crate) log: Vec<String>,
@@ -136,11 +143,7 @@ pub struct Document {
 
 impl Drop for Document {
     fn drop(&mut self) {
-        for b in &self.built {
-            if let Some(body) = b.owned {
-                let _ = self.kernel.release(body);
-            }
-        }
+        self.cache.clear(self.kernel.as_ref());
     }
 }
 
@@ -168,6 +171,7 @@ impl Document {
             kernel,
             built: Vec::new(),
             dirty: 0,
+            cache: BuildCache::default(),
             undo: Vec::new(),
             redo: Vec::new(),
             log: Vec::new(),
@@ -446,15 +450,31 @@ impl Document {
         }
     }
 
-    /// Rebuilds from the first stale feature to the end of the tree.
+    /// True while the document keeps `body`: a feature build it holds made it. A body
+    /// it no longer keeps is released and does not come back.
+    pub fn keeps(&self, body: BodyId) -> bool {
+        self.cache.holds(body)
+    }
+
+    /// The bytes the kept feature builds retain, and the budget they are trimmed to.
+    pub fn rebuild_cache_usage(&self) -> (u64, u64) {
+        (self.cache.retained(), self.cache.budget())
+    }
+
+    /// Sets how many bytes of feature builds the document keeps for reuse. The builds of
+    /// the current tree are always kept. A smaller budget applies at once.
+    pub fn set_rebuild_budget(&mut self, bytes: u64) {
+        self.cache.set_budget(bytes);
+        self.cache.trim(&self.built, self.kernel.as_ref());
+    }
+
+    /// Rebuilds from the first stale feature to the end of the tree, reusing every
+    /// feature build whose exact inputs the cache holds.
     pub(crate) fn rebuild(&mut self) {
         let start = self.dirty.min(self.built.len());
-        for b in self.built.drain(start..) {
-            if let Some(body) = b.owned {
-                let _ = self.kernel.release(body);
-            }
-        }
+        self.built.truncate(start);
         let active = self.active_count();
+        let mut cache = std::mem::take(&mut self.cache);
         let mut current = start.checked_sub(1).and_then(|i| self.built[i].output);
         for i in start..self.features.len() {
             let f = self.features[i].clone();
@@ -463,11 +483,13 @@ impl Document {
             } else if f.suppressed {
                 Built::pass(FeatureStatus::Suppressed, current)
             } else {
-                self.build(&f, current)
+                self.build(&f, current, &mut cache)
             };
             current = built.output;
             self.built.push(built);
         }
+        cache.trim(&self.built, self.kernel.as_ref());
+        self.cache = cache;
         self.dirty = self.built.len();
     }
 
@@ -476,12 +498,50 @@ impl Document {
         self.dirty = self.dirty.min(index);
     }
 
-    fn build(&self, f: &Feature, current: Option<BodyId>) -> Built {
-        match &f.kind {
+    /// A feature's build: the kept one when the cache has its exact inputs, else a new
+    /// one, kept. Checks whose messages name another feature run every time and are not
+    /// kept, so a rename shows in them without building anything.
+    fn build(&self, f: &Feature, current: Option<BodyId>, cache: &mut BuildCache) -> Built {
+        let profile = match &f.kind {
+            FeatureKind::Extrude(ExtrudeFeature { profile: ProfileSource::Sketch { feature }, .. }) => {
+                match self.profile_input(*feature, current) {
+                    Ok(input) => Some(input.version),
+                    Err(refused) => return *refused,
+                }
+            }
+            _ => None,
+        };
+        let key = cache.key(f, current, profile);
+        if let Some(built) = cache.get(&key) {
+            return built;
+        }
+        let built = match &f.kind {
             FeatureKind::Sketch(s) => self.build_sketch(s, current),
             FeatureKind::Extrude(e) => self.build_extrude(f, e, current),
             FeatureKind::Fillet(b) => self.build_blend(f, b, false, current),
             FeatureKind::Chamfer(b) => self.build_blend(f, b, true, current),
+        };
+        cache.insert(key, built, self.kernel.as_ref())
+    }
+
+    /// The built sketch an extrusion sweeps, or the extrusion's result when that sketch
+    /// is missing, not built or has no closed region.
+    fn profile_input(&self, sketch: FeatureId, current: Option<BodyId>) -> Result<&Built, Box<Built>> {
+        let sketch_name = || self.feature(sketch).map(|s| s.name.clone()).unwrap_or_else(|| sketch.to_string());
+        let failed = |message: String| Err(Box::new(Built::failed(current, message)));
+        let Some(input) = self.built_index(sketch).map(|i| &self.built[i]) else {
+            return failed(format!("its sketch {} is missing", sketch_name()));
+        };
+        let Some(sk) = input.sketch.as_ref() else {
+            if input.status.is_ok() {
+                return failed(format!("{} is not a sketch", sketch_name()));
+            }
+            return Err(Box::new(Built::pass(FeatureStatus::Blocked(sketch), current)));
+        };
+        match &sk.regions {
+            Ok(r) if !r.is_empty() => Ok(input),
+            Ok(_) => failed(format!("{} has no closed region", sketch_name())),
+            Err(err) => failed(format!("{} has no closed region: {err}", sketch_name())),
         }
     }
 
@@ -527,39 +587,27 @@ impl Document {
             owned: None,
             names: Vec::new(),
             sketch: Some(BuiltSketch { plane, on_face, regions }),
+            version: 0,
         }
     }
 
     fn build_extrude(&self, f: &Feature, e: &ExtrudeFeature, current: Option<BodyId>) -> Built {
         let shape_sketch;
         let sk = match &e.profile {
-            ProfileSource::Sketch { feature } => {
-                let sketch_name = self.feature(*feature).map(|s| s.name.clone()).unwrap_or_else(|| feature.to_string());
-                let Some(input) = self.built_index(*feature).map(|i| &self.built[i]) else {
-                    return Built::failed(current, format!("its sketch {sketch_name} is missing"));
-                };
-                let Some(sk) = input.sketch.as_ref() else {
-                    if input.status.is_ok() {
-                        return Built::failed(current, format!("{sketch_name} is not a sketch"));
-                    }
-                    return Built::pass(FeatureStatus::Blocked(*feature), current);
-                };
-                sk
-            }
+            ProfileSource::Sketch { feature } => match self.profile_input(*feature, current) {
+                Ok(input) => input.sketch.as_ref().expect("a profile input is a built sketch"),
+                Err(refused) => return *refused,
+            },
             ProfileSource::Shape { datum, shape } => {
                 let regions = shape.sketch().and_then(|s| s.regions().map_err(|e| e.to_string()));
                 shape_sketch = BuiltSketch { plane: datum.plane(), on_face: false, regions };
                 &shape_sketch
             }
         };
-        let sketch_name = match &e.profile {
-            ProfileSource::Sketch { feature } => self.feature(*feature).map_or("the sketch".into(), |s| s.name.clone()),
-            ProfileSource::Shape { .. } => "the built-in profile".to_string(),
-        };
         let regions = match &sk.regions {
             Ok(r) if !r.is_empty() => r,
-            Ok(_) => return Built::failed(current, format!("{sketch_name} has no closed region")),
-            Err(err) => return Built::failed(current, format!("{sketch_name} has no closed region: {err}")),
+            Ok(_) => return Built::failed(current, "the built-in profile has no closed region"),
+            Err(err) => return Built::failed(current, format!("the built-in profile has no closed region: {err}")),
         };
         let dir = if e.reverse { -sk.plane.normal } else { sk.plane.normal };
         // Behind the face is material for a boss along the normal and air for a cut
@@ -652,7 +700,9 @@ impl Document {
             Ok(body)
         };
         match run(&mut mine) {
-            Ok(output) => Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None },
+            Ok(output) => {
+                Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None, version: 0 }
+            }
             Err(err) => {
                 if let Some(body) = mine {
                     let _ = self.kernel.release(body);
@@ -725,6 +775,7 @@ impl Document {
             owned: Some(result.body),
             names: number(faces),
             sketch: None,
+            version: 0,
         }
     }
 }
