@@ -5,11 +5,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use soliddraft_document::journal::{self, Session};
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 #[wasm_bindgen(module = "/src/journal_browser.js")]
 extern "C" {
+    #[wasm_bindgen(catch, js_name = prepare)]
+    fn js_prepare(export: &js_sys::Function) -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(js_name = retry)]
+    fn js_retry(message: &str) -> js_sys::Promise;
+    #[wasm_bindgen(js_name = ready)]
+    fn js_ready();
     #[wasm_bindgen(catch, js_name = start)]
     fn js_start(id: &str) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = append)]
@@ -54,22 +61,52 @@ thread_local! {
     static STATE: RefCell<Option<BrowserJournals>> = const { RefCell::new(None) };
 }
 
-/// Starts storage before creating a document, and finds only journals without a live tab's lock.
+/// Installs read-only recovery before attempting a writable session. No document
+/// or editor is created until a header has reached browser storage.
 pub async fn start() -> Result<(), String> {
-    let id = soliddraft_document::DocumentId::new().to_string();
-    let offers = JsFuture::from(js_start(&id).map_err(error)?).await.map_err(error)?;
-    let offers: Vec<String> = serde_json::from_str(&offers.as_string().ok_or("invalid browser journal offers")?)
-        .map_err(|e| e.to_string())?;
-    let session = Session::start_external(PathBuf::from(&id), BrowserWriter(id), |path: &Path| {
-        if let Some(id) = path.to_str() {
-            js_close(id);
-        }
-    })
-    .map_err(|e| e.to_string())?;
-    STATE.with(|state| {
-        *state.borrow_mut() = Some(BrowserJournals { _session: session, show: !offers.is_empty(), offers, error: None })
+    let export = Closure::<dyn FnMut(String) -> Result<(), JsValue>>::new(|text: String| {
+        export_report(&text).map_err(|e| JsValue::from_str(&e))
     });
-    Ok(())
+    let prepared = JsFuture::from(js_prepare(export.as_ref().unchecked_ref()).map_err(error)?).await.map_err(error)?;
+    let mut offers = parse_offers(prepared)?;
+    loop {
+        let id = soliddraft_document::DocumentId::new().to_string();
+        let session = async {
+            JsFuture::from(js_start(&id).map_err(error)?).await.map_err(error)?;
+            Session::start_external(PathBuf::from(&id), BrowserWriter(id.clone()), |path: &Path| {
+                if let Some(id) = path.to_str() {
+                    js_close(id);
+                }
+            })
+            .map_err(|e| e.to_string())
+        }
+        .await;
+        match session {
+            Ok(session) => {
+                STATE.with(|state| {
+                    *state.borrow_mut() =
+                        Some(BrowserJournals { _session: session, show: !offers.is_empty(), offers, error: None })
+                });
+                js_ready();
+                return Ok(());
+            }
+            Err(error) => {
+                // A failed header is not an active session. Release its lock,
+                // retaining any records, so another attempt can start safely.
+                js_close(&id);
+                offers = parse_offers(JsFuture::from(js_retry(&error)).await.map_err(self::error)?)?;
+            }
+        }
+    }
+}
+
+fn parse_offers(value: JsValue) -> Result<Vec<String>, String> {
+    serde_json::from_str(&value.as_string().ok_or("invalid browser journal offers")?).map_err(|e| e.to_string())
+}
+
+fn export_report(text: &str) -> Result<(), String> {
+    let bytes = journal::report_bytes(text.as_bytes())?;
+    crate::web::download("crash-report.jsonl", &bytes)
 }
 
 /// Prevents normal page teardown from removing a journal after a Rust panic.
@@ -123,10 +160,7 @@ pub fn window(ctx: &egui::Context, app: &mut crate::state::AppState) {
         });
     });
     if let Some(id) = export {
-        let result = js_read(&id)
-            .map_err(error)
-            .and_then(|text| journal::report_bytes(text.as_bytes()))
-            .and_then(|bytes| crate::web::download("crash-report.jsonl", &bytes));
+        let result = js_read(&id).map_err(error).and_then(|text| export_report(&text));
         match result {
             Ok(()) => {
                 app.note("Crash report journal downloaded. Review it before sharing.", crate::state::NoteKind::Ok)
