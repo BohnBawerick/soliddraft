@@ -18,6 +18,8 @@ SolidDraft uses `0.x.y` versions. Every `0.x` release is labelled **alpha** and 
 | Browser | `.zip`, with relative asset URLs suitable for a GitHub Pages project path |
 | Release metadata | `SHA256SUMS`, SPDX JSON SBOM, generated `release-notes.md` |
 
+Windows builds link the C runtime statically. Assembly inspects the portable executable's imports and rejects a dependency on the separately installed Visual C++ runtime.
+
 Linux packages build on Ubuntu 22.04. The portable tar needs the host's graphics drivers and desktop libraries; the AppImage bundles dependencies through cargo-packager. The archive packages include LICENSE and NOTICE. The Debian package and installers also include them as resources.
 
 Winit loads XKB libraries at runtime rather than linking them into the executable. `packaging/Packager.json` explicitly includes those libraries and the XCB XKB dependency in the AppImage, and declares desktop/graphics runtime dependencies for Debian. Keep these declarations aligned with the packaged startup smoke, not just the binary's `ldd` output.
