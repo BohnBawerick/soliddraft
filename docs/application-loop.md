@@ -149,11 +149,22 @@ The pinned kernel does not log initial meshing inside its application build as
 a separate operation. That inseparable cost remains in construction or edit,
 not in the display subtotal; no timing is invented to separate it.
 
-An over-budget step fails but the runner continues collecting later steps when
-all semantic and artifact checks passed. Other failures stop the scenario.
-Hosted CI uploads the complete bundle and publishes per-step waits and budgets
-in its job summary. Shared-hosted-runner numbers are not quiet pinned-core
-performance baselines. Over-budget results remain failures unless the owner
-explicitly approves a known-failure policy; budgets are never increased to pass.
+An unlisted over-budget step fails, but the runner continues collecting later
+steps when all semantic and artifact checks passed. Other failures stop the
+scenario. Hosted CI uploads the complete bundle and publishes per-step waits,
+budgets and acceptance status in its job summary. Shared-hosted-runner numbers
+are not quiet pinned-core performance baselines.
+
+The owner approved one exception in `ci/known-over-budget.json`: scenario
+`bracket`, step 6, `extrude`. Its budget stays 1,000 ms. The file records its last
+measured wait, revision and approval date, not a replacement budget. An overrun
+for that exact scenario, step and tool remains visible as `known-over-budget`
+with a GitHub warning on every run, but does not fail latency acceptance.
+Any other step over budget still fails. If the listed step meets its budget,
+CI fails as `stale-known-over-budget` and tells the maintainer to remove it from
+the file. A changed tool or a missing listed step also fails instead of inheriting
+the exception. No scenario or CLI flag can add an exception or raise a budget.
+`within_budget` records the raw comparison; `pass` records policy acceptance.
+Both the measured wait and unchanged budget stay in every timing record.
 All timers and budget decisions live in the Python runner and CI. No clocks or
 reports are added to the application's model build or edit path.

@@ -114,6 +114,45 @@ def timing(tool, segments):
             "pass": elapsed <= BUDGET_MS[kind]}
 
 
+def load_known_over_budget(path):
+    policy = json.loads(path.read_text())
+    if policy["format"] != "soliddraft-known-over-budget/1":
+        raise ValueError("expected soliddraft-known-over-budget/1")
+    known = {}
+    for entry in policy["steps"]:
+        key = (entry["scenario"], entry["step"])
+        if key in known:
+            raise ValueError(f"duplicate known-over-budget step: {key}")
+        milliseconds(entry["last_measured_ms"])
+        known[key] = entry
+    return known
+
+
+def accept_latency(scenario, number, tool, latency, known):
+    result = {**latency, "within_budget": latency["pass"],
+              "status": "pass" if latency["pass"] else "over-budget"}
+    approved = known.get((scenario, number))
+    if approved is None:
+        return result
+    result["known_over_budget"] = approved
+    label = f"{scenario} step {number} ({tool})"
+    if approved["tool"] != tool:
+        result["pass"] = False
+        result["status"] = "invalid-known-over-budget"
+        result["message"] = f"{label}: tool differs from ci/known-over-budget.json; remove or review the listing"
+    elif latency["pass"]:
+        result["pass"] = False
+        result["status"] = "stale-known-over-budget"
+        result["message"] = (f"{label} meets its {latency['budget_ms']} ms budget at "
+                             f"{latency['elapsed_ms']:.3f} ms; remove it from ci/known-over-budget.json")
+    else:
+        result["pass"] = True
+        result["status"] = "known-over-budget"
+        result["message"] = (f"Known over-budget: {label} took {latency['elapsed_ms']:.3f} ms; "
+                             f"budget remains {latency['budget_ms']} ms")
+    return result
+
+
 def write(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
@@ -231,6 +270,10 @@ def run(args):
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False}
     client = None
     try:
+        known = load_known_over_budget(pathlib.Path(__file__).with_name("known-over-budget.json"))
+        for (name, number) in known:
+            if name == scenario["name"] and not 1 <= number <= len(scenario["steps"]):
+                raise ValueError(f"remove missing {name} step {number} from ci/known-over-budget.json")
         client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
         initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
@@ -304,11 +347,15 @@ def run(args):
             # Preserve external waits even if the log cannot support a phase split.
             entry["waits_ms"] = [{"source": s["source"], "elapsed_ms": s["elapsed_ms"]} for s in segments]
             write(directory / "waits.json", entry["waits_ms"])
-            latency = timing(step["tool"], segments)
+            latency = accept_latency(scenario["name"], number, step["tool"], timing(step["tool"], segments), known)
             entry["timing"] = latency
             checks.append(latency)
             write(directory / "timing.json", latency)
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
+            if latency["status"] == "known-over-budget":
+                print(f"::warning::{latency['message']}", flush=True)
+            elif latency["status"] in {"stale-known-over-budget", "invalid-known-over-budget"}:
+                print(f"::error::{latency['message']}", flush=True)
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)

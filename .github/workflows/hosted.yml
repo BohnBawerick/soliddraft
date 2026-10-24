@@ -286,7 +286,7 @@ jobs:
                   if timing:
                       rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
                           f"{timing['elapsed_ms']:.3f} | {timing['budget_ms']} | "
-                          f"{'pass' if timing['pass'] else 'OVER BUDGET'} |")
+                          f"{timing['status']} |")
               if report.get("error"):
                   rows.extend(["", f"{report['name']}: {report['error']}"])
           with open(sys.argv[2], "a") as summary:

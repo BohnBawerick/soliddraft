@@ -126,5 +126,37 @@ class Latency(unittest.TestCase):
             scenarios.timing("extrude", [self.segment(10, [call])])
 
 
+class KnownBudgets(unittest.TestCase):
+    known = {("bracket", 6): {"scenario": "bracket", "step": 6, "tool": "extrude",
+                            "last_measured_ms": 2240.892348}}
+
+    def verdict(self, elapsed, scenario="bracket", number=6, tool="extrude"):
+        latency = scenarios.timing(tool, [Latency.segment(elapsed)])
+        return scenarios.accept_latency(scenario, number, tool, latency, self.known)
+
+    def test_approved_overrun_is_accepted_only_for_its_exact_step_and_tool(self):
+        accepted = self.verdict(2240)
+        self.assertTrue(accepted["pass"])
+        self.assertFalse(accepted["within_budget"])
+        self.assertEqual(accepted["status"], "known-over-budget")
+        self.assertFalse(self.verdict(2240, scenario="another-bracket")["pass"])
+        self.assertFalse(self.verdict(2240, number=7)["pass"])
+        self.assertFalse(self.verdict(2240, tool="cut")["pass"])
+
+    def test_listed_step_that_meets_the_budget_fails_as_stale(self):
+        for elapsed in (999.999, 1000):
+            with self.subTest(elapsed=elapsed):
+                stale = self.verdict(elapsed)
+                self.assertFalse(stale["pass"])
+                self.assertTrue(stale["within_budget"])
+                self.assertEqual(stale["status"], "stale-known-over-budget")
+
+    def test_unlisted_step_keeps_its_strict_budget_boundary(self):
+        self.assertTrue(self.verdict(1000, number=7)["pass"])
+        over = self.verdict(1000.001, number=7)
+        self.assertFalse(over["pass"])
+        self.assertEqual(over["status"], "over-budget")
+
+
 if __name__ == "__main__":
     unittest.main()
