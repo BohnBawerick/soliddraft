@@ -232,7 +232,9 @@ jobs:
         run: |
           # Pick the closest released version reachable from this commit, not an unrelated tag.
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --slurp \
-            --jq '[.[][] | select(.draft == false) | .tag_name]' > "$RUNNER_TEMP/releases.json"
+            > "$RUNNER_TEMP/release-pages.json"
+          jq '[.[][] | select(.draft == false) | .tag_name]' "$RUNNER_TEMP/release-pages.json" \
+            > "$RUNNER_TEMP/releases.json"
           previous=$(python3 packaging/release.py previous "$RUNNER_TEMP/releases.json")
           gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" --paginate --slurp \
             > "$RUNNER_TEMP/pulls.json"
