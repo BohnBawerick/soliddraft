@@ -354,7 +354,7 @@ fn files_round_trip_and_refuse_what_they_cannot_read() {
     let newer = d.part_json().replace("soliddraft-part/2", "soliddraft-part/3");
     assert!(matches!(Document::from_part_json(&newer, kernel.clone()), Err(FileError::Format { .. })));
     // A truth without a format tag says so, rather than naming a blank one.
-    let untagged = Document::from_part_json("[1, 2]", kernel.clone()).err().expect("refused");
+    let Err(untagged) = Document::from_part_json("[1, 2]", kernel.clone()) else { panic!("a list is not a part") };
     assert!(matches!(untagged, FileError::Format { .. }));
     assert!(untagged.to_string().starts_with("the file has no format tag, this version reads"), "{untagged}");
     assert!(
