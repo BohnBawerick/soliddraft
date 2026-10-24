@@ -127,6 +127,18 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p soliddraft-web --target wasm32-unknown-unknown --locked
+      - name: Install trunk
+        run: |
+          curl --fail --location https://github.com/trunk-rs/trunk/releases/download/v0.22.0/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Package the browser application
+        working-directory: crates/soliddraft-web
+        run: trunk build --locked --no-default-features --dist ../../target/web-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-application
+          path: target/web-dist
+          if-no-files-found: error
 
   msrv:
     name: Minimum Rust version (Rust-only crates)
