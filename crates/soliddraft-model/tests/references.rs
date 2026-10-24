@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use soliddraft_kernel_api::{FaceId, Kernel, Topology};
+use soliddraft_kernel_api::{FaceId, Topology};
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{ConstraintId, P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
