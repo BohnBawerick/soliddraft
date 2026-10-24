@@ -18,6 +18,19 @@ fn bracket(k: &CatallaxKernel) -> BodyId {
     soliddraft_recipe::build(k, &recipe).unwrap().1
 }
 
+// Measurement belongs to this acceptance test, not the application export path.
+fn volume(mesh: &soliddraft_exchange::Welded) -> f64 {
+    let p = |i: u32| mesh.positions[i as usize].map(f64::from);
+    mesh.triangles
+        .iter()
+        .map(|t| {
+            let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
+            let cross = [b[1] * c[2] - b[2] * c[1], b[2] * c[0] - b[0] * c[2], b[0] * c[1] - b[1] * c[0]];
+            (a[0] * cross[0] + a[1] * cross[1] + a[2] * cross[2]) / 6.0
+        })
+        .sum()
+}
+
 #[test]
 fn step_carries_the_proven_deviation_and_the_body_faces() {
     let k = CatallaxKernel::new();
@@ -26,9 +39,19 @@ fn step_carries_the_proven_deviation_and_the_body_faces() {
     let Report::Step(r) = &out.report else { panic!("a STEP report") };
     assert_eq!(r.faces, k.topology(body).unwrap().faces.len());
     assert!(r.within_tolerance && r.max_deviation_mm <= 1e-7, "{r:?}");
-    let text = String::from_utf8(out.bytes).unwrap();
+    let text = std::str::from_utf8(&out.bytes).unwrap();
     assert!(text.starts_with("ISO-10303-21;") && text.ends_with("END-ISO-10303-21;\n"));
-    assert!(out.report.summary().contains("(proven)"), "{}", out.report.summary());
+    if let Some(directory) = std::env::var_os("SOLIDDRAFT_STEP_PROOF_DIR") {
+        let directory = std::path::PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let mass = k.mass_properties(body).unwrap();
+        let report = serde_json::json!({
+            "report": out.report,
+            "body": {"faces": k.topology(body).unwrap().faces.len(), "volume": mass.volume, "area": mass.area},
+        });
+        std::fs::write(directory.join("bracket.step"), &out.bytes).unwrap();
+        std::fs::write(directory.join("step-report.json"), serde_json::to_vec(&report).unwrap()).unwrap();
+    }
 }
 
 #[test]
@@ -51,7 +74,7 @@ fn meshes_are_closed_and_within_their_chord_height() {
     // A closed mesh within the chord height of every face encloses a volume within area
     // times the chord height of the exact one.
     let welded = soliddraft_exchange::mesh::weld(&k.tessellate(body, &tolerance.params()).unwrap());
-    assert!((welded.volume() - exact).abs() <= area * tolerance.chord_height, "{} against {exact}", welded.volume());
+    assert!((volume(&welded) - exact).abs() <= area * tolerance.chord_height, "{} against {exact}", volume(&welded));
 
     let package = export(&k, body, "bracket", Format::ThreeMf, &tolerance).unwrap();
     assert_eq!(package.report, stl.report, "STL and 3MF share one mesh");

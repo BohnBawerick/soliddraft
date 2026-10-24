@@ -3,7 +3,7 @@
 
 usage: check-step.py <file.step> <report.json>
 
-<report.json> holds the line `soliddraft export --json` printed for that file. The check
+<report.json> is the acceptance test's STEP report and exact-body measurements. The check
 passes when OpenCASCADE reads the file into one valid solid whose face count equals both
 the report's and the exact body's, and whose volume is within the reported deviation of
 the exact volume. A surface moved by at most d changes the enclosed volume by at most
@@ -51,7 +51,7 @@ def check(step_path, report):
     integration_error = BRepGProp.VolumeProperties_s(shape, props, INTEGRATION_EPS)
     volume = props.Mass()
     deviation = step["max_deviation_mm"]
-    allowance = exact["area"] * deviation + abs(integration_error) + MEASUREMENT_WIDTH * exact["volume"]
+    allowance = exact["area"] * deviation + abs(integration_error * volume) + MEASUREMENT_WIDTH * exact["volume"]
     seen = {
         "solids": count(shape, TopAbs_SOLID),
         "faces": count(shape, TopAbs_FACE),

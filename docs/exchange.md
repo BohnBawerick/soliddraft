@@ -29,10 +29,10 @@ A part with a feature that needs a repair, is blocked or failed is refused, so n
 ## Where to export
 
 - In the app, File > Export offers STEP AP242, STL and 3MF. The status bar shows each export's report in one line.
-- On the command line, `soliddraft export <part.dwprt | recipe.json> --out bracket.step --out bracket.3mf` writes each file; `--json` prints each report with the exact body's faces, volume and area beside it.
+- On the command line, `soliddraft export <part.dwprt | recipe.json> --out bracket.step --out bracket.3mf` writes each file; `--json` prints each export report. It does not measure the body for acceptance checks.
 
 ## The OpenCASCADE check
 
 Hosted CI's STEP job exports the bracket and opens its STEP in OpenCASCADE through `ci/check-step.py`. The check passes when OpenCASCADE reads one valid solid with the face count of the report and of the exact body, and a volume within the reported deviation of Catallax's exact volume. A surface moved by at most `d` changes the enclosed volume by at most `area * d` to first order, so the allowance is that product, plus OpenCASCADE's own integration error estimate and the exact volume's measurement width.
 
-OpenCASCADE is a test tool only. The application never links it or runs it.
+OpenCASCADE and the exact-body acceptance measurements are test tools only. The application never links or runs OpenCASCADE. To capture the bracket and its measurement report locally, run `SOLIDDRAFT_STEP_PROOF_DIR=/tmp/bracket-proof cargo test -p soliddraft-exchange --test bracket step_carries_the_proven_deviation_and_the_body_faces -- --exact`, then `python3 ci/check-step.py /tmp/bracket-proof/bracket.step /tmp/bracket-proof/step-report.json`.

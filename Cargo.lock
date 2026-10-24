@@ -4996,6 +4996,7 @@ name = "soliddraft-exchange"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "soliddraft-kernel-api",
  "soliddraft-kernel-catallax",
  "soliddraft-recipe",

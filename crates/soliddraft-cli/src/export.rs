@@ -10,7 +10,6 @@ use soliddraft_exchange::{Export, Format};
 use soliddraft_kernel_api::Kernel;
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::Document;
-use soliddraft_recipe::BodySummary;
 use soliddraft_tessellation::ExportTolerance;
 
 pub(crate) const USAGE: &str = "\
@@ -29,8 +28,7 @@ uses the default, 0.01 mm. Each report gives what was written and how far it may
 lie from the exact part. A part with a feature that did not build is refused.
 
   --out   a file to write; repeat it for several formats
-  --json  print one JSON report per file, with the exact body's faces, volume
-          and area beside it
+  --json  print one JSON export report per file
 ";
 
 /// What `export` was asked for.
@@ -84,33 +82,29 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
 fn export(a: &Args) -> Result<(), String> {
     let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let at = |e: String| format!("{}: {e}", a.input.display());
-    let (exports, body) = match DocKind::of_path(&a.input) {
+    let exports = match DocKind::of_path(&a.input) {
         Some(DocKind::Part) => {
             let doc = Document::open(&a.input, kernel.clone()).map_err(|e| at(e.to_string()))?;
-            let exports = a.outputs.iter().map(|(_, f)| doc.export(*f)).collect::<Result<Vec<_>, _>>().map_err(at)?;
-            let body = doc.body().map(|b| soliddraft_recipe::summarize(kernel.as_ref(), b)).transpose();
-            (exports, body.map_err(|e| at(e.to_string()))?)
+            a.outputs.iter().map(|(_, f)| doc.export(*f)).collect::<Result<Vec<_>, _>>().map_err(at)?
         }
         Some(kind) => return Err(at(format!("export takes a part or a recipe, not a {kind}"))),
         None => {
             let text = std::fs::read_to_string(&a.input).map_err(|e| at(e.to_string()))?;
             let recipe = soliddraft_recipe::parse(&text).map_err(|e| at(e.to_string()))?;
             let (_, body) = soliddraft_recipe::build(kernel.as_ref(), &recipe).map_err(|e| at(e.to_string()))?;
-            let exports = a
-                .outputs
+            a.outputs
                 .iter()
                 .map(|(_, f)| {
                     soliddraft_exchange::export(kernel.as_ref(), body, &recipe.name, *f, &ExportTolerance::default())
                 })
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| at(e.to_string()))?;
-            (exports, Some(soliddraft_recipe::summarize(kernel.as_ref(), body).map_err(|e| at(e.to_string()))?))
+                .map_err(|e| at(e.to_string()))?
         }
     };
     // Every export succeeded before any file is written, so a refusal leaves no files.
     for ((path, format), out) in a.outputs.iter().zip(&exports) {
         write(path, out)?;
-        report(path, *format, out, body.as_ref(), a.json);
+        report(path, *format, out, a.json);
     }
     Ok(())
 }
@@ -119,13 +113,9 @@ fn write(path: &Path, out: &Export) -> Result<(), String> {
     soliddraft_document::save_atomic(path, &out.bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
-fn report(path: &Path, format: Format, out: &Export, body: Option<&BodySummary>, json: bool) {
+fn report(path: &Path, format: Format, out: &Export, json: bool) {
     if json {
-        let body = body.map(|b| json!({"faces": b.faces, "edges": b.edges, "volume": b.volume, "area": b.area}));
-        println!(
-            "{}",
-            json!({"file": path, "format": format, "bytes": out.bytes.len(), "report": out.report, "body": body})
-        );
+        println!("{}", json!({"file": path, "format": format, "bytes": out.bytes.len(), "report": out.report}));
     } else {
         println!("{}: {}, {}", path.display(), format.name(), out.report.summary());
     }

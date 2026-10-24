@@ -57,20 +57,6 @@ impl Welded {
         !self.triangles.is_empty() && uses.iter().all(|(&(a, b), &n)| n == 1 && uses.get(&(b, a)) == Some(&1))
     }
 
-    /// The enclosed volume in cubic millimetres, by the divergence theorem. Meaningful for
-    /// a closed mesh.
-    pub fn volume(&self) -> f64 {
-        let p = |i: u32| self.positions[i as usize].map(f64::from);
-        self.triangles
-            .iter()
-            .map(|t| {
-                let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
-                let cross = [b[1] * c[2] - b[2] * c[1], b[2] * c[0] - b[0] * c[2], b[0] * c[1] - b[1] * c[0]];
-                (a[0] * cross[0] + a[1] * cross[1] + a[2] * cross[2]) / 6.0
-            })
-            .sum()
-    }
-
     /// The unit normal of a triangle from its corners, or zero for a sliver too thin to
     /// have one.
     pub fn normal(&self, t: [u32; 3]) -> [f32; 3] {
@@ -108,7 +94,6 @@ mod tests {
         let w = weld(&cube());
         assert_eq!((w.positions.len(), w.triangles.len()), (8, 12));
         assert!(w.is_closed());
-        assert!((w.volume() - 1.0).abs() < 1e-12, "{}", w.volume());
         assert_eq!(w.normal(w.triangles[0]), [0.0, 0.0, -1.0]);
     }
 
