@@ -1,12 +1,12 @@
 //! The part document: features in tree order, rebuilt through the kernel trait.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use soliddraft_document::DocumentId;
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, HistoryRecord, Kernel, KernelError, KernelResult, OpTag,
-    Plane, Topology, Vec3,
+    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, KernelResult, OpTag, Origin, Plane,
+    Topology, Vec3,
 };
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
@@ -14,7 +14,7 @@ use soliddraft_tessellation::{Report, Settings};
 
 use crate::command::UndoEntry;
 use crate::feature::{
-    BlendFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
+    BlendFeature, DatumPlane, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
     SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
@@ -76,7 +76,7 @@ pub(crate) struct Built {
     pub output: Option<BodyId>,
     /// The body this feature made. The rebuild cache owns it and releases it.
     pub owned: Option<BodyId>,
-    /// The faces this feature generated, named.
+    /// The names of the faces this feature generated, with the origins they stand for.
     pub names: Vec<NamedFace>,
     pub sketch: Option<BuiltSketch>,
     /// Which kept build this is, so a feature that reads it can key on it. Zero for a
@@ -120,6 +120,7 @@ pub struct Document {
     pub(crate) id: DocumentId,
     pub(crate) name: String,
     pub(crate) features: Vec<Feature>,
+    pub(crate) datum_names: BTreeMap<DatumPlane, String>,
     /// The first feature below the rollback bar.
     pub(crate) rollback: Option<FeatureId>,
     pub(crate) next_id: u32,
@@ -159,6 +160,7 @@ impl Document {
             id: DocumentId::new(),
             name: name.into(),
             features: Vec::new(),
+            datum_names: BTreeMap::new(),
             rollback: None,
             next_id: 1,
             materials: PartMaterials::default(),
@@ -188,6 +190,11 @@ impl Document {
     /// The part's name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// The reference plane's display name. References store the datum, not this label.
+    pub fn datum_name(&self, datum: DatumPlane) -> &str {
+        self.datum_names.get(&datum).map(String::as_str).unwrap_or_else(|| datum.label())
     }
 
     /// Renames the part. Not an undoable command: the name is the file's, not the model's.
@@ -307,7 +314,7 @@ impl Document {
         self.built_index(id).and_then(|i| self.built[i].sketch.as_ref())
     }
 
-    /// The faces a feature generated in the last rebuild, named.
+    /// The names a feature defined for the faces it generated in the last rebuild.
     pub fn generated_faces(&self, id: FeatureId) -> &[NamedFace] {
         self.built_index(id).map(|i| self.built[i].names.as_slice()).unwrap_or(&[])
     }
@@ -329,20 +336,30 @@ impl Document {
         out
     }
 
-    pub(crate) fn view_of(&self, body: BodyId) -> KernelResult<(Topology, Vec<HistoryRecord>)> {
-        Ok((self.kernel.topology(body)?, self.kernel.history(body)?))
+    pub(crate) fn view_of(&self, body: BodyId) -> KernelResult<Topology> {
+        self.kernel.topology(body)
     }
 
     /// The latest body of the rebuild that contains a face or edge.
-    fn body_with(&self, has: impl Fn(&Topology) -> bool) -> Option<(Topology, Vec<HistoryRecord>)> {
-        self.bodies().into_iter().filter_map(|b| self.view_of(b).ok()).find(|(t, _)| has(t))
+    fn body_with(&self, has: impl Fn(&Topology) -> bool) -> Option<Topology> {
+        self.bodies().into_iter().filter_map(|b| self.view_of(b).ok()).find(|t| has(t))
     }
 
     /// A persistent name for a face of the part, for a feature to store. The face may be
     /// in the final body or in the body after any feature.
     pub fn face_ref(&self, face: FaceId) -> Result<FaceRef, NamingError> {
-        let (t, h) = self.body_with(|t| t.face(face).is_some()).ok_or(NamingError::NotInModel(face.to_string()))?;
-        let mut r = reference::name_face(face, &View { topology: &t, history: &h }, &self.name_map())?;
+        let t = self.body_with(|t| t.face(face).is_some()).ok_or(NamingError::NotInModel(face.to_string()))?;
+        let mut r = reference::name_face(face, &View { topology: &t }, &self.name_map())?;
+        r.label = self.face_label(face).map(|l| l.text).unwrap_or_default();
+        Ok(r)
+    }
+
+    /// A persistent name for a planar face of the part to sketch on. Unlike
+    /// [`face_ref`](Self::face_ref) it accepts a piece of a split face, since every piece
+    /// of the face's origin lies in the same plane.
+    pub fn plane_ref(&self, face: FaceId) -> Result<FaceRef, NamingError> {
+        let t = self.body_with(|t| t.face(face).is_some()).ok_or(NamingError::NotInModel(face.to_string()))?;
+        let mut r = reference::name_plane(face, &View { topology: &t }, &self.name_map())?;
         r.label = self.face_label(face).map(|l| l.text).unwrap_or_default();
         Ok(r)
     }
@@ -350,8 +367,8 @@ impl Document {
     /// A persistent name for an edge of the part, for a feature to store. Its label
     /// names the two faces it separates: "Base · End cap ∩ Flange · End cap".
     pub fn edge_ref(&self, edge: EdgeId) -> Result<EdgeRef, NamingError> {
-        let (t, h) = self.body_with(|t| t.edge(edge).is_some()).ok_or(NamingError::NotInModel(edge.to_string()))?;
-        let mut r = reference::name_edge(edge, &View { topology: &t, history: &h }, &self.name_map())?;
+        let t = self.body_with(|t| t.edge(edge).is_some()).ok_or(NamingError::NotInModel(edge.to_string()))?;
+        let mut r = reference::name_edge(edge, &View { topology: &t }, &self.name_map())?;
         let faces = &t.edge(edge).expect("named edges are in the topology").faces;
         let labels: Vec<String> =
             faces.iter().map(|f| self.face_label(*f).map(|l| l.text).unwrap_or_else(|| f.to_string())).collect();
@@ -365,17 +382,16 @@ impl Document {
 
     /// Finds a face reference in a body, as a feature reading that body would.
     pub fn resolve_face(&self, r: &FaceRef, body: BodyId) -> Result<FaceId, RepairNeeded> {
-        let (t, h) = self.view_of(body).map_err(|e| kernel_repair(ReferenceSlot::SketchPlane, e))?;
-        reference::resolve_face(r, &View { topology: &t, history: &h }, &self.name_map())
+        let t = self.view_of(body).map_err(|e| kernel_repair(ReferenceSlot::SketchPlane, e))?;
+        reference::resolve_face(r, &View { topology: &t }, &self.name_map())
             .map_err(|u| u.into_repair(ReferenceSlot::SketchPlane))
     }
 
     /// Finds an edge reference in a body, as a feature reading that body would.
     pub fn resolve_edge(&self, r: &EdgeRef, body: BodyId) -> Result<EdgeId, RepairNeeded> {
         let slot = ReferenceSlot::Edge { index: 0 };
-        let (t, h) = self.view_of(body).map_err(|e| kernel_repair(slot, e))?;
-        reference::resolve_edge(r, &View { topology: &t, history: &h }, &self.name_map())
-            .map_err(|u| u.into_repair(slot))
+        let t = self.view_of(body).map_err(|e| kernel_repair(slot, e))?;
+        reference::resolve_edge(r, &View { topology: &t }, &self.name_map()).map_err(|u| u.into_repair(slot))
     }
 
     /// Moves the rollback bar without an undo entry and rebuilds, for views that show
@@ -394,15 +410,15 @@ impl Document {
 
     /// The name of a face for people, such as "Boss-Extrude1 · End cap".
     pub fn face_label(&self, face: FaceId) -> Option<FaceLabel> {
-        let (t, h) = self.body_with(|t| t.face(face).is_some())?;
-        self.label_in(face, &t, &h)
+        let t = self.body_with(|t| t.face(face).is_some())?;
+        self.label_in(face, &t)
     }
 
     /// Names every face of a body for people, in topology order, with one kernel query
     /// for the whole body. Faces no feature generated have no label.
     pub fn face_labels(&self, body: BodyId) -> Vec<(FaceId, Option<FaceLabel>)> {
-        let Ok((t, h)) = self.view_of(body) else { return Vec::new() };
-        t.faces.iter().map(|f| (f.id, self.label_in(f.id, &t, &h))).collect()
+        let Ok(t) = self.view_of(body) else { return Vec::new() };
+        t.faces.iter().map(|f| (f.id, self.label_in(f.id, &t))).collect()
     }
 
     /// The feature whose operation created each edge of a body, in topology order,
@@ -424,9 +440,8 @@ impl Document {
         t.edges.iter().map(|e| (e.id, creator(e.id))).collect()
     }
 
-    fn label_in(&self, face: FaceId, t: &Topology, h: &[HistoryRecord]) -> Option<FaceLabel> {
-        let (feature, generator, ordinal) =
-            reference::origin_label(face, &View { topology: t, history: h }, &self.name_map())?;
+    fn label_in(&self, face: FaceId, t: &Topology) -> Option<FaceLabel> {
+        let (feature, generator, ordinal) = reference::origin_label(face, &View { topology: t }, &self.name_map())?;
         let f = self.feature(feature)?;
         let what = match generator {
             Generator::Side { entity } => {
@@ -471,6 +486,7 @@ impl Document {
             id: self.id,
             name: self.name.clone(),
             features: self.features.clone(),
+            datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_id: self.next_id,
             materials: self.materials.clone(),
@@ -595,11 +611,11 @@ impl Document {
                 let Some(body) = current else {
                     return repair(RepairReason::Missing, "there is no part body to sketch on".into(), vec![]);
                 };
-                let (t, h) = match self.view_of(body) {
+                let t = match self.view_of(body) {
                     Ok(v) => v,
                     Err(e) => return Built::failed(current, e.to_string()),
                 };
-                let id = match reference::resolve_face(face, &View { topology: &t, history: &h }, &self.name_map()) {
+                let id = match reference::resolve_plane(face, &View { topology: &t }, &self.name_map()) {
                     Ok(id) => id,
                     Err(u) => {
                         return Built::pass(
@@ -682,7 +698,7 @@ impl Document {
             }
         };
         let mut mine: Option<BodyId> = None;
-        let mut faces: Vec<(FaceId, Generator, usize, Vec3, u64)> = Vec::new();
+        let mut faces: Vec<(Origin, Generator, usize)> = Vec::new();
         let mut run = |mine: &mut Option<BodyId>| -> KernelResult<Option<BodyId>> {
             let k = &self.kernel;
             let mut body = current;
@@ -692,24 +708,18 @@ impl Document {
                 let tool = k.extrude(&tag("sweep"), sheet.body, &Extrude { distance, direction: Some(dir) });
                 let _ = k.release(sheet.body);
                 let tool = tool?;
-                let topology = match k.topology(tool.body) {
-                    Ok(t) => t,
-                    Err(err) => {
-                        let _ = k.release(tool.body);
-                        return Err(err);
-                    }
-                };
                 for o in &tool.record.face_roles {
                     let generator = match o.role {
-                        FaceRole::StartCap => Generator::StartCap,
-                        FaceRole::EndCap => Generator::EndCap,
+                        FaceRole::StartCap => Some(Generator::StartCap),
+                        FaceRole::EndCap => Some(Generator::EndCap),
                         FaceRole::Side { loop_index, segment } => region
                             .entity(loop_index as usize, segment as usize)
-                            .map_or(Generator::Other, |entity| Generator::Side { entity }),
-                        _ => Generator::Other,
+                            .map(|entity| Generator::Side { entity }),
+                        _ => None,
                     };
-                    let centroid = topology.face(o.face).map_or(Vec3::ZERO, |x| x.centroid);
-                    faces.push((o.face, generator, i, centroid, tool.record.seq));
+                    if let Some(generator) = generator {
+                        faces.push((Origin { tag: tool.record.tag.clone(), role: o.role }, generator, i));
+                    }
                 }
                 let next = match (e.operation, body) {
                     (ExtrudeOp::Boss, None) => tool.body,
@@ -756,12 +766,12 @@ impl Document {
         if b.edges.is_empty() {
             return Built::failed(current, format!("the {what} has no edges"));
         }
-        let (t, h) = match self.view_of(body) {
+        let t = match self.view_of(body) {
             Ok(v) => v,
             Err(err) => return Built::failed(current, err.to_string()),
         };
         let names = self.name_map();
-        let view = View { topology: &t, history: &h };
+        let view = View { topology: &t };
         let mut ids: Vec<EdgeId> = Vec::new();
         let mut repairs = Vec::new();
         for (i, r) in b.edges.iter().enumerate() {
@@ -788,21 +798,15 @@ impl Document {
             Ok(r) => r,
             Err(err) => return Built::failed(current, err.to_string()),
         };
-        let topology = self.kernel.topology(result.body).ok();
         let faces = result
             .record
             .face_roles
             .iter()
-            .map(|o| {
-                let generator = match o.role {
-                    FaceRole::Blend { edge } => ids
-                        .iter()
-                        .position(|x| *x == edge)
-                        .map_or(Generator::Other, |i| Generator::Blend { edge: i as u32 }),
-                    _ => Generator::Other,
-                };
-                let centroid = topology.as_ref().and_then(|t| t.face(o.face)).map_or(Vec3::ZERO, |x| x.centroid);
-                (o.face, generator, 0, centroid, result.record.seq)
+            .filter_map(|o| match o.role {
+                FaceRole::Blend { edge } => ids.iter().position(|x| *x == edge).map(|i| {
+                    (Origin { tag: result.record.tag.clone(), role: o.role }, Generator::Blend { edge: i as u32 }, 0)
+                }),
+                _ => None,
             })
             .collect();
         Built {
@@ -828,18 +832,18 @@ pub fn feature_of_tag(tag: &str) -> Option<FeatureId> {
     id.parse().ok().map(FeatureId)
 }
 
-/// Ordinals: faces with the same generator are ranked by region, then by centroid.
-fn number(mut faces: Vec<(FaceId, Generator, usize, Vec3, u64)>) -> Vec<NamedFace> {
-    let key = |c: Vec3| [c.x, c.y, c.z].map(|v| (v * 1e6).round() as i64);
-    faces.sort_by_key(|f| (f.1, f.2, key(f.3)));
+/// Ordinals: faces with the same generator are ranked by the region that made them. A
+/// region makes each generator once, so the rank never depends on geometry.
+fn number(mut faces: Vec<(Origin, Generator, usize)>) -> Vec<NamedFace> {
+    faces.sort_by_key(|f| (f.1, f.2));
     let mut counts: HashMap<Generator, u32> = HashMap::new();
     faces
         .into_iter()
-        .map(|(face, generator, _, _, seq)| {
+        .map(|(origin, generator, _)| {
             let n = counts.entry(generator).or_default();
             let ordinal = *n;
             *n += 1;
-            NamedFace { face, generator, ordinal, seq }
+            NamedFace { origin, generator, ordinal }
         })
         .collect()
 }

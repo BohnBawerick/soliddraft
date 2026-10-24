@@ -1124,8 +1124,12 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::NewPart),
         cmd("open", "Open", Icon::Open, "Open a part or a drawing; a drawing opens its part too")
             .key(Scope::Part, ctrl, Key::O)
-            .run(|_| AppAction::Open(None)),
-        cmd("save", "Save", Icon::Save, "Save the part").key(Scope::Part, ctrl, Key::S).run(|_| AppAction::Save),
+            .run(|_| AppAction::Open(None))
+            .agents(Agents::Mcp, "Opens a part file in place of the current part.", tools::part_path_params),
+        cmd("save", "Save", Icon::Save, "Save the part")
+            .key(Scope::Part, ctrl, Key::S)
+            .run(|_| AppAction::Save)
+            .agents(Agents::Mcp, "Saves the part to the file.", tools::part_path_params),
         cmd("save_as", "Save as", Icon::Save, "Save the part under a new name")
             .key(Scope::Part, ctrl_shift, Key::S)
             .run(|_| AppAction::SaveAs(None)),
@@ -1155,7 +1159,18 @@ fn registry() -> Vec<CommandSpec> {
             .when(|s| s.selected_feature().is_some()),
         cmd("rename", "Rename", Icon::Props, "Rename the selected feature")
             .key(Scope::Part, none, Key::F2)
-            .run(|_| AppAction::RenameSelected),
+            .run(|_| AppAction::RenameSelected)
+            .agents(Agents::Mcp, "References to the feature's faces keep working.", tools::rename_params),
+        cmd("rename_plane", "Rename plane", Icon::Plane, "Rename a reference plane").agents(
+            Agents::Mcp,
+            "Sketches keep their datum identity when its display name changes.",
+            tools::rename_plane_params,
+        ),
+        cmd("edit_dimension", "Edit dimension", Icon::Props, "Change a dimension of a sketch").agents(
+            Agents::Mcp,
+            "The sketch solves again and everything after it rebuilds.",
+            tools::edit_dimension_params,
+        ),
         cmd(
             "suppress",
             "Suppress",

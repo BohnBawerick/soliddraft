@@ -238,8 +238,8 @@ impl Document {
             return table;
         }
         let Some(body) = self.body() else { return table };
-        let Ok((topology, history)) = self.view_of(body) else { return table };
-        let view = View { topology: &topology, history: &history };
+        let Ok(topology) = self.view_of(body) else { return table };
+        let view = View { topology: &topology };
         let names = self.name_map();
         let mut index: HashMap<&AppearanceId, u32> = HashMap::new();
         for (i, a) in chosen {

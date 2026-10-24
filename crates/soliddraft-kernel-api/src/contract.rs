@@ -613,6 +613,53 @@ pub fn created_faces_have_roles(k: &dyn Kernel) {
     }
 }
 
+/// Every face lists the origins that made it, by the caller's tags: a sweep's caps and
+/// sides, the union of both origins on a face merged from two coplanar ones, and the same
+/// origin on every piece of a face a later cut splits.
+pub fn faces_keep_their_origins(k: &dyn Kernel) {
+    let solid = |name: &str, plane: Plane, center: Point2, w: f64, h: f64, depth: f64| {
+        let p = k.create_body_from_profile(&tag(&format!("{name}.profile")), &Profile::rectangle(plane, center, w, h));
+        let p = p.unwrap();
+        let swept = k.extrude(&tag(&format!("{name}.sweep")), p.body, &Extrude { distance: depth, direction: None });
+        k.release(p.body).unwrap();
+        swept.unwrap().body
+    };
+    let origin = |name: &str, role: FaceRole| crate::Origin { tag: tag(&format!("{name}.sweep")), role };
+    let carrying = |body: BodyId, o: &crate::Origin| {
+        k.topology(body).unwrap().faces.into_iter().filter(|f| f.origins.contains(o)).collect::<Vec<_>>()
+    };
+    let plate = solid("plate", Plane::XY, Point2::new(60.0, 45.0), 120.0, 90.0, 10.0);
+    let t = k.topology(plate).unwrap();
+    assert_eq!(t.faces.len(), 6);
+    assert!(t.faces.iter().all(|f| f.origins.len() == 1), "a lone sweep's faces have one origin each");
+    let top = origin("plate", FaceRole::EndCap);
+    let side = origin("plate", FaceRole::Side { loop_index: 0, segment: 1 });
+    assert!(near(carrying(plate, &top)[0].centroid, Vec3::new(60.0, 45.0, 10.0), 1e-6));
+    assert!(near(carrying(plate, &side)[0].centroid, Vec3::new(120.0, 45.0, 5.0), 1e-6));
+
+    // A flush tab past the plate's +X side: the tops merge into one face with both origins.
+    let tab = solid("tab", Plane::XY, Point2::new(130.0, 45.0), 20.0, 20.0, 10.0);
+    let merged = k.boolean(&tag("tab.union"), BooleanOp::Union, plate, tab).unwrap().body;
+    let tops = carrying(merged, &top);
+    assert_eq!(tops.len(), 1, "one top face");
+    assert!(tops[0].origins.contains(&origin("tab", FaceRole::EndCap)), "the merged top carries the tab's origin");
+    assert!(close(tops[0].area, 120.0 * 90.0 + 400.0, 1e-6));
+
+    // A groove across the plate splits the merged top: both pieces keep both origins they had.
+    let down = Plane { origin: Vec3::new(0.0, 0.0, 10.0), normal: -Vec3::Z, x_dir: Vec3::X };
+    let groove = solid("groove", down, Point2::new(100.0, -45.0), 6.0, 100.0, 3.0);
+    let cut = k.boolean(&tag("groove.cut"), BooleanOp::Subtract, merged, groove).unwrap().body;
+    let pieces = carrying(cut, &top);
+    assert_eq!(pieces.len(), 2, "the groove splits the top in two");
+    assert!(pieces.iter().all(|f| f.normal == Some(Vec3::Z)));
+    let floor = carrying(cut, &origin("groove", FaceRole::EndCap));
+    assert_eq!(floor.len(), 1, "the groove's floor is its end cap");
+    assert!(near(floor[0].centroid, Vec3::new(100.0, 45.0, 7.0), 1e-6));
+    for body in [plate, tab, merged, groove, cut] {
+        k.release(body).unwrap();
+    }
+}
+
 // Drawing queries.
 
 /// The bracket of `recipes/bracket.json`, built step by step: a 120 x 90 x 10 plate with a

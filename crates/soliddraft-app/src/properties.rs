@@ -253,10 +253,14 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                         theme::section_label(ui, "Sketch plane");
                         egui::ComboBox::from_id_salt("plane")
                             .width(ui.available_width() - 4.0)
-                            .selected_text(params.plane.label())
+                            .selected_text(state.doc.model().datum_name(params.plane.to_model()))
                             .show_ui(ui, |ui| {
                                 for p in PlaneKind::ALL {
-                                    ui.selectable_value(&mut params.plane, p, p.label());
+                                    ui.selectable_value(
+                                        &mut params.plane,
+                                        p,
+                                        state.doc.model().datum_name(p.to_model()),
+                                    );
                                 }
                             });
                     }
@@ -367,7 +371,13 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 hint(ui, "Choose a reference plane, or click a planar face of the body.");
                 ui.add_space(4.0);
                 for p in PlaneKind::ALL {
-                    if ui.add_sized(vec2(ui.available_width() - 4.0, 24.0), egui::Button::new(p.label())).clicked() {
+                    if ui
+                        .add_sized(
+                            vec2(ui.available_width() - 4.0, 24.0),
+                            egui::Button::new(state.doc.model().datum_name(p.to_model())),
+                        )
+                        .clicked()
+                    {
                         actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: p }));
                     }
                 }

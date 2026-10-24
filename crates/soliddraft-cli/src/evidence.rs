@@ -8,7 +8,7 @@ use soliddraft_app::command_tools::CommandTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
-use soliddraft_model::{Document, feature_of_tag};
+use soliddraft_model::{Document, FaceRef, FeatureKind, FeatureStatus, ReferenceSlot, SketchPlane, feature_of_tag};
 
 pub(crate) struct Evidence<'a> {
     host: CommandTools<'a>,
@@ -52,6 +52,7 @@ impl<'a> Evidence<'a> {
             write_json(dir.join("recipe.json"), &kernel.body_recipe(body)?)?;
         }
         let summary = self.host.summary();
+        let references = references(doc.model());
         let mut diagnostics = kernel.take_diagnostics()?;
         if let Some(questions) = diagnostics["questions"].as_array_mut() {
             for (i, question) in questions.iter_mut().enumerate() {
@@ -64,7 +65,7 @@ impl<'a> Evidence<'a> {
             dir.join("command.json"),
             &json!({
                 "tool":name,"arguments":input,"is_error":output.is_error,"output":output.content,
-                "backend":doc.kernel().backend(),"summary":summary,
+                "backend":doc.kernel().backend(),"summary":summary,"references":references,
                 "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
@@ -96,6 +97,98 @@ fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
         doc.features().iter().filter(|f| ids.remove(&f.id)).map(|f| f.name.clone()).collect();
     features.extend(ids.into_iter().map(|id| id.to_string()));
     json!({"features_recomputed":features,"operations":operations,"meshes_rebuilt":meshes})
+}
+
+/// Reference evidence is collected only for an explicitly requested command bundle,
+/// after the edit. Survival assertions live in the scenario runner, not in rebuild.
+fn references(doc: &soliddraft_model::Document) -> Value {
+    let origin = |r: &FaceRef| format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1);
+    let mut out = Vec::new();
+    for f in doc.features() {
+        let refs: Vec<(ReferenceSlot, String, Vec<&FaceRef>)> = match &f.kind {
+            FeatureKind::Sketch(s) => match &s.plane {
+                SketchPlane::Face { face } => vec![(ReferenceSlot::SketchPlane, origin(face), vec![face])],
+                SketchPlane::Datum { datum, .. } => {
+                    vec![(ReferenceSlot::SketchPlane, format!("datum:{datum:?}"), Vec::new())]
+                }
+            },
+            FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) => b
+                .edges
+                .iter()
+                .enumerate()
+                .map(|(i, e)| {
+                    let text = format!("{} | {}", origin(&e.faces[0]), origin(&e.faces[1]));
+                    (ReferenceSlot::Edge { index: i as u32 }, text, e.faces.iter().collect())
+                })
+                .collect(),
+            FeatureKind::Extrude(_) => Vec::new(),
+        };
+        if refs.is_empty() {
+            continue;
+        }
+        let status = doc.status(f.id);
+        let topology = doc.body_before(f.id).and_then(|b| doc.kernel().topology(b).ok());
+        for (slot, text, faces) in refs {
+            let repair = match status {
+                Some(FeatureStatus::RepairNeeded(items)) => items.iter().find(|r| r.slot == slot),
+                _ => None,
+            };
+            let built =
+                matches!(status, Some(FeatureStatus::Ok | FeatureStatus::RepairNeeded(_) | FeatureStatus::Failed(_)));
+            let origins: Vec<_> = faces
+                .iter()
+                .map(|r| {
+                    doc.generated_faces(r.feature)
+                        .iter()
+                        .find(|n| n.generator == r.generator && n.ordinal == r.ordinal)
+                        .map(|n| &n.origin)
+                })
+                .collect();
+            let carriers: Vec<Vec<_>> = origins
+                .iter()
+                .map(|origin| {
+                    topology
+                        .as_ref()
+                        .map(|t| t.faces.iter().filter(|f| origin.is_some_and(|o| f.origins.contains(o))).collect())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let matches_origin = if !matches!(status, Some(FeatureStatus::Ok)) {
+                None
+            } else {
+                Some(match &f.kind {
+                    FeatureKind::Sketch(s) => doc.built_sketch(f.id).is_some_and(|built| match &s.plane {
+                        SketchPlane::Datum { datum, offset } => {
+                            let p = datum.plane();
+                            built.plane == p.with_origin(p.origin + p.normal * *offset)
+                        }
+                        SketchPlane::Face { .. } => carriers.iter().all(|set| {
+                            !set.is_empty()
+                                && set.iter().all(|f| {
+                                    f.normal == Some(built.plane.normal)
+                                        && (f.centroid - built.plane.origin).dot(built.plane.normal).abs() <= 1e-6
+                                })
+                        }),
+                    }),
+                    _ => carriers.iter().all(|set| !set.is_empty()),
+                })
+            };
+            out.push(json!({
+                "feature_id": f.id.to_string(),
+                "feature": f.name,
+                "slot": slot.to_string(),
+                "origin": text,
+                "of": faces.iter().map(|r| doc.feature(r.feature).map(|g| g.name.clone())).collect::<Vec<_>>(),
+                "resolved": built.then_some(repair.is_none()),
+                "kernel_origins": origins,
+                "carrier_counts": carriers.iter().map(Vec::len).collect::<Vec<_>>(),
+                "carrier_origin_counts": carriers.iter().map(|set| set.iter().map(|f| f.origins.len()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+                "matches_origin": matches_origin,
+                "repair": repair.map(|r| r.message.clone()),
+            }));
+        }
+    }
+    Value::Array(out)
 }
 
 fn write_json(path: PathBuf, value: &Value) -> Result<(), std::io::Error> {

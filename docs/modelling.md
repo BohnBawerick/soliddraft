@@ -136,26 +136,54 @@ Every state but `Ok` passes the body through, so the rest of the tree still buil
 A feature never stores a kernel id. It names a face by origin: the feature that
 generated it, the generator (start cap, end cap, the side swept from sketch entity 5,
 the blend of the feature's edge 2) and an ordinal among that feature's faces with the
-same generator. The generators come from the kernel's face roles (see
-[kernel-bridge.md](kernel-bridge.md)). An edge is named by the two faces it separates.
+same generator, ranked by the sketch region that made them. An edge is named by the two
+faces it separates.
 
-On every rebuild a name is looked up among the faces its feature generated in this
-rebuild, then followed through the kernel's history: split faces become their pieces,
-deleted ones drop out. For an edge, both faces are followed and the edge between them is
-taken, so an edge survives a split of one of its faces.
+The origin is the identity. Catallax records on every face the operations that made it
+and the part each one played (its role), and keeps them through later operations: every
+piece of a split face keeps the origin, and a face merged from coplanar faces carries
+all of their origins. The kernel interface reports them as `FaceInfo::origins`, with the
+document's operation tags. On every rebuild each feature says which origin each of its
+names stands for, and a name resolves to the faces of the input body that carry that
+origin. Renames, splits, merges and dimension edits keep a reference without following
+history or comparing geometry. No face role is guessed: a face whose role the interface
+cannot express has no name.
+
+What a reference needs from those faces depends on its use:
+
+- a sketch plane needs one plane, so it accepts the pieces of a split face when they lie
+  in one plane;
+- an appearance follows every piece;
+- a drawing anchor or a fillet edge needs exactly one face or edge.
 
 The result is checked against a fingerprint taken when the reference was made: the
 surface or curve type must not change, and a planar face must still face the same way.
-Position and size may change, since that is what editing a dimension does.
+The fingerprint never chooses a face. Its position and size only rank the candidates
+offered when a reference breaks.
 
 A reference that resolves to no entity, to several, or to one that fails the check stops
 its feature with `RepairNeeded`: which reference broke, why (`Missing`, `Ambiguous`,
-`Mismatch`), and candidates ranked by fingerprint. It never re-attaches silently. A
-repair is an ordinary edit with a new reference.
+`Mismatch`), and candidates ranked by fingerprint. It never re-attaches silently, picks
+the nearest face or guesses an identity from geometry. A repair is an ordinary edit with
+a new reference.
 
 `Document::face_ref` and `Document::edge_ref` make a reference from a picked kernel id,
-and check that it resolves back to that entity. `Document::face_label` names a face for
-people, such as "Boss-Extrude1 · End cap".
+and check that it resolves back to that entity. `Document::plane_ref` makes a sketch
+plane reference and also accepts a piece of a split face. `Document::face_label` names a
+face for people, such as "Boss-Extrude1 · End cap".
+
+`tests/references.rs` checks survival on the bracket. It edits the plate thickness and
+the boss diameter, renames features and the Top datum, splits the plate's top with a
+groove, merges it with a flush tab, suppresses and restores the groove, undoes and redoes,
+and saves and reopens the part. Every reference survives these steps. Deleting the boss
+then raises the repair prompt for the bore's missing plane instead of choosing another.
+The same steps run through MCP as the `references` application scenario
+([application-loop.md](application-loop.md)).
+
+Datum references store `DatumPlane`, never its display name. `RenameDatumPlane` changes
+the label without rebuilding geometry; it is undoable and saved in `part.json` as
+`datum_names`. Files without labels use Top, Front and Right. Labels affect the semantic
+hash, not the geometry hash.
 
 ## Native files
 

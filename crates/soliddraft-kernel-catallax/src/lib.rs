@@ -168,11 +168,20 @@ impl CatallaxKernel {
         let mut state = self.state()?;
         // A refused build keeps its question too.
         state.questions.extend(questions);
-        let app = built?;
+        let (app, names) = built?;
+        // Catallax names faces by recipe step; the interface uses the caller's tag.
+        let tags: BTreeMap<String, OpTag> = names
+            .into_iter()
+            .filter_map(|(name, id)| {
+                let n: u64 = name.strip_prefix("op_")?.parse().ok()?;
+                let tag = if n == seq { tag.clone() } else { history.get(&n)?.tag.clone() };
+                Some((id.as_str().to_owned(), tag))
+            })
+            .collect();
         if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
             return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
         }
-        let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &mut state.next);
+        let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &tags, &mut state.next);
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
@@ -210,7 +219,12 @@ fn gap(what: &str, stage: &str) -> KernelError {
     ))
 }
 
-fn build(input: &Value, op: OpKind, questions: Option<&mut Vec<Value>>) -> KernelResult<ApplicationBody> {
+/// Builds a legacy recipe, returning the body and the legacy step names' Catallax step ids.
+fn build(
+    input: &Value,
+    op: OpKind,
+    questions: Option<&mut Vec<Value>>,
+) -> KernelResult<(ApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
     let mut converted =
         catallax_app::soliddraft::convert(&input.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
     let sources = input["steps"].as_array().expect("generated recipe steps");
@@ -251,8 +265,9 @@ fn build(input: &Value, op: OpKind, questions: Option<&mut Vec<Value>>) -> Kerne
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
         questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
     }
-    catallax_app::build(&converted.recipe, &MeshOptions::default(), &mut Decider::default())
-        .map_err(|e| build_error(op, e))
+    let app = catallax_app::build(&converted.recipe, &MeshOptions::default(), &mut Decider::default())
+        .map_err(|e| build_error(op, e))?;
+    Ok((app, converted.steps))
 }
 
 fn build_error(op: OpKind, error: Error) -> KernelError {

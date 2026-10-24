@@ -10,7 +10,7 @@ use soliddraft_materials::{Appearance, AppearanceId, Catalog, Material, Material
 use soliddraft_sketch::{ConstraintId, SolveStatus};
 
 use crate::document::Document;
-use crate::feature::{Feature, FeatureId, FeatureKind};
+use crate::feature::{DatumPlane, Feature, FeatureId, FeatureKind};
 use crate::materials::{AppearanceAssignment, AppearanceTarget, MaterialAssignment, PartMaterials};
 
 /// A change to a document.
@@ -60,6 +60,13 @@ pub enum Command {
         /// The feature.
         id: FeatureId,
         /// The new name, not empty.
+        name: String,
+    },
+    /// Renames a reference plane without changing the datum sketches reference.
+    RenameDatumPlane {
+        /// The plane's stable identity.
+        datum: DatumPlane,
+        /// The new display name, not empty or used by another datum.
         name: String,
     },
     /// Removes a feature. Features that used it report what broke.
@@ -217,6 +224,30 @@ struct Applied {
 }
 
 impl Document {
+    pub(crate) fn rename_datum(&mut self, datum: DatumPlane, name: &str) -> Result<String, CommandError> {
+        if name.trim().is_empty() {
+            return Err(CommandError::Invalid("a plane name cannot be empty".into()));
+        }
+        let key = name.trim().to_ascii_lowercase();
+        let key = key.trim_end_matches(" plane");
+        for other in [DatumPlane::Top, DatumPlane::Front, DatumPlane::Right] {
+            if other != datum
+                && [self.datum_name(other), other.label()]
+                    .iter()
+                    .any(|label| label.to_ascii_lowercase().trim_end_matches(" plane") == key)
+            {
+                return Err(CommandError::Invalid(format!("another plane is already named {name}")));
+            }
+        }
+        let old = self.datum_name(datum).to_owned();
+        if name == datum.label() {
+            self.datum_names.remove(&datum);
+        } else {
+            self.datum_names.insert(datum, name.to_owned());
+        }
+        Ok(old)
+    }
+
     /// Runs a command, records it for undo and rebuilds from the first feature it
     /// changed. A rebuild problem does not refuse the command: it shows up in the
     /// features' statuses.
@@ -456,6 +487,16 @@ impl Document {
                 Ok(Applied {
                     inverse: Command::RenameFeature { id, name: old.clone() },
                     redo: Command::RenameFeature { id, name: name.clone() },
+                    created: None,
+                    label: format!("rename {old} to {name}"),
+                })
+            }
+            Command::RenameDatumPlane { datum, name } => {
+                let name = name.trim().to_owned();
+                let old = self.rename_datum(datum, &name)?;
+                Ok(Applied {
+                    inverse: Command::RenameDatumPlane { datum, name: old.clone() },
+                    redo: Command::RenameDatumPlane { datum, name: name.clone() },
                     created: None,
                     label: format!("rename {old} to {name}"),
                 })

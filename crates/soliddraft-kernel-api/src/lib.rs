@@ -16,6 +16,9 @@
 //!   the faces, edges and vertices each one created, modified, deleted or split, and the
 //!   role of every face it created (a cap, a side swept from a given profile segment, a
 //!   blend of a given edge).
+//! - **Faces carry their origins.** [`FaceInfo::origins`] lists the operations and roles
+//!   that made each face, kept through splits and merges. Persistent references resolve
+//!   by them.
 //!
 //! Units are millimetres and degrees.
 
@@ -30,7 +33,7 @@ mod ids;
 mod profile;
 
 pub use geometry::{Aabb, Plane, Point2, Vec3};
-pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, OpKind, Split};
+pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
 pub use profile::{Loop, PROFILE_JOIN_TOLERANCE, Profile, ProfileError, Segment};
 
@@ -199,6 +202,10 @@ pub struct FaceInfo {
     /// side its profile plane's normal points to). `None` for curved faces.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normal: Option<Vec3>,
+    /// The operations that made the face, in a stable order: its persistent identity.
+    /// Empty when the backend reports no origins for it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origins: Vec<Origin>,
 }
 
 /// One edge of a body.

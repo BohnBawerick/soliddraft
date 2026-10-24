@@ -127,7 +127,7 @@ pub enum SketchPlane {
 }
 
 /// The three reference planes. Z is up; the Front plane faces a viewer standing on -Y.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DatumPlane {
     /// The XY plane, normal +Z.

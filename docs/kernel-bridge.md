@@ -32,7 +32,7 @@ This change removes SMLib and its callers without changing the kernel trait's co
 - "modified" as a geometric-change guess;
 - `validate()` as a guard against false successes.
 
-The recipe format also stays unchanged. The model still names faces by generators and follows origin-derived history when resolving saved references.
+The recipe format also stays unchanged. Faces carry Catallax's origins as `FaceInfo::origins`. The adapter maps each origin's recipe step back to the document's operation tag and leaves out roles the interface cannot express. Saved references resolve by those origins, not by history (see [modelling.md](modelling.md)). Legacy history records remain for drawings, the recipe runner and edge labels.
 
 ## Checks
 

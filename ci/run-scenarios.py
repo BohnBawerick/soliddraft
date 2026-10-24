@@ -98,6 +98,47 @@ def check(value, spec):
         return {"check": spec, "error": str(error), "pass": False}
 
 
+def rebuilds(features, repair):
+    """Every feature builds, except the expected repairs and the features waiting for them."""
+    waiting = tuple(f"error: {name} needs repair first" for name in repair)
+    broken = [f for f in features if f["status"].startswith(("error", "needs repair"))
+        and not (f["name"] in repair and f["status"].startswith("needs repair"))
+        and not f["status"].startswith(waiting)]
+    prompted = {f["name"] for f in features if f["status"].startswith("needs repair")}
+    missing = [name for name in repair if name not in prompted]
+    return {"check": "feature rebuilds", "actual": broken, "missing_repairs": missing,
+        "pass": not broken and not missing}
+
+
+def references_kept(known, references, repair, deleted):
+    """Each reference names the origin it named before, and resolves or raises the repair prompt."""
+    now = {(r["feature_id"], r["slot"]): r for r in references}
+    changed = [{"reference": list(key), "was": identity, "now": now[key]["origin"]}
+        for key, identity in known.items() if key in now
+        and (now[key]["origin"] != identity["name"]
+            or (all(o is not None for o in now[key]["kernel_origins"])
+                and now[key]["kernel_origins"] != identity["kernel"]))]
+    lost = [list(key) for key in known if key not in now and not deleted]
+    wrong = [r for r in references
+        if (r["resolved"] is not None and r["resolved"] != (r["feature"] not in repair))
+        or (r["resolved"] is True and r["matches_origin"] is not True)]
+    for key, r in now.items():
+        known.setdefault(key, {"name": r["origin"], "kernel": r["kernel_origins"]})
+    return {"check": "references kept", "changed": changed, "lost": lost, "unexpected": wrong,
+        "pass": not changed and not lost and not wrong}
+
+
+def substitute(value, bundle):
+    """Replaces {bundle} in string arguments with the run's bundle directory."""
+    if isinstance(value, str):
+        return value.replace("{bundle}", str(bundle))
+    if isinstance(value, list):
+        return [substitute(v, bundle) for v in value]
+    if isinstance(value, dict):
+        return {k: substitute(v, bundle) for k, v in value.items()}
+    return value
+
+
 def cli(binary, arguments, directory, label, timeout):
     result = subprocess.run([binary, *map(str, arguments)], capture_output=True, text=True, timeout=timeout)
     (directory / f"{label}.stdout").write_text(result.stdout)
@@ -132,18 +173,21 @@ def run(args):
         if initialized["protocolVersion"] != "2025-06-18":
             raise RuntimeError("MCP initialization version mismatch")
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        known = {}
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
             report["steps"].append(entry)
-            result = client.request("tools/call", {"name": step["tool"], "arguments": step.get("arguments", {})})
+            arguments = substitute(step.get("arguments", {}), args.out)
+            result = client.request("tools/call", {"name": step["tool"], "arguments": arguments})
             directory = args.out / "commands" / f"{number:04}"
             command = json.loads((directory / "command.json").read_text())
             checks = entry["checks"]
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == bool(step.get("refusal"))})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
             checks.extend(check(command, spec) for spec in step.get("checks", []))
-            errors = [f for f in command["summary"]["features"] if f["status"].startswith(("error", "needs repair"))]
-            checks.append({"check": "feature rebuilds", "actual": errors, "pass": not errors})
+            repair = step.get("repair", [])
+            checks.append(rebuilds(command["summary"]["features"], repair))
+            checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature"))
             if step.get("refusal"):
                 code = step["refusal"]
                 checks.append({"check": "application refusal", "actual": command["output"], "pass": code in command["output"]})

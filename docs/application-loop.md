@@ -28,6 +28,15 @@ Model commands, viewport screenshots, SVG views and drawing output use Catallax.
 The view and drawing checks require that backend. Views use the same polygon
 hidden-line method as the drawing workspace.
 
+`references.json` is the reference survival scenario. It builds the bracket with
+sketches on the plate's and the boss's top faces, splits the plate's top with a groove,
+sketches on one piece, and merges the top with a flush tab. It then changes the plate
+thickness and the boss diameter, renames features and the Top reference plane, suppresses
+and restores the groove, undoes and redoes, and saves and reopens the part. Every
+reference must survive these steps, including the datum references. Deleting the boss
+then raises the repair prompt for the bore's missing plane. Split and merge checks
+inspect the actual origin sets, not just feature statuses.
+
 `refusal.json` sets the deterministic per-call work allowance to zero. The
 extrusion refuses with `numbers.operation-budget`, leaves the part unchanged,
 and exports its actual Catallax recipe and allowance. The runner calls
@@ -44,17 +53,30 @@ Optional `checks` use JSON pointers into `command.json`, with exactly one of
 for a sketch without a body, `drawing: true` for drawing output, or `refusal`
 with an expected stable kernel code. Unexpected tool errors fail immediately.
 MCP rounds reported volumes to two decimals, so the bracket checks allow
-0.005 mm³ around the analytical volume.
+0.005 mm³ around the analytical volume. A step's `repair` lists the features expected
+to raise the repair prompt; features that wait for them may report it, and every other
+feature must build. `{bundle}` in a string argument is replaced by the run's bundle
+directory, for `save` and `open`.
+
+Every step also checks references: each reference in `command.json` must keep its
+original identity and Catallax operation tag and role. A built face sketch must lie on
+the plane of the input body's faces carrying that origin. The reference must resolve
+unless its feature is in `repair`. A reference may disappear only when the step deletes
+a feature.
 
 Every run has `scenario.json`, `protocol.json` and `result.json`. Each executed
 MCP tool call has a numbered directory under `commands/` containing:
 
-- `command.json`: input, output, backend, the current model summary and the
-  `rebuild` report. `features_recomputed` lists the features whose kernel operations
-  the command ran, in tree order. `operations` counts those operations and
+- `command.json`: input, output, backend, the current model summary and every
+  persistent reference: the feature holding it, its slot, its identity, the Catallax
+  origins, carrier counts and whether the built sketch's plane matches those carriers.
+  `resolved` is null when that feature was not built. These observations run only after
+  execution when `--bundle` was requested; the scenario runner makes the assertions.
+  The `rebuild` report's `features_recomputed` lists the features whose kernel
+  operations the command ran, in tree order. `operations` counts those operations and
   `meshes_rebuilt` the meshes made. The bundle counts by wrapping the kernel, and the
-  application does no counting. `meshes_rebuilt` includes display levels the
-  background worker finished during the command, so scenarios do not check it.
+  application does no counting. `meshes_rebuilt` includes display levels the background
+  worker finished during the command, so scenarios do not check it.
 - `part.json` and `part.dwprt`: the application's complete feature recipe and
   saved part after the command, including undo, rejected proposals and rollback.
 - `recipe.json`, when a solid exists: the recipe that constructed the displayed

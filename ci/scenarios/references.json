@@ -1,0 +1,412 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "references",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              60,
+              45,
+              0
+            ],
+            "width": 120,
+            "height": 90
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 108000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              45,
+              0
+            ],
+            "width": 10,
+            "height": 90
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 60,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 153000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              10
+            ],
+            "diameter": 24
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch3",
+        "depth": 20,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 162047.7868423386,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude3 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              30
+            ],
+            "diameter": 12
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch4",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 158654.86677646163,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              100,
+              45,
+              10
+            ],
+            "width": 6,
+            "height": 100
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch5",
+        "through_all": false,
+        "depth": 3,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 157034.86677646163,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              112,
+              45,
+              10
+            ],
+            "diameter": 6
+          }
+        ]
+      },
+      "render": false,
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+      ]
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch6",
+        "through_all": false,
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 156893.49510705008,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              130,
+              45,
+              0
+            ],
+            "width": 20,
+            "height": 20
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch7",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 160893.49510705008,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              130,
+              45,
+              10
+            ],
+            "diameter": 5
+          }
+        ]
+      },
+      "render": false,
+      "checks": [
+        { "pointer": "/references/7/carrier_origin_counts/0", "contains": 2 }
+      ]
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch8",
+        "through_all": false,
+        "depth": 4,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 160814.95529071035,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 12,
+        "flip": false
+      }
+    },
+    {
+      "tool": "edit_dimension",
+      "arguments": {
+        "sketch": "Sketch3",
+        "dimension": 1,
+        "value": 30
+      }
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Plate"
+      }
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude3",
+        "name": "Boss"
+      }
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Sketch3",
+        "name": "Boss sketch"
+      }
+    },
+    {
+      "tool": "rename_plane",
+      "arguments": {
+        "plane": "top",
+        "name": "Mounting plane"
+      },
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
+        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Top plane" }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude2",
+        "suppressed": true
+      },
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 1 }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude2",
+        "suppressed": false
+      },
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {}
+    },
+    {
+      "tool": "redo",
+      "arguments": {}
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/survival.dwprt"
+      }
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/survival.dwprt"
+      },
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
+        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Mounting plane",
+        "shapes": [
+          { "shape": "circle", "center": [20, 20, 0], "diameter": 2 }
+        ]
+      },
+      "render": false,
+      "checks": [
+        { "pointer": "/summary/features/16/plane", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "delete_feature",
+      "arguments": {
+        "feature": "Boss"
+      },
+      "repair": [
+        "Sketch4"
+      ]
+    }
+  ]
+}

@@ -34,6 +34,7 @@
 //! version, or with a required section this version does not know, is refused rather
 //! than misread.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ use soliddraft_tessellation::{Settings, settings};
 
 use crate::display;
 use crate::document::Document;
-use crate::feature::{Feature, FeatureId};
+use crate::feature::{DatumPlane, Feature, FeatureId};
 use crate::materials::{AppearanceAssignment, MaterialAssignment, PartMaterials};
 
 /// The format tag of the current version.
@@ -108,6 +109,8 @@ struct Recipe {
     name: String,
     units: Units,
     features: Vec<Feature>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    datum_names: BTreeMap<DatumPlane, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     rollback: Option<FeatureId>,
     next_feature: u32,
@@ -133,6 +136,7 @@ impl Document {
             name: self.name.clone(),
             units: Units::Mm,
             features: self.features.clone(),
+            datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_feature: self.next_id,
             material: self.materials.material.clone(),
@@ -163,7 +167,7 @@ impl Document {
     pub fn geometry_hash(&self) -> ContentHash {
         let mut truth = soliddraft_document::hash::without_format(&self.truth());
         if let Value::Object(map) = &mut truth {
-            for key in ["name", "material", "appearances", "snapshots"] {
+            for key in ["name", "datum_names", "material", "appearances", "snapshots"] {
                 map.remove(key);
             }
             if let Some(Value::Array(features)) = map.get_mut("features") {
@@ -305,6 +309,9 @@ impl Document {
         let mut doc = Document::new(recipe.name, kernel);
         doc.id = manifest::legacy_identity(DocKind::Part, &probe, Vec::new()).id;
         doc.materials = materials;
+        for (datum, name) in recipe.datum_names {
+            doc.rename_datum(datum, &name).map_err(|e| FileError::Invalid(e.to_string()))?;
+        }
         doc.features = recipe.features;
         doc.rollback = recipe.rollback;
         doc.next_id = recipe.next_feature;

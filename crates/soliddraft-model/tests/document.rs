@@ -64,6 +64,15 @@ fn assert_waiting(doc: &Document, feature: FeatureId) {
     );
 }
 
+/// The face of the final body that carries a name's origin.
+fn carrier(doc: &Document, name: &soliddraft_model::NamedFace) -> soliddraft_kernel_api::FaceId {
+    let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
+    let mut faces = t.faces.iter().filter(|f| f.origins.contains(&name.origin));
+    let face = faces.next().expect("a face carries the origin").id;
+    assert!(faces.next().is_none(), "one face carries the origin");
+    face
+}
+
 fn top_edges(doc: &Document) -> Vec<soliddraft_model::EdgeRef> {
     let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
     t.edges.iter().filter(|e| e.midpoint.z > 10.0 - 1e-6).map(|e| doc.edge_ref(e.id).unwrap()).collect()
@@ -79,9 +88,10 @@ fn features_get_names_and_faces_get_labels() {
     let generators: Vec<Generator> = d.generated_faces(e).iter().map(|n| n.generator).collect();
     assert!(generators.contains(&Generator::StartCap) && generators.contains(&Generator::EndCap));
     assert_eq!(generators.iter().filter(|g| matches!(g, Generator::Side { .. })).count(), 4);
-    let end = d.generated_faces(e).iter().find(|n| n.generator == Generator::EndCap).unwrap().face;
+    let end = carrier(&d, d.generated_faces(e).iter().find(|n| n.generator == Generator::EndCap).unwrap());
     assert_eq!(d.face_label(end).unwrap().text, "Boss-Extrude1 · End cap");
-    let side = d.generated_faces(e).iter().find(|n| matches!(n.generator, Generator::Side { .. })).unwrap().face;
+    let side =
+        carrier(&d, d.generated_faces(e).iter().find(|n| matches!(n.generator, Generator::Side { .. })).unwrap());
     assert!(d.face_label(side).unwrap().text.starts_with("Boss-Extrude1 · Side of line "));
 }
 
@@ -538,7 +548,7 @@ fn built_in_shapes_extrude_without_a_sketch() {
     let sides = d.generated_faces(plate).iter().filter(|n| matches!(n.generator, Generator::Side { .. })).count();
     assert_eq!(sides, 4, "each rectangle line names a side");
     let side = d.generated_faces(plate).iter().find(|n| matches!(n.generator, Generator::Side { .. })).unwrap();
-    assert!(d.face_label(side.face).unwrap().text.starts_with("Boss-Extrude1 · Side of line "));
+    assert!(d.face_label(carrier(&d, side)).unwrap().text.starts_with("Boss-Extrude1 · Side of line "));
     // A boss through the plate's middle, from the Front plane: it joins the plate.
     let pin = add(&mut d, shape(DatumPlane::Front, BuiltinShape::Circle { diameter: 6.0 }, 20.0));
     assert!(d.status(pin).unwrap().is_ok(), "{:?}", d.status(pin));
