@@ -352,8 +352,11 @@ pub(super) fn mesh(model: &Model, mesh: &catallax_mesh::Mesh, ids: &Ids, params:
             };
             let p = catallax_shapes::Point3::new(real(point.x), real(point.y), real(point.z));
             let gradient = model.geom().surface(f.surface).gradient(&p);
-            let n =
-                vector(&gradient).normalized().map(|n| if f.sense == Sense::Same { n } else { -n }).unwrap_or(fallback);
+            let n = gradient
+                .as_ref()
+                .and_then(|gradient| vector(gradient).normalized())
+                .map(|n| if f.sense == Sense::Same { n } else { -n })
+                .unwrap_or(fallback);
             out.indices.push(out.positions.len() as u32);
             out.positions.push([point.x as f32, point.y as f32, point.z as f32]);
             out.normals.push([n.x as f32, n.y as f32, n.z as f32]);
