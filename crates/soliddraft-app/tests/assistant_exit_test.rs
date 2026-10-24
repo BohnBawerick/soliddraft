@@ -246,8 +246,19 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
             r["structuredContent"].clone()
         };
         let mut volumes = Vec::new();
-        let body_volume =
-            |c: &mut HttpClient| call(c, "model_summary", json!({}))["body"]["volume_mm3"].as_f64().unwrap();
+        let body_volume = |c: &mut HttpClient| {
+            let summary = call(c, "model_summary", json!({}));
+            let feature = summary["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|f| f["type"] != "sketch" && f["status"] == "ok")
+                .unwrap()["name"]
+                .as_str()
+                .unwrap();
+            call(c, "mass_properties", json!({"name":feature}))["volume_mm3"].as_f64().unwrap()
+        };
         volumes.push(body_volume(&mut c));
         let waiting = c.call_tool("fillet", json!({ "edges": [corner], "radius": 8 })).unwrap();
         assert_eq!(waiting["isError"], true);

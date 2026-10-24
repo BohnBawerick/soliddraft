@@ -191,3 +191,46 @@ fn the_drawing_ribbon_and_keys_come_from_the_registry() {
     harness.run_steps(2);
     assert_eq!(features(&harness), n, "the part is untouched");
 }
+
+#[test]
+fn mass_properties_button_calculates_on_request_without_measuring_selection() {
+    use soliddraft_app::document::{Command, Document, ExtrudeParams, ProfileKind, Selection};
+    use soliddraft_kernel_catallax::CatallaxKernel;
+    use std::sync::Arc;
+
+    let _turn = gpu_turn();
+    if !gpu_available() {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("soliddraft-mass-properties-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    soliddraft_app::file::set_config_dir(Some(dir.clone()));
+    let mut harness =
+        Harness::builder().with_size(vec2(1440.0, 900.0)).with_render_every_step(true).wgpu().build_eframe(|cc| {
+            let mut doc = Document::new("requested mass", Arc::new(CatallaxKernel::new()));
+            doc.apply(Command::AddExtrude {
+                params: ExtrudeParams {
+                    profile: ProfileKind::Rectangle { width: 40.0, height: 30.0 },
+                    depth: 10.0,
+                    ..Default::default()
+                },
+                via_assistant: false,
+            })
+            .unwrap();
+            SolidDraftApp::new(cc, doc, Automation::default())
+        });
+    let id = harness.state().state.doc.features[0].id;
+    let body = harness.state().state.doc.display_body().unwrap();
+    harness.state_mut().state.doc.selection = Some(Selection::Feature(id));
+    harness.state_mut().state.ribbon_tab = RibbonTab::Evaluate;
+    harness.run_steps(4);
+    assert!(harness.state().state.doc.kernel().cached_mass_properties(body).is_none());
+    harness.render().unwrap().save(dir.join("before-request.png")).unwrap();
+    harness.get_by_label("Mass props").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().state.doc.kernel().cached_mass_properties(body).unwrap().volume, 12000.0);
+    assert!(harness.query_by_label("12000 mm³").is_some());
+    harness.render().unwrap().save(dir.join("after-request.png")).unwrap();
+    println!("mass properties viewport proof: {}", dir.display());
+}

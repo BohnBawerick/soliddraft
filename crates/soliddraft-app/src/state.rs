@@ -54,6 +54,8 @@ pub enum AppAction {
     DeleteSelection,
     RenameSelected,
     Select(Option<Selection>),
+    /// Computes mass properties only after the user requests them.
+    MeasureMassProperties,
     SetView(StandardView),
     /// Look straight at the active sketch plane, or the selected planar face.
     NormalTo,

@@ -47,7 +47,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 64000,
           "tolerance": 0.001
         }
@@ -81,7 +81,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -96,7 +96,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 64000,
           "tolerance": 0.001
         },
@@ -111,7 +111,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -149,7 +149,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -164,7 +164,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -179,7 +179,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -217,7 +217,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -232,7 +232,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -247,7 +247,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -285,7 +285,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -300,7 +300,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -315,7 +315,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -353,7 +353,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -368,7 +368,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -383,7 +383,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -421,7 +421,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -436,7 +436,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -451,7 +451,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -489,7 +489,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -504,7 +504,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -519,7 +519,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -557,7 +557,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -572,7 +572,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -587,7 +587,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -625,7 +625,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -640,7 +640,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -655,7 +655,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -693,7 +693,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -708,7 +708,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -723,7 +723,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -761,7 +761,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -776,7 +776,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -791,7 +791,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -829,7 +829,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -844,7 +844,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -859,7 +859,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -897,7 +897,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -912,7 +912,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -927,7 +927,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -965,7 +965,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -980,7 +980,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -995,7 +995,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1033,7 +1033,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1048,7 +1048,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1063,7 +1063,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1101,7 +1101,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1116,7 +1116,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1131,7 +1131,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1169,7 +1169,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1184,7 +1184,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1199,7 +1199,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1237,7 +1237,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1252,7 +1252,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1267,7 +1267,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1305,7 +1305,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1320,7 +1320,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1335,7 +1335,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1373,7 +1373,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1388,7 +1388,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1403,7 +1403,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1441,7 +1441,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1456,7 +1456,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1471,7 +1471,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1509,7 +1509,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1524,7 +1524,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1539,7 +1539,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1577,7 +1577,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1592,7 +1592,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1607,7 +1607,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1645,7 +1645,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1660,7 +1660,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1675,7 +1675,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1713,7 +1713,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1728,7 +1728,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1743,7 +1743,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1781,7 +1781,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1796,7 +1796,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1811,7 +1811,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1849,7 +1849,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1864,7 +1864,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1879,7 +1879,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1917,7 +1917,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1932,7 +1932,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1947,7 +1947,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -1985,7 +1985,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -2000,7 +2000,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -2015,7 +2015,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -2053,7 +2053,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -2068,7 +2068,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },
@@ -2083,7 +2083,7 @@
       "arguments": {},
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 63920,
           "tolerance": 0.001
         },

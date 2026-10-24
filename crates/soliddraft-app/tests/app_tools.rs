@@ -213,3 +213,53 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(missed.is_empty(), "this test calls no {missed:?}; add each to it");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn editing_and_inspection_measure_only_on_request_and_keep_body_results_separate() {
+    use soliddraft_app::document::{Document, Selection};
+    use soliddraft_kernel_catallax::CatallaxKernel;
+    use std::sync::Arc;
+
+    let kernel = Arc::new(CatallaxKernel::with_operation_log());
+    let mut session = Session {
+        state: AppState::new(Document::new("lazy mass", kernel.clone())),
+        ran: BTreeSet::new(),
+        dir: std::env::temp_dir(),
+    };
+    session.call(
+        "sketch",
+        json!({
+            "plane":"top",
+            "shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]
+        }),
+    );
+    session.call("extrude", json!({"sketch":"Sketch1","depth":10,"flip":false}));
+    let feature = session.state.doc.features[1].id;
+    session.state.doc.describe(Selection::Feature(feature)).unwrap();
+    let summary = session.call("model_summary", json!({}));
+    assert!(summary["body"]["volume_mm3"].is_null(), "{summary}");
+    let evidence = kernel.take_diagnostics().unwrap();
+    assert!(
+        evidence["calls"].as_array().unwrap().iter().all(|call| call["operation"] != "mass_properties"),
+        "{evidence}"
+    );
+
+    let measured = session.call("mass_properties", json!({"name":"Boss-Extrude1"}));
+    assert_eq!(measured["volume_mm3"], 12000.0);
+    let summary = session.call("model_summary", json!({}));
+    assert_eq!(summary["body"]["volume_mm3"], 12000.0);
+    let description = session.state.doc.describe(Selection::Feature(feature)).unwrap();
+    assert!(description.details.iter().any(|(key, _)| key == "Volume"));
+
+    session.call("edit_extrude", json!({"feature":"Boss-Extrude1","depth":20,"flip":false}));
+    let summary = session.call("model_summary", json!({}));
+    assert!(summary["body"]["volume_mm3"].is_null(), "new body must not inherit old measurements: {summary}");
+    session.call("undo", json!({}));
+    let summary = session.call("model_summary", json!({}));
+    assert_eq!(summary["body"]["volume_mm3"], 12000.0);
+    session.call("redo", json!({}));
+    let summary = session.call("model_summary", json!({}));
+    assert!(summary["body"]["volume_mm3"].is_null(), "{summary}");
+    let measured = session.call("mass_properties", json!({"name":"Boss-Extrude1"}));
+    assert_eq!(measured["volume_mm3"], 24000.0);
+}

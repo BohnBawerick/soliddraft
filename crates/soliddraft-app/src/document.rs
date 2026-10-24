@@ -1595,7 +1595,8 @@ impl Document {
                     }
                 }
                 if !f.is_sketch()
-                    && let Some(mp) = self.mass_properties(id)
+                    && let Some(body) = f.body
+                    && let Some(mp) = self.kernel().cached_mass_properties(body)
                 {
                     details.push(("Volume".to_owned(), format!("{:.0} mm³", mp.volume)));
                     details.push(("Surface area".to_owned(), format!("{:.0} mm²", mp.area)));

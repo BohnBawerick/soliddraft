@@ -528,6 +528,10 @@ impl Kernel for CatallaxKernel {
         })
     }
 
+    fn cached_mass_properties(&self, body: BodyId) -> Option<MassProperties> {
+        self.solid(body).ok()?.mass.get()?.as_ref().ok().copied()
+    }
+
     fn validate(&self, body: BodyId) -> KernelResult<Validation> {
         self.observe("validate", || {
             let solid = self.solid(body)?;

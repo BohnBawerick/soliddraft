@@ -96,10 +96,23 @@ impl<'a> Evidence<'a> {
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
-        let diagnostics = self.kernel.as_ref().ok_or("capture kernel missing")?.take_diagnostics()?;
-        write_json(dir.join("display.kernel.json"), &diagnostics)?;
         let result = json!({"backend":doc.kernel().backend(),"method":"mesh","live_document":true});
         write_json(dir.join("display.json"), &result)?;
+        Ok(result)
+    }
+
+    fn scenario_measure(&mut self) -> Result<Value, Box<dyn std::error::Error>> {
+        let root = self.directory.as_ref().ok_or("scenario measurement requires --bundle")?;
+        let dir = root.join(format!("{:04}", self.sequence));
+        let doc = &self.host.state.doc;
+        let mass = doc.display_body().map(|body| doc.kernel().mass_properties(body)).transpose()?;
+        let result = json!({
+            "backend":doc.kernel().backend(), "live_document":true,
+            "volume_mm3":mass.map(|m| m.volume),
+            "area_mm2":mass.map(|m| m.area),
+            "centre_of_mass":mass.map(|m| [m.centroid.x,m.centroid.y,m.centroid.z]),
+        });
+        write_json(dir.join("measurement.json"), &result)?;
         Ok(result)
     }
 }
@@ -229,6 +242,7 @@ impl ToolHost for Evidence<'_> {
             for (name, description) in [
                 ("scenario_prepare", "Prepare the retained offscreen renderer before scenario timing."),
                 ("scenario_display", "Capture the live document's viewport and SVG without reopening a file."),
+                ("scenario_measure", "Explicitly measure the live body after the timed edit and display."),
             ] {
                 tools.push(ToolSpec {
                     name: name.into(),
@@ -244,8 +258,22 @@ impl ToolHost for Evidence<'_> {
         if self.failed {
             return ToolOutput::error("bundle write failed; start a new run");
         }
-        if self.directory.is_some() && matches!(name, "scenario_prepare" | "scenario_display") {
-            let capture = self.scenario_capture(name == "scenario_prepare");
+        if self.directory.is_some() && matches!(name, "scenario_prepare" | "scenario_display" | "scenario_measure") {
+            let capture = (|| {
+                let result = if name == "scenario_measure" {
+                    self.scenario_measure()
+                } else {
+                    self.scenario_capture(name == "scenario_prepare")
+                };
+                if name != "scenario_prepare" {
+                    let root = self.directory.as_ref().ok_or("scenario capture requires --bundle")?;
+                    let dir = root.join(format!("{:04}", self.sequence));
+                    let stem = if name == "scenario_measure" { "measurement" } else { "display" };
+                    let diagnostics = self.kernel.as_ref().ok_or("capture kernel missing")?.take_diagnostics()?;
+                    write_json(dir.join(format!("{stem}.kernel.json")), &diagnostics)?;
+                }
+                result
+            })();
             // Evidence rendering is not the next command's rebuild work.
             if let Some(work) = &self.work {
                 work.take();

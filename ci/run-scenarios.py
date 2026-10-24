@@ -370,7 +370,6 @@ def run(args):
             checks = entry["checks"]
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == bool(step.get("refusal"))})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
-            checks.extend(check(command, spec) for spec in step.get("checks", []))
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
             checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature"))
@@ -398,12 +397,12 @@ def run(args):
                 displayed = client.request("tools/call", {"name": "scenario_display", "arguments": {}})
                 display_ms = (time.perf_counter_ns() - started) / 1_000_000
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
+                segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
+                                 "kernel": json.loads((directory / "display.kernel.json").read_text())})
                 if not displayed.get("isError"):
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
-                    segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
-                                     "kernel": json.loads((directory / "display.kernel.json").read_text())})
                 checks.append({"check": "SVG contains curves",
                                "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
@@ -430,6 +429,26 @@ def run(args):
                 print(f"::warning::{latency['message']}", flush=True)
             elif latency["status"] in {"stale-known-over-budget", "invalid-known-over-budget"}:
                 print(f"::error::{latency['message']}", flush=True)
+            # Volume/area acceptance is an explicit request after the click's display,
+            # not automatic work on the normal edit path or a pre-warming step.
+            evidence = command
+            if any(spec["pointer"].startswith("/measurement/") for spec in step.get("checks", [])):
+                started = time.perf_counter_ns()
+                measured = client.request("tools/call", {"name": "scenario_measure", "arguments": {}})
+                measured_ms = (time.perf_counter_ns() - started) / 1_000_000
+                checks.append({"check": "requested measurement", "pass": not measured.get("isError"),
+                               "response": measured})
+                measurement = None
+                measure_timing = timing("measure", [{
+                    "source": "measurement.kernel.json", "elapsed_ms": measured_ms, "phase": "measurement",
+                    "kernel": json.loads((directory / "measurement.kernel.json").read_text())}])
+                measure_timing["check"] = "requested measurement budget"
+                entry["measurement"] = measure_timing
+                checks.append(measure_timing)
+                if not measured.get("isError"):
+                    measurement = json.loads((directory / "measurement.json").read_text())
+                evidence = {**command, "measurement": measurement}
+            checks.extend(check(evidence, spec) for spec in step.get("checks", []))
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)

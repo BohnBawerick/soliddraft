@@ -512,6 +512,12 @@ pub trait Kernel: Send + Sync {
     /// Volume, area, centroid and inertia.
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties>;
 
+    /// Already computed properties of this immutable body, without starting a query.
+    /// Unmeasured bodies and backends without a retained result return `None`.
+    fn cached_mass_properties(&self, _body: BodyId) -> Option<MassProperties> {
+        None
+    }
+
     /// Checks a body. Never trusts the status of the operation that made it.
     fn validate(&self, body: BodyId) -> KernelResult<Validation>;
 

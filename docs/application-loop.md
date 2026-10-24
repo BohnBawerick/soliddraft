@@ -76,14 +76,16 @@ develop a feature-count latency trend.
 
 A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step
 has `tool` and `arguments`, using the schemas printed by `soliddraft mcp --help`.
-Optional `checks` use JSON pointers into `command.json`, with exactly one of
-`equals`, `approx`, `minimum` or `contains`. `approx` accepts an absolute
-`tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
+Optional `checks` use JSON pointers into `command.json`, or `/measurement/...` for an
+explicit live-body measurement requested after the edit and display have been timed.
+Each check has exactly one of `equals`, `approx`, `minimum` or `contains`. `approx`
+accepts an absolute `tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
 for drawing output or `refusal` with an expected stable kernel code. Every step
 with a displayed solid captures the live viewport and SVG, including sketches
 and history changes. Unexpected tool errors fail immediately.
-MCP rounds reported volumes to two decimals, so the bracket checks allow
-0.005 mm³ around the analytical volume. A step's `repair` lists the features expected
+Volume checks request full-precision results rather than triggering measurement through
+the model summary; the existing 0.005 mm³ bracket allowance is unchanged.
+A step's `repair` lists the features expected
 to raise the repair prompt; features that wait for them may report it, and every other
 feature must build. `{bundle}` in a string argument is replaced by the run's bundle
 directory, for `save` and `open`.
@@ -130,6 +132,12 @@ MCP tool call has a numbered directory under `commands/` containing:
   live document and backend; `display.kernel.json` retains the SVG/display calls.
   A drawing step also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`,
   collected by `soliddraft draw --kernel-log`.
+- `measurement.json` and `measurement.kernel.json`, when a check requests
+  `/measurement/volume_mm3` or another quantity. The bundle-only `scenario_measure`
+  request runs after the complete click interval, so it cannot pre-warm that display.
+  It neither advances the command sequence nor changes the part. Its own elapsed time,
+  work and unchanged 1000 ms ceiling are retained as `measurement` in the step result.
+  Any measurement still performed by an edit is charged to that edit, not subtracted.
 - `waits.json` and `timing.json`: external command/display/drawing waits, their
   disjoint phase split, deterministic work and strict budget verdict.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step

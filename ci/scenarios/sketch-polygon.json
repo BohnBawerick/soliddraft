@@ -31,7 +31,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 100,
           "tolerance": 0.005
         },
