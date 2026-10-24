@@ -189,6 +189,11 @@ pub enum Record {
         /// The canonical command and its arguments.
         command: Value,
     },
+    /// An observed filesystem input used by the enclosing command.
+    Input {
+        /// Portable authored state or an operating-system outcome, never raw archives.
+        value: Value,
+    },
     /// Written only after the command handler returns. Absence identifies the interrupted command.
     Result {
         /// Command number this return belongs to.
@@ -221,6 +226,15 @@ pub fn begin(id: &Identity, command: impl FnOnce() -> Value) -> CommandGuard {
         Some(sequence)
     });
     CommandGuard(sequence)
+}
+
+/// Retains an external input while the enclosing command is active.
+pub fn input(value: impl FnOnce() -> Value) {
+    CURRENT.with(|current| {
+        if let Some(writer) = current.borrow_mut().as_mut().filter(|w| w.nested) {
+            writer.append(&Record::Input { value: value() });
+        }
+    });
 }
 
 /// An outer command's completion marker. Unwinding leaves the intent unmatched.
@@ -355,7 +369,21 @@ fn private_file(path: &Path) -> std::io::Result<File> {
 
 fn replacement(path: &str, paths: &mut std::collections::BTreeMap<String, String>) -> String {
     let next = paths.len() + 1;
-    paths.entry(path.into()).or_insert_with(|| format!("<path-{next}>")).clone()
+    paths
+        .entry(path.into())
+        .or_insert_with(|| {
+            let extension = path
+                .rsplit(['/', '\\'])
+                .next()
+                .and_then(|name| name.rsplit_once('.'))
+                .map(|(_, extension)| extension)
+                .filter(|extension| matches!(*extension, "dwprt" | "dwasm" | "dwdrw"));
+            match extension {
+                Some(extension) => format!("<path-{next}>.{extension}"),
+                None => format!("<path-{next}>"),
+            }
+        })
+        .clone()
 }
 
 fn redact(value: &mut Value, paths: &mut std::collections::BTreeMap<String, String>) {
@@ -366,6 +394,11 @@ fn redact(value: &mut Value, paths: &mut std::collections::BTreeMap<String, Stri
                 redact(&mut nested, paths);
                 *text = nested.to_string();
                 return;
+            }
+            let mut known: Vec<_> = paths.iter().filter(|(path, _)| text.contains(path.as_str())).collect();
+            known.sort_by_key(|(path, _)| std::cmp::Reverse(path.len()));
+            for (path, replacement) in known {
+                *text = text.replace(path, replacement);
             }
             // Format identifiers are not relative filesystem paths.
             if (text.starts_with("soliddraft-") || text.starts_with("catallax-"))
@@ -403,8 +436,11 @@ fn redact(value: &mut Value, paths: &mut std::collections::BTreeMap<String, Stri
         }
         Value::Array(values) => values.iter_mut().for_each(|value| redact(value, paths)),
         Value::Object(values) => {
-            if values.contains_key("pinned")
-                && values.contains_key("kind")
+            if (values.contains_key("pinned") && values.contains_key("kind")
+                || values
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .is_some_and(|p| p.ends_with(".dwprt") || p.ends_with(".dwasm") || p.ends_with(".dwdrw")))
                 && let Some(Value::String(path)) = values.get_mut("path")
             {
                 *path = replacement(path, paths);

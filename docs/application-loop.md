@@ -160,6 +160,15 @@ model calls are not separate edits in the journal. A scratch fork never writes
 its own document journal. Document replacement starts a new instance in the
 same session rather than losing the preceding commands.
 
+MCP `open` and `save` also retain the filesystem inputs their commands observed.
+An opening part's authored state is recorded before its rebuild, without the
+archive's display caches. Replay rebuilds that state through the model loader;
+it does not require the source file. Writes still serialize the document, then
+consume the recorded filesystem outcome without touching the original
+destination. Missing or mismatched input records fail closed. Source-file
+refusals and proposal ids survive a document replacement. Path tokens keep
+`.dwprt`, `.dwasm` and `.dwdrw` suffixes so exported commands remain valid.
+
 The journal contains commands and their outcomes, not durations, rebuild counts,
 survival checks or per-edit state hashes. Normal close removes only the current
 session's journal. A crash leaves it for the next start, even with autosave off.

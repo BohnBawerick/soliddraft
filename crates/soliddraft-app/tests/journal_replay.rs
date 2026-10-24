@@ -135,3 +135,122 @@ fn a_crashed_session_replays_the_document_refusal_and_failure() {
     assert_eq!(report["failure"], "command 9 panicked: deliberate journal crash at depth 13");
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn file_commands_replay_without_reading_or_overwriting_user_files() {
+    let root =
+        std::env::temp_dir().join(format!("soliddraft-journal-files-{}", soliddraft_document::DocumentId::new()));
+    std::fs::create_dir_all(&root).unwrap();
+    let source = root.join("source.dwprt");
+    let saved = root.join("saved.dwprt");
+    let mut imported = Document::new("Imported", soliddraft_app::kernel());
+    imported
+        .apply(Command::AddExtrude { params: ExtrudeParams { depth: 4.0, ..Default::default() }, via_assistant: false })
+        .unwrap();
+    imported.model().save(&source).unwrap();
+    let session = Session::start(&root.join("journals")).unwrap();
+    let path = session.path().to_owned();
+    let mut doc = Document::new("Before open", soliddraft_app::kernel());
+    let mut book = ProposalBook::default();
+    let sketch = || json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":10,"height":8}]});
+    let call = |doc: &mut Document, book: &mut ProposalBook, name: &str, input: Value| {
+        CommandTools { doc, book, surface: Surface::Mcp, drawing: None }.call(
+            name,
+            input,
+            &Caller::Mcp { client: "file replay".into() },
+        )
+    };
+    assert!(!call(&mut doc, &mut book, "sketch", sketch()).is_error);
+    let closed = doc.model().truth();
+    assert!(!call(&mut doc, &mut book, "open", json!({"path":source})).is_error);
+    assert!(!call(&mut doc, &mut book, "sketch", sketch()).is_error);
+    assert!(
+        call(&mut doc, &mut book, "apply", json!({"proposal_id":"P2"})).is_error,
+        "the proposal was already applied"
+    );
+    assert!(!call(&mut doc, &mut book, "save", json!({"path":saved})).is_error);
+    assert!(call(&mut doc, &mut book, "open", json!({"path":root.join("missing.dwprt")})).is_error);
+    let expected = doc.model().truth();
+    drop(session);
+    std::fs::remove_file(&source).unwrap();
+    std::fs::write(&saved, b"leave this user's file unchanged").unwrap();
+    let replay = Replay::read(&path, soliddraft_app::kernel()).unwrap();
+    assert!(replay.failure.is_none(), "{:?}", replay.failure);
+    let report = replay.report();
+    assert_eq!(report["parts"][0]["part"], closed);
+    assert_eq!(report["parts"][1]["part"], expected);
+    assert!(!source.exists(), "replay must not recreate or require the original input");
+    assert_eq!(
+        std::fs::read(&saved).unwrap(),
+        b"leave this user's file unchanged",
+        "replay must not write the original destination"
+    );
+    let portable = root.join("report.jsonl");
+    journal::export(&path, &portable).unwrap();
+    assert!(!std::fs::read_to_string(&portable).unwrap().contains(root.to_str().unwrap()));
+    let replay = Replay::read(&portable, soliddraft_app::kernel()).unwrap();
+    assert!(replay.failure.is_none(), "{:?}", replay.failure);
+    assert_eq!(replay.report()["parts"][1]["part"], expected);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn missing_file_inputs_never_fall_back_to_real_writes() {
+    let root =
+        std::env::temp_dir().join(format!("soliddraft-journal-untrusted-{}", soliddraft_document::DocumentId::new()));
+    std::fs::create_dir_all(&root).unwrap();
+    let target = root.join("protected.dwprt");
+    std::fs::write(&target, b"protected original").unwrap();
+    let session = Session::start(&root.join("journals")).unwrap();
+    let path = session.path().to_owned();
+    let doc = Document::new("Untrusted input", soliddraft_app::kernel());
+    doc.model()
+        .journal_command(|| {
+            json!({"op":"tool","name":"save","input":{"path":target},
+        "surface":"mcp","assistant":false,"auto_apply":false,"drawing":null})
+        })
+        .finish(Ok::<_, String>(()))
+        .unwrap();
+    drop(session);
+    let replay = Replay::read(&path, soliddraft_app::kernel()).unwrap();
+    assert!(replay.failure.as_ref().is_some_and(|e| e.contains("missing a filesystem input")));
+    assert_eq!(std::fs::read(&target).unwrap(), b"protected original");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn an_opening_rebuild_crash_replays_after_the_source_is_removed() {
+    let root =
+        std::env::temp_dir().join(format!("soliddraft-journal-open-crash-{}", soliddraft_document::DocumentId::new()));
+    std::fs::create_dir_all(&root).unwrap();
+    let source = root.join("crashing.dwprt");
+    let mut imported = Document::new("Opening crash", soliddraft_app::kernel());
+    imported
+        .apply(Command::AddExtrude {
+            params: ExtrudeParams { depth: 13.0, ..Default::default() },
+            via_assistant: false,
+        })
+        .unwrap();
+    imported.model().save(&source).unwrap();
+    let session = Session::start(&root.join("journals")).unwrap();
+    let path = session.path().to_owned();
+    let mut doc = Document::new("Keep this document", Arc::new(Crashing::default()));
+    let before = doc.model().truth();
+    let mut book = ProposalBook::default();
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None }.call(
+            "open",
+            json!({"path":source}),
+            &Caller::Mcp { client: "opening crash".into() },
+        )
+    }));
+    assert!(failed.is_err());
+    assert_eq!(doc.model().truth(), before);
+    drop(session);
+    std::fs::remove_file(&source).unwrap();
+    let replay = Replay::read(&path, Arc::new(Crashing::default())).unwrap();
+    assert_eq!(replay.interrupted, Some(1));
+    assert_eq!(replay.failure.as_deref(), Some("command 1 panicked: deliberate journal crash at depth 13"));
+    assert_eq!(replay.report()["parts"][0]["part"], before);
+    std::fs::remove_dir_all(root).unwrap();
+}

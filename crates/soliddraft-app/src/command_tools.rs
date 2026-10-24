@@ -1516,15 +1516,14 @@ impl ToolHost for CommandTools<'_> {
             "save" if mcp => (|| {
                 let path = part_path(&input)?;
                 // The part file alone: no backups or recent-file list, which belong to the user's session.
-                self.doc.model().save(&path).map_err(|e| format!("cannot save {}: {e}", path.display()))?;
+                crate::journal::save_part(self.doc, &path)?;
                 self.doc.path = Some(path.clone());
                 self.doc.dirty = false;
                 Ok(json!({ "saved": path }))
             })(),
             "open" if mcp => (|| {
                 let path = part_path(&input)?;
-                let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let mut doc = crate::file::open_bytes(&path.display().to_string(), &bytes, self.doc.kernel().clone())?;
+                let mut doc = crate::journal::open_part(&path, self.doc.kernel().clone())?;
                 doc.path = Some(path.clone());
                 *self.doc = doc;
                 Ok(json!({ "opened": path }))
@@ -1556,7 +1555,11 @@ impl ToolHost for CommandTools<'_> {
             }
             other => Err(format!("unknown tool `{other}`")),
         };
-        match journal.finish(result) {
+        let result = journal.finish(result);
+        if name == "open" && result.is_ok() {
+            self.doc.model().journal_key();
+        }
+        match result {
             Ok(v) => ToolOutput::json(&v),
             Err(e) => ToolOutput::error(e),
         }
