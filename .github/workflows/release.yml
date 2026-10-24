@@ -92,7 +92,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libssl-dev libdbus-1-dev libfuse2 patchelf \
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libssl-dev libdbus-1-dev libfuse2 patchelf \
             libegl1-mesa libgl1-mesa-dri mesa-vulkan-drivers xvfb
       - name: Build desktop
         if: runner.os != 'macOS'
