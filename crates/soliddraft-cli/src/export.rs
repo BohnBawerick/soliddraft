@@ -32,6 +32,7 @@ lie from the exact part. A part with a feature that did not build is refused.
 ";
 
 /// What `export` was asked for.
+#[derive(Debug)]
 struct Args {
     input: PathBuf,
     outputs: Vec<(PathBuf, Format)>,
