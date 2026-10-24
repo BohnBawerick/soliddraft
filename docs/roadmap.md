@@ -33,11 +33,15 @@ Catallax keeps no global state, so the dedicated kernel thread and the plan to m
 
 Rebuild stops replaying the whole feature list on every change. Catallax keeps every intermediate body valid, so a rebuild starts at the first changed feature and reuses the bodies before it.
 
+A rebuild also skips work that is not geometry. Renaming a feature or a body recomputes nothing. Restoring an earlier parameter value reuses the bodies built for it. Display meshes of bodies that did not change stay in place. Cache keys come from exact parameter values, recorded settings and body versions, never from rounded coordinates. A coordinate grid and Catallax's recorded sameness decisions mean different things. Caches are budgeted by the bytes they keep. Tests in the development build count the features recomputed, the meshes rebuilt and the bodies placed for each edit, and compare the result with a full replay. The counting lives in the test harness, not in the rebuild.
+
 ## 4. One recipe format
 
 New files are written as `catallax-recipe`, following RECIPE.md section 6.2 in the Catallax repository. That section already maps `soliddraft-recipe/1`, including how `nearest` and `within` selectors become names resolved once against a built part. Old files and the existing corpus stay readable through a converter. The converter lives on the Catallax side, so both projects test it; switching the document model's file format is SolidDraft's work. The geometric digest stays as a test tool during the change and goes once agreement on point sets and names replaces it.
 
 Persistent references get simpler. Catallax names faces by the operation that made them and reports origin sets through splits and merges, so the origin becomes the identity and the fingerprint becomes a check. The repair prompt for a genuinely lost reference stays. The face-role heuristic (caps by centroid, a wall if cylindrical, sides in topology order) is deleted.
+
+Reference survival is tested as a scenario, not argued. The scenario that edits the bracket's plate thickness and boss radius also renames features and reference planes, splits and merges faces with a later cut, suppresses and restores a feature, undoes and redoes, and saves and reopens the `.dwprt` file. After each step every reference resolves to the same origin or raises the repair prompt. The application never recovers a lost reference by picking the nearest face or by guessing an identity from geometry.
 
 ## 5. The application loop for agents
 
@@ -48,7 +52,12 @@ Headless SolidDraft on Catallax is driven by agents through `soliddraft mcp` and
 - the recipe after every command;
 - rendered views: hidden-line SVG from the existing `view` command, and raster screenshots made without a window by the same renderer the viewport uses;
 - Catallax's per-operation log: how each decision was settled, refusals with their codes, marks, local tolerances and timings;
+- elapsed time for each command, taken by the runner from outside the application and split into construction, edit, display (tessellation and rendering), measurement and refusal, next to Catallax's deterministic work counts;
 - a pass or fail result for each check in the scenario.
+
+A command that returns before its body is displayed or its requested measurement is made has not met the click budget. The scenario times the whole path, from the command to the displayed result, and fails a step that exceeds the latency budget Catallax's roadmap sets for that kind of command. Timings sit beside the deterministic counts and do not replace them.
+
+Measurement is test and development tooling. Timings, rebuild reports, survival checks, comparison runs and the scoreboard live in the scenario runner, the benchmarks, CI and the development build. None of it runs inside the application at runtime or slows a user edit, and measurement stays separate from the code path that builds the part. Checks that already run at runtime by design stay as they are; no new runtime work is added to them.
 
 Any failure exports the recipe, or the failing step, as a Catallax kernel-loop question, so the fix is checked in seconds with `catallax-verify` and the scenario then runs again through the application. Because it is the same application users run, what the agents test is what users get. Full scenario suites run on GitHub's runners.
 
@@ -82,6 +91,8 @@ Reference geometry (planes, axes, points) is application-side work and can come 
 
 Drawings use the polygon-mode pass (`mesh_hlr`) over Catallax's display triangles and edge polylines, with face origins preserved for associativity. Plane sections subtract a half-space through Catallax booleans and hatch the cut-face loops. Whole lines and untrimmed circles retain their geometry after polygon visibility; other curves and silhouettes keep the polygon result. Exact silhouettes and the remaining curve conversions are Catallax requests. The drawing document, its associativity and its exporters keep their formats.
 
+Every curve in a drawing says how accurate it is. Whole lines and untrimmed circles are exact. Silhouettes and other curves are fitted from polygons at the mesh's chord tolerance, and visibility is decided on polygons. The drawing document and its exports record which. A requested fit tolerance is never reported as a proven bound, and zero deviation measured at sampled points stays sampled. The labels tighten as exact silhouettes arrive from Catallax.
+
 ## 8. Work that does not depend on the kernel
 
 These items from the previous roadmap continue in parallel.
@@ -90,10 +101,9 @@ These items from the previous roadmap continue in parallel.
 - Interface: a shared command registry across the ribbon, shortcuts, assistant, MCP and command line; a command palette, shortcut editor and right-click selection tools; on-canvas feature handles, display presets, dark theme and interface scaling; material property sources and conditions.
 - Reliability: fuzz command inputs and test damaged document files; record replayable command journals for crash reports; interface scenarios and layout checks at several window sizes; kernel work off the interface thread in the browser build; installers once the document formats and modelling tools are ready.
 
-The [SolidCraft](https://github.com/bherbruck/solidcraft) project informed parts of
-this backlog. Ideas do not imply copied code. Any future code reuse must keep the
-upstream licence and attribution in `NOTICE`, including separate licences for its
-vendored dependencies. Do not copy its screenshots, fonts or icons.
+On-canvas handles drag with previews. While a handle moves, the application shows a preview computed off the interface thread, from the field kernel or from a cached mesh of the last exact result, and delivers intermediate values as the drag goes on. When the drag settles, the exact B-rep result at the requested value replaces the preview. The viewport and the tree label a preview as a preview. Only the exact result is saved, exported or measured; a preview carries no proof, and a stale preview never stands in for an edit that failed. One drag is one undo step. The interface scenarios drive continuous input, cancellation, a change of selection during a drag and a result that arrives after its drag was superseded.
+
+Some of these items were informed by public work on other open-source CAD projects, including [SolidCraft](https://github.com/tangency-labs/solidcraft); ideas only, with no code, screenshots, fonts or icons copied, and any future code reuse keeps the upstream licence and attribution in `NOTICE`.
 
 ## 9. Verdicts
 
@@ -148,12 +158,12 @@ Numbered in priority order.
 
 1. **Catallax backend behind the existing interface.** Build. Pairs with Catallax next item 6. Deliverable: a backend for `soliddraft_kernel_api::Kernel` on Catallax's application entry, chosen in `soliddraft_app::kernel()`. Exit: the bracket recipe builds, displays, picks named faces, edits and rebuilds through Catallax inside Catallax's interactive targets; phase 0's exit test passes on Catallax. Depends on Catallax milestone M2.
 2. **Remove SMLib.** Build. Deliverable: the SMLib crates, the `third_party/usd-brep` submodule, the WebAssembly kernel module and its Emscripten job deleted; waiting features marked in the ribbon with their stage; README.md's works-today list rewritten. Exit: a fresh clone builds with Rust alone on all three platforms and in the browser build; CI passes; every waiting command names its stage. Ships with the Catallax backend in item 1.
-3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window and Catallax's per-operation log in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. Depends on Catallax milestone M2.
-4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, and plane sections. Exit: the bracket drawing with four views and a section regenerates on Catallax; SVG, PDF and DXF output keep their formats. Ships with the SMLib removal in item 2.
+3. **The application loop.** Build. Deliverable: section 5, with raster screenshots made without a window, Catallax's per-operation log and the split timings the runner takes in each run's bundle. Exit: an agent scenario builds and edits the bracket headlessly and writes the bundle; the bundle reports each command's time split into construction, edit, display, measurement and refusal, and a step over its budget fails the scenario; a deliberately failing scenario exports a question that `catallax-verify` replays with the same refusal; the suite runs on GitHub's runners. Depends on Catallax milestone M2.
+4. **Drawings on Catallax.** Build. Deliverable: the polygon-mode hidden-line pass over Catallax's meshes, plane sections, and section 7's accuracy labels on every curve. Exit: the bracket drawing with four views and a section regenerates on Catallax; an application-loop scenario makes that drawing, edits a parameter, regenerates it and writes SVG, PDF and DXF, with each curve's accuracy label in the bundle; SVG, PDF and DXF output keep their formats. Ships with the SMLib removal in item 2.
 5. **One recipe format.** Build. Deliverable: section 4's write and read paths. Exit: every recipe in `recipes/` converts and replays on Catallax, and existing part files open. Depends on Catallax milestone M3.
 6. **STEP and mesh export.** Build. Deliverable: STEP AP242 from Catallax with its deviation report; STL and 3MF from Catallax's meshes. Exit: the bracket's STEP opens in OpenCASCADE with the same face count and a volume within the reported deviation. Depends on Catallax milestone M3.
-7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted. Exit: plate-thickness and boss-radius edits on the bracket keep every reference, and a genuinely lost reference still raises the repair prompt. Depends on Catallax milestone M3.
-8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild. Exit: editing the last feature of the bracket rebuilds only that feature, and the result is identical to a full replay. Depends on Catallax milestone M4.
+7. **References on Catallax origins.** Build. Deliverable: section 4's simplified references, with the face-role heuristic deleted, and section 4's survival scenario in the application loop. Exit: plate-thickness and boss-radius edits on the bracket keep every reference; the survival scenario keeps every reference across rename, split, merge, suppress and restore, undo and redo, and save and reopen; a genuinely lost reference still raises the repair prompt. Depends on Catallax milestone M3.
+8. **Rebuild from the first changed feature.** Build. Deliverable: section 3's rebuild, and a rebuild report, written by the development build into each application-loop command's bundle, that counts features recomputed, meshes rebuilt and bodies placed; the counting stays out of the rebuild path. Exit: editing the last feature of the bracket rebuilds only that feature and rebuilds no unrelated mesh or placement; renaming a feature recomputes nothing; restoring the previous value reuses the earlier bodies; in each case the result is identical to a full replay in bodies, face names and refusals. Depends on Catallax milestone M4.
 9. **Feature plumbing in the kernel's order.** Build, recurring. Deliverable: each feature in section 6 switched on when its Catallax operation lands. Exit, per feature: the application loop builds and edits the matching target part.
 10. **Sketch depth, first half.** Build. Deliverable: polygon, trim, extend, offset, mirror and patterns of lines and arcs. Exit: profiles made with the new tools build through Catallax.
 11. **The SolidWorks comparison corpus on Catallax.** Build. Waits for a machine with SolidWorks. Deliverable: the comparator pointed at Catallax. Exit: the first comparison report for the first three target parts.
