@@ -16,7 +16,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use soliddraft_document::{ContentHash, DocKind, Package};
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureId, FeatureKind, ProfileSource,
@@ -66,7 +66,7 @@ impl Drop for Dir {
 }
 
 fn kernel() -> Arc<dyn Kernel> {
-    Arc::new(SmlibKernel::new())
+    Arc::new(CatallaxKernel::new())
 }
 
 /// A 40 x 30 block `depth` mm thick; returns it with its extrusion's id.

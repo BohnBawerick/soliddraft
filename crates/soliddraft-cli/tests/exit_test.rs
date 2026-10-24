@@ -1,19 +1,14 @@
 //! The phase 0 exit test, run through the `soliddraft` binary as separate processes:
 //!
-//! - box, cylinder, union, subtract and a circular fillet replay from recipes with
-//!   identical digests across repeated runs;
-//! - a deliberately failing operation returns an error and leaves the previous body;
-//! - every recipe in the corpus matches the checked-in digests in
-//!   `recipes/golden/smlib.json`. Set `SOLIDDRAFT_BLESS=1` to rewrite that file after a
-//!   deliberate change.
+//! Box, cylinder and boolean recipes repeat across processes. Waiting fillets report
+//! their Catallax stages, and an expected failure leaves the preceding body unchanged.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use soliddraft_recipe::{BodySummary, ReplayReport, StepOutcome};
+use soliddraft_recipe::{ReplayReport, StepOutcome};
 
-const EXIT_RECIPES: &[&str] = &["box", "cylinder", "union", "subtract", "fillet", "failing-fillet"];
+const EXIT_RECIPES: &[&str] = &["box", "cylinder", "union", "subtract", "failing-fillet"];
 const RUNS: usize = 3;
 
 fn recipes_dir() -> PathBuf {
@@ -22,18 +17,6 @@ fn recipes_dir() -> PathBuf {
 
 fn recipe(name: &str) -> PathBuf {
     recipes_dir().join(format!("{name}.json"))
-}
-
-fn corpus() -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(recipes_dir())
-        .unwrap()
-        .filter_map(|e| {
-            let p = e.unwrap().path();
-            (p.extension()? == "json").then(|| p.file_stem().unwrap().to_string_lossy().into_owned())
-        })
-        .collect();
-    names.sort();
-    names
 }
 
 /// Runs `soliddraft replay --json --steps` on the files in a fresh process.
@@ -90,39 +73,10 @@ fn a_step_that_should_succeed_but_fails_fails_the_replay() {
     assert!(stderr.contains("step too_big failed"), "{stderr}");
 }
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
-struct Golden {
-    backend: String,
-    results: BTreeMap<String, BodySummary>,
-}
-
 #[test]
-fn corpus_matches_golden_digests() {
-    let names = corpus();
-    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let reports = replay(&refs);
-    let got = Golden {
-        backend: format!("{} {}", reports[0].backend.name, reports[0].backend.version),
-        results: reports.into_iter().map(|r| (r.recipe, r.result)).collect(),
-    };
-    let path = recipes_dir().join("golden/smlib.json");
-    if std::env::var_os("SOLIDDRAFT_BLESS").is_some() {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, serde_json::to_string_pretty(&got).unwrap() + "\n").unwrap();
-        return;
-    }
-    let text =
-        std::fs::read_to_string(&path).expect("recipes/golden/smlib.json; run with SOLIDDRAFT_BLESS=1 to create it");
-    let want: Golden = serde_json::from_str(&text).unwrap();
-    assert_eq!(got.backend, want.backend, "backend changed; re-bless deliberately");
-    assert_eq!(got.results.keys().collect::<Vec<_>>(), want.results.keys().collect::<Vec<_>>(), "corpus changed");
-    for (name, w) in &want.results {
-        let g = &got.results[name];
-        assert_eq!(
-            (g.kind, g.faces, g.edges, g.vertices, g.valid),
-            (w.kind, w.faces, w.edges, w.vertices, w.valid),
-            "{name}"
-        );
-        assert_eq!(g.digest, w.digest, "{name} digest changed");
-    }
+fn fillet_recipe_reports_its_catallax_stages() {
+    let out = Command::new(env!("CARGO_BIN_EXE_soliddraft")).arg("replay").arg(recipe("fillet")).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(error.contains("Catallax stage 3") && error.contains("Catallax stage 4"), "{error}");
 }

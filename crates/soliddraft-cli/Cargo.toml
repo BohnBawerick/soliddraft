@@ -18,7 +18,6 @@ soliddraft-document.workspace = true
 soliddraft-drawing.workspace = true
 soliddraft-kernel-api.workspace = true
 soliddraft-kernel-catallax.workspace = true
-soliddraft-kernel-smlib.workspace = true
 soliddraft-materials.workspace = true
 soliddraft-recipe.workspace = true
 soliddraft-model.workspace = true

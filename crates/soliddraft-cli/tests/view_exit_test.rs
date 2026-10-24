@@ -1,8 +1,7 @@
 //! The phase D0 exit test, through the `soliddraft view` binary as separate processes:
 //!
 //! The bracket's four Catallax views repeat across runs and match the polygon golden.
-//! SVG output carries visible and hidden line work. SMLib remains the independent
-//! visibility comparison for the generic mesh pass.
+//! SVG output carries visible and hidden line work.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -10,7 +9,7 @@ use std::process::Command;
 
 use soliddraft_kernel_api::Kernel;
 use soliddraft_kernel_api::contract;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 
 const VIEWS: &str = "front,top,right,iso";
 const RUNS: usize = 3;
@@ -105,7 +104,7 @@ fn view_writes_svg() {
 
 #[test]
 fn mesh_method_agrees_with_the_kernel_on_visible_lengths() {
-    let k = SmlibKernel::new();
+    let k = CatallaxKernel::new();
     for name in ["box", "cylinder", "bracket"] {
         let text = std::fs::read_to_string(recipes_dir().join(format!("{name}.json"))).unwrap();
         let recipe = soliddraft_recipe::parse(&text).unwrap();

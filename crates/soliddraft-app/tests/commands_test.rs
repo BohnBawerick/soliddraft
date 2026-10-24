@@ -32,7 +32,7 @@ fn gpu_available() -> bool {
 type App<'a> = Harness<'a, SolidDraftApp>;
 
 fn harness() -> App<'static> {
-    harness_with(|| soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())))
+    harness_with(soliddraft_app::demo_document)
 }
 
 fn harness_with(doc: fn() -> soliddraft_app::document::Document) -> App<'static> {
@@ -113,7 +113,7 @@ fn a_disabled_command_says_why_instead_of_running() {
     let mut harness = harness_with(|| {
         soliddraft_app::document::Document::new(
             "Part1",
-            std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+            std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
         )
     });
     harness.run_steps(3);
@@ -121,7 +121,7 @@ fn a_disabled_command_says_why_instead_of_running() {
     harness.run_steps(2);
     let state = &harness.state().state;
     assert!(state.editor.is_none(), "no chamfer without a body");
-    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Chamfer needs a body"));
+    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Arrives with Catallax stage 3"));
 }
 
 #[test]

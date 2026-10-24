@@ -435,8 +435,23 @@ impl CommandSpec {
         (self.label_now)(state).unwrap_or_else(|| self.label.to_owned())
     }
 
+    /// Commands whose geometry is waiting for Catallax, in roadmap section 6 order.
+    pub fn catallax_wait(&self) -> Option<&'static str> {
+        match self.id {
+            "fillet" | "edit_fillet" => Some(
+                "Fillets between planes and cylinders arrive with Catallax stage 3; other fillets with Catallax stage 4",
+            ),
+            "chamfer" | "edit_chamfer" | "shell" | "hole" | "linear_pattern" | "circular_pattern" | "mirror" => {
+                Some("Arrives with Catallax stage 3")
+            }
+            "draft" => Some("Arrives with Catallax stage 4"),
+            "sweep" | "loft" => Some("Arrives with Catallax stage 5"),
+            _ => None,
+        }
+    }
+
     pub fn is_enabled(&self, state: &AppState) -> bool {
-        self.action.is_some() && (self.enabled)(state)
+        self.catallax_wait().is_none() && self.action.is_some() && (self.enabled)(state)
     }
 
     /// The action to run now, or `None` when the command is disabled.
@@ -446,7 +461,10 @@ impl CommandSpec {
 
     /// What its hint says now, or why it is disabled.
     pub fn hint_now(&self, state: &AppState) -> Option<String> {
-        (self.hint)(state).or_else(|| self.action.is_none().then(|| LATER.to_owned()))
+        self.catallax_wait()
+            .map(str::to_owned)
+            .or_else(|| (self.hint)(state))
+            .or_else(|| self.action.is_none().then(|| LATER.to_owned()))
     }
 
     /// The first shortcut, as hints show it.
@@ -1624,6 +1642,36 @@ fn drawing_registry() -> Vec<CommandSpec> {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn waiting_commands_stay_visible_disabled_and_name_their_stages() {
+        let state = AppState::new(crate::demo_document());
+        for (id, stages) in [
+            ("fillet", &[3, 4][..]),
+            ("chamfer", &[3][..]),
+            ("shell", &[3][..]),
+            ("hole", &[3][..]),
+            ("linear_pattern", &[3][..]),
+            ("circular_pattern", &[3][..]),
+            ("mirror", &[3][..]),
+            ("draft", &[4][..]),
+            ("sweep", &[5][..]),
+            ("loft", &[5][..]),
+        ] {
+            let command = get(id).unwrap();
+            assert!(!command.ribbon.is_empty(), "{id}");
+            assert!((command.shown)(&state), "{id}");
+            assert!(!command.is_enabled(&state), "{id}");
+            assert!(command.action_now(&state).is_none(), "{id}");
+            for stage in stages {
+                assert!(
+                    command.tip(&state).contains(&format!("Catallax stage {stage}")),
+                    "{id}: {}",
+                    command.tip(&state)
+                );
+            }
+        }
+    }
 
     #[test]
     fn ids_are_unique_and_valid_tool_names() {

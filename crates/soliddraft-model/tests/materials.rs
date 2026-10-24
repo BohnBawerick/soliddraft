@@ -1,11 +1,11 @@
-//! A part's material and appearances on the SMLib backend: assignment, precedence,
+//! A part's material and appearances on the Catallax backend: assignment, precedence,
 //! faces that split or disappear, configuration scopes, mass, undo and files.
 
 use std::sync::Arc;
 
 use soliddraft_document::{ConfigScope, ConfigurationId};
 use soliddraft_kernel_api::{FaceId, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_materials::{Appearance, AppearanceId, Catalog, MaterialId, Srgb, Unknown};
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
@@ -14,7 +14,7 @@ use soliddraft_model::{
 };
 
 fn doc() -> Document {
-    Document::new("Part1", Arc::new(SmlibKernel::new()))
+    Document::new("Part1", Arc::new(CatallaxKernel::new()))
 }
 
 fn add(doc: &mut Document, kind: FeatureKind) -> FeatureId {
@@ -263,7 +263,7 @@ fn copies_survive_files_and_follow_library_updates_only_on_request() {
 
     let json = d.part_json();
     assert!(json.contains("\"on\": \"face\"") && json.contains("\"scope\": \"all\""), "{json}");
-    let back = Document::from_bytes(&d.to_bytes().unwrap(), Arc::new(SmlibKernel::new())).unwrap();
+    let back = Document::from_bytes(&d.to_bytes().unwrap(), Arc::new(CatallaxKernel::new())).unwrap();
     assert_eq!(back.materials(), d.materials());
     assert_eq!(back.part_json(), json, "a saved file round-trips exactly");
     assert_eq!(back.semantic_hash(), d.semantic_hash());
@@ -281,7 +281,7 @@ fn copies_survive_files_and_follow_library_updates_only_on_request() {
 
     // A file whose assignment has no copy is refused rather than shown wrong.
     let broken = json.replace("\"id\": \"my-teal\"", "\"id\": \"my-other-teal\"");
-    let err = Document::from_part_json(&broken, Arc::new(SmlibKernel::new())).unwrap_err();
+    let err = Document::from_part_json(&broken, Arc::new(CatallaxKernel::new())).unwrap_err();
     assert!(matches!(err, FileError::Invalid(ref m) if m.contains("my-teal")), "{err}");
 }
 

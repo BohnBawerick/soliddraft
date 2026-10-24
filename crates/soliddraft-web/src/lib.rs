@@ -30,7 +30,6 @@ pub fn start() {
         .find_map(|p| p.strip_prefix("preset="))
         .and_then(soliddraft_app::viewport::look::Preset::parse);
     wasm_bindgen_futures::spawn_local(async move {
-        soliddraft_app::web::kernel_ready().await;
         let started = eframe::WebRunner::new()
             .start(
                 canvas,

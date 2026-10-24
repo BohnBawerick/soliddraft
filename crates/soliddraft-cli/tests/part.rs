@@ -5,7 +5,7 @@ use std::process::Command as Process;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     BlendFeature, Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource,
@@ -13,8 +13,8 @@ use soliddraft_model::{
 };
 
 /// A 40 x 30 x 10 block with its top edges rounded, saved to a temporary file.
-fn save_block(name: &str) -> (PathBuf, Document) {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+fn save_block(name: &str, with_fillet: bool) -> (PathBuf, Document) {
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut doc = Document::new("Block", kernel);
     let mut sketch = Sketch::new();
     sketch.rectangle(P2::new(0.0, 0.0), 40.0, 30.0).unwrap();
@@ -39,8 +39,10 @@ fn save_block(name: &str) -> (PathBuf, Document) {
         }),
     );
     let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
-    let edges = t.edges.iter().filter(|e| e.bbox.min.z > 10.0 - 1e-6).map(|e| doc.edge_ref(e.id).unwrap()).collect();
-    add(&mut doc, FeatureKind::Fillet(BlendFeature { edges, size: 2.0 }));
+    let edges = t.edges.iter().filter(|e| e.midpoint.z > 10.0 - 1e-6).map(|e| doc.edge_ref(e.id).unwrap()).collect();
+    if with_fillet {
+        add(&mut doc, FeatureKind::Fillet(BlendFeature { edges, size: 2.0 }));
+    }
     let path = std::env::temp_dir().join(format!("soliddraft-cli-{}-{name}.dwprt", std::process::id()));
     doc.save(&path).unwrap();
     (path, doc)
@@ -53,14 +55,14 @@ fn run(args: &[&str]) -> (bool, String, String) {
 
 #[test]
 fn part_rebuilds_a_saved_file_and_reports_every_feature() {
-    let (path, doc) = save_block("ok");
+    let (path, doc) = save_block("ok", false);
     let want = doc.kernel().mass_properties(doc.body().unwrap()).unwrap().volume;
     let (ok, stdout, stderr) = run(&["part", "--json", path.to_str().unwrap()]);
     assert!(ok, "{stderr}");
     let report: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(report["part"], "Block");
     let names: Vec<&str> = report["features"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Sketch1", "Boss-Extrude1", "Fillet1"]);
+    assert_eq!(names, ["Sketch1", "Boss-Extrude1"]);
     assert!(report["features"].as_array().unwrap().iter().all(|f| f["status"] == "ok"), "{report}");
     let volume = report["body"]["volume"].as_f64().unwrap();
     assert!((volume - want).abs() <= 1e-9 * want, "volume {volume}, saved part {want}");
@@ -68,13 +70,13 @@ fn part_rebuilds_a_saved_file_and_reports_every_feature() {
     let (ok, text, _) = run(&["part", path.to_str().unwrap()]);
     assert!(ok);
     assert!(text.starts_with("Block ("), "{text}");
-    assert!(text.contains("Fillet1") && text.contains("body: solid faces 10"), "{text}");
+    assert!(text.contains("Boss-Extrude1") && text.contains("body: solid faces 6"), "{text}");
     std::fs::remove_file(path).ok();
 }
 
 #[test]
 fn part_fails_when_a_feature_does_not_build() {
-    let (path, mut doc) = save_block("broken");
+    let (path, mut doc) = save_block("broken", false);
     let sketch = doc.features()[0].id;
     doc.execute(Command::DeleteFeature { id: sketch }).unwrap();
     doc.save(&path).unwrap();
@@ -85,5 +87,18 @@ fn part_fails_when_a_feature_does_not_build() {
     assert!(report["body"].is_null());
     let (ok, _, stderr) = run(&["part", "/nonexistent/part.dwpart"]);
     assert!(!ok && !stderr.is_empty());
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn existing_fillet_reports_its_stage_and_keeps_the_block() {
+    let (path, _) = save_block("waiting", true);
+    let (ok, stdout, _) = run(&["part", "--json", path.to_str().unwrap()]);
+    assert!(!ok);
+    let report: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(report["features"][2]["status"], "failed", "{report}");
+    assert!(stdout.contains("Catallax stage 3") && stdout.contains("Catallax stage 4"), "{stdout}");
+    assert_eq!(report["body"]["faces"], 6);
+    assert!((report["body"]["volume"].as_f64().unwrap() - 12000.0).abs() < 1e-6);
     std::fs::remove_file(path).ok();
 }

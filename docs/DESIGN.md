@@ -54,7 +54,7 @@ The colour pass renders into offscreen targets in the callback's `prepare` step 
 
 ## Kernel boundary
 
-The app talks to `soliddraft_kernel_api::Kernel` and nothing else. The backend is chosen in one place, `soliddraft_app::kernel()`, which hands out an `Arc<dyn Kernel>` on the SMLib backend; the document, the viewport and the panels never name a backend.
+The app talks to `soliddraft_kernel_api::Kernel` and nothing else. The backend is chosen in one place, `soliddraft_app::kernel()`, which hands out an `Arc<dyn Kernel>` on Catallax; the document, the viewport and the panels never name a backend.
 
 The document replays its feature list on every change: each extrude is `create_body_from_profile` plus `extrude`, the sheet body is released at once, the previous solids are released before the replay. Kernel ids change on every replay, so a selection is carried across a rebuild by name: the same feature and the same label ("Boss-Extrude1 · End cap"). The labels come from the app, not the kernel: for an extrude, a planar face whose centroid lies on the sketch plane is the start cap, one at the extrusion distance is the end cap, a cylindrical face is the wall and the rest are sides in topology order.
 
@@ -146,7 +146,7 @@ PDF, DXF and SVG are written from the same display list the canvas paints, so wh
 
 ### Where the code lives
 
-Projection, sheet layout and auto scale, alignment, measurement, Model items, associativity with its repairs, the commands and undo stack, the display list, the template library, the exporters and the drawing file are in `crates/soliddraft-drawing`, shared with the headless `soliddraft draw`. The app adds two thin modules: `drawing/part.rs` presents the part document as the crate's `Part` and names entities with the model's persistent references (and reads hole features for callouts), and `drawing/document.rs` holds the open drawing with its undo stack, file path and the views' transforms for picking. A drawing file is a zip (`.dwdrw`; `.dwdrawing` files still open) with a manifest, the drawing, each view's cached line work and a thumbnail; its part reference is described in [documents.md](documents.md). Updates still run on the interface thread (about a second for four views of the bracket on the SMLib backend).
+Projection, sheet layout and auto scale, alignment, measurement, Model items, associativity with its repairs, the commands and undo stack, the display list, the template library, the exporters and the drawing file are in `crates/soliddraft-drawing`, shared with the headless `soliddraft draw`. The app adds two thin modules: `drawing/part.rs` presents the part document as the crate's `Part` and names entities with the model's persistent references (and reads hole features for callouts), and `drawing/document.rs` holds the open drawing with its undo stack, file path and the views' transforms for picking. A drawing file is a zip (`.dwdrw`; `.dwdrawing` files still open) with a manifest, the drawing, each view's cached line work and a thumbnail; its part reference is described in [documents.md](documents.md). Updates still run on the interface thread .
 
 ### Screenshots
 

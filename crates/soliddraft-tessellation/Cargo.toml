@@ -17,7 +17,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 soliddraft-kernel-api = { workspace = true, features = ["contract"] }
-soliddraft-kernel-smlib.workspace = true
+soliddraft-kernel-catallax.workspace = true
 
 [lints]
 workspace = true

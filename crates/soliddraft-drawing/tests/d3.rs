@@ -1,7 +1,7 @@
 //! Phase D3 without the C++ kernel, on a kernel of boxes: detail and auxiliary views,
 //! crops, dimension sets, symbols, revisions, several sheets with location labels, and
 //! DXF dimensions and hatches. Sections need booleans; the `soliddraft draw` exit test
-//! covers them on SMLib.
+//! covers them on Catallax.
 
 mod support;
 

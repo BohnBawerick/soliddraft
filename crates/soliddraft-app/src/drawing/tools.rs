@@ -13,7 +13,7 @@ use crate::state::AppState;
 use crate::theme;
 use egui::{Stroke, vec2};
 use soliddraft_drawing::display::{self as layout, Owner};
-use soliddraft_drawing::measure::{CurveShape, precision_for, shape_of};
+use soliddraft_drawing::measure::{CurveShape, precision_for, shape_of, shape_of_curve};
 use soliddraft_drawing::project::{self, view_label};
 use soliddraft_drawing::{
     AlignAxis, Anchor, Annotation, AnnotationKind, AnnotationState, Attach, Boundary, BrokenOut, Command, CurveKind,
@@ -70,7 +70,8 @@ fn anchor_from_hit(s: &DrawingSession, hit: Hit) -> Option<(ViewId, Anchor)> {
     let Owner::Curve(view, index) = hit.owner else { return None };
     let v = s.sheet().view(view)?;
     let c = v.geometry.curves.get(index)?;
-    let shape = shape_of(&c.path);
+    let circles = s.doc.circles.get(&view).map(Vec::as_slice).unwrap_or_default();
+    let shape = shape_of_curve(c, circles);
     // A circle's start is where its path begins, not a corner: the centre wins.
     let (attach, at) = match (&shape, hit.end) {
         (CurveShape::Circle { centre, .. }, _) => (Attach::Centre, *centre),

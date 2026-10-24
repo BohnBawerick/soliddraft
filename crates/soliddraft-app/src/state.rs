@@ -486,7 +486,7 @@ impl AppState {
                 self.push(action);
             }
             None => {
-                if let Some(why) = (command.hint)(self) {
+                if let Some(why) = command.hint_now(self) {
                     self.note(why, NoteKind::Info);
                 }
             }

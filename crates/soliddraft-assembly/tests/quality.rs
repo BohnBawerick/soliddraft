@@ -11,7 +11,7 @@ use soliddraft_assembly::{
 };
 use soliddraft_document::{DocRef, identify_file};
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -20,7 +20,7 @@ use soliddraft_model::{
 use soliddraft_tessellation::Quality;
 
 fn kernel() -> Arc<dyn Kernel> {
-    Arc::new(SmlibKernel::new())
+    Arc::new(CatallaxKernel::new())
 }
 
 fn folder(name: &str) -> PathBuf {

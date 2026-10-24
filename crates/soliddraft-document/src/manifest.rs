@@ -61,7 +61,7 @@ pub struct Manifest {
     pub format: String,
     /// The application that wrote the file, such as "soliddraft 0.1.0".
     pub writer: String,
-    /// The kernel backend whose results the file's caches hold, such as "smlib c9c5979".
+    /// The kernel backend whose results the file's caches hold, such as "catallax a778fb4".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kernel: Option<String>,
     /// BLAKE3 over the canonical truth: the revision references pin.

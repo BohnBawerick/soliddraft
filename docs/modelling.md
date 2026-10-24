@@ -138,7 +138,7 @@ A part file (`.dwprt`) is a zip archive with two entries:
   [documents.md](documents.md)).
 - `part.json`: format tag `soliddraft-part/2`, name, units, every feature with its
   parameters, sketch and references, the rollback bar and the next feature id. No
-  kernel ids, no computed geometry: it rebuilds on any backend.
+  kernel ids, no computed geometry: it rebuilds on Catallax.
 
 Writing is deterministic and floats round-trip bit for bit, so saving an opened file
 gives the same bytes. A file with a newer major version is refused, as is a recipe with
@@ -148,27 +148,6 @@ renames over it. Part files from before the manifest (`.dwpart`, `recipe.json` w
 
 ## Exit test
 
-`crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the
-command layer, one command per feature, the way a user would: a 120 x 90 x 10 base with
-R8 corners, a 70 mm tall flange with rounded top corners on its front edge, an R8 inside
-fillet on the edge picked where they meet, a 24 mm boss on the base's top face with a
-12 mm bore cut through all from the boss's top face, four 9 mm holes on a 90 x 44
-pattern, and a 40 x 12 slot sketched on the flange's front face and cut through.
+`crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the command layer, saves and reopens it, edits its base thickness and checks undo, redo and reference repair. Its saved inside fillet now reports its Catallax stage and passes the preceding body through. Supported downstream features keep building.
 
-1. The built volume matches the closed form to 0.1 percent.
-2. The part is saved, reopened in a new document, and saving it again gives the same
-   bytes; the volume is unchanged.
-3. The base thickness goes from 10 to 12 mm. Every feature downstream rebuilds (none is
-   left failed), the boss sketch moves to z = 12 with the base's top face, the fillet
-   rounds the corner at its new height, and the volume matches the closed form again.
-   Undo and redo switch between the two.
-4. Suppressing the flange stops the fillet with `RepairNeeded` (its edge lay on the
-   flange), with candidates, and leaves every other feature built. Suppressing the boss
-   stops the bore sketch with a sketch-plane repair (it lay on the boss's top face) and
-   blocks the bore cut. Undo brings each back.
-
-The slot is picked on the flange's front face, but that face is coplanar with the base's
-front face, and the union merges the two into one face that keeps the base's name. The
-test checks that label rather than assume the flange owns the face.
-
-It runs in `cargo test --workspace`, so CI runs it on every pull request.
+The document tests also reopen a part containing a chamfer, check the stage 3 rebuild error, and verify that the body before and after that feature is identical. Ribbon tests check that waiting commands stay visible, stay disabled and name their stages. These run in the workspace CI suite.

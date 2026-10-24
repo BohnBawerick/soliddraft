@@ -66,12 +66,13 @@ pub fn new_document() -> Document {
 
 /// The sample part used by `--demo` and the screenshots: a base plate, a flange and a boss.
 pub fn demo_document() -> Document {
-    demo_document_on(kernel())
+    let mut doc = new_document();
+    populate_demo(&mut doc);
+    doc
 }
 
-/// Builds the sample on an explicitly supplied backend, also used by backend regression tests.
-pub fn demo_document_on(kernel: Arc<dyn Kernel>) -> Document {
-    let mut doc = Document::new("Part1", kernel);
+/// Adds the sample features to a document, retaining its Catallax diagnostics.
+pub fn populate_demo(doc: &mut Document) {
     for params in [
         ExtrudeParams {
             sketch: None,
@@ -99,7 +100,6 @@ pub fn demo_document_on(kernel: Arc<dyn Kernel>) -> Document {
     }
     doc.selection = None;
     doc.dirty = false;
-    doc
 }
 
 /// One body tessellated to well over 10,000 triangles, for the frame-time benchmark.

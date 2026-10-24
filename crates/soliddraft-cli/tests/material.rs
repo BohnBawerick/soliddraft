@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -24,7 +24,7 @@ fn scratch(name: &str) -> PathBuf {
 
 /// A 40 x 30 x 10 block, 12 000 mm³, saved in `dir`.
 fn save_block(dir: &Path) -> PathBuf {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut doc = Document::new("Block", kernel);
     let mut sketch = Sketch::new();
     sketch.rectangle(P2::new(0.0, 0.0), 40.0, 30.0).unwrap();

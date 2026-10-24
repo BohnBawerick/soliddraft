@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -19,7 +19,7 @@ fn save_pin(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("soliddraft-cli-quality-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut doc = Document::new("Pin", kernel);
     let mut sketch = Sketch::new();
     sketch.circle_at(P2::new(0.0, 0.0), 20.0).unwrap();

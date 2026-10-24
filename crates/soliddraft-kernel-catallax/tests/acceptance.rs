@@ -8,7 +8,6 @@ const BRACKET: &str = include_str!("../../../recipes/bracket.json");
 
 #[test]
 fn phase_zero_repeatability_and_failure_preserves_the_previous_body() {
-    // Successful fillets remain SMLib coverage until Catallax stage 4.
     for text in [
         include_str!("../../../recipes/box.json"),
         include_str!("../../../recipes/cylinder.json"),
@@ -231,4 +230,133 @@ fn polygon_face_loops_keep_holes_and_coedge_order() {
     for id in [body, outer, inner] {
         k.release(id).unwrap();
     }
+}
+
+#[test]
+fn axis_aligned_front_extrusions_keep_the_exact_frame_in_both_directions() {
+    let k = CatallaxKernel::with_operation_log();
+    let profile =
+        Profile::circle(Plane { origin: Vec3::ZERO, normal: -Vec3::Y, x_dir: Vec3::X }, Point2::new(0.0, 0.0), 3.0);
+    let sheet = k.create_body_from_profile(&OpTag::new("front"), &profile).unwrap();
+    for direction in [-Vec3::Y, Vec3::Y] {
+        let body = k
+            .extrude(&OpTag::new("pin"), sheet.body, &Extrude { distance: 20.0, direction: Some(direction) })
+            .unwrap()
+            .body;
+        let mass = k.mass_properties(body).unwrap();
+        assert!((mass.volume - 180.0 * std::f64::consts::PI).abs() < 1e-4);
+        assert!(mass.centroid.distance(direction * 10.0) < 1e-8);
+        let topology = k.topology(body).unwrap();
+        let normals: Vec<_> = topology.faces.iter().filter_map(|f| f.normal).collect();
+        assert!(normals.contains(&Vec3::Y) && normals.contains(&-Vec3::Y), "{normals:?}");
+        let evidence = k.take_diagnostics().unwrap();
+        let questions = evidence["questions"].as_array().unwrap();
+        let recipe: catallax_recipe::Recipe =
+            serde_json::from_value(questions.last().unwrap()["problem"].clone()).unwrap();
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("captured question must replay the exact frame used by the application");
+        k.release(body).unwrap();
+    }
+    k.release(sheet.body).unwrap();
+}
+
+#[test]
+fn face_frame_normal_sweeps_use_the_certified_frame_without_changing_other_directions() {
+    let k = CatallaxKernel::with_operation_log();
+    let plane = Plane {
+        origin: Vec3::new(-3.5164312091753774e-36, -2.1476647763447118e-17, 0.0),
+        normal: Vec3::new(-1.6373277840689282e-19, -1.0, 0.0),
+        x_dir: Vec3::new(1.0, -1.6373277840689282e-19, 0.0),
+    };
+    let profile = Profile::circle(plane, Point2::new(0.0, 0.0), 3.0);
+    let sheet = k.create_body_from_profile(&OpTag::new("front_face"), &profile).unwrap().body;
+    for direction in [plane.normal, -plane.normal] {
+        let body =
+            k.extrude(&OpTag::new("pin"), sheet, &Extrude { distance: 20.0, direction: Some(direction) }).unwrap().body;
+        let mass = k.mass_properties(body).unwrap();
+        assert!((mass.volume - 180.0 * std::f64::consts::PI).abs() < 1e-4);
+        assert!(mass.centroid.distance(plane.origin + direction * 10.0) < 1e-8);
+        let evidence = k.take_diagnostics().unwrap();
+        let recipe: catallax_recipe::Recipe =
+            serde_json::from_value(evidence["questions"].as_array().unwrap().last().unwrap()["problem"].clone())
+                .unwrap();
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("the captured normal sweep must replay");
+        k.release(body).unwrap();
+    }
+    let error = k
+        .extrude(
+            &OpTag::new("independent_direction"),
+            sheet,
+            &Extrude { distance: 20.0, direction: Some(Vec3::new(2e-19, 1.0, 0.0)) },
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("features.unsupported-algebraic-placement"), "{error}");
+    let evidence = k.take_diagnostics().unwrap();
+    let question = evidence["questions"].as_array().unwrap().last().unwrap();
+    let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();
+    let catallax_recipe::Operation::Extrude { direction: Some(direction), .. } = &recipe.steps.last().unwrap().op
+    else {
+        panic!()
+    };
+    assert_eq!(direction.0[0], catallax_recipe::Number::parse("2e-19").unwrap());
+    k.release(sheet).unwrap();
+}
+
+#[test]
+fn certified_application_display_serves_matching_requests_and_preserves_finer_meshing() {
+    let k = CatallaxKernel::with_operation_log();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    k.take_diagnostics().unwrap();
+    let topology = k.topology(body).unwrap();
+    assert_eq!(topology.display_chord_height, Some(0.01));
+    let log = k.take_diagnostics().unwrap();
+    assert!(log["calls"].as_array().unwrap().iter().all(|call| {
+        call["operation_log"]["operations"].as_array().unwrap().iter().all(|op| op["operation"] == "face_area")
+    }));
+
+    // Half the requested chord is reserved for the unchanged f32 rounding check.
+    let params = TessellationParams { chord_height: 0.02, ..Default::default() };
+    let original = k.tessellate(body, &params).unwrap();
+    let edges = k.tessellate_edges(body, &params).unwrap();
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"].as_array().unwrap().len(), 2);
+    assert!(
+        log["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|call| call["operation_log"]["operations"].as_array().unwrap().is_empty())
+    );
+
+    let finer = TessellationParams { chord_height: 0.005, ..params };
+    let refined = k.tessellate(body, &finer).unwrap();
+    assert!(refined.triangle_count() > original.triangle_count());
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"][0]["operation_log"]["operations"][0]["operation"], "tessellate");
+
+    assert_eq!(k.tessellate(body, &params).unwrap(), original);
+    assert_eq!(k.tessellate_edges(body, &params).unwrap(), edges);
+    assert_eq!(k.topology(body).unwrap(), topology);
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"].as_array().unwrap().len(), 3);
+    assert!(
+        log["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|call| call["operation_log"]["operations"].as_array().unwrap().is_empty())
+    );
+    k.release(body).unwrap();
+}
+
+#[test]
+fn captured_manual_slot_question_builds_without_changing_its_geometry() {
+    let question: serde_json::Value = serde_json::from_str(include_str!("fixtures/slot-native-question.json")).unwrap();
+    let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();
+    let body =
+        catallax_app::build(&recipe, &catallax_mesh::MeshOptions::default(), &mut catallax_numbers::Decider::default())
+            .expect("the captured manual slot must build with its original squared radii");
+    assert!(body.built.model.check(body.built.result).is_empty());
+    assert!(!body.display.value.triangles.is_empty());
 }

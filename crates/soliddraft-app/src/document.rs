@@ -1630,7 +1630,7 @@ mod tests {
     use crate::sketch::{ConstraintKind, EntityKind, P2, PointRef};
 
     fn doc() -> Document {
-        Document::new("Test", Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()))
+        Document::new("Test", Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()))
     }
 
     fn rect_sketch(w: f64, h: f64, at: P2) -> Sketch {
@@ -1748,7 +1748,7 @@ mod tests {
     }
 
     #[test]
-    fn fillet_references_survive_a_thickness_change_and_report_repair_when_gone() {
+    fn existing_fillet_waits_for_its_stage_and_keeps_the_body_through_edits_and_reopen() {
         let mut d = doc();
         let base = d
             .apply(Command::AddExtrude {
@@ -1785,11 +1785,20 @@ mod tests {
             .unwrap();
         let r = d.edge_ref(inside.id).unwrap();
         assert!(r.label.contains("Boss-Extrude2"), "{}", r.label);
-        let fillet =
-            d.apply(Command::AddFillet { params: FilletParams { edges: vec![r], radius: 4.0 } }).unwrap().unwrap();
-        assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Ok);
+        let error = d.apply(Command::AddFillet { params: FilletParams { edges: vec![r], radius: 4.0 } }).unwrap_err();
+        assert!(error.contains("Catallax stage 3") && error.contains("Catallax stage 4"), "{error}");
+        let fillet = d.features.last().unwrap().id;
+        let waiting = |d: &Document| {
+            assert!(matches!(&d.feature(fillet).unwrap().status, FeatureStatus::Error(error)
+                if error.contains("Catallax stage 3") && error.contains("Catallax stage 4")));
+            assert_eq!(d.model.body_after(model_id(fillet)), d.model.body_before(model_id(fillet)));
+        };
+        waiting(&d);
+        let reopened =
+            Document::from_model(model::Document::from_bytes(&d.model.to_bytes().unwrap(), crate::kernel()).unwrap());
+        waiting(&reopened);
         let v_before = d.mass_properties(fillet).unwrap().volume;
-        // Thicker base: the inside edge moves up; the fillet follows it.
+        // The waiting feature keeps the rebuilt body after a base edit.
         d.apply(Command::EditExtrude {
             id: base,
             params: ExtrudeParams {
@@ -1799,7 +1808,7 @@ mod tests {
             },
         })
         .unwrap();
-        assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Ok, "{:?}", d.feature(fillet).unwrap().status);
+        waiting(&d);
         let v_after = d.mass_properties(fillet).unwrap().volume;
         assert!(v_after > v_before);
         // Suppress the flange: the edge is gone and the fillet asks for repair.
@@ -1807,12 +1816,12 @@ mod tests {
         assert!(matches!(d.feature(fillet).unwrap().status, FeatureStatus::NeedsRepair(_)));
         assert!(d.display_body().is_some(), "the body passes through a skipped feature");
         d.apply(Command::Suppress { id: flange, suppressed: false }).unwrap();
-        assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Ok);
+        waiting(&d);
         // Rollback hides the fillet without removing it.
         d.apply(Command::Rollback(Some(3))).unwrap();
         assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Inactive);
         assert_eq!(d.display_index(), Some(2));
         d.apply(Command::Rollback(None)).unwrap();
-        assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Ok);
+        waiting(&d);
     }
 }

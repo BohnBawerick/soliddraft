@@ -11,7 +11,7 @@
 
 use serde_json::{Value, json};
 use soliddraft_app::chat::{ChatState, Role};
-use soliddraft_app::command_tools::{Line, ProposalStatus, Shape, board_bracket_on};
+use soliddraft_app::command_tools::{Line, ProposalStatus, Shape, board_bracket};
 use soliddraft_app::document::{Document, FeatureStatus, Selection};
 use soliddraft_app::state::AppState;
 use soliddraft_assistant::mcp::HttpClient;
@@ -24,7 +24,6 @@ const HOLES: &str = "Add four 9 mm holes on a 90 x 44 pattern";
 const SLOT: &str = "Cut a 40 x 12 slot through the flange";
 
 /// Material each exchange adds (positive) or removes (negative), mm³.
-const FILLET_ADDS: f64 = (64.0 - PI * 16.0) * 120.0;
 const HOLES_REMOVE: f64 = 4.0 * PI * 4.5 * 4.5 * 10.0;
 const SLOT_REMOVES: f64 = (28.0 * 12.0 + PI * 36.0) * 10.0;
 
@@ -132,7 +131,7 @@ fn apply_and_undo(st: &mut AppState, id: &str, prompt: &str, volume_change: f64,
 
 #[test]
 fn the_three_board_exchanges_with_the_mock_provider() {
-    let doc = board_bracket_on(Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+    let doc = board_bracket();
     let corner = inside_corner(&doc);
     let provider = Arc::new(MockProvider::new(vec![
         // Fillet: the model looks at the flange, then proposes on the concave edge.
@@ -144,7 +143,9 @@ fn the_three_board_exchanges_with_the_mock_provider() {
                 json!({ "summary": "R8 fillet on the inside corner", "commands": [{ "op": "fillet", "edges": [corner], "radius": 8 }] }),
             )],
         ),
-        MockTurn::text("Fillet1 rounds the inside corner where the flange meets the base, R8."),
+        MockTurn::text(
+            "Fillets between planes and cylinders wait for Catallax stage 3; other fillets for Catallax stage 4.",
+        ),
         // Hole pattern.
         MockTurn::tools("", vec![("propose", holes())]),
         MockTurn::text("Four Ø9 holes through the base on a 90 × 44 pattern centred on the free plate."),
@@ -156,10 +157,10 @@ fn the_three_board_exchanges_with_the_mock_provider() {
     st.chat = ChatState::connected(provider.clone(), "mock provider");
     let mut transcript = String::new();
 
-    let p = exchange(&mut st, FILLET, &mut transcript).expect("a fillet proposal");
-    let lines = &st.chat.book.get(&p).unwrap().lines;
-    assert!(matches!(&lines[..], [Line::Fillet { radius, .. }] if *radius == 8.0), "{lines:?}");
-    apply_and_undo(&mut st, &p, FILLET, FILLET_ADDS, 30.0);
+    let before = st.doc.features.len();
+    assert!(exchange(&mut st, FILLET, &mut transcript).is_none(), "{transcript}");
+    assert!(transcript.contains("Catallax stage 3") && transcript.contains("Catallax stage 4"), "{transcript}");
+    assert_eq!(st.doc.features.len(), before);
 
     let p = exchange(&mut st, HOLES, &mut transcript).expect("a hole proposal");
     apply_and_undo(&mut st, &p, HOLES, -HOLES_REMOVE, 30.0);
@@ -192,7 +193,7 @@ fn the_three_board_exchanges_with_the_real_model() {
     let how = choice.source.describe();
     let provider = choice.connect().expect("provider");
     eprintln!("real-model exit test on {} {} with the {how}", provider.name(), provider.model());
-    let mut st = AppState::new(board_bracket_on(Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())));
+    let mut st = AppState::new(board_bracket());
     st.chat = ChatState::connected(provider, &how);
     let mut transcript = String::new();
     let check = |st: &mut AppState, prompt: &str, change: f64, tolerance: f64, transcript: &mut String| {
@@ -201,10 +202,6 @@ fn the_three_board_exchanges_with_the_real_model() {
         apply_and_undo(st, &id, prompt, change, tolerance);
         id
     };
-
-    let p = check(&mut st, FILLET, FILLET_ADDS, 60.0, &mut transcript);
-    let lines = st.chat.book.get(&p).unwrap().lines.clone();
-    assert!(lines.iter().any(|l| matches!(l, Line::Fillet { radius, .. } if *radius == 8.0)), "{lines:?}");
 
     let p = check(&mut st, HOLES, -HOLES_REMOVE, 60.0, &mut transcript);
     let lines = st.chat.book.get(&p).unwrap().lines.clone();
@@ -234,7 +231,7 @@ fn the_three_board_exchanges_with_the_real_model() {
 
 #[test]
 fn an_outside_agent_drives_the_same_commands_over_mcp() {
-    let doc = board_bracket_on(Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+    let doc = board_bracket();
     let corner = inside_corner(&doc);
     let features = doc.features.len();
     let v0 = volume(&doc);
@@ -244,7 +241,7 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
         let (mut c, init) = HttpClient::connect(&url, "exit-test-agent").unwrap();
         assert_eq!(init["serverInfo"]["name"], "soliddraft");
         let call = |c: &mut HttpClient, name: &str, args: Value| {
-            let r = c.call_tool(name, args).unwrap();
+            let r = c.call_tool(name, args).unwrap_or_else(|error| panic!("{name}: {error}"));
             assert_eq!(r["isError"], false, "{name}: {r}");
             r["structuredContent"].clone()
         };
@@ -252,7 +249,10 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
         let body_volume =
             |c: &mut HttpClient| call(c, "model_summary", json!({}))["body"]["volume_mm3"].as_f64().unwrap();
         volumes.push(body_volume(&mut c));
-        call(&mut c, "fillet", json!({ "edges": [corner], "radius": 8 }));
+        let waiting = c.call_tool("fillet", json!({ "edges": [corner], "radius": 8 })).unwrap();
+        assert_eq!(waiting["isError"], true);
+        let message = waiting.to_string();
+        assert!(message.contains("Catallax stage 3") && message.contains("Catallax stage 4"), "{message}");
         volumes.push(body_volume(&mut c));
         let h = holes();
         call(
@@ -285,7 +285,7 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
         // A reference that does not resolve is refused before anything happens.
         let bad = c.call_tool("fillet", json!({ "edges": ["Fillet1 · Edge 999"], "radius": 2 })).unwrap();
         assert_eq!(bad["isError"], true);
-        for _ in 0..5 {
+        for _ in 0..4 {
             call(&mut c, "undo", json!({}));
         }
         volumes.push(body_volume(&mut c));
@@ -298,7 +298,7 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
     }
     let v = agent.join().unwrap();
     assert!((v[0] - v0).abs() < 0.1);
-    assert!((v[1] - v[0] - FILLET_ADDS).abs() < 30.0, "fillet {v:?}");
+    assert_eq!(v[1], v[0], "a waiting fillet leaves the body unchanged");
     assert!((v[2] - v[1] + HOLES_REMOVE).abs() < 30.0, "holes {v:?}");
     assert!((v[3] - v[2] + SLOT_REMOVES).abs() < 30.0, "slot {v:?}");
     assert!((v[4] - v0).abs() < 0.1, "undone {v:?}");
@@ -310,7 +310,7 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
 fn without_a_key_the_chat_says_why() {
     let mut st = AppState::new(soliddraft_app::document::Document::new(
         "Part1",
-        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+        std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
     ));
     st.chat = ChatState::offline("No API key, so the assistant is off.".into());
     st.chat.draft = "hello".into();

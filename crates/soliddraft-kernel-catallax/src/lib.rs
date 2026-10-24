@@ -7,6 +7,7 @@
 mod convert;
 mod diagnostics;
 mod drawing_queries;
+mod frames;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -18,7 +19,7 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "674d284db928c076b74eac3846670403c38bbad3";
+pub const CATALLAX_REVISION: &str = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -59,11 +60,13 @@ impl Solid {
         {
             return Ok(mesh.clone());
         }
-        let mesh = Arc::new(
+        let mesh = Arc::new(if options.chord_tolerance == MeshOptions::default().chord_tolerance {
+            self.app.display.value.clone()
+        } else {
             numerical(query, |dec| mesh_body(&self.app.built.model, self.app.built.result, options, dec))
                 .map_err(|e| query_error(query, e))?
-                .value,
-        );
+                .value
+        });
         // Keep one tolerance per immutable body so triangles and edges share the same mesh.
         *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
         Ok(mesh)
@@ -101,16 +104,8 @@ impl State {
         step["id"] = result.clone().into();
         steps.insert(seq, step);
         let input = json!({"format":"soliddraft-recipe/1", "name":"SolidDraft", "steps": steps.values().collect::<Vec<_>>(), "result": result});
-        if self.capture {
-            let problem = catallax_app::soliddraft::convert(&input.to_string())
-                .map(|c| serde_json::to_value(c.recipe).expect("Catallax recipes serialize"));
-            if let Ok(problem) = problem {
-                self.questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
-            }
-        }
-        let app = catallax_app::build_soliddraft(&input.to_string(), &MeshOptions::default(), &mut Decider::default())
-            .map_err(|e| build_error(op, e))?
-            .body;
+        let questions = self.capture.then_some(&mut self.questions);
+        let app = build(&input, op, questions)?;
         if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
             return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
         }
@@ -118,6 +113,7 @@ impl State {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(self.id());
+        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
         self.bodies.insert(
             body,
             Stored {
@@ -127,7 +123,7 @@ impl State {
                 solid: Some(Arc::new(Solid {
                     app,
                     ids,
-                    display: Mutex::new(None),
+                    display: Mutex::new(Some(display)),
                     topology: OnceLock::new(),
                     mass: OnceLock::new(),
                 })),
@@ -196,6 +192,51 @@ fn gap(what: &str, stage: &str) -> KernelError {
     KernelError::Unsupported(format!(
         "{what} is not available in the Catallax application entry (Catallax stage {stage})"
     ))
+}
+
+fn build(input: &Value, op: OpKind, questions: Option<&mut Vec<Value>>) -> KernelResult<ApplicationBody> {
+    let mut converted =
+        catallax_app::soliddraft::convert(&input.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
+    let sources = input["steps"].as_array().expect("generated recipe steps");
+    let mut planes = BTreeMap::new();
+    for source in sources {
+        if source["op"] != "profile" {
+            continue;
+        }
+        let plane: Plane = serde_json::from_value(source["plane"].clone())
+            .map_err(|e| KernelError::InvalidInput(format!("stored profile frame: {e}")))?;
+        let name = source["id"].as_str().expect("generated step id");
+        let id = &converted.steps[name];
+        let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted profile step");
+        if let catallax_recipe::Operation::Sketch { plane: pose, .. } = &mut step.op {
+            if let Some(rotation) = frames::rotation(plane) {
+                pose.rotation = rotation;
+            }
+            planes.insert(name, (plane, pose.rotation.clone()));
+        }
+    }
+    for source in sources {
+        if source["op"] != "extrude" || source["direction"].is_null() {
+            continue;
+        }
+        let direction: Vec3 = serde_json::from_value(source["direction"].clone())
+            .map_err(|e| KernelError::InvalidInput(format!("stored sweep direction: {e}")))?;
+        let profile = source["profile"].as_str().expect("generated profile id");
+        let (plane, rotation) = &planes[profile];
+        if let Some(direction) = frames::normal_sweep(*plane, rotation, direction) {
+            let id = &converted.steps[source["id"].as_str().expect("generated step id")];
+            let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted extrusion step");
+            if let catallax_recipe::Operation::Extrude { direction: sweep, .. } = &mut step.op {
+                *sweep = Some(direction);
+            }
+        }
+    }
+    if let Some(questions) = questions {
+        let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
+        questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
+    }
+    catallax_app::build(&converted.recipe, &MeshOptions::default(), &mut Decider::default())
+        .map_err(|e| build_error(op, e))
 }
 
 fn build_error(op: OpKind, error: Error) -> KernelError {
@@ -330,7 +371,7 @@ impl Kernel for CatallaxKernel {
     fn fillet(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
         self.observe("fillet", || {
             self.solid(body)?;
-            Err(gap("fillet", "4 (or stage 3 if brought forward)"))
+            Err(gap("fillet", "3 for fillets between planes and cylinders; Catallax stage 4 for other fillets"))
         })
     }
 
@@ -425,6 +466,7 @@ impl Kernel for CatallaxKernel {
     fn topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.observe("topology", || {
             let solid = self.solid(body)?;
+            // Topology uses the original certified display, independent of later mesh requests.
             solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids)).clone()
         })
     }

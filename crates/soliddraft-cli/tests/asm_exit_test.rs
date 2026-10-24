@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -48,7 +48,7 @@ impl Dir {
 
 /// A block `w` x 20 x 10, centred in plan, saved at `path` (keeping its id).
 fn save_block(path: &std::path::Path, w: f64) {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut doc = if path.exists() { Document::open(path, kernel).unwrap() } else { Document::new("Block", kernel) };
     for id in doc.features().iter().map(|f| f.id).rev().collect::<Vec<_>>() {
         doc.execute(Command::DeleteFeature { id }).unwrap();

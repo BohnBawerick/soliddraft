@@ -1,6 +1,6 @@
 [package]
 name = "soliddraft-server"
-description = "Serves the web build of SolidDraft, with the geometry kernel and the assistant's model calls that a browser cannot make itself."
+description = "Serves the web build of SolidDraft, with the assistant's model calls that a browser cannot make itself."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,6 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-soliddraft-kernel-api.workspace = true
-soliddraft-kernel-smlib.workspace = true
-soliddraft-kernel-remote.workspace = true
 soliddraft-assistant.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -21,7 +18,6 @@ tiny_http = "0.12.0"
 flate2 = "1.1.10"
 
 [dev-dependencies]
-soliddraft-kernel-api = { workspace = true, features = ["contract"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["blocking"] }
 
 [lints]

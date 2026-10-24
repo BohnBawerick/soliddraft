@@ -112,7 +112,7 @@ impl DisplayMesh {
         Ok(())
     }
 
-    /// The binary form. `made_by` says what made it, such as "smlib c9c5979 coarse".
+    /// The binary form. `made_by` says what made it, such as "catallax a778fb4 coarse".
     pub fn encode(&self, made_by: &str) -> Vec<u8> {
         let mut w = Writer::with_capacity(32 + self.heap_bytes());
         w.raw(MAGIC);

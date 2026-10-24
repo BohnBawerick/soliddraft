@@ -14,7 +14,7 @@ use egui_kittest::kittest::Queryable;
 use glam::Vec3;
 use soliddraft_app::app::{Automation, SolidDraftApp};
 use soliddraft_app::chat::ChatState;
-use soliddraft_app::document::{FeatureKind, FeatureStatus, Selection};
+use soliddraft_app::document::{FeatureStatus, Selection};
 use soliddraft_app::sketch::{P2, SolveStatus};
 use soliddraft_app::sketcher::Frame;
 use soliddraft_assistant::{MockProvider, MockTurn};
@@ -46,7 +46,7 @@ fn harness() -> App<'static> {
                 cc,
                 soliddraft_app::document::Document::new(
                     "Part1",
-                    std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+                    std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
                 ),
                 Automation::default(),
             )
@@ -327,11 +327,7 @@ fn demo_part_renders() {
         .with_step_dt(1.0 / 60.0)
         .wgpu()
         .build_eframe(|cc| {
-            let mut app = SolidDraftApp::new(
-                cc,
-                soliddraft_app::demo_document_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new())),
-                Automation::default(),
-            );
+            let mut app = SolidDraftApp::new(cc, soliddraft_app::demo_document(), Automation::default());
             let provider = std::sync::Arc::new(MockProvider::new(vec![
                 MockTurn::tools(
                     "",
@@ -551,36 +547,15 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
         feature_status(&harness, "Cut-Extrude2")
     );
 
-    // 6. Inside fillet R8 on the edge where the flange meets the base, seen from behind.
-    look_from(&mut harness, 45.0, 35.0);
-    let inside = screen_of(&harness, Vec3::new(70.0, 10.0, 10.0));
-    click_at(&mut harness, inside);
-    let sel = harness.state().state.doc.selection;
-    assert!(matches!(sel, Some(Selection::Edge(_))), "expected the inside edge, got {sel:?}");
-    click_button(&mut harness, "Fillet");
-    assert_eq!(harness.state().state.editor.as_ref().unwrap().edges().len(), 1);
-    set_field(&mut harness, "Radius", "8");
-    harness.run_steps(4);
-    save(&mut harness, "17-fillet-preview");
-    harness.key_press(Key::Enter);
-    settle(&mut harness);
-    assert_eq!(feature_status(&harness, "Fillet1"), FeatureStatus::Ok, "{:?}", feature_status(&harness, "Fillet1"));
-
-    // 7. Chamfer 2 mm on the flange's top front edge.
-    harness.key_press(Key::I);
-    settle(&mut harness);
-    let top_front = screen_of(&harness, Vec3::new(100.0, 0.0, 60.0));
-    click_at(&mut harness, top_front);
-    assert!(matches!(harness.state().state.doc.selection, Some(Selection::Edge(_))));
-    click_button(&mut harness, "Chamfer");
-    set_field(&mut harness, "Distance", "2");
-    harness.key_press(Key::Enter);
-    settle(&mut harness);
-    assert_eq!(feature_status(&harness, "Chamfer1"), FeatureStatus::Ok, "{:?}", feature_status(&harness, "Chamfer1"));
-    harness.key_press(Key::Escape);
-    harness.key_press(Key::Z);
-    settle(&mut harness);
-    save(&mut harness, "18-bracket");
+    // Finishing commands stay visible while the kernel operations wait.
+    for (id, stage) in [("fillet", "Catallax stage 3"), ("chamfer", "Catallax stage 3")] {
+        let command = soliddraft_app::commands::get(id).unwrap();
+        let state = &harness.state().state;
+        assert!(!command.ribbon.is_empty());
+        assert!(!command.is_enabled(state));
+        assert!(command.tip(state).contains(stage));
+        assert!(command.action_now(state).is_none());
+    }
     let v_done = volume(&harness);
 
     // 8. Save, then reopen through the recent-files menu.
@@ -600,7 +575,7 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     harness.run_steps(2);
     harness.get_by_label("bracket.dwprt").click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.doc.features.len(), 12, "{:?}", feature_names(&harness));
+    assert_eq!(harness.state().state.doc.features.len(), 10, "{:?}", feature_names(&harness));
     assert_eq!(harness.state().state.doc.name, "bracket");
     let v_reopened = volume(&harness);
     assert!((v_reopened - v_done).abs() < 1e-3, "reopened volume {v_reopened} vs {v_done}");
@@ -619,40 +594,14 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
     }
     let v_thick = volume(&harness);
     assert!(v_thick > v_done + 120.0 * 90.0 * 3.0, "thicker base: {v_done} -> {v_thick}");
-    let fillet_edge = harness.state().state.doc.features.iter().find(|f| f.name == "Fillet1").map(|f| match &f.kind {
-        FeatureKind::Fillet(p) => p.edges[0].label.clone(),
-        _ => unreachable!(),
-    });
-    eprintln!("fillet follows {fillet_edge:?}");
     save(&mut harness, "20-thickness-14");
 
-    // 10. Suppress the flange: the fillet and chamfer lose their edges and ask for repair.
+    // Suppressing and restoring the flange still rebuilds the supported features.
     click_row(&mut harness, "Boss-Extrude2");
     click_button(&mut harness, "Suppress");
     settle(&mut harness);
-    assert!(
-        matches!(feature_status(&harness, "Fillet1"), FeatureStatus::NeedsRepair(_)),
-        "{:?}",
-        feature_status(&harness, "Fillet1")
-    );
-    assert!(matches!(feature_status(&harness, "Chamfer1"), FeatureStatus::NeedsRepair(_)));
-    save(&mut harness, "21-needs-repair");
-
-    // Repair the fillet onto the base's back top edge.
-    click_row(&mut harness, "Fillet1");
-    click_button(&mut harness, "Repair…");
-    assert!(matches!(
-        harness.state().state.editor.as_ref().map(|e| &e.params),
-        Some(soliddraft_app::state::EditorParams::Repair { .. })
-    ));
-    look_from(&mut harness, 45.0, 35.0);
-    let back_top = screen_of(&harness, Vec3::new(30.0, 90.0, 14.0));
-    click_at(&mut harness, back_top);
-    save(&mut harness, "22-repair-pick");
-    harness.key_press(Key::Enter);
+    assert_eq!(feature_status(&harness, "Boss-Extrude2"), FeatureStatus::Inactive);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     settle(&mut harness);
-    assert_eq!(feature_status(&harness, "Fillet1"), FeatureStatus::Ok, "{:?}", feature_status(&harness, "Fillet1"));
-    harness.key_press(Key::I);
-    settle(&mut harness);
-    save(&mut harness, "23-repaired");
+    assert!(harness.state().state.doc.features.iter().all(|f| f.status == FeatureStatus::Ok));
 }

@@ -1356,12 +1356,7 @@ impl ToolHost for CommandTools<'_> {
 /// boss with a Ø12 bore. The fillet, the hole pattern and the slot are left for the
 /// assistant.
 pub fn board_bracket() -> Document {
-    board_bracket_on(crate::kernel())
-}
-
-/// Builds the assistant sample on an explicit backend for regression scenarios.
-pub fn board_bracket_on(kernel: std::sync::Arc<dyn soliddraft_kernel_api::Kernel>) -> Document {
-    let mut doc = Document::new("Part1", kernel);
+    let mut doc = Document::new("Part1", crate::kernel());
     let rect = |center: Point, width: f64, height: f64| Shape::Rectangle { center, width, height };
     let circle = |center: Point, diameter: f64| Shape::Circle { center, diameter };
     let steps = [
@@ -1460,7 +1455,7 @@ mod tests {
 
     #[test]
     fn the_board_bracket_builds() {
-        let doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let doc = board_bracket();
         let names: Vec<&str> = doc.features.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(
             names,
@@ -1488,7 +1483,7 @@ mod tests {
 
     #[test]
     fn propose_apply_undo_is_one_step() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket();
         let mut book = ProposalBook::default();
         let before = doc.features.len();
         let depth = doc.undo_depth();
@@ -1529,7 +1524,7 @@ mod tests {
 
     #[test]
     fn unresolved_references_are_rejected_before_preview() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket();
         let mut book = ProposalBook::default();
         let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
         for (commands, expect) in [
@@ -1553,7 +1548,7 @@ mod tests {
 
     #[test]
     fn the_inside_corner_reads_as_concave() {
-        let mut doc = board_bracket_on(std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()));
+        let mut doc = board_bracket();
         let mut book = ProposalBook::default();
         let tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
         let all: Vec<Value> = tools

@@ -1,39 +1,21 @@
 //! The server behind the web build of SolidDraft.
 //!
-//! The app runs in the browser as WebAssembly. The server gives it the two things it
-//! cannot have there:
-//!
-//! - **The geometry kernel.** `POST /api/kernel` answers one kernel call in the protocol of
-//!   `soliddraft-kernel-remote`. Each browser tab sends a session id in the
-//!   `x-soliddraft-session` header; a session sees only the bodies it made, and its bodies
-//!   are released when the tab closes (`POST /api/session/close`) or stops sending its
-//!   heartbeat (`POST /api/session/ping`).
-//! - **The assistant's model.** `POST /api/assistant` takes a provider-neutral chat
-//!   request, runs it on the provider the server's environment configures, and streams the
-//!   reply back as JSON lines (`soliddraft_assistant::relay`). The API key stays here.
-//!
-//! Everything else is the web build itself, served as static files. `GET /api/info` says
-//! which kernel answers and whether the assistant is on, and `GET /version` which commit
-//! the running build was made from.
+//! The application and Catallax run in one browser WebAssembly module. The server
+//! serves its static files and relays assistant requests to the configured provider.
+//! API keys stay on the server. `GET /api/info` reports the assistant's state and
+//! `GET /version` identifies the running build.
 
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 use serde_json::json;
 use soliddraft_assistant::Provider;
 use soliddraft_assistant::relay;
 use soliddraft_assistant::wire::ChatRequest;
-use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_remote::Session;
 use tiny_http::{Header, Method, Request, Response, StatusCode};
-
-/// The header that names a browser tab's kernel session.
-pub const SESSION_HEADER: &str = "x-soliddraft-session";
 
 /// Largest request body accepted, in bytes.
 const MAX_BODY: u64 = 64 << 20;
@@ -45,25 +27,14 @@ const COMPRESS_FROM: usize = 16 << 10;
 pub struct Config {
     /// The directory holding the web build (`index.html` and the WebAssembly).
     pub web_dir: PathBuf,
-    /// The kernel every session shares.
-    pub kernel: Arc<dyn Kernel>,
     /// The assistant's provider, or why there is none.
     pub provider: Result<Arc<dyn Provider>, String>,
-    /// How long a session may go without a request or heartbeat before its bodies are
-    /// released.
-    pub session_idle: Duration,
     /// The commit the build was made from, if the build said (`GET /version`).
     pub commit: Option<String>,
 }
 
-struct SessionEntry {
-    session: Session,
-    last_seen: Instant,
-}
-
 struct Shared {
     config: Config,
-    sessions: Mutex<HashMap<String, SessionEntry>>,
 }
 
 /// A running server.
@@ -76,7 +47,7 @@ impl Server {
     /// Binds `addr`. Port 0 picks a free port; [`Server::addr`] says which.
     pub fn bind(addr: &str, config: Config) -> Result<Server, String> {
         let http = tiny_http::Server::http(addr).map_err(|e| format!("cannot listen on {addr}: {e}"))?;
-        Ok(Server { http: Arc::new(http), shared: Arc::new(Shared { config, sessions: Mutex::new(HashMap::new()) }) })
+        Ok(Server { http: Arc::new(http), shared: Arc::new(Shared { config }) })
     }
 
     /// The address the server listens on.
@@ -87,16 +58,6 @@ impl Server {
     /// Serves until the process ends. Each request gets its own thread, since an assistant
     /// reply streams for as long as the model writes.
     pub fn run(self) {
-        let shared = self.shared.clone();
-        std::thread::Builder::new()
-            .name("session-reaper".into())
-            .spawn(move || {
-                loop {
-                    std::thread::sleep(Duration::from_secs(30));
-                    reap(&shared, Instant::now());
-                }
-            })
-            .expect("spawn the session reaper");
         for request in self.http.incoming_requests() {
             let shared = self.shared.clone();
             let spawned = std::thread::Builder::new().name("request".into()).spawn(move || handle(&shared, request));
@@ -114,29 +75,12 @@ impl Server {
     }
 }
 
-/// Releases the bodies of sessions that have been quiet too long.
-fn reap(shared: &Shared, now: Instant) {
-    let idle = shared.config.session_idle;
-    let mut sessions = shared.sessions.lock().unwrap_or_else(|e| e.into_inner());
-    sessions.retain(|id, entry| {
-        let keep = now.duration_since(entry.last_seen) < idle;
-        if !keep {
-            log::info!("session {id} idle; releasing {} bodies", entry.session.body_count());
-            entry.session.release_all(shared.config.kernel.as_ref());
-        }
-        keep
-    });
-}
-
-fn handle(shared: &Shared, mut request: Request) {
+fn handle(shared: &Shared, request: Request) {
     let path = request.url().split('?').next().unwrap_or("/").to_owned();
     let method = request.method().clone();
     let result = match (&method, path.as_str()) {
         (Method::Get, "/api/info") => Ok(info(shared)),
         (Method::Get, "/version") => Ok(version(shared)),
-        (Method::Post, "/api/kernel") => kernel_call(shared, &mut request),
-        (Method::Post, "/api/session/ping") => touch(shared, &request, false),
-        (Method::Post, "/api/session/close") => touch(shared, &request, true),
         (Method::Post, "/api/assistant") => return assistant(shared, request),
         (Method::Get | Method::Head, p) if !p.starts_with("/api/") => static_file(&shared.config.web_dir, p),
         _ => Err((StatusCode(404), "not found".to_owned())),
@@ -226,34 +170,15 @@ fn compress(bytes: &[u8]) -> Vec<u8> {
 }
 
 fn info(shared: &Shared) -> Reply {
-    let kernel = shared.config.kernel.backend();
     let assistant = match &shared.config.provider {
         Ok(p) => json!({ "on": true, "provider": p.name(), "model": p.model() }),
         Err(reason) => json!({ "on": false, "reason": reason }),
     };
-    Reply::json(json!({ "kernel": kernel, "assistant": assistant }).to_string())
+    Reply::json(json!({ "assistant": assistant }).to_string())
 }
 
 fn version(shared: &Shared) -> Reply {
     Reply::json(json!({ "commit": shared.config.commit, "version": env!("CARGO_PKG_VERSION") }).to_string())
-}
-
-/// The session id a request names, in the header or, for a beacon, which cannot set
-/// headers, in the `session` query parameter. Ids are the browser's own random tokens.
-fn session_id(request: &Request) -> Result<String, (StatusCode, String)> {
-    let from_query = || {
-        let query = request.url().split_once('?')?.1;
-        query.split('&').find_map(|pair| pair.strip_prefix("session=")).map(str::to_owned)
-    };
-    let id = request
-        .headers()
-        .iter()
-        .find(|h| h.field.equiv(SESSION_HEADER))
-        .map(|h| h.value.as_str().to_owned())
-        .or_else(from_query)
-        .ok_or((StatusCode(400), format!("missing the {SESSION_HEADER} header")))?;
-    let well_formed = (8..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
-    if well_formed { Ok(id) } else { Err((StatusCode(400), "bad session id".into())) }
 }
 
 fn read_body(request: &mut Request) -> Result<String, (StatusCode, String)> {
@@ -267,31 +192,6 @@ fn read_body(request: &mut Request) -> Result<String, (StatusCode, String)> {
         return Err((StatusCode(413), "request too large".into()));
     }
     Ok(body)
-}
-
-fn kernel_call(shared: &Shared, request: &mut Request) -> HandlerResult {
-    let id = session_id(request)?;
-    let body = read_body(request)?;
-    // The kernel runs one call at a time anyway, so one lock over every session costs
-    // nothing and keeps a session's bodies consistent with its calls.
-    let mut sessions = shared.sessions.lock().unwrap_or_else(|e| e.into_inner());
-    let entry =
-        sessions.entry(id).or_insert_with(|| SessionEntry { session: Session::new(), last_seen: Instant::now() });
-    entry.last_seen = Instant::now();
-    Ok(Reply::json(entry.session.handle(shared.config.kernel.as_ref(), &body)))
-}
-
-fn touch(shared: &Shared, request: &Request, close: bool) -> HandlerResult {
-    let id = session_id(request)?;
-    let mut sessions = shared.sessions.lock().unwrap_or_else(|e| e.into_inner());
-    if close {
-        if let Some(mut entry) = sessions.remove(&id) {
-            entry.session.release_all(shared.config.kernel.as_ref());
-        }
-    } else if let Some(entry) = sessions.get_mut(&id) {
-        entry.last_seen = Instant::now();
-    }
-    Ok(Reply::json("{}".into()))
 }
 
 /// Streams one assistant request's reply as JSON lines.
@@ -390,8 +290,8 @@ fn static_file(root: &Path, url_path: &str) -> HandlerResult {
         _ => "application/octet-stream",
     };
     // trunk names the app's files by content hash, so those can be cached for good. The
-    // page and the kernel module keep their names from build to build: the browser checks
-    // them each time and downloads them again only when the ETag changed.
+    // page keeps its name from build to build: the browser checks
+    // it each time and downloads it again only when the ETag changed.
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let hashed = stem
         .trim_end_matches("_bg")

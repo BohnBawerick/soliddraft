@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -44,7 +44,7 @@ fn json(dir: &Path, args: &[&str]) -> Value {
 
 /// A pin 60 mm across, saved as `pin.dwprt` in `dir`.
 fn save_pin(dir: &Path) {
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut doc = Document::new("Pin", kernel);
     let mut sketch = Sketch::new();
     sketch.circle_at(P2::new(0.0, 0.0), 60.0).unwrap();

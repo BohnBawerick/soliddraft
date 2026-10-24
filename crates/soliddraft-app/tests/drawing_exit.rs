@@ -134,7 +134,7 @@ fn circles(list: &[(P2, f64)]) -> Sketch {
 fn bracket_document() -> Document {
     let mut doc = soliddraft_app::document::Document::new(
         "Part1",
-        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+        std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
     );
     doc.name = "Bracket".into();
     let sketch_on = |doc: &mut Document, plane: PlaneKind, sketch: Sketch| -> u64 {
@@ -531,7 +531,7 @@ fn fixture_drawing_renders_with_attention_list() {
     let _gpu = gpu_lock();
     let mut harness = harness(soliddraft_app::document::Document::new(
         "Part1",
-        std::sync::Arc::new(soliddraft_kernel_smlib::SmlibKernel::new()),
+        std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
     ));
     harness.run_steps(3);
     let doc = soliddraft_app::drawing::DrawingDoc::new(soliddraft_drawing::fixture::bracket_a3());

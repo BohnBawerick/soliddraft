@@ -1,11 +1,11 @@
 //! `soliddraft`, the headless command line.
 //!
 //! `soliddraft replay [--json] [--steps] <recipe.json>...` replays each recipe on the
-//! SMLib backend and prints the result body's face and edge counts, volume, area,
+//! Catallax backend and prints the result body's face and edge counts, volume, area,
 //! validity and geometric digest. It exits with status 1 if any recipe fails.
 //!
 //! `soliddraft part [--json] <part.dwprt>...` opens each part file, rebuilds it on the
-//! SMLib backend and prints every feature's state, the final body, and the material
+//! Catallax backend and prints every feature's state, the final body, and the material
 //! and mass. It exits with
 //! status 1 if a file cannot be read or a feature did not build.
 //!
@@ -59,7 +59,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::{Document, FeatureStatus};
 use soliddraft_recipe::{BodySummary, ReplayReport, StepOutcome};
 
@@ -81,14 +81,14 @@ usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft material info|faces|set|paint|update <part.dwprt> ...
        soliddraft quality <part.dwprt> [--set <quality>] [--export <chord>,<angle>] [--json]
 
-replay  Replays recipes on the SMLib kernel and reports, for each result body, its
+replay  Replays recipes on the Catallax kernel and reports, for each result body, its
         face, edge and vertex counts, volume, area, validity and geometric digest.
           --json    print one JSON report per recipe, one per line
           --steps   also report every step, not only the result
 
 view    `soliddraft view --help` describes the view command.
 
-part    Opens SolidDraft part files, rebuilds them on the SMLib kernel and reports
+part    Opens SolidDraft part files, rebuilds them on the Catallax kernel and reports
         each feature's state, the final body, and the material and mass.
           --json    print one JSON report per file, one per line
 
@@ -171,7 +171,7 @@ fn main() -> ExitCode {
         }
         Some("quality") => quality::run(&args[1..]),
         Some("--version") => {
-            let k = SmlibKernel::new();
+            let k = CatallaxKernel::new();
             let b = k.backend();
             println!("soliddraft {} ({} {})", env!("CARGO_PKG_VERSION"), b.name, b.version);
             ExitCode::SUCCESS
@@ -206,7 +206,7 @@ fn replay(args: &[String]) -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     }
-    let kernel = SmlibKernel::new();
+    let kernel = CatallaxKernel::new();
     let mut ok = true;
     for file in &files {
         let report = std::fs::read_to_string(file)
@@ -306,7 +306,7 @@ fn part(args: &[String]) -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     }
-    let kernel: Arc<dyn Kernel> = Arc::new(SmlibKernel::new());
+    let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let mut ok = true;
     for file in &files {
         let doc = match Document::open(file, kernel.clone()) {
@@ -439,7 +439,11 @@ fn mcp(args: &[String]) -> ExitCode {
                 return ExitCode::FAILURE;
             }
         },
-        None if demo => soliddraft_app::demo_document_on(kernel.clone()),
+        None if demo => {
+            let mut doc = soliddraft_app::document::Document::new("Part1", kernel);
+            soliddraft_app::populate_demo(&mut doc);
+            doc
+        }
         None => soliddraft_app::document::Document::new("Part1", kernel),
     };
     let mut book = ProposalBook::default();

@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      refresh_catallax_views:
+        description: Generate Catallax view and drawing baselines as artifacts for review
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,20 +22,12 @@ permissions:
   contents: read
 
 jobs:
-  # Formatting, lints and the pinned kernel commit.
+  # Formatting and lints.
   lint:
-    name: Lint (fmt, clippy, pinned kernel)
+    name: Lint (fmt, clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Check the pinned usd-brep commit
-        run: |
-          pinned=$(sed -n 's/^pub const USD_BREP_COMMIT: &str = "\(.*\)";/\1/p' crates/soliddraft-smlib-sys/src/lib.rs)
-          actual=$(git -C third_party/usd-brep rev-parse HEAD)
-          echo "pinned $pinned, submodule $actual"
-          test "$pinned" = "$actual"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -38,21 +35,35 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-  # The kernel build and the exit tests.
-  test:
-    name: Test (kernel, exit test)
+  kernel:
+    name: Catallax adapter and recipes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --all-features
+      - run: cargo test -p soliddraft-kernel-catallax -p soliddraft-recipe --all-features --locked --no-fail-fast
+      - name: Generate the requested Catallax view and drawing baselines
+        if: inputs.refresh_catallax_views
+        env:
+          SOLIDDRAFT_BLESS: "1"
+        run: |
+          cargo test -p soliddraft-cli --test view_exit_test bracket_catallax_views_match_golden_across_runs --locked -- --exact
+          cargo test -p soliddraft-cli --test draw_exit_test bracket_drawing_exports_and_follows_the_part --locked -- --exact
+          cargo test -p soliddraft-cli --test d3_exit_test bracket_sections_details_and_sheets --locked -- --exact
+      - uses: actions/upload-artifact@v4
+        if: inputs.refresh_catallax_views
+        with:
+          name: catallax-view-baseline
+          path: recipes/golden/catallax-*
+          if-no-files-found: error
 
-  # Rust-only tests also cover macOS and Windows. Assembly integration tests need SMLib and run in the workspace job.
-  rust-only:
-    name: Rust-only crates (${{ matrix.os }})
+  # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
+  test:
+    name: Workspace (${{ matrix.os }})
+    env:
+      # Workspace numeric code must share the dependency optimization level.
+      CARGO_PROFILE_TEST_OPT_LEVEL: 2
     strategy:
       fail-fast: false
       matrix:
@@ -62,10 +73,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p soliddraft-kernel-api -p soliddraft-kernel-catallax -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials --all-features
+      - run: cargo test --workspace --all-features --locked --no-fail-fast
 
-  # The web build: the app compiled to WebAssembly. It does not use the C++ kernel, so it
-  # needs no submodule and no ccache.
+  # Catallax is compiled into the application WebAssembly module.
   web:
     name: Web build (wasm32)
     runs-on: ubuntu-latest
@@ -75,7 +85,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p soliddraft-web --target wasm32-unknown-unknown
+      - run: cargo build -p soliddraft-web --target wasm32-unknown-unknown --locked
 
   msrv:
     name: Minimum Rust version (Rust-only crates)
@@ -87,19 +97,26 @@ jobs:
       - run: cargo check -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials -p soliddraft-assembly --all-features
 
   catallax-interactive:
-    name: Catallax bracket (render, pick, edit, rebuild)
-    runs-on: ubuntu-latest
+    name: Catallax bracket (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            backend: vulkan
+          - os: macos-latest
+            backend: metal
+    runs-on: ${{ matrix.os }}
     env:
-      WGPU_BACKEND: vulkan
+      WGPU_BACKEND: ${{ matrix.backend }}
       SOLIDDRAFT_REQUIRE_GPU: "1"
       XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install the software Vulkan adapter
+        if: runner.os == 'Linux'
         run: |
           printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
@@ -107,11 +124,13 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: catallax-drawing-workspace
-          path: target/exit-test/catallax-drawing.png
+          name: catallax-drawing-workspace-${{ matrix.os }}
+          path: target/exit-test/
 
   application-loop:
     name: Application scenarios (MCP, viewport, kernel replay)
@@ -122,8 +141,6 @@ jobs:
       XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -157,6 +174,27 @@ jobs:
       - run: cargo build --locked -p soliddraft-cli
       - name: Build the verifier from the same pinned revision
         run: cargo build --locked --manifest-path .ci-catallax/Cargo.toml -p catallax-cli --bin catallax-verify --target-dir target
+      - name: Replay the captured slot and full slot-cut questions
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop" <<'PYTHON'
+          import json, pathlib, subprocess, sys
+          binary = pathlib.Path("target/debug/catallax-verify").resolve()
+          about = json.loads(subprocess.check_output([binary, "about"], text=True))
+          assert about["default_work"] == 100_000_000, about
+          for name in ("slot", "slot-cut"):
+              directory = pathlib.Path(sys.argv[1]) / f"{name}-replay"
+              directory.mkdir(parents=True, exist_ok=True)
+              question = json.loads(pathlib.Path(f"crates/soliddraft-kernel-catallax/tests/fixtures/{name}-native-question.json").read_text())
+              question["max_work"] = about["default_work"]
+              (directory / "about.json").write_text(json.dumps(about))
+              (directory / "question.json").write_text(json.dumps(question))
+              with (directory / "response.json").open("w") as output:
+                  subprocess.run([binary, "replay", directory / "question.json", "--out", directory / "evidence"], stdout=output, check=True)
+              response = json.loads((directory / "response.json").read_text())
+              assert response["manifest"]["status"] == "answered", response["manifest"]
+              assert response["work"]["limit"] == 100_000_000, response["work"]
+              print(f"{name} answered with its original geometry: {response['work']}")
+          PYTHON
       - name: Run the bracket and refusal scenarios
         run: |
           status=0

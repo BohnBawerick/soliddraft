@@ -1,6 +1,6 @@
 //! Phase 2 exit test, headless: the sample L-bracket built through the command layer,
 //! saved, reopened, its base thickness changed, and every downstream feature either
-//! rebuilt or stopped with a repair.
+//! rebuilt, waited for its Catallax stage, or stopped with a repair.
 //!
 //! The bracket (sample dimensions): a 120 x 90 x 10 base with 8 mm corner radii, a 60 mm
 //! flange above it with rounded top corners, an 8 mm inside fillet where they meet, a
@@ -10,18 +10,18 @@
 use std::f64::consts::PI;
 use std::sync::Arc;
 
-use soliddraft_kernel_api::{Kernel, SurfaceKind, Vec3};
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_api::{Kernel, Vec3};
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{
     Align, ConstraintKind, DistanceKind, EntityKind, P2, PointRef, Sketch, SolveStatus, solve::solve,
 };
 use soliddraft_model::{
     BlendFeature, Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureId, FeatureKind,
-    FeatureStatus, Generator, ProfileSource, RepairReason, SketchFeature, SketchPlane,
+    FeatureStatus, ProfileSource, RepairReason, SketchFeature, SketchPlane,
 };
 
 fn kernel() -> Arc<dyn Kernel> {
-    Arc::new(SmlibKernel::new())
+    Arc::new(CatallaxKernel::new())
 }
 
 fn p(u: f64, v: f64) -> P2 {
@@ -215,12 +215,11 @@ fn bracket_volume(t: f64) -> f64 {
     let base = (120.0 * 90.0 - 4.0 * corner) * t;
     let flange = (120.0 * 70.0 - 2.0 * corner) * 10.0;
     let overlap = (120.0 * 10.0 - 2.0 * corner) * t; // flange inside the base
-    let fillet = corner * 120.0;
     let boss = PI * 144.0 * 14.0;
     let bore = PI * 36.0 * (t + 14.0);
     let holes = 4.0 * PI * 20.25 * t;
     let slot = (28.0 * 12.0 + PI * 36.0) * 10.0;
-    base + flange - overlap + fillet + boss - bore - holes - slot
+    base + flange - overlap + boss - bore - holes - slot
 }
 
 fn volume(doc: &Document) -> f64 {
@@ -237,7 +236,14 @@ fn report(doc: &Document) -> String {
 
 fn assert_all_ok(doc: &Document) {
     assert!(
-        doc.features().iter().all(|f| doc.status(f.id).unwrap().is_ok()),
+        doc.features().iter().all(|f| {
+            if matches!(f.kind, FeatureKind::Fillet(_)) {
+                matches!(doc.status(f.id), Some(FeatureStatus::Failed(error)) if error.contains("Catallax stage 3") && error.contains("Catallax stage 4"))
+                    && doc.body_after(f.id) == doc.body_before(f.id)
+            } else {
+                doc.status(f.id).unwrap().is_ok()
+            }
+        }),
         "not every feature built:\n{}",
         report(doc)
     );
@@ -282,7 +288,9 @@ fn bracket_survives_save_reopen_and_a_thicker_base() {
     for f in reopened.features() {
         let status = reopened.status(f.id).unwrap();
         assert!(
-            matches!(status, FeatureStatus::Ok | FeatureStatus::RepairNeeded(_)),
+            matches!(status, FeatureStatus::Ok | FeatureStatus::RepairNeeded(_))
+                || (f.id == ids.fillet
+                    && matches!(status, FeatureStatus::Failed(error) if error.contains("Catallax stage"))),
             "{} neither rebuilt nor asked for a repair: {status:?}",
             f.name
         );
@@ -298,25 +306,12 @@ fn bracket_survives_save_reopen_and_a_thicker_base() {
     assert_close(volume(&reopened), bracket_volume(12.0), "with a 12 mm base");
 
     // The references followed the base: the boss sketch now lies on z = 12 and the
-    // fillet rounds the corner at z = 12.
+    // waiting fillet keeps the preceding body at z = 12.
     let boss_plane = reopened.built_sketch(ids.boss_sketch).unwrap().plane;
     assert!((boss_plane.origin.z - 12.0).abs() < 1e-9, "boss sketch plane at {:?}", boss_plane.origin);
-    let t = kernel.topology(reopened.body().unwrap()).unwrap();
-    let named = &reopened.generated_faces(ids.fillet)[0];
-    assert_eq!(named.generator, Generator::Blend { edge: 0 });
-    let round = t.face(named.face).expect("the fillet face is in the final body");
-    // SMLib types its circular fillet surface as a cone; what matters is that it is curved.
-    assert_ne!(round.surface, SurfaceKind::Plane, "the fillet face is round");
-    assert!(
-        round.bbox.min.y > -35.0 - 1e-6 && round.bbox.max.y < -27.0 + 1e-6,
-        "fillet spans y -35..-27: {:?}",
-        round.bbox
-    );
-    assert!(
-        round.bbox.min.z > 12.0 - 1e-6 && round.bbox.max.z < 20.0 + 1e-6,
-        "fillet spans z 12..20: {:?}",
-        round.bbox
-    );
+    assert!(matches!(reopened.status(ids.fillet), Some(FeatureStatus::Failed(error))
+        if error.contains("Catallax stage 3") && error.contains("Catallax stage 4")));
+    assert_eq!(reopened.body_after(ids.fillet), reopened.body_before(ids.fillet));
 
     // Undo puts the 10 mm base back; redo makes it 12 again.
     assert!(reopened.undo().unwrap().starts_with("edit Base"));
@@ -339,7 +334,7 @@ fn removing_features_asks_for_repairs_instead_of_guessing() {
     let ids = build_bracket(&mut doc);
     assert_all_ok(&doc);
     let others_ok = |doc: &Document, except: &[FeatureId]| {
-        for f in doc.features().iter().filter(|f| !except.contains(&f.id)) {
+        for f in doc.features().iter().filter(|f| !except.contains(&f.id) && f.id != ids.fillet) {
             assert!(doc.status(f.id).unwrap().is_ok(), "{}: {:?}\n{}", f.name, doc.status(f.id), report(doc));
         }
     };

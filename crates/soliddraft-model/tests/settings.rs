@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use soliddraft_kernel_smlib::SmlibKernel;
+use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, SolveStatus, solve::solve};
 use soliddraft_model::{
     Command, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureKind, ProfileSource, SketchFeature,
@@ -13,7 +13,7 @@ use soliddraft_tessellation::{ExportTolerance, Level, Quality, Settings};
 
 /// A cylinder of radius 10 and height 20, so the quality setting shows.
 fn cylinder() -> Document {
-    let mut doc = Document::new("Pin", Arc::new(SmlibKernel::new()));
+    let mut doc = Document::new("Pin", Arc::new(CatallaxKernel::new()));
     let mut s = Sketch::new();
     s.circle_at(P2::new(0.0, 0.0), 20.0).unwrap();
     solve(&mut s, None, true);
@@ -101,7 +101,8 @@ fn the_quality_report_follows_the_setting() {
     let mut doc = cylinder();
     let auto = doc.quality_report().unwrap().unwrap();
     // A 20 x 20 x 20 box around the cylinder: diagonal 20 * sqrt(3).
-    assert!((auto.diagonal_mm - 20.0 * 3f64.sqrt()).abs() < 1e-6, "{}", auto.diagonal_mm);
+    let chord = doc.kernel().topology(doc.body().unwrap()).unwrap().display_chord_height.unwrap();
+    assert!((auto.diagonal_mm - 20.0 * 3f64.sqrt()).abs() <= 2.0 * 3f64.sqrt() * chord + 1e-6, "{}", auto.diagonal_mm);
     let standard = auto.level(Level::Standard);
     assert!((standard.deviation_mm.unwrap() - 0.002 * auto.diagonal_mm).abs() < 1e-12);
     assert!(auto.level(Level::Fine).triangles > standard.triangles);
