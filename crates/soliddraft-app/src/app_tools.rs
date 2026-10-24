@@ -26,7 +26,7 @@ use soliddraft_drawing::{
 use soliddraft_exchange::Format as ExportFormat;
 use soliddraft_kernel_api::Point2;
 
-use crate::command_tools::{CommandTools, Surface, feature_by_name, tool_specs};
+use crate::command_tools::{CommandTools, Surface, tool_specs};
 use crate::document::{Command, Document};
 use crate::drawing::document::DrawingDoc;
 use crate::drawing::reference::LinkState;
