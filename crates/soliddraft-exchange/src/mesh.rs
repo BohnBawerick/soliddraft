@@ -34,7 +34,7 @@ pub fn weld(mesh: &Mesh) -> Welded {
         });
         remap.push(i);
     }
-    for t in mesh.indices.chunks_exact(3) {
+    for t in mesh.indices.as_chunks::<3>().0 {
         let t = [remap[t[0] as usize], remap[t[1] as usize], remap[t[2] as usize]];
         if t[0] != t[1] && t[1] != t[2] && t[2] != t[0] {
             out.triangles.push(t);
