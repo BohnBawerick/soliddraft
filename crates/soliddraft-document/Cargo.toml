@@ -16,6 +16,9 @@ thiserror.workspace = true
 uuid = { version = "1.26.1", features = ["v4", "v8", "serde"] }
 zip.workspace = true
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fs2 = "0.4.3"
+
 # Random ids in the browser come from its crypto source.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "1.26.1", features = ["js"] }

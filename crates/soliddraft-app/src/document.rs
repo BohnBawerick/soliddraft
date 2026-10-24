@@ -10,6 +10,7 @@
 use crate::display_quality::{self, DisplayQuality};
 use crate::sketch::{self, Sketch};
 use glam::Vec3;
+use serde::{Deserialize, Serialize};
 use soliddraft_kernel_api::{
     BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, FaceId, Kernel, KernelError, Mesh, OpTag, Plane, Point2, Profile,
     SurfaceKind, TessellationParams, Topology,
@@ -33,7 +34,7 @@ fn app_id(id: model::FeatureId) -> FeatureId {
 }
 
 /// Built-in profiles: a quick extrude without a sketch.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ProfileKind {
     Rectangle { width: f64, height: f64 },
     Circle { diameter: f64 },
@@ -70,7 +71,7 @@ impl ProfileKind {
 }
 
 /// The three reference planes. Z is up; Front faces the viewer standing on -Y.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlaneKind {
     Top,
     Front,
@@ -106,7 +107,7 @@ impl PlaneKind {
 }
 
 /// Where a sketch lies: a reference plane or a planar face of the body so far.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SketchPlane {
     Reference { plane: PlaneKind },
     Face { face: FaceRef },
@@ -135,7 +136,7 @@ pub struct SketchFeature {
     pub sketch: Sketch,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExtrudeParams {
     /// The sketch to extrude; when `None`, the built-in profile on `plane`.
     pub sketch: Option<FeatureId>,
@@ -157,7 +158,7 @@ impl Default for ExtrudeParams {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CutParams {
     pub sketch: FeatureId,
     pub depth: f64,
@@ -172,13 +173,13 @@ impl CutParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilletParams {
     pub edges: Vec<EdgeRef>,
     pub radius: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChamferParams {
     pub edges: Vec<EdgeRef>,
     pub distance: f64,
@@ -318,7 +319,7 @@ pub enum RefKind {
 }
 
 /// A face or edge reference, as the repair editor collects them.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EntityRef {
     Face(FaceRef),
     Edge(EdgeRef),
@@ -511,7 +512,7 @@ impl DisplayMesh {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Command {
     AddSketch {
         plane: SketchPlane,
@@ -720,6 +721,29 @@ impl Document {
         &self.model
     }
 
+    /// Runs a canonical model command and refreshes the application document.
+    pub fn run_journal_command(&mut self, input: serde_json::Value) -> Result<(), String> {
+        match input["op"].as_str().unwrap_or_default() {
+            "app_command" => {
+                self.assistant_mark = input["assistant_mark"].as_bool().unwrap_or(false);
+                return self
+                    .apply(serde_json::from_value(input["command"].clone()).map_err(|e| e.to_string())?)
+                    .map(|_| ());
+            }
+            "app_undo" => return self.undo().map(|_| ()),
+            "app_redo" => return self.redo().map(|_| ()),
+            "app_rebuild" => {
+                self.rollback = serde_json::from_value(input["rollback"].clone()).map_err(|e| e.to_string())?;
+                return self.rebuild();
+            }
+            _ => {}
+        }
+        let result = self.model.run_journal_command(input);
+        self.touch();
+        self.after_change();
+        result
+    }
+
     pub fn kernel(&self) -> &Arc<dyn Kernel> {
         self.model.kernel()
     }
@@ -824,35 +848,48 @@ impl Document {
     }
 
     pub fn undo(&mut self) -> Result<String, String> {
-        let label = self.model.undo().map_err(|e| e.to_string())?;
-        self.touch();
-        self.after_change();
-        Ok(label)
+        let journal = self.model.journal_command(|| serde_json::json!({"op":"app_undo"}));
+        journal.finish((|| {
+            let label = self.model.undo().map_err(|e| e.to_string())?;
+            self.touch();
+            self.after_change();
+            Ok(label)
+        })())
     }
 
     pub fn redo(&mut self) -> Result<String, String> {
-        let label = self.model.redo().map_err(|e| e.to_string())?;
-        self.touch();
-        self.after_change();
-        Ok(label)
+        let journal = self.model.journal_command(|| serde_json::json!({"op":"app_redo"}));
+        journal.finish((|| {
+            let label = self.model.redo().map_err(|e| e.to_string())?;
+            self.touch();
+            self.after_change();
+            Ok(label)
+        })())
     }
 
     /// Runs a command as one undo entry and rebuilds. Returns the id of a
     /// feature the command created. A created feature that fails to build stays
     /// in the tree with its error, and the error comes back here too.
     pub fn apply(&mut self, command: Command) -> Result<Option<FeatureId>, String> {
-        let label = command.label();
-        let commands = self.to_model(command)?;
-        let done = self.model.execute(model::Command::Batch { label, commands }).map_err(|e| e.to_string())?;
-        self.touch();
-        self.after_change();
-        let created = done.created.map(app_id);
-        if let Some(id) = created
-            && let Some(FeatureStatus::Error(msg)) = self.feature(id).map(|f| f.status.clone())
-        {
-            return Err(msg);
-        }
-        Ok(created)
+        let journal = self.model.journal_command(|| {
+            serde_json::json!({
+                "op":"app_command", "command":command, "assistant_mark":self.assistant_mark
+            })
+        });
+        journal.finish((|| {
+            let label = command.label();
+            let commands = self.to_model(command)?;
+            let done = self.model.execute(model::Command::Batch { label, commands }).map_err(|e| e.to_string())?;
+            self.touch();
+            self.after_change();
+            let created = done.created.map(app_id);
+            if let Some(id) = created
+                && let Some(FeatureStatus::Error(msg)) = self.feature(id).map(|f| f.status.clone())
+            {
+                return Err(msg);
+            }
+            Ok(created)
+        })())
     }
 
     /// The model commands for one panel command.
@@ -983,16 +1020,19 @@ impl Document {
     /// The model caches every feature's body, so this rebuilds only from the
     /// first feature whose state moved.
     pub fn rebuild(&mut self) -> Result<(), String> {
-        let before = self.rollback.and_then(|c| self.features.get(c)).map(|f| model_id(f.id));
-        self.model.set_rollback(before);
-        self.after_change();
-        match self.features.iter().find_map(|f| match &f.status {
-            FeatureStatus::Error(e) => Some(format!("{}: {e}", f.name)),
-            _ => None,
-        }) {
-            Some(e) => Err(e),
-            None => Ok(()),
-        }
+        let journal = self.model.journal_command(|| serde_json::json!({"op":"app_rebuild", "rollback":self.rollback}));
+        journal.finish({
+            let before = self.rollback.and_then(|c| self.features.get(c)).map(|f| model_id(f.id));
+            self.model.set_rollback(before);
+            self.after_change();
+            match self.features.iter().find_map(|f| match &f.status {
+                FeatureStatus::Error(e) => Some(format!("{}: {e}", f.name)),
+                _ => None,
+            }) {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
+        })
     }
 
     /// Mirrors the model and refreshes the display, keeping the selection by name.

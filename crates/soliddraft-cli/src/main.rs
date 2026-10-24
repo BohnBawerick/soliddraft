@@ -54,6 +54,7 @@ mod draw;
 mod evidence;
 mod export;
 mod generate;
+mod journal;
 mod material;
 mod quality;
 mod screenshot;
@@ -75,6 +76,8 @@ usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft part [--json] <part.dwprt>...
        soliddraft mcp [--demo | --open <part.dwprt>] [--http PORT]
        soliddraft commands [--json] [<query>...]
+       soliddraft journal replay <journal.jsonl> [--out <report.json>]
+       soliddraft journal export <journal.jsonl> <report.jsonl>
        soliddraft key set|delete openrouter|anthropic
        soliddraft key status
        soliddraft draw <part.dwprt | recipe.json> [--template iso-a3] [--out <file>]...
@@ -135,6 +138,7 @@ asm     `soliddraft asm --help` describes the assembly commands.
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("journal") => journal::run(&args[1..]),
         Some("replay") => replay(&args[1..]),
         Some("view") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
             print!("{}", view::USAGE);
@@ -394,10 +398,19 @@ fn mcp(args: &[String]) -> ExitCode {
     let mut max_work = 100_000_000;
     let mut demo = false;
     let mut open = None;
+    let mut drawing_path = None;
     let mut http = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--drawing" => {
+                drawing_path = args.get(i + 1).map(std::path::PathBuf::from);
+                if drawing_path.is_none() {
+                    eprintln!("--drawing needs a drawing file");
+                    return ExitCode::from(2);
+                }
+                i += 1;
+            }
             "--bundle" => {
                 bundle = args.get(i + 1).map(std::path::PathBuf::from);
                 if bundle.is_none() {
@@ -442,6 +455,21 @@ fn mcp(args: &[String]) -> ExitCode {
         eprintln!("--max-work requires --bundle");
         return ExitCode::from(2);
     }
+    let Some(root) = soliddraft_app::settings::documents().recovery_folder() else {
+        eprintln!("mcp: no command journal folder is configured");
+        return ExitCode::FAILURE;
+    };
+    let journal = match soliddraft_document::journal::Session::start(&root.join("journals")) {
+        Ok(journal) => journal,
+        Err(e) => {
+            eprintln!("mcp: cannot start command journal: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = journal.configure(serde_json::json!({"max_work":bundle.as_ref().map(|_| max_work)})) {
+        eprintln!("mcp: cannot record kernel policy: {e}");
+        return ExitCode::FAILURE;
+    }
     let evidence_kernel =
         bundle.as_ref().map(|_| Arc::new(soliddraft_kernel_catallax::CatallaxKernel::with_diagnostics(max_work)));
     // A bundle counts the work each command asks of the kernel, outside the application.
@@ -462,9 +490,19 @@ fn mcp(args: &[String]) -> ExitCode {
         }
         None => soliddraft_app::document::Document::new("Part1", kernel),
     };
+    let mut drawing = match drawing_path {
+        Some(path) => match soliddraft_app::drawing::document::DrawingDoc::open(&path) {
+            Ok(doc) => Some(doc),
+            Err(e) => {
+                eprintln!("mcp: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
+        None => None,
+    };
     let mut book = ProposalBook::default();
     let mut session = McpSession::new("soliddraft", env!("CARGO_PKG_VERSION"), MCP_INSTRUCTIONS);
-    let host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: drawing.as_mut() };
     let mut host = match evidence::Evidence::new(host, evidence_kernel, counting, bundle, max_work) {
         Ok(host) => host,
         Err(e) => {
@@ -472,7 +510,7 @@ fn mcp(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match http {
+    let result = match http {
         None => match serve_stdio(&mut session, &mut host) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -495,7 +533,15 @@ fn mcp(args: &[String]) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
+    };
+    if let Some(error) = soliddraft_document::journal::failure() {
+        eprintln!("mcp: {error}");
+        return ExitCode::FAILURE;
     }
+    if result == ExitCode::SUCCESS {
+        journal.close();
+    }
+    result
 }
 
 fn key(args: &[String]) -> ExitCode {

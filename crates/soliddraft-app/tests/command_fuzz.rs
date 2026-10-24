@@ -455,7 +455,7 @@ fn run_over_mcp(calls: Vec<Call>) {
         if std::env::var_os("FUZZ_TRACE").is_some() {
             eprintln!("calling {}", request["params"].to_string().chars().take(600).collect::<String>());
         }
-        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
         let reply = session.handle(&mut host, request.clone()).expect("a request is answered");
         let refused = assert_reply(&request, &reply);
         if std::env::var_os("FUZZ_TRACE").is_some() {
@@ -497,7 +497,7 @@ fn run_as_assistant(calls: Vec<Call>, auto_apply: bool) {
         if std::env::var_os("FUZZ_TRACE").is_some() {
             eprintln!("calling {} {}", call.tool, call.arguments.to_string().chars().take(600).collect::<String>());
         }
-        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
+        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
         let out = call_checked(&mut host, &call.tool, call.arguments.clone(), &caller);
         assert!(!out.content.trim().is_empty(), "{} says nothing", call.tool);
         if out.is_error && !auto_apply {
@@ -545,7 +545,7 @@ proptest! {
 fn every_tool_refuses_an_empty_call_with_a_message() {
     let mut doc = board_bracket();
     let mut book = ProposalBook::default();
-    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
     let caller = Caller::Mcp { client: "test".into() };
     for spec in host.tools() {
         let schema_wants_fields = spec.input_schema["required"].as_array().is_some_and(|r| !r.is_empty());
@@ -582,7 +582,7 @@ fn a_size_no_part_has_is_refused_before_the_kernel_meets_it() {
     let started = std::time::Instant::now();
     for (tool, arguments) in calls {
         let before = snapshot(&doc, &book);
-        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
         let out = call_checked(&mut host, tool, arguments.clone(), &caller);
         assert!(out.is_error, "{tool} {arguments} ran");
         assert!(out.content.contains("at most") || out.content.contains("within"), "{tool}: {}", out.content);
@@ -590,7 +590,7 @@ fn a_size_no_part_has_is_refused_before_the_kernel_meets_it() {
     }
     assert!(started.elapsed() < Duration::from_secs(10), "refusing took {:?}", started.elapsed());
     // A through-all cut ignores its depth, whatever it says.
-    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
     let out = call_checked(
         &mut host,
         "cut",

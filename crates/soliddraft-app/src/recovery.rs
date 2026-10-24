@@ -64,6 +64,8 @@ pub struct Recovery {
     drawing: Watch,
     /// Copies from sessions that ended without quitting, newest first.
     pub offers: Vec<RecoveryCopy>,
+    /// Journals from sessions that ended without quitting. Only redacted copies may be shared.
+    pub journals: Vec<PathBuf>,
     /// Damaged copies found at start, as sentences.
     pub problems: Vec<String>,
     /// Copies that could not be made or written since the app last looked, as sentences.
@@ -90,12 +92,13 @@ impl Recovery {
             part: Watch::default(),
             drawing: Watch::default(),
             offers: Vec::new(),
+            journals: soliddraft_document::journal::abandoned(&root.join("journals")),
             problems: Vec::new(),
             failures: Vec::new(),
             show: false,
         };
         recovery.adopt_ended_sessions();
-        recovery.show = !recovery.offers.is_empty() || !recovery.problems.is_empty();
+        recovery.show = !recovery.offers.is_empty() || !recovery.journals.is_empty() || !recovery.problems.is_empty();
         Ok(recovery)
     }
 
@@ -115,6 +118,9 @@ impl Recovery {
         now: Instant,
     ) -> Option<Duration> {
         self.collect_failures();
+        if let Some(error) = soliddraft_document::journal::take_failure() {
+            self.failures.push(error);
+        }
         let policy = self.policy;
         let jobs = self.jobs.clone();
         let send = |job| {
@@ -178,6 +184,7 @@ impl Recovery {
     /// Deletes an offered copy the user does not want.
     pub fn discard(&mut self, file: &Path) -> Result<(), String> {
         self.offers.retain(|c| c.file != file);
+        self.journals.retain(|p| p != file);
         match std::fs::remove_file(file) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
                 Err(format!("cannot discard {}: {e}", file.display()))
@@ -402,6 +409,21 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                     actions.push(AppAction::DiscardRecovery(copy.file.clone()));
                 }
             });
+        }
+        if !r.journals.is_empty() {
+            ui.separator();
+            ui.label("Crash report journals are available. Personal paths are replaced in the report copy.");
+            for (index, journal) in r.journals.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("Session {}", index + 1));
+                    if ui.button("Save crash report journal").clicked() {
+                        actions.push(AppAction::ExportCrashJournal(journal.clone()));
+                    }
+                    if ui.button("Discard journal").clicked() {
+                        actions.push(AppAction::DiscardRecovery(journal.clone()));
+                    }
+                });
+            }
         }
         if !r.problems.is_empty() {
             ui.separator();

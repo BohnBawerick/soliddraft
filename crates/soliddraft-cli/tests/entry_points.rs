@@ -134,7 +134,7 @@ fn every_agent_tool_has_a_handler() {
     ] {
         let mut doc = soliddraft_app::new_document();
         let mut book = ProposalBook::default();
-        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface };
+        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface, drawing: None };
         for tool in host.tools() {
             let out = host.call(&tool.name, json!({}), &caller);
             assert!(!out.content.starts_with("unknown tool"), "{surface:?}: {} has no handler", tool.name);
