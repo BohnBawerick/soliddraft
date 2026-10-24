@@ -9,6 +9,148 @@ import queue
 import subprocess
 import sys
 import threading
+import time
+
+
+# Catallax PLAN 7.3. These are acceptance limits, not process timeouts.
+BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
+PHASES = ("construction", "edit", "display", "measurement", "refusal")
+DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "view_curves", "section_view"}
+MEASUREMENT = {"mass_properties", "face_area", "face_centroid", "face_bounding_box",
+               "bounding_box", "edge_length", "edge_midpoint", "inertia"}
+
+
+def budget(tool):
+    if tool in {"box", "cylinder", "sphere", "cone", "torus"}:
+        return "stock"
+    if tool in {"boolean", "union", "subtract", "intersect"}:
+        return "boolean"
+    if tool == "compare":
+        return "comparison"
+    return "feature"
+
+
+def phase(operation, default):
+    if operation.get("refusal") or operation.get("status") == "refused":
+        return "refusal"
+    if operation["operation"] in DISPLAY:
+        return "display"
+    if operation["operation"] in MEASUREMENT:
+        return "measurement"
+    return default
+
+
+def milliseconds(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"invalid elapsed milliseconds: {value!r}")
+    return value
+
+
+def command_phase(tool):
+    if tool == "measure":
+        return "measurement"
+    if tool.startswith("edit_") or tool in {
+        "undo", "redo", "rollback", "suppress", "delete_feature", "rename",
+    }:
+        return "edit"
+    return "construction"
+
+
+def timing(tool, segments):
+    """Partition external wait time using disjoint top-level calls and their operation logs."""
+    kind = budget(tool)
+    default = command_phase(tool)
+    split = dict.fromkeys(PHASES, 0.0)
+    work = dict.fromkeys(PHASES, 0)
+    background_split = dict.fromkeys(PHASES, 0.0)
+    background_work = dict.fromkeys(PHASES, 0)
+    sources = []
+    for segment in segments:
+        elapsed = milliseconds(segment["elapsed_ms"])
+        remaining = elapsed
+        fallback = segment.get("phase", default)
+        for call in segment["kernel"]["calls"]:
+            if call.get("nested", False):
+                continue  # Included by the enclosing log_scope; never charge it twice.
+            on_capture_thread = call["on_capture_thread"]
+            if not isinstance(on_capture_thread, bool):
+                raise ValueError("missing capture-thread ownership")
+            call_split = split if on_capture_thread else background_split
+            call_work = work if on_capture_thread else background_work
+            call_ms = milliseconds(call["wall_ms"])
+            owner = phase(call, fallback)
+            log = call["operation_log"]
+            if log["format"] != "catallax-operation-log/1":
+                raise ValueError("unsupported operation log")
+            allocated = 0.0
+            used = 0
+            for operation in log["operations"]:
+                op_ms = milliseconds(operation["wall_ms"])
+                op_work = operation["work"]["used"]
+                target = phase(operation, owner)
+                # A refused outer call owns its entire wait, including successful attempts.
+                if owner == "refusal":
+                    target = owner
+                if target != owner:
+                    call_split[target] += op_ms
+                    allocated += op_ms
+                call_work[target] += op_work
+                used += op_work
+            if allocated > call_ms + 0.001:
+                raise ValueError("overlapping operation timings exceed their enclosing call")
+            call_split[owner] += max(0.0, call_ms - allocated)
+            if call.get("work") is not None:
+                call_work[owner] += max(0, call["work"]["used"] - used)
+            if on_capture_thread:
+                remaining -= call_ms
+        if remaining < -0.001:
+            raise ValueError("kernel call timings exceed external wait time")
+        split[segment.get("overhead_phase", fallback)] += max(0.0, remaining)
+        sources.append({"source": segment["source"], "elapsed_ms": elapsed})
+    elapsed = sum(s["elapsed_ms"] for s in sources)
+    return {"check": "click budget", "class": kind, "budget_ms": BUDGET_MS[kind],
+            "elapsed_ms": elapsed, "split_ms": split, "work": work, "segments": sources,
+            "background": {"call_ms": background_split, "work": background_work},
+            "pass": elapsed <= BUDGET_MS[kind]}
+
+
+def load_known_over_budget(path):
+    policy = json.loads(path.read_text())
+    if policy["format"] != "soliddraft-known-over-budget/1":
+        raise ValueError("expected soliddraft-known-over-budget/1")
+    known = {}
+    for entry in policy["steps"]:
+        key = (entry["scenario"], entry["step"])
+        if key in known:
+            raise ValueError(f"duplicate known-over-budget step: {key}")
+        milliseconds(entry["last_measured_ms"])
+        known[key] = entry
+    return known
+
+
+def accept_latency(scenario, number, tool, latency, known):
+    result = {**latency, "within_budget": latency["pass"],
+              "status": "pass" if latency["pass"] else "over-budget"}
+    approved = known.get((scenario, number))
+    if approved is None:
+        return result
+    result["known_over_budget"] = approved
+    label = f"{scenario} step {number} ({tool})"
+    if approved["tool"] != tool:
+        result["pass"] = False
+        result["status"] = "invalid-known-over-budget"
+        result["message"] = f"{label}: tool differs from ci/known-over-budget.json; remove or review the listing"
+    elif latency["pass"]:
+        result["pass"] = False
+        result["status"] = "stale-known-over-budget"
+        result["message"] = (f"{label} meets its {latency['budget_ms']} ms budget at "
+                             f"{latency['elapsed_ms']:.3f} ms; remove it from ci/known-over-budget.json")
+    else:
+        result["pass"] = True
+        result["status"] = "known-over-budget"
+        result["message"] = (f"Known over-budget: {label} took {latency['elapsed_ms']:.3f} ms; "
+                             f"budget remains {latency['budget_ms']} ms")
+    return result
 
 
 def write(path, value):
@@ -99,10 +241,12 @@ def check(value, spec):
 
 
 def cli(binary, arguments, directory, label, timeout):
+    start = time.perf_counter_ns()
     result = subprocess.run([binary, *map(str, arguments)], capture_output=True, text=True, timeout=timeout)
     (directory / f"{label}.stdout").write_text(result.stdout)
     (directory / f"{label}.stderr").write_text(result.stderr)
     return {"check": label, "command": [binary, *map(str, arguments)], "exit": result.returncode,
+            "elapsed_ms": (time.perf_counter_ns() - start) / 1_000_000,
             "pass": result.returncode == 0}
 
 
@@ -126,18 +270,28 @@ def run(args):
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False}
     client = None
     try:
+        known = load_known_over_budget(pathlib.Path(__file__).with_name("known-over-budget.json"))
+        for (name, number) in known:
+            if name == scenario["name"] and not 1 <= number <= len(scenario["steps"]):
+                raise ValueError(f"remove missing {name} step {number} from ci/known-over-budget.json")
         client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
         initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
         if initialized["protocolVersion"] != "2025-06-18":
             raise RuntimeError("MCP initialization version mismatch")
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        prepared = False
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
             report["steps"].append(entry)
+            started = time.perf_counter_ns()
             result = client.request("tools/call", {"name": step["tool"], "arguments": step.get("arguments", {})})
+            command_ms = (time.perf_counter_ns() - started) / 1_000_000
             directory = args.out / "commands" / f"{number:04}"
             command = json.loads((directory / "command.json").read_text())
+            kernel = json.loads((directory / "kernel.json").read_text())
+            segments = [{"source": "kernel.json", "elapsed_ms": command_ms, "kernel": kernel,
+                         "phase": "refusal" if result.get("isError") else command_phase(step["tool"])}]
             checks = entry["checks"]
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == bool(step.get("refusal"))})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
@@ -147,7 +301,7 @@ def run(args):
             if step.get("refusal"):
                 code = step["refusal"]
                 checks.append({"check": "application refusal", "actual": command["output"], "pass": code in command["output"]})
-                kernel = json.loads((directory / "kernel.json").read_text())
+                # Read the captured refusal, never replay it inside the click interval.
                 refusals = [operation["refusal"]["code"] for call in kernel["calls"]
                     for operation in call["operation_log"]["operations"] if operation.get("refusal")]
                 checks.append({"check": "recorded kernel refusal", "actual": refusals, "pass": code in refusals})
@@ -159,19 +313,25 @@ def run(args):
                     replay["expected_refusal"] = code
                     replay["pass"] &= replay.get("refusal") == code and replay.get("status") == "refused"
                     checks.append(replay)
-            if step.get("render", True) and (directory / "recipe.json").exists():
-                view = cli(args.soliddraft, ["view", directory / "recipe.json",
-                    "--dir", "iso", "--svg", directory / "view.svg", "--json"], directory, "view", args.timeout)
-                if view["pass"]:
-                    rendered = json.loads((directory / "view.stdout").read_text())
-                    view["backend"] = rendered["backend"]
-                    view["method"] = rendered["method"]
-                    view["pass"] &= rendered["backend"].startswith("catallax ")
-                checks.append(view)
-                checks.append(cli(args.soliddraft, ["screenshot", directory / "part.dwprt", "--png", directory / "viewport.png"],
-                    directory, "screenshot", args.timeout))
-                if (directory / "view.svg").exists():
-                    checks.append({"check": "SVG contains curves", "pass": "<path " in (directory / "view.svg").read_text()})
+            if (directory / "recipe.json").exists():
+                if not prepared:
+                    response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
+                    if response.get("isError"):
+                        raise RuntimeError(f"renderer preparation failed: {response}")
+                    prepared = True
+                started = time.perf_counter_ns()
+                displayed = client.request("tools/call", {"name": "scenario_display", "arguments": {}})
+                display_ms = (time.perf_counter_ns() - started) / 1_000_000
+                checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
+                if not displayed.get("isError"):
+                    display = json.loads((directory / "display.json").read_text())
+                    checks.append({"check": "live Catallax display", "actual": display,
+                                   "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
+                    segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
+                                     "kernel": json.loads((directory / "display.kernel.json").read_text())})
+                checks.append({"check": "SVG contains curves",
+                               "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
+                checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
             if step.get("drawing"):
                 drawing = cli(args.soliddraft, ["draw", directory / "part.dwprt", "--template", "iso-a3",
                     "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--kernel-log", directory / "drawing.kernel.json", "--json"], directory, "drawing", args.timeout)
@@ -180,13 +340,30 @@ def run(args):
                     drawing["backend"] = rendered["backend"]
                     drawing["pass"] &= rendered["backend"].startswith("catallax ")
                 checks.append(drawing)
+                if drawing["pass"]:
+                    segments.append({"source": "drawing.kernel.json", "elapsed_ms": drawing["elapsed_ms"],
+                                     "phase": "construction", "overhead_phase": "display",
+                                     "kernel": json.loads((directory / "drawing.kernel.json").read_text())})
+            # Preserve external waits even if the log cannot support a phase split.
+            entry["waits_ms"] = [{"source": s["source"], "elapsed_ms": s["elapsed_ms"]} for s in segments]
+            write(directory / "waits.json", entry["waits_ms"])
+            latency = accept_latency(scenario["name"], number, step["tool"], timing(step["tool"], segments), known)
+            entry["timing"] = latency
+            checks.append(latency)
+            write(directory / "timing.json", latency)
+            print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
+            if latency["status"] == "known-over-budget":
+                print(f"::warning::{latency['message']}", flush=True)
+            elif latency["status"] in {"stale-known-over-budget", "invalid-known-over-budget"}:
+                print(f"::error::{latency['message']}", flush=True)
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)
             if not entry["pass"]:
                 # Retain every candidate input, including rejected scratch builds, for kernel diagnosis.
                 entry["questions"] = [str(p.relative_to(args.out)) for p in directory.glob("question-*.json")]
-                break
+                if any(not c["pass"] for c in checks if c is not latency):
+                    break
         report["pass"] = len(report["steps"]) == len(scenario["steps"]) and all(s["pass"] for s in report["steps"])
     except Exception as error:
         report["error"] = str(error)

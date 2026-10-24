@@ -1,14 +1,15 @@
 # Application scenarios
 
-The scenario runner drives `soliddraft mcp` over its stdio protocol, then runs
-`soliddraft view`, `soliddraft screenshot` and `soliddraft draw` as child commands.
-MCP uses the command registry and document commands the assistant and ribbon use.
-The runner needs Python 3 and the two built executables. It opens no window.
+The scenario runner drives `soliddraft mcp` over its stdio protocol and captures
+the live document through bundle-only display tools. MCP uses the command
+registry and document commands the assistant and ribbon use. Drawings and refusal
+replays run as child commands. The runner needs Python 3 and the two built
+executables. It opens no window.
 
 ```sh
-cargo build -p soliddraft-cli
+cargo build --release --locked -p soliddraft-cli
 python3 ci/run-scenarios.py ci/scenarios/bracket.json \
-  --soliddraft target/debug/soliddraft \
+  --soliddraft target/release/soliddraft \
   --catallax-verify /path/to/pinned/catallax-verify \
   --out /tmp/bracket-run
 ```
@@ -18,6 +19,11 @@ Build `catallax-verify` from `CATALLAX_REVISION` in
 revision and builds its `catallax-cli` package. A verifier from a different
 revision is not evidence of matching behavior. The workflow uploads both
 successful and failed bundles as `application-loop`.
+
+Click budgets measure release executables, as users run them. Debug builds are
+useful for diagnosis but are not the acceptance measurement. Hosted CI builds
+both executables with `--release` and caches that profile's Cargo artifacts with
+`Swatinem/rust-cache` under the `application-loop-release` cache key.
 
 `bracket.json` builds the plate, flange, bored boss, four mounting holes and flange
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
@@ -40,9 +46,10 @@ A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step
 has `tool` and `arguments`, using the schemas printed by `soliddraft mcp --help`.
 Optional `checks` use JSON pointers into `command.json`, with exactly one of
 `equals`, `approx`, `minimum` or `contains`. `approx` accepts an absolute
-`tolerance`, default 0.001. Missing values fail. A step can set `render: false`
-for a sketch without a body, `drawing: true` for drawing output, or `refusal`
-with an expected stable kernel code. Unexpected tool errors fail immediately.
+`tolerance`, default 0.001. Missing values fail. `render: false` describes a sketch
+without a body; it never skips display timing when a body exists. A step can set
+`drawing: true` for drawing output, or `refusal` with an expected stable kernel
+code. Unexpected tool errors fail immediately.
 MCP rounds reported volumes to two decimals, so the bracket checks allow
 0.005 mm³ around the analytical volume.
 
@@ -68,12 +75,19 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `question-*.json`: portable `catallax-question/1` inputs for kernel builds,
   including scratch builds that rejected a proposal. These contain Catallax
   recipes, not numeric body handles or paths into this machine.
-- `view.svg` and `viewport.png`, for rendered steps. The PNG comes from the
-  viewport's `ViewportRenderer`, shader and camera. The adjacent `viewport.json`
-  records the adapter and kernel calls made while reopening the saved part.
-  `view.svg.kernel.json` retains the view command's kernel calls. A drawing step
-  also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`, collected
-  by `soliddraft draw --kernel-log`.
+- `view.svg` and `viewport.png`, for steps with a displayed body. Both use the
+  live MCP document, never a reopened recipe or saved part. The PNG comes from
+  the viewport's `ViewportRenderer`, shader and camera. `viewport.json` records
+  the adapter, `display.json` the model backend, and `display.kernel.json` the
+  view's actual kernel calls. `scenario_prepare` retains one offscreen GPU and
+  renderer for the run; `scenario_display` captures without editing or advancing
+  the command number. These tools exist only with `mcp --bundle`.
+  A drawing step also writes `drawing.dwdrw`, `drawing.svg` and
+  `drawing.kernel.json`, collected by `soliddraft draw --kernel-log`.
+- `timing.json`: external command, live display and requested drawing waits,
+  their total, five phase totals, deterministic work counts and the click-budget
+  verdict. The same record appears in `checks.json` and `result.json`.
+- `waits.json`: external segment durations, also kept if phase attribution fails.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 
@@ -88,9 +102,74 @@ catallax-verify replay /tmp/bracket-run/commands/0002/question-0000.json \
 ```
 
 Directories must be new. Neither MCP capture nor the runner overwrites an older
-run. Commands have a timeout, and the runner stops at the first unexpected failure.
+run. Commands have a timeout. Semantic, protocol and artifact failures stop the
+scenario; latency failures remain recorded while later steps run.
 To collect the same evidence from another agent, start
 `soliddraft mcp --bundle /tmp/new-agent-run`. `--max-work N` sets its per-call
 kernel allowance. View, drawing and screenshot logging impose no work allowance.
 Normal MCP sessions without `--bundle` keep their existing
 kernel behavior and do not collect diagnostic data.
+
+## Click budgets
+
+The runner uses a monotonic nanosecond clock outside the application. It sums
+the command response, live viewport and SVG capture, and requested drawing
+command. A command response alone cannot pass a step with a slow display.
+Protocol initialization, GPU setup, Python checks and refusal replay are outside
+the click interval. Capture includes pixel readback and artifact writing.
+The command interval also includes existing evidence snapshot overhead, so this
+is a conservative headless wait, not an isolated kernel benchmark.
+
+Catallax's [PLAN section 7.3](https://github.com/BohnBawerick/catallax/blob/main/docs/PLAN.md#73-useful-latency-kept)
+sets the fixed limits:
+
+| Command class | Budget |
+|---|---:|
+| Stock solid | 100 ms |
+| Boolean | 500 ms |
+| Recipe feature or edit | 1,000 ms |
+| Complete background comparison | 2,000 ms |
+
+Application `extrude` and `cut` tools are recipe features, even when they perform
+a boolean internally. Requested measurement and display share the command's
+budget. No scenario or CLI option can raise it. The 300-second timeout only
+contains hung subprocesses; it is not a latency allowance.
+
+The split uses `kernel.json` and Catallax's per-operation logs. Top-level display,
+measurement and refused calls own their whole interval. Other calls extract
+logged display and measurement operations; their remainder belongs to construction
+or edit according to the command. Nested `log_scope` calls are already included
+by their parent and are never charged twice. Work counts follow the same
+ownership rule. External time outside kernel calls belongs to the command phase,
+or to display for capture. Missing or invalid timing evidence fails the run.
+Opt-in diagnostic calls identify whether they ran on the kernel capture thread.
+Only that thread's outer calls partition the command wait. Background calls keep
+their phase work and aggregate call durations under `background`; these durations
+can overlap and are never added to, or subtracted from, the external wait.
+Nested calls are still owned by their enclosing log scope on either thread.
+The ownership marker adds no clock and is absent from the normal kernel path.
+Unexplained capture-thread overlap still fails attribution and preserves
+`waits.json`.
+The pinned kernel does not log initial meshing inside its application build as
+a separate operation. That inseparable cost remains in construction or edit,
+not in the display subtotal; no timing is invented to separate it.
+
+An unlisted over-budget step fails, but the runner continues collecting later
+steps when all semantic and artifact checks passed. Other failures stop the
+scenario. Hosted CI uploads the complete bundle and publishes per-step waits,
+budgets and acceptance status in its job summary. Shared-hosted-runner numbers
+are not quiet pinned-core performance baselines.
+
+The owner approved one exception in `ci/known-over-budget.json`: scenario
+`bracket`, step 6, `extrude`. Its budget stays 1,000 ms. The file records its last
+measured wait, revision and approval date, not a replacement budget. An overrun
+for that exact scenario, step and tool remains visible as `known-over-budget`
+with a GitHub warning on every run, but does not fail latency acceptance.
+Any other step over budget still fails. If the listed step meets its budget,
+CI fails as `stale-known-over-budget` and tells the maintainer to remove it from
+the file. A changed tool or a missing listed step also fails instead of inheriting
+the exception. No scenario or CLI flag can add an exception or raise a budget.
+`within_budget` records the raw comparison; `pass` records policy acceptance.
+Both the measured wait and unchanged budget stay in every timing record.
+All timers and budget decisions live in the Python runner and CI. No clocks or
+reports are added to the application's model build or edit path.
