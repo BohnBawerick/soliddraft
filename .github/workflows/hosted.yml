@@ -77,7 +77,8 @@ jobs:
           out="$RUNNER_TEMP/bracket-export"
           mkdir -p "$out"
           target/debug/soliddraft export recipes/bracket.json --json \
-            --out "$out/cli-bracket.step" --out "$out/bracket.stl" --out "$out/bracket.3mf" > "$out/reports.jsonl"
+            --out "$out/cli-bracket.step" --out "$out/bracket.stl" --out "$out/bracket.3mf" \
+            --out "$out/bracket.obj" > "$out/reports.jsonl"
           cat "$out/reports.jsonl"
           SOLIDDRAFT_STEP_PROOF_DIR="$out" cargo test --locked -p soliddraft-exchange --test bracket \
             step_carries_the_proven_deviation_and_the_body_faces -- --exact

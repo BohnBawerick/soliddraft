@@ -36,7 +36,7 @@
 //! layer to an MCP client, on stdin and stdout or on a loopback HTTP port.
 //!
 //! `soliddraft export <part.dwprt | recipe.json> --out bracket.step` writes a part or a
-//! recipe's result as STEP, STL or 3MF with each file's deviation; see [`export::USAGE`].
+//! recipe's result as STEP, STL, 3MF or OBJ with each file's deviation; see [`export::USAGE`].
 //!
 //! `soliddraft screenshot <part.dwprt> --png out.png` captures the viewport without a window.
 //!
@@ -79,7 +79,7 @@ usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft key status
        soliddraft draw <part.dwprt | recipe.json> [--template iso-a3] [--out <file>]...
        soliddraft draw --update <drawing.dwdrw>
-       soliddraft export <part.dwprt | recipe.json> --out <file.step|.stl|.3mf>... [--json]
+       soliddraft export <part.dwprt | recipe.json> --out <file.step|.stl|.3mf|.obj>... [--json]
        soliddraft doc info|refs|rebuild|repair|migrate|where-used <file>...
        soliddraft asm new|info|tree|insert|pattern|move|hide|show|colour|rename|delete|rebuild|generate|bench ...
        soliddraft locations [list | add <kind> <path> | remove <kind> <path>]
@@ -115,7 +115,7 @@ key     The assistant's API keys in the OS keychain, one per provider: OpenRoute
 
 draw    `soliddraft draw --help` describes the draw command.
 
-export  Writes a part or a recipe's result as STEP AP242, STL or 3MF, with how far
+export  Writes a part or a recipe's result as STEP AP242, STL, 3MF or OBJ, with how far
         each file may lie from the exact part. `soliddraft export --help`
         describes it.
 

@@ -1,4 +1,4 @@
-//! The bracket exported to STEP, STL and 3MF on Catallax, through the same entry the
+//! The bracket exported to STEP, STL, 3MF and OBJ on Catallax, through the same entry the
 //! application and the command line use.
 
 use std::f64::consts::PI;
@@ -73,7 +73,8 @@ fn meshes_are_closed_and_within_their_chord_height() {
 
     // A closed mesh within the chord height of every face encloses a volume within area
     // times the chord height of the exact one.
-    let welded = soliddraft_exchange::mesh::weld(&k.tessellate(body, &tolerance.params()).unwrap());
+    let source = k.tessellate(body, &tolerance.params()).unwrap();
+    let welded = soliddraft_exchange::mesh::weld(&source);
     assert!((volume(&welded) - exact).abs() <= area * tolerance.chord_height, "{} against {exact}", volume(&welded));
 
     let package = export(&k, body, "bracket", Format::ThreeMf, &tolerance).unwrap();
@@ -86,6 +87,63 @@ fn meshes_are_closed_and_within_their_chord_height() {
     assert_eq!(model.matches("<vertex ").count(), r.vertices);
     assert_eq!(model.matches("<triangle ").count(), r.triangles);
     assert_eq!(package.bytes, export(&k, body, "bracket", Format::ThreeMf, &tolerance).unwrap().bytes, "repeatable");
+
+    let obj = export(&k, body, "bracket", Format::Obj, &tolerance).unwrap();
+    let Report::Mesh(obj_report) = &obj.report else { panic!("an OBJ mesh report") };
+    assert_eq!(obj_report.chord_height, tolerance.chord_height);
+    assert_eq!(obj_report.triangles, r.triangles);
+    assert_eq!(obj_report.closed, r.closed);
+    assert_eq!(obj_report.unavailable_controls, r.unavailable_controls);
+    let text = std::str::from_utf8(&obj.bytes).unwrap();
+    assert!(text.lines().any(|l| l == "o bracket"));
+    let mut positions = Vec::<[f32; 3]>::new();
+    let mut normals = Vec::<[f32; 3]>::new();
+    let mut triangles = Vec::new();
+    let mut faces = Vec::new();
+    let mut face = None;
+    for line in text.lines() {
+        let mut words = line.split_whitespace();
+        match words.next() {
+            Some(kind @ ("v" | "vn")) => {
+                let p = std::array::from_fn(|_| words.next().unwrap().parse::<f32>().unwrap());
+                if kind == "v" { positions.push(p) } else { normals.push(p) }
+            }
+            Some("g") => face = Some(words.next().unwrap().strip_prefix("face_").unwrap().parse::<u64>().unwrap()),
+            Some("f") => {
+                let t = std::array::from_fn(|_| {
+                    let (v, n) = words.next().unwrap().split_once("//").unwrap();
+                    let v = v.parse::<u32>().unwrap() - 1;
+                    assert_eq!(v, n.parse::<u32>().unwrap() - 1);
+                    assert!((v as usize) < positions.len() && (v as usize) < normals.len());
+                    v
+                });
+                assert!(words.next().is_none(), "triangles only");
+                triangles.push(t);
+                faces.push(face.expect("every triangle belongs to a face"));
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(positions, source.positions, "decimal vertices round-trip to the proven display coordinates");
+    assert_eq!(normals, source.normals, "sharp-face normals survive");
+    assert_eq!(positions.len(), obj_report.vertices);
+    let expected: Vec<_> = source
+        .indices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(&source.triangle_faces)
+        .filter(|(t, _)| {
+            let [a, b, c] = t.map(|i| source.positions[i as usize]);
+            a != b && b != c && c != a
+        })
+        .collect();
+    assert_eq!(triangles, expected.iter().map(|(t, _)| **t).collect::<Vec<_>>(), "winding and triangle order survive");
+    assert_eq!(faces, expected.iter().map(|(_, f)| f.raw()).collect::<Vec<_>>(), "source face identities survive");
+    assert_eq!(triangles.len(), obj_report.triangles);
+    let reread = soliddraft_exchange::Welded { positions, triangles };
+    assert!((volume(&reread) - exact).abs() <= area * tolerance.chord_height);
+    assert_eq!(obj.bytes, export(&k, body, "bracket", Format::Obj, &tolerance).unwrap().bytes, "repeatable");
 }
 
 #[test]
@@ -93,7 +151,9 @@ fn bad_settings_and_released_bodies_are_refused() {
     let k = CatallaxKernel::new();
     let body = bracket(&k);
     let zero = ExportTolerance { chord_height: 0.0, ..ExportTolerance::default() };
-    assert!(matches!(export(&k, body, "b", Format::Stl, &zero), Err(ExportError::Invalid(_))));
+    for format in [Format::Stl, Format::ThreeMf, Format::Obj] {
+        assert!(matches!(export(&k, body, "b", format, &zero), Err(ExportError::Invalid(_))));
+    }
     k.release(body).unwrap();
     assert!(matches!(export(&k, body, "b", Format::Step, &ExportTolerance::default()), Err(ExportError::Kernel(_))));
 }
@@ -105,7 +165,8 @@ fn formats_follow_extensions() {
     assert_eq!(Format::of_path(Path::new("b.step")), Some(Format::Step));
     assert_eq!(Format::of_path(Path::new("b.stl")), Some(Format::Stl));
     assert_eq!(Format::of_path(Path::new("b.3mf")), Some(Format::ThreeMf));
-    assert_eq!(Format::of_path(Path::new("b.obj")), None);
+    assert_eq!(Format::of_path(Path::new("b.OBJ")), Some(Format::Obj));
+    assert_eq!(Format::of_path(Path::new("b.iges")), None);
     for f in Format::ALL {
         assert_eq!(Format::of_path(Path::new(&format!("x.{}", f.extension()))), Some(f));
     }

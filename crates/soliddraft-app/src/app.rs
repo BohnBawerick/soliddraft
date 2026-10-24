@@ -487,6 +487,7 @@ impl SolidDraftApp {
                     menu_command(ui, st, "export_step", "STEP AP242…");
                     menu_command(ui, st, "export_stl", "STL…");
                     menu_command(ui, st, "export_3mf", "3MF…");
+                    menu_command(ui, st, "export_obj", "OBJ…");
                 });
                 if st.recovery.as_ref().is_some_and(|r| !r.offers.is_empty())
                     && ui.button("Recover documents…").clicked()
