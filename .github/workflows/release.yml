@@ -96,6 +96,8 @@ jobs:
             libegl1-mesa libgl1-mesa-dri mesa-vulkan-drivers xvfb
       - name: Build desktop
         if: runner.os != 'macOS'
+        env:
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --release --locked -p soliddraft-app --target '${{ matrix.target }}'
       - name: Build both macOS architectures and join them
         if: runner.os == 'macOS'
@@ -226,6 +228,14 @@ jobs:
           pattern: packages-*
           merge-multiple: true
           path: dist
+      - name: Require the portable Windows executable to carry its C runtime
+        run: |
+          unzip -p dist/*-windows-x64.zip soliddraft-app.exe > "$RUNNER_TEMP/soliddraft-app.exe"
+          objdump -p "$RUNNER_TEMP/soliddraft-app.exe" > "$RUNNER_TEMP/windows-imports.txt"
+          if grep -Ei 'DLL Name: (VCRUNTIME|MSVCP)[0-9]' "$RUNNER_TEMP/windows-imports.txt"; then
+            echo 'The portable Windows build must not require a Visual C++ runtime installation.'
+            exit 1
+          fi
       - name: Generate notes from merged pull requests
         env:
           GH_TOKEN: ${{ github.token }}
