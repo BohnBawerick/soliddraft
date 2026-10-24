@@ -68,7 +68,7 @@ The model is not connected in phase 1. The panel is the real layout: system note
 
 ## Shortcuts
 
-F, T, R, I views, N normal to the sketch plane or the selected face. Z zoom to fit. S sketch, E extrude, X cut, F or C fillet or chamfer the selected edge. Enter and Esc apply or cancel the open feature and leave a sketch. Delete removes the selected feature or sketch entity, F2 renames. Ctrl+Z and Ctrl+Y undo and redo, Ctrl+S and Ctrl+O save and open, Ctrl+N new part, Ctrl+Q quit. In a sketch, L R C A S P D pick the line, rectangle, circle, arc, slot, point and smart dimension tools and X toggles construction. / focuses the assistant, ? opens the shortcut list. F9 and Shift+F9 hide or show the feature tree and the assistant.
+F, T, R, I views, N normal to the sketch plane or the selected face. Z zoom to fit. S sketch, E extrude, X cut, F or C fillet or chamfer the selected edge. Enter and Esc apply or cancel the open feature and leave a sketch. Delete removes the selected feature or sketch entity, F2 renames. Ctrl+Z and Ctrl+Y undo and redo, Ctrl+S and Ctrl+O save and open, Ctrl+N new part, Ctrl+Q quit. In a sketch, L R C A S P D pick the line, rectangle, circle, arc, slot, point and smart dimension tools and X toggles construction. / focuses the assistant, ? opens the shortcut list, Ctrl+Shift+P opens the command palette. F9 and Shift+F9 hide or show the feature tree and the assistant.
 
 ## Automation
 
