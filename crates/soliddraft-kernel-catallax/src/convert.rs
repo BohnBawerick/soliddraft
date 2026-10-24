@@ -24,6 +24,9 @@ pub(super) struct Ids {
     origins: BTreeMap<FaceId, Vec<Origin>>,
     /// The same origins in the interface's terms, by the caller's operation tags.
     pub face_origins: BTreeMap<FaceId, Vec<soliddraft_kernel_api::Origin>>,
+    /// Each Catallax origin with its interface origin, kept for later bodies: a blend's
+    /// edge is gone once the fillet has built, but its faces keep the name.
+    named: Vec<(Origin, soliddraft_kernel_api::Origin)>,
     supports: BTreeMap<FaceId, String>,
     edge_names: BTreeMap<EdgeId, String>,
 }
@@ -59,6 +62,7 @@ impl Ids {
             vertex_keys: BTreeMap::new(),
             origins: BTreeMap::new(),
             face_origins: BTreeMap::new(),
+            named: Vec::new(),
             supports: BTreeMap::new(),
             edge_names: BTreeMap::new(),
         };
@@ -82,15 +86,22 @@ impl Ids {
             ids.faces.insert(*face, id);
             ids.face_keys.insert(id, key);
             // An origin whose role the interface cannot express is left out, never guessed.
-            let mut named: Vec<_> = origins
-                .iter()
-                .filter_map(|o| {
+            let mut named = Vec::new();
+            for o in &origins {
+                let known = parents.iter().find_map(|p| p.named.iter().find_map(|(c, n)| (c == o).then_some(n)));
+                let Some(n) = known.cloned().or_else(|| {
                     Some(soliddraft_kernel_api::Origin {
                         tag: tags.get(o.step.as_str())?.clone(),
-                        role: face_role(&o.role)?,
+                        role: face_role(&o.role, parents)?,
                     })
-                })
-                .collect();
+                }) else {
+                    continue;
+                };
+                if !ids.named.iter().any(|(c, _)| c == o) {
+                    ids.named.push((o.clone(), n.clone()));
+                }
+                named.push(n);
+            }
             named.sort();
             named.dedup();
             ids.face_origins.insert(id, named);
@@ -117,13 +128,16 @@ impl Ids {
     }
 
     pub fn record(&self, seq: u64, tag: &OpTag, op: OpKind, step: &str, parents: &[&Ids]) -> HistoryRecord {
+        // A drafted face keeps its source origins on a new support, so it descends from
+        // the face it tilts. Elsewhere a new support means a new face.
+        let tilts = op == OpKind::Draft;
         let faces = changes(
             self.face_keys.keys().copied(),
             parents.iter().flat_map(|p| p.face_keys.keys().copied()),
             |old, new| {
                 parents.iter().any(|p| {
                     p.origins.get(&old).is_some_and(|os| self.origins[&new].iter().any(|o| os.contains(o)))
-                        && p.supports.get(&old) == self.supports.get(&new)
+                        && (tilts || p.supports.get(&old) == self.supports.get(&new))
                 })
             },
         );
@@ -148,7 +162,7 @@ impl Ids {
                 let role = self.origins[face]
                     .iter()
                     .find(|o| o.step.as_str() == step)
-                    .and_then(|o| face_role(&o.role))
+                    .and_then(|o| face_role(&o.role, parents))
                     .unwrap_or(FaceRole::Other);
                 FaceOrigin { face: *face, role }
             })
@@ -181,7 +195,7 @@ fn changes<I: Copy + Ord>(
 }
 
 /// The interface's role for a Catallax role, when the interface has one.
-fn face_role(role: &Role) -> Option<FaceRole> {
+fn face_role(role: &Role, parents: &[&Ids]) -> Option<FaceRole> {
     match role {
         Role::Start => Some(FaceRole::StartCap),
         Role::End => Some(FaceRole::EndCap),
@@ -190,7 +204,36 @@ fn face_role(role: &Role) -> Option<FaceRole> {
             .strip_prefix('l')
             .and_then(|s| s.split_once('s'))
             .and_then(|(a, b)| Some(FaceRole::Side { loop_index: a.parse().ok()?, segment: b.parse().ok()? })),
+        Role::Hole { at, part } => at
+            .as_str()
+            .strip_prefix('h')
+            .and_then(|i| i.parse().ok())
+            .map(|placement| FaceRole::Hole { placement, part: hole_part(*part) }),
+        Role::Blend { edge } | Role::Bevel { edge } => {
+            let name = serde_json::to_string(edge).expect("edge name serializes");
+            parents
+                .iter()
+                .find_map(|p| p.edge_names.iter().find_map(|(id, n)| (*n == name).then_some(*id)))
+                .map(|edge| FaceRole::Blend { edge })
+        }
+        Role::Copy { instance, of } => parents
+            .iter()
+            .find_map(|p| p.origins.iter().find_map(|(id, os)| os.contains(of).then_some(*id)))
+            .map(|face| FaceRole::Copy { instance: *instance, face }),
         _ => None,
+    }
+}
+
+fn hole_part(part: catallax_recipe::HolePart) -> HolePart {
+    use catallax_recipe::HolePart as P;
+    match part {
+        P::Entry => HolePart::Entry,
+        P::CounterboreWall => HolePart::CounterboreWall,
+        P::CounterboreFloor => HolePart::CounterboreFloor,
+        P::Countersink => HolePart::Countersink,
+        P::Wall => HolePart::Wall,
+        P::Floor => HolePart::Floor,
+        P::Tip => HolePart::Tip,
     }
 }
 
@@ -226,44 +269,41 @@ fn bounds(points: impl Iterator<Item = Vec3>, padding: f64) -> Aabb {
     if any { Aabb { min: min - pad, max: max + pad } } else { Aabb { min: Vec3::ZERO, max: Vec3::ZERO } }
 }
 
+fn enclosed(value: &[catallax_measure::Enclosure; 3]) -> Vec3 {
+    Vec3::from(value.each_ref().map(midpoint))
+}
+
+fn proven_box(b: &catallax_measure::BoundingBox) -> Aabb {
+    let f = |v: &[catallax_numbers::Rational; 3]| Vec3::from(v.each_ref().map(|x| x.to_f64_nearest()));
+    Aabb { min: f(&b.min), max: f(&b.max) }
+}
+
+/// Faces, edges and vertices with Catallax's proven measures: face areas, centroids and
+/// boxes, edge lengths and half-arc-length points, and the body's box. Edge boxes are
+/// the edge's display polyline grown by its proven chord error, so they enclose the edge.
 pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topology> {
     let model = &app.built.model;
     let mesh = &app.display.value;
-    let chord = catallax_mesh::MeshOptions::default().chord_tolerance.to_f64_nearest();
+    let accuracy = catallax_measure::Accuracy::default();
+    let query = |name: &str, e: catallax_numbers::Refusal| query_error(name, e);
     let mut faces = Vec::new();
     let mut adjacency: BTreeMap<CatEdge, Vec<FaceId>> = BTreeMap::new();
     for face_mesh in &mesh.faces {
-        let face = model.face(face_mesh.face);
-        let triangles = &mesh.triangles[face_mesh.triangles.clone()];
-        let mut area = 0.0;
-        let mut center = Vec3::ZERO;
-        for t in triangles {
-            let [a, b, c] = t.vertices.map(|v| Vec3::from(mesh.positions[v]));
-            let weight = (b - a).cross(c - a).length() * 0.5;
-            area += weight;
-            center = center + (a + b + c) * (weight / 3.0);
-        }
-        let bbox = bounds(triangles.iter().flat_map(|t| t.vertices).map(|v| mesh.positions[v].into()), chord);
-        let centroid = if area > 0.0 {
-            center * (1.0 / area)
-        } else {
-            return Err(KernelError::QueryFailed {
-                query: "topology".into(),
-                code: 0,
-                message: "Catallax display face has no nondegenerate triangles (Catallax stage 1)".into(),
-            });
-        };
-        let proven_area = super::numerical("face_area", |dec| {
-            catallax_measure::face_area(model, face_mesh.face, &catallax_measure::Accuracy::default(), dec)
-        })
-        .map_err(|e| query_error("face_area", e))?;
+        let id = face_mesh.face;
+        let face = model.face(id);
+        let area = super::numerical("face_area", |dec| catallax_measure::face_area(model, id, &accuracy, dec))
+            .map_err(|e| query("face_area", e))?;
+        let centroid = super::numerical("face_centroid", |dec| app.face_centroid(id, &accuracy, dec))
+            .map_err(|e| query("face_centroid", e))?;
+        let bbox = super::numerical("face_bounding_box", |dec| app.face_bounding_box(id, &accuracy, dec))
+            .map_err(|e| query("face_bounding_box", e))?;
         let mut edges = Vec::new();
         for l in &face.loops {
             if let catallax_topology::Loop::Coedges(cs) = model.loop_(*l) {
                 for c in cs {
                     let edge = model.coedge(*c).edge;
                     edges.push(ids.edges[&edge]);
-                    adjacency.entry(edge).or_default().push(ids.faces[&face_mesh.face]);
+                    adjacency.entry(edge).or_default().push(ids.faces[&id]);
                 }
             }
         }
@@ -274,11 +314,11 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
             None
         };
         faces.push(FaceInfo {
-            id: ids.faces[&face_mesh.face],
+            id: ids.faces[&id],
             surface: surface_kind(surface),
-            area: midpoint(&proven_area.value),
-            centroid,
-            bbox,
+            area: midpoint(&area.value),
+            centroid: enclosed(&centroid.value),
+            bbox: proven_box(&bbox.value),
             edges,
             normal,
             origins: ids.face_origins[&ids.faces[&face_mesh.face]].clone(),
@@ -286,14 +326,13 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
     }
     let mut edges = Vec::new();
     for e in &mesh.edges {
-        let edge = model.edge(e.edge);
-        let points: Vec<Vec3> = e.vertices.iter().map(|v| mesh.positions[*v].into()).collect();
-        let length = points.windows(2).map(|p| p[0].distance(p[1])).sum();
-        let midpoint = if points.len() % 2 == 1 {
-            points[points.len() / 2]
-        } else {
-            (points[points.len() / 2 - 1] + points[points.len() / 2]) * 0.5
-        };
+        let id = e.edge;
+        let edge = model.edge(id);
+        let length = super::numerical("edge_length", |dec| app.edge_length(id, &accuracy, dec))
+            .map_err(|e| query("edge_length", e))?;
+        let middle = super::numerical("edge_midpoint", |dec| app.edge_midpoint(id, &accuracy, dec))
+            .map_err(|e| query("edge_midpoint", e))?;
+        let points = e.vertices.iter().map(|v| Vec3::from(mesh.positions[*v]));
         let curve = match model.geom().curve(edge.curve).kind() {
             CatCurve::Line => CurveKind::Line,
             CatCurve::Circle => CurveKind::Circle,
@@ -302,12 +341,12 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
         };
         let vertices: BTreeSet<_> = [edge.start, edge.end].into_iter().flatten().map(|v| ids.vertices[&v]).collect();
         edges.push(EdgeInfo {
-            id: ids.edges[&e.edge],
+            id: ids.edges[&id],
             curve,
-            length,
-            midpoint,
-            bbox: bounds(points.into_iter(), chord),
-            faces: adjacency.remove(&e.edge).unwrap_or_default(),
+            length: midpoint(&length.value),
+            midpoint: enclosed(&middle.value),
+            bbox: bounds(points, e.max_chord_error.to_f64_nearest()),
+            faces: adjacency.remove(&id).unwrap_or_default(),
             vertices: vertices.into_iter().collect(),
         });
     }
@@ -320,29 +359,37 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
             edges: edges.iter().filter(|e| e.vertices.contains(id)).map(|e| e.id).collect(),
         })
         .collect();
+    let bbox = super::numerical("bounding_box", |dec| app.bounding_box(&accuracy, dec))
+        .map_err(|e| query("bounding_box", e))?
+        .value
+        .map(|b| proven_box(&b))
+        .unwrap_or(Aabb { min: Vec3::ZERO, max: Vec3::ZERO });
     Ok(Topology {
         kind: BodyKind::Solid,
         faces,
         edges,
         vertex_count: vertices.len(),
         vertices,
-        bbox: bounds(mesh.positions.iter().copied().map(Vec3::from), chord),
-        display_chord_height: Some(chord),
+        bbox,
+        display_chord_height: None,
     })
 }
 
 pub(super) fn mesh(model: &Model, mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationParams) -> Mesh {
     let mut out = Mesh::default();
-    for (value, name) in [
-        (params.curve_angle_deg, "curve_angle_deg"),
-        (params.surface_angle_deg, "surface_angle_deg"),
-        (params.max_edge_length, "max_edge_length"),
-        (params.max_aspect_ratio, "max_aspect_ratio"),
-    ] {
-        if value > 0.0 {
-            out.unavailable_controls
-                .push(format!("{name}: Catallax stage 1 display entry supports chord tolerance only"));
-        }
+    if params.curve_angle_deg > 0.0 {
+        out.unavailable_controls.push(
+            "curve_angle_deg: Catallax bounds facet normals (surface_angle_deg) and chords, not the turn along an edge"
+                .into(),
+        );
+    }
+    for missing in &mesh.unavailable_controls {
+        let name = match missing.control {
+            catallax_mesh::MeshControl::AngularDeviation => "surface_angle_deg",
+            catallax_mesh::MeshControl::EdgeLength => "max_edge_length",
+            catallax_mesh::MeshControl::AspectRatio => "max_aspect_ratio",
+        };
+        out.unavailable_controls.push(format!("{name} on {}: {}", ids.faces[&missing.face], missing.reason));
     }
     let mut vertices = BTreeMap::new();
     for triangle in &mesh.triangles {

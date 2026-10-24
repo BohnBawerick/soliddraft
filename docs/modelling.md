@@ -56,7 +56,12 @@ arc traversed against its own direction, such as a concave bite out of an edge, 
 |---|---|
 | Sketch | a plane (Top, Front or Right, optionally offset, or a planar face of the part by persistent name) and a sketch |
 | Extrude | a profile (a sketch, or a built-in rectangle or circle on a reference plane), boss or cut, blind depth or through all, reversed or not |
+| Extrude end | blind, through all, up to the next boundary, or up to a face by persistent name |
 | Fillet, Chamfer | edges by persistent name, radius or distance |
+| Hole | a planar face by persistent name, centres in the face's sketch frame, diameter, blind depth or through, flat or drill-point tip, counterbore or countersink |
+| Linear and circular pattern | a direction and spacing, or an axis and angle, and the number of copies; copies the body and unites the copies with it |
+| Mirror | a reference plane or a planar face, and whether the original stays |
+| Draft | faces by persistent name, a neutral plane (reference plane or planar face), an angle and the pull's sense |
 
 A part has one body. The first boss makes it, later bosses join it, and cuts remove from
 it. Every closed region of the sketch is swept; four circles make four holes. Through all
@@ -69,6 +74,8 @@ face. A boss growing out of such a face, or a cut going into it, starts 0.01 mm 
 the face (`FACE_OVERLAP`), so the tool overlaps the part instead of touching it along a
 coplanar face; behind the face is material for the boss and air for the cut, so the
 overlap changes nothing. A reversed boss or cut starts on the face.
+
+A hole's faces are named by the hole's place in the point list and the part of the hole: entry, counterbore wall and floor, countersink, wall, floor or tip. A pattern's or mirror's copy faces are named by the copy number and ranked by the names of the faces they copy, so editing the spacing, the count or an earlier feature keeps them. A drafted face keeps the name of the face it tilts. An extrusion up to a boundary starts on its sketch face rather than behind it, because a start inside the material would stop at the material's exit.
 
 ## Commands, undo and redo
 
@@ -204,6 +211,6 @@ renames over it. Part files from before the manifest (`.dwpart`, `recipe.json` w
 
 ## Exit test
 
-`crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the command layer, saves and reopens it, edits its base thickness and checks undo, redo and reference repair. Its saved inside fillet now reports its Catallax stage and passes the preceding body through. Supported downstream features keep building.
+`crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the command layer, saves and reopens it, edits its base thickness and checks undo, redo and reference repair. Its saved inside fillet builds through Catallax's elementary fillet strips. Supported downstream features keep building.
 
-The document tests also reopen a part containing a chamfer, check the stage 3 rebuild error, and verify that the body before and after that feature is identical. Ribbon tests check that waiting commands stay visible, stay disabled and name their stages. These run in the workspace CI suite.
+The document tests also reopen a part containing a chamfer and check that it rebuilds to the same body. Ribbon tests check that waiting commands stay visible, stay disabled and name their stages, and that the switched-on commands are enabled. These run in the workspace CI suite. The application scenarios in `ci/scenarios` build and edit each switched-on feature through MCP.

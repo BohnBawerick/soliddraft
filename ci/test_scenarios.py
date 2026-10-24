@@ -50,6 +50,12 @@ class Checks(unittest.TestCase):
         self.assertEqual(scenarios.substitute({"path": "{bundle}/a.dwprt", "n": [1, "{bundle}"]}, "/run"),
             {"path": "/run/a.dwprt", "n": [1, "/run"]})
 
+    def test_timings_list_labelled_steps_only(self):
+        steps = [{"tool": "sketch", "pass": True, "elapsed_ms": 3.0},
+                 {"tool": "hole", "label": "hole build", "pass": True, "elapsed_ms": 812.5}]
+        self.assertEqual(scenarios.timings(steps),
+                         [{"label": "hole build", "tool": "hole", "elapsed_ms": 812.5, "pass": True}])
+
     def test_json_pointer_escapes_and_arrays(self):
         self.assertEqual(scenarios.at({"a/b": [{"~": 2}]}, "/a~1b/0/~0"), 2)
 

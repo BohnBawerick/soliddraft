@@ -439,13 +439,7 @@ impl CommandSpec {
     /// Commands whose geometry is waiting for Catallax, in roadmap section 6 order.
     pub fn catallax_wait(&self) -> Option<&'static str> {
         match self.id {
-            "fillet" | "edit_fillet" => Some(
-                "Fillets between planes and cylinders arrive with Catallax stage 3; other fillets with Catallax stage 4",
-            ),
-            "chamfer" | "edit_chamfer" | "shell" | "hole" | "linear_pattern" | "circular_pattern" | "mirror" => {
-                Some("Arrives with Catallax stage 3")
-            }
-            "draft" => Some("Arrives with Catallax stage 4"),
+            "shell" => Some("Arrives with Catallax stage 3"),
             "sweep" | "loft" => Some("Arrives with Catallax stage 5"),
             _ => None,
         }
@@ -914,7 +908,18 @@ fn registry() -> Vec<CommandSpec> {
                  circles in one sketch cut several holes at once.",
                 tools::cut_params,
             ),
-        cmd("hole", "Hole", Icon::Hole, "Cut a hole at a point").on(Features, "Cut", Large),
+        cmd("hole", "Hole", Icon::Hole, "Drill holes into a planar face, with a counterbore or countersink")
+            .on(Features, "Cut", Large)
+            .run(|_| AppAction::StartHole)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Hole(_))))
+            .hint(|s| (!has_body(s)).then(|| "Hole needs a body".into()))
+            .agents(
+                Agents::Verb,
+                "Each point is a hole centre on the face. Holes drill against the face's outward normal. Standard \
+                 angles: 118 for drill tips; 82, 90 and 100 for countersinks.",
+                tools::hole_params,
+            ),
         cmd("slot", "Slot", Icon::Slot, "Cut a slot").on(Features, "Cut", Large),
         // Finish.
         cmd("fillet", "Fillet", Icon::Fillet, "Round edges with a circular fillet of one radius")
@@ -935,13 +940,40 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Verb, "", tools::chamfer_params),
         cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
             .on(Features, "Finish", Small),
-        cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle").on(Features, "Finish", Small),
+        cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle about a neutral plane")
+            .on(Features, "Finish", Small)
+            .run(|_| AppAction::StartDraft)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Draft(_))))
+            .hint(|s| (!has_body(s)).then(|| "Draft needs a body".into()))
+            .agents(
+                Agents::Verb,
+                "The pull direction is the neutral plane's normal, or its reverse. Catallax drafts planar faces and \
+                 cylinders parallel to the pull.",
+                tools::draft_params,
+            ),
         // Pattern.
-        cmd("linear_pattern", "Linear", Icon::LinearPattern, "Repeat features along one or two directions")
-            .on(Features, "Pattern", Large),
-        cmd("circular_pattern", "Circular", Icon::CircularPattern, "Repeat features around an axis")
-            .on(Features, "Pattern", Large),
-        cmd("mirror", "Mirror", Icon::Mirror, "Mirror features about a plane").on(Features, "Pattern", Large),
+        cmd("linear_pattern", "Linear", Icon::LinearPattern, "Copy the part's body along a direction")
+            .on(Features, "Pattern", Large)
+            .run(|_| AppAction::StartPattern { circular: false })
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Pattern(f) if matches!(f.layout, soliddraft_model::PatternSpec::Linear { .. }))))
+            .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
+            .agents(Agents::Verb, "The copies unite with the body.", tools::linear_pattern_params),
+        cmd("circular_pattern", "Circular", Icon::CircularPattern, "Copy the part's body around an axis")
+            .on(Features, "Pattern", Large)
+            .run(|_| AppAction::StartPattern { circular: true })
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Pattern(f) if matches!(f.layout, soliddraft_model::PatternSpec::Circular { .. }))))
+            .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
+            .agents(Agents::Verb, "The copies unite with the body.", tools::circular_pattern_params),
+        cmd("mirror", "Mirror", Icon::Mirror, "Mirror the part's body in a plane")
+            .on(Features, "Pattern", Large)
+            .run(|_| AppAction::StartMirror)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Mirror(_))))
+            .hint(|s| (!has_body(s)).then(|| "Mirror needs a body".into()))
+            .agents(Agents::Verb, "", tools::mirror_params),
         // Reference geometry.
         cmd("reference_plane", "Plane", Icon::Plane, "Add a reference plane").on(Features, "Reference", Small),
         cmd("reference_axis", "Axis", Icon::Axis, "Add a reference axis").on(Features, "Reference", Small),
@@ -1235,6 +1267,23 @@ fn registry() -> Vec<CommandSpec> {
             Agents::Verb,
             "",
             tools::edit_chamfer_params,
+        ),
+        cmd("edit_hole", "Edit hole", Icon::Hole, "Change a hole's diameter, depth and countersink").agents(
+            Agents::Verb,
+            "Everything after it rebuilds.",
+            tools::edit_hole_params,
+        ),
+        cmd("edit_pattern", "Edit pattern", Icon::LinearPattern, "Change a pattern's copies and spacing or angle")
+            .agents(Agents::Verb, "Everything after it rebuilds.", tools::edit_pattern_params),
+        cmd("edit_mirror", "Edit mirror", Icon::Mirror, "Change whether a mirror keeps the original").agents(
+            Agents::Verb,
+            "",
+            tools::edit_mirror_params,
+        ),
+        cmd("edit_draft", "Edit draft", Icon::Draft, "Change a draft's angle").agents(
+            Agents::Verb,
+            "Everything after it rebuilds.",
+            tools::edit_draft_params,
         ),
         cmd("roll_to_end", "Roll to end", Icon::Rollback, "Move the rollback bar to the end of the tree")
             .run(|_| AppAction::Command(Command::Rollback(None)))
@@ -1694,18 +1743,7 @@ mod tests {
     #[test]
     fn waiting_commands_stay_visible_disabled_and_name_their_stages() {
         let state = AppState::new(crate::demo_document());
-        for (id, stages) in [
-            ("fillet", &[3, 4][..]),
-            ("chamfer", &[3][..]),
-            ("shell", &[3][..]),
-            ("hole", &[3][..]),
-            ("linear_pattern", &[3][..]),
-            ("circular_pattern", &[3][..]),
-            ("mirror", &[3][..]),
-            ("draft", &[4][..]),
-            ("sweep", &[5][..]),
-            ("loft", &[5][..]),
-        ] {
+        for (id, stages) in [("shell", &[3][..]), ("sweep", &[5][..]), ("loft", &[5][..])] {
             let command = get(id).unwrap();
             assert!(!command.ribbon.is_empty(), "{id}");
             assert!((command.shown)(&state), "{id}");
@@ -1718,6 +1756,17 @@ mod tests {
                     command.tip(&state)
                 );
             }
+        }
+    }
+
+    #[test]
+    fn catallax_features_on_main_are_switched_on() {
+        let state = AppState::new(crate::demo_document());
+        for id in ["fillet", "chamfer", "hole", "linear_pattern", "circular_pattern", "mirror", "draft"] {
+            let command = get(id).unwrap();
+            assert!(command.catallax_wait().is_none(), "{id}");
+            assert!(command.is_enabled(&state), "{id}: {}", command.tip(&state));
+            assert!(command.agents == Agents::Verb, "{id} is an agent verb");
         }
     }
 

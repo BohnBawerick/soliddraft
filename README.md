@@ -47,7 +47,10 @@ Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/
 - The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
 - Dragging a selected feature's depth previews the rebuilt part off the interface thread and applies the final value as one undo step.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
-- Extrudes, cuts, two-sided through all, booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
+- Extrudes and cuts, blind, through all, up to the next boundary or up to a planar face; booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
+- Holes on a planar face, blind or through, with flat or drill-point tips, counterbores and countersinks at any angle, including the standard 118° tip and 82°, 90° and 100° countersinks. A countersink or drill point cannot yet go into a body that has another cylinder; see [the backend gaps](docs/needs-catallax.md).
+- Linear and circular patterns and mirrors of the part's body.
+- Fillets and equal-distance chamfers between planes and between planes and cylinders, and drafts of planar faces and cylinders parallel to the pull.
 - Drawings use Catallax meshes for polygon hidden-line removal and Catallax booleans for plane sections. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.
 - The assistant, connected to Claude: it reads the part, proposes changes as cards you preview, apply and undo. The same commands are open to outside agents over MCP.
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
@@ -57,10 +60,9 @@ Waiting commands stay visible and disabled with a tooltip naming their Catallax 
 
 | Waiting feature | Catallax stage |
 |---|---|
-| One-sided through all, up to face, up to next; hole and countersink | 3 |
-| Chamfer; pattern and mirror; shell, offset and thicken | 3 |
-| Fillets between planes and cylinders | 3 |
-| Other fillets; draft | 4 |
+| Shell, offset and thicken | 3 |
+| Up to a curved face (Catallax covers bare stock targets only) | 3 |
+| Other fillets | 4 |
 | Sweep and loft; spline, ellipse and text profiles | 5 |
 | STEP import | 6 |
 
@@ -82,7 +84,7 @@ cargo run --release -p soliddraft-app -- --demo
 
 A part or drawing file on the command line opens it. `--demo` loads a sample part, `--bench` measures frame times on a dense body and exits, `--screenshot out.png` saves the window and exits, `--help` lists the rest. Press `?` in the app for the keyboard shortcuts.
 
-Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Fillet and chamfer remain visible while they wait for the Catallax stages listed above.
+Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Hole, Fillet, Chamfer, Draft, the patterns and Mirror work on the body from the ribbon.
 
 ## Running in a browser
 

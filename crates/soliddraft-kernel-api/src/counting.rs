@@ -8,9 +8,9 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    BackendInfo, BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, FaceId, HistoryRecord, Kernel, KernelResult,
-    MassProperties, Mesh, OpResult, OpTag, Plane, Profile, Revolve, TessellationParams, Topology, Validation, Vec3,
-    drawing,
+    BackendInfo, BodyId, BooleanOp, Draft, EdgeId, EdgePolyline, Extrude, ExtrudeLimit, FaceId, HistoryRecord, Hole,
+    Kernel, KernelResult, MassProperties, Mesh, Mirror, OpResult, OpTag, PatternLayout, Plane, Profile, Revolve,
+    TessellationParams, Topology, Validation, Vec3, drawing,
 };
 
 /// One piece of work a kernel was asked for.
@@ -87,6 +87,38 @@ impl Kernel for Counting {
     fn shell(&self, tag: &OpTag, body: BodyId, open_faces: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
         self.op(tag);
         self.inner.shell(tag, body, open_faces, thickness)
+    }
+
+    fn extrude_to(
+        &self,
+        tag: &OpTag,
+        profile: BodyId,
+        target: BodyId,
+        direction: Option<Vec3>,
+        limit: &ExtrudeLimit,
+    ) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.extrude_to(tag, profile, target, direction, limit)
+    }
+
+    fn hole(&self, tag: &OpTag, body: BodyId, params: &Hole) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.hole(tag, body, params)
+    }
+
+    fn pattern(&self, tag: &OpTag, body: BodyId, layout: &PatternLayout) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.pattern(tag, body, layout)
+    }
+
+    fn mirror(&self, tag: &OpTag, body: BodyId, params: &Mirror) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.mirror(tag, body, params)
+    }
+
+    fn draft(&self, tag: &OpTag, body: BodyId, faces: &[FaceId], params: &Draft) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.draft(tag, body, faces, params)
     }
 
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {

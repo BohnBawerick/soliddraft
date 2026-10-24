@@ -168,7 +168,9 @@ fn bracket_document() -> Document {
         .unwrap();
     let bore = sketch_on(&mut doc, PlaneKind::Top, circles(&[(P2::new(70.0, 45.0), 6.0)]));
     let bore = doc
-        .apply(Command::AddCut { params: CutParams { sketch: bore, depth: 40.0, through_all: true, flip: true } })
+        .apply(Command::AddCut {
+            params: CutParams { sketch: bore, depth: 40.0, through_all: true, flip: true, up_to: None },
+        })
         .unwrap()
         .unwrap();
     let holes = sketch_on(
@@ -182,13 +184,17 @@ fn bracket_document() -> Document {
         ]),
     );
     let holes = doc
-        .apply(Command::AddCut { params: CutParams { sketch: holes, depth: 12.0, through_all: true, flip: true } })
+        .apply(Command::AddCut {
+            params: CutParams { sketch: holes, depth: 12.0, through_all: true, flip: true, up_to: None },
+        })
         .unwrap()
         .unwrap();
     // The slot: on the Right plane (u along Y, v along Z), cut 12 mm along +X.
     let slot = sketch_on(&mut doc, PlaneKind::Right, rectangle(P2::new(25.0, 25.0), P2::new(65.0, 37.0)));
     let slot = doc
-        .apply(Command::AddCut { params: CutParams { sketch: slot, depth: 12.0, through_all: false, flip: true } })
+        .apply(Command::AddCut {
+            params: CutParams { sketch: slot, depth: 12.0, through_all: false, flip: true, up_to: None },
+        })
         .unwrap()
         .unwrap();
     for (id, name) in

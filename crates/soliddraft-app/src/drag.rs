@@ -22,7 +22,7 @@
 //! at once without asking the worker.
 
 use crate::document::{
-    Command, DisplayMesh, Document, FeatureId, FeatureKind, FeatureStatus, Selection, fmt_mm, preview_mesh,
+    Command, DisplayMesh, Document, EndKind, FeatureId, FeatureKind, FeatureStatus, Selection, fmt_mm, preview_mesh,
 };
 use soliddraft_kernel_api::{Kernel, TessellationParams};
 use soliddraft_model as model;
@@ -41,11 +41,17 @@ impl Dimension {
     /// The dimension a feature offers for dragging, if it has one.
     pub fn of(kind: &FeatureKind) -> Option<Dimension> {
         match kind {
-            FeatureKind::Extrude(_) => Some(Dimension::Depth),
-            FeatureKind::Cut(p) if !p.through_all => Some(Dimension::Depth),
+            FeatureKind::Extrude(p) if p.end == EndKind::Blind => Some(Dimension::Depth),
+            FeatureKind::Cut(p) if !p.through_all && p.up_to.is_none() => Some(Dimension::Depth),
             FeatureKind::Fillet(_) => Some(Dimension::Radius),
             FeatureKind::Chamfer(_) => Some(Dimension::Distance),
-            FeatureKind::Cut(_) | FeatureKind::Sketch(_) => None,
+            FeatureKind::Extrude(_)
+            | FeatureKind::Cut(_)
+            | FeatureKind::Sketch(_)
+            | FeatureKind::Hole(_)
+            | FeatureKind::Pattern(_)
+            | FeatureKind::Mirror(_)
+            | FeatureKind::Draft(_) => None,
         }
     }
 
@@ -89,6 +95,9 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
         FeatureKind::Cut(params) => Command::EditCut { id, params },
         FeatureKind::Fillet(params) => Command::EditFillet { id, params },
         FeatureKind::Chamfer(params) => Command::EditChamfer { id, params },
+        kind @ (FeatureKind::Hole(_) | FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_)) => {
+            Command::EditFeature { id, kind }
+        }
         FeatureKind::Sketch(_) => return None,
     })
 }

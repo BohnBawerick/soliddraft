@@ -8,6 +8,7 @@ mod convert;
 mod diagnostics;
 mod drawing_queries;
 mod frames;
+mod native;
 mod step;
 
 use std::collections::BTreeMap;
@@ -16,11 +17,12 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use catallax_app::{ApplicationBody, Error};
 use catallax_mesh::{MeshOptions, mesh_body};
 use catallax_numbers::{Decider, Rational};
+use catallax_recipe::StepId;
 use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b";
+pub const CATALLAX_REVISION: &str = "98068abbba47dd28eb72683b99574920baff8f12";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -47,29 +49,42 @@ struct Stored {
 struct Solid {
     app: ApplicationBody,
     ids: convert::Ids,
-    display: Mutex<Option<(Rational, Arc<catallax_mesh::Mesh>)>>,
+    display: Mutex<Option<(DisplayKey, Arc<catallax_mesh::Mesh>)>>,
     topology: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
+}
+
+/// Every display control of a mesh request.
+type DisplayKey = (Rational, Option<Rational>, Option<Rational>, Option<Rational>);
+
+fn display_key(options: &MeshOptions) -> DisplayKey {
+    (
+        options.chord_tolerance.clone(),
+        options.angular_deviation.clone(),
+        options.max_edge_length.clone(),
+        options.max_aspect_ratio.clone(),
+    )
 }
 
 impl Solid {
     fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
         let mut cached =
             self.display.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
-        if let Some((chord, mesh)) = cached.as_ref()
-            && chord == &options.chord_tolerance
+        let key = display_key(options);
+        if let Some((k, mesh)) = cached.as_ref()
+            && k == &key
         {
             return Ok(mesh.clone());
         }
-        let mesh = Arc::new(if options.chord_tolerance == MeshOptions::default().chord_tolerance {
+        let mesh = Arc::new(if key == display_key(&MeshOptions::default()) {
             self.app.display.value.clone()
         } else {
             numerical(query, |dec| mesh_body(&self.app.built.model, self.app.built.result, options, dec))
                 .map_err(|e| query_error(query, e))?
                 .value
         });
-        // Keep one tolerance per immutable body so triangles and edges share the same mesh.
-        *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
+        // Keep one set of controls per immutable body so triangles and edges share the same mesh.
+        *cached = Some((key, mesh.clone()));
         Ok(mesh)
     }
 }
@@ -86,6 +101,10 @@ impl State {
 
     fn solid(&self, body: BodyId) -> KernelResult<Arc<Solid>> {
         self.get(body)?.solid.clone().ok_or_else(|| gap("profile sheet queries", "1"))
+    }
+
+    fn step(&self, body: BodyId) -> KernelResult<StepId> {
+        Ok(StepId::new(self.get(body)?.result.clone()).expect("generated step ids are valid"))
     }
 }
 
@@ -139,15 +158,32 @@ impl CatallaxKernel {
     /// body arena lock, so other threads keep reading and building bodies meanwhile.
     fn operation(
         &self,
+        state: MutexGuard<'_, State>,
+        tag: &OpTag,
+        op: OpKind,
+        inputs: &[BodyId],
+        step: Value,
+    ) -> KernelResult<OpResult> {
+        self.operation_reading(state, tag, op, inputs, &[], step)
+    }
+
+    /// Like [`CatallaxKernel::operation`], also reading the steps of `context` bodies
+    /// whose faces the operation only looks at, so their history stays out of the result's.
+    fn operation_reading(
+        &self,
         mut state: MutexGuard<'_, State>,
         tag: &OpTag,
         op: OpKind,
         inputs: &[BodyId],
+        context: &[BodyId],
         mut step: Value,
     ) -> KernelResult<OpResult> {
         let mut steps = BTreeMap::new();
         let mut history = BTreeMap::new();
         let mut parents = Vec::new();
+        for body in context {
+            steps.extend(state.get(*body)?.steps.clone());
+        }
         for input in inputs {
             let stored = state.get(*input)?;
             steps.extend(stored.steps.clone());
@@ -185,7 +221,7 @@ impl CatallaxKernel {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
-        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
+        let display = (display_key(&MeshOptions::default()), Arc::new(app.display.value.clone()));
         state.bodies.insert(
             body,
             Stored {
@@ -202,6 +238,26 @@ impl CatallaxKernel {
             },
         );
         Ok(OpResult { body, record })
+    }
+
+    /// Stores a Catallax-native step that reads the solid `base` and builds the chain.
+    #[allow(clippy::too_many_arguments)]
+    fn native(
+        &self,
+        state: MutexGuard<'_, State>,
+        tag: &OpTag,
+        op: OpKind,
+        base: BodyId,
+        inputs: &[BodyId],
+        native: catallax_recipe::Operation,
+        sweep: Option<Value>,
+    ) -> KernelResult<OpResult> {
+        let base = state.get(base)?.result.clone();
+        let mut step = json!({"op":"native","base":base,"native":native});
+        if let Some(sweep) = sweep {
+            step["sweep"] = sweep;
+        }
+        self.operation(state, tag, op, inputs, step)
     }
 
     fn state(&self) -> KernelResult<MutexGuard<'_, State>> {
@@ -225,8 +281,23 @@ fn build(
     op: OpKind,
     questions: Option<&mut Vec<Value>>,
 ) -> KernelResult<(ApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+    // The converter reads `soliddraft-recipe/1` only. A native step stands in as an
+    // identity union of the body it reads, then takes its own operation back.
+    let mut legacy = input.clone();
+    let mut natives = Vec::new();
+    for step in legacy["steps"].as_array_mut().expect("generated recipe steps") {
+        if step["op"] != "native" {
+            continue;
+        }
+        let tag = step["id"].as_str().expect("generated step id").to_owned();
+        let native: catallax_recipe::Operation = serde_json::from_value(step["native"].clone())
+            .map_err(|e| KernelError::InvalidInput(format!("stored Catallax step: {e}")))?;
+        natives.push((tag.clone(), native, step["sweep"].clone()));
+        let base = step["base"].clone();
+        *step = json!({"id":tag, "op":"boolean", "kind":"union", "target":base, "tool":base});
+    }
     let mut converted =
-        catallax_app::soliddraft::convert(&input.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
+        catallax_app::soliddraft::convert(&legacy.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
     let sources = input["steps"].as_array().expect("generated recipe steps");
     let mut planes = BTreeMap::new();
     for source in sources {
@@ -242,24 +313,49 @@ fn build(
             if let Some(rotation) = frames::rotation(plane) {
                 pose.rotation = rotation;
             }
-            planes.insert(name, (plane, pose.rotation.clone()));
+            planes.insert(name.to_owned(), (plane, pose.rotation.clone()));
         }
     }
+    // A sweep along the sketch normal uses the normal of the same certified frame.
+    let sweep = |profile: &str, direction: &Value| -> KernelResult<Option<catallax_recipe::Vector3>> {
+        let direction: Vec3 = serde_json::from_value(direction.clone())
+            .map_err(|e| KernelError::InvalidInput(format!("stored sweep direction: {e}")))?;
+        let (plane, rotation) = &planes[profile];
+        Ok(frames::normal_sweep(*plane, rotation, direction))
+    };
     for source in sources {
         if source["op"] != "extrude" || source["direction"].is_null() {
             continue;
         }
-        let direction: Vec3 = serde_json::from_value(source["direction"].clone())
-            .map_err(|e| KernelError::InvalidInput(format!("stored sweep direction: {e}")))?;
         let profile = source["profile"].as_str().expect("generated profile id");
-        let (plane, rotation) = &planes[profile];
-        if let Some(direction) = frames::normal_sweep(*plane, rotation, direction) {
+        if let Some(direction) = sweep(profile, &source["direction"])? {
             let id = &converted.steps[source["id"].as_str().expect("generated step id")];
             let step = converted.recipe.steps.iter_mut().find(|s| &s.id == id).expect("converted extrusion step");
-            if let catallax_recipe::Operation::Extrude { direction: sweep, .. } = &mut step.op {
-                *sweep = Some(direction);
+            if let catallax_recipe::Operation::Extrude { direction: d, .. } = &mut step.op {
+                *d = Some(direction);
             }
         }
+    }
+    for (tag, mut native, stored_sweep) in natives {
+        let id = converted.steps[&tag].clone();
+        // Generated tags are already valid step ids, so native inputs name converted steps.
+        debug_assert_eq!(id.as_str(), tag);
+        if let Some(profile) = stored_sweep["profile"].as_str()
+            && !stored_sweep["direction"].is_null()
+            && let Some(direction) = sweep(profile, &stored_sweep["direction"])?
+            && let catallax_recipe::Operation::ExtrudeTo { direction: d, .. }
+            | catallax_recipe::Operation::ExtrudeNext { direction: d, .. } = &mut native
+        {
+            *d = Some(direction);
+        }
+        if matches!(
+            native,
+            catallax_recipe::Operation::ExtrudeTo { .. } | catallax_recipe::Operation::ExtrudeNext { .. }
+        ) {
+            converted.recipe.format = catallax_recipe::FORMAT_V4.into();
+        }
+        let step = converted.recipe.steps.iter_mut().find(|s| s.id == id).expect("converted native step");
+        step.op = native;
     }
     if let Some(questions) = questions {
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
@@ -270,12 +366,23 @@ fn build(
     Ok((app, converted.steps))
 }
 
+/// The Catallax stage that brought an operation.
+fn stage(op: OpKind) -> &'static str {
+    match op {
+        OpKind::Fillet => "3 for fillets between planes and cylinders; other fillets wait for Catallax stage 4",
+        OpKind::Chamfer => "3 for chamfers between planes and cylinders; other chamfers wait for chamfer continuation",
+        OpKind::ExtrudeTo | OpKind::Shell | OpKind::Hole | OpKind::Pattern | OpKind::Mirror => "3",
+        OpKind::Draft => "4",
+        _ => "1",
+    }
+}
+
 fn build_error(op: OpKind, error: Error) -> KernelError {
     let code = error.code();
     if matches!(error, Error::Conversion(catallax_app::soliddraft::ConversionError::NotYet { .. })) {
-        return gap(&format!("{code}: {error}"), "1");
+        return gap(&format!("{code}: {error}"), stage(op));
     }
-    KernelError::Failed { op, code: 0, message: format!("{code}: {error} (Catallax stage 1)") }
+    KernelError::Failed { op, code: 0, message: format!("{code}: {error} (Catallax stage {})", stage(op)) }
 }
 
 fn query_error(query: &str, error: catallax_numbers::Refusal) -> KernelError {
@@ -297,6 +404,10 @@ fn numerical<T>(
     result
 }
 
+/// A rational lower bound of pi, so a requested angle in degrees becomes a bound in
+/// radians that is never looser than asked.
+const PI_BELOW: (i64, i64) = (314_159_265, 100_000_000);
+
 fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
     let values = [
         params.chord_height,
@@ -308,13 +419,23 @@ fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
     if values.iter().any(|v| !v.is_finite() || *v < 0.0) {
         return Err(KernelError::InvalidInput("tessellation controls must be finite and nonnegative".into()));
     }
+    let exact = |v: f64| Rational::parse(&v.to_string()).map_err(|e| KernelError::InvalidInput(e.to_string()));
     let mut options = MeshOptions::default();
     if params.chord_height > 0.0 {
-        options.chord_tolerance =
-            Rational::parse(&params.chord_height.to_string()).map_err(|e| KernelError::InvalidInput(e.to_string()))?;
+        options.chord_tolerance = exact(params.chord_height)?;
     }
     // Reserve half the requested chord bound for the trait's f32 display positions.
     options.chord_tolerance = &options.chord_tolerance / &Rational::from_i64(2);
+    if params.surface_angle_deg > 0.0 {
+        let pi = Rational::from_ratio(PI_BELOW.0, PI_BELOW.1).expect("pi bound");
+        options.angular_deviation = Some(&(&exact(params.surface_angle_deg)? * &pi) / &Rational::from_i64(180));
+    }
+    if params.max_edge_length > 0.0 {
+        options.max_edge_length = Some(exact(params.max_edge_length)?);
+    }
+    if params.max_aspect_ratio > 0.0 {
+        options.max_aspect_ratio = Some(exact(params.max_aspect_ratio)?);
+    }
     Ok(options)
 }
 
@@ -399,17 +520,38 @@ impl Kernel for CatallaxKernel {
         })
     }
 
-    fn fillet(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
+    fn fillet(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], radius: f64) -> KernelResult<OpResult> {
         self.observe("fillet", || {
-            self.solid(body)?;
-            Err(gap("fillet", "3 for fillets between planes and cylinders; Catallax stage 4 for other fillets"))
+            let state = self.state()?;
+            let solid = state.solid(body)?;
+            if edges.is_empty() {
+                return Err(KernelError::InvalidInput("a fillet needs at least one edge".into()));
+            }
+            let refs = edges.iter().map(|e| solid.edge_ref(*e, body)).collect::<KernelResult<Vec<_>>>()?;
+            let native = catallax_recipe::Operation::Fillet {
+                body: state.step(body)?,
+                edges: catallax_recipe::EdgeSelection::Refs(refs),
+                radius: native::number(radius, "fillet radius")?,
+            };
+            self.native(state, tag, OpKind::Fillet, body, &[body], native, None)
         })
     }
 
-    fn chamfer(&self, _: &OpTag, body: BodyId, _: &[EdgeId], _: f64) -> KernelResult<OpResult> {
+    fn chamfer(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], distance: f64) -> KernelResult<OpResult> {
         self.observe("chamfer", || {
-            self.solid(body)?;
-            Err(gap("chamfer", "3"))
+            let state = self.state()?;
+            let solid = state.solid(body)?;
+            if edges.is_empty() {
+                return Err(KernelError::InvalidInput("a chamfer needs at least one edge".into()));
+            }
+            let refs = edges.iter().map(|e| solid.edge_ref(*e, body)).collect::<KernelResult<Vec<_>>>()?;
+            let native = catallax_recipe::Operation::Chamfer {
+                body: state.step(body)?,
+                edges: catallax_recipe::EdgeSelection::Refs(refs),
+                distance: native::number(distance, "chamfer distance")?,
+                other_distance: None,
+            };
+            self.native(state, tag, OpKind::Chamfer, body, &[body], native, None)
         })
     }
 
@@ -417,6 +559,96 @@ impl Kernel for CatallaxKernel {
         self.observe("shell", || {
             self.solid(body)?;
             Err(gap("shell", "3"))
+        })
+    }
+
+    fn extrude_to(
+        &self,
+        tag: &OpTag,
+        profile: BodyId,
+        target: BodyId,
+        direction: Option<Vec3>,
+        limit: &ExtrudeLimit,
+    ) -> KernelResult<OpResult> {
+        self.observe("extrude_to", || {
+            let state = self.state()?;
+            if state.get(profile)?.solid.is_some() {
+                return Err(KernelError::InvalidInput("extrude_to needs a profile".into()));
+            }
+            let solid = state.solid(target)?;
+            let (target_step, profile_step) = (state.step(target)?, state.step(profile)?);
+            let exact = direction.map(|d| native::vector(d, "sweep direction")).transpose()?;
+            let native = match limit {
+                ExtrudeLimit::UpToNext => catallax_recipe::Operation::ExtrudeNext {
+                    target: target_step,
+                    profile: profile_step,
+                    direction: exact,
+                },
+                ExtrudeLimit::UpToFace { face } => catallax_recipe::Operation::ExtrudeTo {
+                    target: target_step,
+                    profile: profile_step,
+                    direction: exact,
+                    limit: solid.face_ref(*face, target)?,
+                },
+            };
+            let sweep = json!({"profile": state.get(profile)?.result, "direction": direction});
+            let base = state.get(target)?.result.clone();
+            let step = json!({"op":"native","base":base,"native":native,"sweep":sweep});
+            // The swept solid's history starts at the profile: the target is only read.
+            self.operation_reading(state, tag, OpKind::ExtrudeTo, &[profile], &[target], step)
+        })
+    }
+
+    fn hole(&self, tag: &OpTag, body: BodyId, params: &Hole) -> KernelResult<OpResult> {
+        self.observe("hole", || {
+            let state = self.state()?;
+            state.solid(body)?;
+            let native = native::hole(state.step(body)?, params)?;
+            self.native(state, tag, OpKind::Hole, body, &[body], native, None)
+        })
+    }
+
+    fn pattern(&self, tag: &OpTag, body: BodyId, layout: &PatternLayout) -> KernelResult<OpResult> {
+        self.observe("pattern", || {
+            let state = self.state()?;
+            state.solid(body)?;
+            let native = catallax_recipe::Operation::Pattern {
+                body: state.step(body)?,
+                layout: native::pattern_layout(layout)?,
+            };
+            self.native(state, tag, OpKind::Pattern, body, &[body], native, None)
+        })
+    }
+
+    fn mirror(&self, tag: &OpTag, body: BodyId, params: &Mirror) -> KernelResult<OpResult> {
+        self.observe("mirror", || {
+            let state = self.state()?;
+            state.solid(body)?;
+            let native = catallax_recipe::Operation::Mirror {
+                body: state.step(body)?,
+                plane: native::plane(params.plane_origin, params.plane_normal, "mirror plane")?,
+                keep_original: params.keep_original,
+            };
+            self.native(state, tag, OpKind::Mirror, body, &[body], native, None)
+        })
+    }
+
+    fn draft(&self, tag: &OpTag, body: BodyId, faces: &[FaceId], params: &Draft) -> KernelResult<OpResult> {
+        self.observe("draft", || {
+            let state = self.state()?;
+            let solid = state.solid(body)?;
+            if faces.is_empty() {
+                return Err(KernelError::InvalidInput("a draft needs at least one face".into()));
+            }
+            let native = catallax_recipe::Operation::Draft {
+                body: state.step(body)?,
+                faces: faces.iter().map(|f| solid.face_ref(*f, body)).collect::<KernelResult<Vec<_>>>()?,
+                pull: native::vector(params.pull, "pull direction")?,
+                neutral: native::plane(params.neutral_origin, params.neutral_normal, "neutral plane")?,
+                angle: native::number(params.angle_deg, "draft angle")?,
+                keep_regions: None,
+            };
+            self.native(state, tag, OpKind::Draft, body, &[body], native, None)
         })
     }
 
@@ -458,12 +690,7 @@ impl Kernel for CatallaxKernel {
                 .mass
                 .get_or_init(|| {
                     let mass = numerical("mass_properties", |dec| {
-                        catallax_measure::mass_properties(
-                            &solid.app.built.model,
-                            solid.app.built.result,
-                            &catallax_measure::Accuracy::default(),
-                            dec,
-                        )
+                        solid.app.mass_properties(&catallax_measure::Accuracy::default(), dec)
                     })
                     .map_err(|e| query_error("mass_properties", e))?
                     .value;
@@ -474,7 +701,7 @@ impl Kernel for CatallaxKernel {
                             .centroid
                             .map(|c| Vec3::from(c.each_ref().map(convert::midpoint)))
                             .ok_or_else(|| gap("centroid of an empty body", "1"))?,
-                        inertia: None,
+                        inertia: mass.inertia.map(|i| i.map(|row| row.each_ref().map(convert::midpoint))),
                     })
                 })
                 .clone()

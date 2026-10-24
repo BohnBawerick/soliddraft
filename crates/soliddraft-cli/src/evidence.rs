@@ -8,7 +8,9 @@ use soliddraft_app::command_tools::CommandTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
-use soliddraft_model::{Document, FaceRef, FeatureKind, FeatureStatus, ReferenceSlot, SketchPlane, feature_of_tag};
+use soliddraft_model::{
+    Document, EndCondition, FaceRef, FeatureKind, FeatureStatus, PlaneRef, ReferenceSlot, SketchPlane, feature_of_tag,
+};
 
 pub(crate) struct Evidence<'a> {
     host: CommandTools<'a>,
@@ -102,7 +104,15 @@ fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
 /// Reference evidence is collected only for an explicitly requested command bundle,
 /// after the edit. Survival assertions live in the scenario runner, not in rebuild.
 fn references(doc: &soliddraft_model::Document) -> Value {
-    let origin = |r: &FaceRef| format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1);
+    fn origin(r: &FaceRef) -> String {
+        format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1)
+    }
+    fn plane(p: &PlaneRef) -> Option<(ReferenceSlot, String, Vec<&FaceRef>)> {
+        match p {
+            PlaneRef::Face { face } => Some((ReferenceSlot::Plane, origin(face), vec![face])),
+            PlaneRef::Datum { .. } => None,
+        }
+    }
     let mut out = Vec::new();
     for f in doc.features() {
         let refs: Vec<(ReferenceSlot, String, Vec<&FaceRef>)> = match &f.kind {
@@ -121,7 +131,20 @@ fn references(doc: &soliddraft_model::Document) -> Value {
                     (ReferenceSlot::Edge { index: i as u32 }, text, e.faces.iter().collect())
                 })
                 .collect(),
-            FeatureKind::Extrude(_) => Vec::new(),
+            FeatureKind::Extrude(e) => match &e.end {
+                EndCondition::UpToFace { face } => vec![(ReferenceSlot::Limit, origin(face), vec![face])],
+                _ => Vec::new(),
+            },
+            FeatureKind::Hole(h) => vec![(ReferenceSlot::Plane, origin(&h.face), vec![&h.face])],
+            FeatureKind::Mirror(m) => plane(&m.plane).into_iter().collect(),
+            FeatureKind::Draft(d) => d
+                .faces
+                .iter()
+                .enumerate()
+                .map(|(i, face)| (ReferenceSlot::Face { index: i as u32 }, origin(face), vec![face]))
+                .chain(plane(&d.neutral))
+                .collect(),
+            FeatureKind::Pattern(_) => Vec::new(),
         };
         if refs.is_empty() {
             continue;

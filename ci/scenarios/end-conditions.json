@@ -1,0 +1,196 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "end-conditions",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              30,
+              20,
+              0
+            ],
+            "width": 60,
+            "height": 40
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 12000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              20,
+              5
+            ],
+            "width": 10,
+            "height": 40
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 35,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 26000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude2 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              30,
+              20,
+              40
+            ],
+            "width": 60,
+            "height": 40
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch3",
+        "depth": 5,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 36000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude2 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              52,
+              32,
+              40
+            ],
+            "width": 6,
+            "height": 6
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch4",
+        "through_all": false,
+        "depth": 1,
+        "flip": false,
+        "up_to_next": true
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 35820,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "up to next build"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              40,
+              20,
+              5
+            ],
+            "diameter": 12
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch5",
+        "depth": 1,
+        "flip": false,
+        "up_to_face": "Boss-Extrude3 \u00b7 End cap"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 39212.920066,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "up to face build"
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "depth": 45,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 44343.893421,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "up to face and next follow an earlier edit"
+    }
+  ]
+}

@@ -83,6 +83,7 @@ pub fn populate_demo(doc: &mut Document) {
             plane: PlaneKind::Top,
             depth: 10.0,
             flip: false,
+            end: Default::default(),
         },
         ExtrudeParams {
             sketch: None,
@@ -90,6 +91,7 @@ pub fn populate_demo(doc: &mut Document) {
             plane: PlaneKind::Front,
             depth: 10.0,
             flip: true,
+            end: Default::default(),
         },
         ExtrudeParams {
             sketch: None,
@@ -97,6 +99,7 @@ pub fn populate_demo(doc: &mut Document) {
             plane: PlaneKind::Top,
             depth: 24.0,
             flip: false,
+            end: Default::default(),
         },
     ] {
         doc.apply(Command::AddExtrude { params, via_assistant: false }).ok();
@@ -117,6 +120,7 @@ pub fn bench_document() -> Document {
             plane: PlaneKind::Top,
             depth: 40.0,
             flip: false,
+            end: Default::default(),
         },
         via_assistant: false,
     })

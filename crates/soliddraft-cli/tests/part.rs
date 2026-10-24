@@ -91,14 +91,14 @@ fn part_fails_when_a_feature_does_not_build() {
 }
 
 #[test]
-fn existing_fillet_reports_its_stage_and_keeps_the_block() {
-    let (path, _) = save_block("waiting", true);
-    let (ok, stdout, _) = run(&["part", "--json", path.to_str().unwrap()]);
-    assert!(!ok);
+fn a_saved_fillet_rebuilds() {
+    let (path, doc) = save_block("fillet", true);
+    let want = doc.kernel().mass_properties(doc.body().unwrap()).unwrap().volume;
+    let (ok, stdout, stderr) = run(&["part", "--json", path.to_str().unwrap()]);
+    assert!(ok, "{stderr}");
     let report: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
-    assert_eq!(report["features"][2]["status"], "failed", "{report}");
-    assert!(stdout.contains("Catallax stage 3") && stdout.contains("Catallax stage 4"), "{stdout}");
-    assert_eq!(report["body"]["faces"], 6);
-    assert!((report["body"]["volume"].as_f64().unwrap() - 12000.0).abs() < 1e-6);
+    assert_eq!(report["features"][2]["status"], "ok", "{report}");
+    let volume = report["body"]["volume"].as_f64().unwrap();
+    assert!(volume < 12000.0 && (volume - want).abs() <= 1e-9 * want, "volume {volume}, saved part {want}");
     std::fs::remove_file(path).ok();
 }

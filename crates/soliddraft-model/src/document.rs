@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use soliddraft_document::DocumentId;
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, KernelResult, OpTag, Origin, Plane,
-    Topology, Vec3,
+    BodyId, BooleanOp, Draft, EdgeId, Extrude, ExtrudeLimit, FaceId, FaceRole, Hole, HolePlacement, Kernel,
+    KernelError, KernelResult, Mirror, OpResult, OpTag, Origin, PatternLayout, Plane, Topology, Vec3,
 };
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
@@ -14,8 +14,8 @@ use soliddraft_tessellation::{Report, Settings};
 
 use crate::command::UndoEntry;
 use crate::feature::{
-    BlendFeature, DatumPlane, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
-    SketchFeature, SketchPlane,
+    BlendFeature, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind,
+    HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
 use crate::rebuild::BuildCache;
@@ -572,6 +572,10 @@ impl Document {
             FeatureKind::Extrude(e) => self.build_extrude(f, e, current),
             FeatureKind::Fillet(b) => self.build_blend(f, b, false, current),
             FeatureKind::Chamfer(b) => self.build_blend(f, b, true, current),
+            FeatureKind::Hole(h) => self.build_hole(f, h, current),
+            FeatureKind::Pattern(p) => self.build_pattern(f, p, current),
+            FeatureKind::Mirror(m) => self.build_mirror(f, m, current),
+            FeatureKind::Draft(d) => self.build_draft(f, d, current),
         };
         cache.insert(key, built, &self.kernel)
     }
@@ -663,10 +667,31 @@ impl Document {
         };
         let dir = if e.reverse { -sk.plane.normal } else { sk.plane.normal };
         // Behind the face is material for a boss along the normal and air for a cut
-        // against it; only there is starting behind the face harmless.
+        // against it; only there is starting behind the face harmless. An extrusion up
+        // to a boundary starts on the face, since starting in material stops at its exit.
         let away = (e.operation == ExtrudeOp::Boss) != e.reverse;
-        let back = if sk.on_face && away { FACE_OVERLAP } else { 0.0 };
+        let limited = matches!(e.end, EndCondition::UpToNext | EndCondition::UpToFace { .. });
+        let back = if sk.on_face && away && !limited { FACE_OVERLAP } else { 0.0 };
         let start = sk.plane.with_origin(sk.plane.origin - dir * back);
+        let limit = match &e.end {
+            EndCondition::UpToNext => Some(ExtrudeLimit::UpToNext),
+            EndCondition::UpToFace { face } => {
+                let Some(body) = current else {
+                    return Built::failed(current, "an extrusion up to a face needs a body");
+                };
+                match self.resolve_face(face, body) {
+                    Ok(face) => Some(ExtrudeLimit::UpToFace { face }),
+                    Err(r) => {
+                        let r = RepairNeeded { slot: ReferenceSlot::Limit, ..r };
+                        return Built::pass(FeatureStatus::RepairNeeded(vec![r]), current);
+                    }
+                }
+            }
+            _ => None,
+        };
+        if limit.is_some() && current.is_none() {
+            return Built::failed(current, "an extrusion up to the next face needs a body");
+        }
         let distance = match e.end {
             EndCondition::Blind { depth } if depth.is_finite() && depth > 0.0 => depth + back,
             EndCondition::Blind { depth } => {
@@ -696,6 +721,7 @@ impl Document {
                 }
                 reach + 1.0 + 0.01 * bbox.diagonal()
             }
+            EndCondition::UpToNext | EndCondition::UpToFace { .. } => 0.0,
         };
         let mut mine: Option<BodyId> = None;
         let mut faces: Vec<(Origin, Generator, usize)> = Vec::new();
@@ -705,7 +731,10 @@ impl Document {
             for (i, region) in regions.iter().enumerate() {
                 let tag = |step: &str| OpTag::new(format!("{}.r{i}.{step}", f.id));
                 let sheet = k.create_body_from_profile(&tag("profile"), &region.to_profile(start))?;
-                let tool = k.extrude(&tag("sweep"), sheet.body, &Extrude { distance, direction: Some(dir) });
+                let tool = match (&limit, current) {
+                    (Some(limit), Some(target)) => k.extrude_to(&tag("sweep"), sheet.body, target, Some(dir), limit),
+                    _ => k.extrude(&tag("sweep"), sheet.body, &Extrude { distance, direction: Some(dir) }),
+                };
                 let _ = k.release(sheet.body);
                 let tool = tool?;
                 for o in &tool.record.face_roles {
@@ -818,7 +847,184 @@ impl Document {
             version: 0,
         }
     }
+
+    /// Resolves a feature's plane: a reference plane, or a planar face of `body` with
+    /// its outward normal.
+    fn plane_of(&self, r: &PlaneRef, body: BodyId) -> Result<Plane, Box<RepairNeeded>> {
+        match r {
+            PlaneRef::Datum { datum, offset } => {
+                let p = datum.plane();
+                Ok(p.with_origin(p.origin + p.normal * *offset))
+            }
+            PlaneRef::Face { face } => {
+                let id = self
+                    .resolve_face(face, body)
+                    .map_err(|r| Box::new(RepairNeeded { slot: ReferenceSlot::Plane, ..r }))?;
+                let info = self.kernel.topology(body).ok().and_then(|t| t.face(id).cloned());
+                match info.and_then(|f| f.normal.map(|n| (n, f.centroid))) {
+                    Some((normal, centroid)) => Ok(plane_on_face(normal, centroid)),
+                    None => {
+                        let detail = "the face is not planar".to_string();
+                        Err(Box::new(RepairNeeded {
+                            slot: ReferenceSlot::Plane,
+                            reason: RepairReason::Mismatch { detail: detail.clone() },
+                            message: detail,
+                            candidates: vec![],
+                        }))
+                    }
+                }
+            }
+        }
+    }
+
+    /// The result of an operation that makes a new body from the part's body, with
+    /// the faces it made named.
+    fn finish(
+        &self,
+        result: KernelResult<OpResult>,
+        current: Option<BodyId>,
+        name: impl Fn(&OpResult) -> Vec<NamedFace>,
+    ) -> Built {
+        match result {
+            Ok(r) => Built {
+                status: FeatureStatus::Ok,
+                output: Some(r.body),
+                owned: Some(r.body),
+                names: name(&r),
+                sketch: None,
+                version: 0,
+            },
+            Err(err) => Built::failed(current, err.to_string()),
+        }
+    }
+
+    fn build_hole(&self, f: &Feature, h: &HoleFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to drill") };
+        if h.points.is_empty() {
+            return Built::failed(current, "the hole has no points");
+        }
+        let plane = match self.plane_of(&PlaneRef::Face { face: h.face.clone() }, body) {
+            Ok(p) => p,
+            Err(r) => return Built::pass(FeatureStatus::RepairNeeded(vec![*r]), current),
+        };
+        let placements = h
+            .points
+            .iter()
+            .map(|p| HolePlacement {
+                point: plane.origin + plane.x_dir * p.u + plane.y_dir() * p.v,
+                direction: -plane.normal,
+            })
+            .collect();
+        let params = Hole { placements, diameter: h.diameter, depth: h.depth, tip: h.tip, head: h.head };
+        let result = self.kernel.hole(&OpTag::new(format!("{}.hole", f.id)), body, &params);
+        self.finish(result, current, |r| {
+            let faces = r
+                .record
+                .face_roles
+                .iter()
+                .filter_map(|o| match o.role {
+                    FaceRole::Hole { placement, part } => Some((
+                        Origin { tag: r.record.tag.clone(), role: o.role },
+                        Generator::Hole { placement, part },
+                        0,
+                    )),
+                    _ => None,
+                })
+                .collect();
+            number(faces)
+        })
+    }
+
+    fn build_pattern(&self, f: &Feature, p: &PatternFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to pattern") };
+        let layout = match p.layout {
+            PatternSpec::Linear { direction, spacing, count } => {
+                let Some(unit) = direction.normalized() else {
+                    return Built::failed(current, "the pattern direction is zero");
+                };
+                PatternLayout::Linear { step: unit * spacing, count }
+            }
+            PatternSpec::Circular { axis_origin, axis_direction, count, angle } => {
+                PatternLayout::Circular { axis_origin, axis_direction, count, angle_deg: angle }
+            }
+        };
+        let result = self.kernel.pattern(&OpTag::new(format!("{}.pattern", f.id)), body, &layout);
+        self.finish(result, current, |r| self.copies(r, body))
+    }
+
+    fn build_mirror(&self, f: &Feature, m: &MirrorFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to mirror") };
+        let plane = match self.plane_of(&m.plane, body) {
+            Ok(p) => p,
+            Err(r) => return Built::pass(FeatureStatus::RepairNeeded(vec![*r]), current),
+        };
+        let params = Mirror { plane_origin: plane.origin, plane_normal: plane.normal, keep_original: m.keep_original };
+        let result = self.kernel.mirror(&OpTag::new(format!("{}.mirror", f.id)), body, &params);
+        self.finish(result, current, |r| self.copies(r, body))
+    }
+
+    /// Names a pattern's or mirror's copies: each copy's faces are ranked by the names of
+    /// the faces of `source` they copy, so the ranks follow origins, not positions.
+    fn copies(&self, r: &OpResult, source: BodyId) -> Vec<NamedFace> {
+        let view = self.view_of(source).ok();
+        let names = self.name_map();
+        let mut faces: Vec<(u32, Option<SourceName>, FaceRole)> = Vec::new();
+        for o in &r.record.face_roles {
+            if let FaceRole::Copy { instance, face } = o.role {
+                let key = view.as_ref().and_then(|t| reference::origin_label(face, &View { topology: t }, &names));
+                faces.push((instance, key, o.role));
+            }
+        }
+        faces.sort();
+        faces.dedup();
+        let mut out = Vec::new();
+        let mut ordinal = 0;
+        for (i, (instance, _, role)) in faces.iter().enumerate() {
+            if i > 0 && faces[i - 1].0 != *instance {
+                ordinal = 0;
+            }
+            out.push(NamedFace {
+                origin: Origin { tag: r.record.tag.clone(), role: *role },
+                generator: Generator::Copy { instance: *instance },
+                ordinal,
+            });
+            ordinal += 1;
+        }
+        out
+    }
+
+    fn build_draft(&self, f: &Feature, d: &DraftFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to draft") };
+        if d.faces.is_empty() {
+            return Built::failed(current, "the draft has no faces");
+        }
+        let mut repairs = Vec::new();
+        let mut faces = Vec::new();
+        for (i, r) in d.faces.iter().enumerate() {
+            match self.resolve_face(r, body) {
+                Ok(id) => faces.push(id),
+                Err(r) => repairs.push(RepairNeeded { slot: ReferenceSlot::Face { index: i as u32 }, ..r }),
+            }
+        }
+        let neutral = match self.plane_of(&d.neutral, body) {
+            Ok(p) => Some(p),
+            Err(r) => {
+                repairs.push(*r);
+                None
+            }
+        };
+        let Some(neutral) = neutral.filter(|_| repairs.is_empty()) else {
+            return Built::pass(FeatureStatus::RepairNeeded(repairs), current);
+        };
+        let pull = if d.reverse { -neutral.normal } else { neutral.normal };
+        let params = Draft { pull, neutral_origin: neutral.origin, neutral_normal: neutral.normal, angle_deg: d.angle };
+        let result = self.kernel.draft(&OpTag::new(format!("{}.draft", f.id)), body, &faces, &params);
+        self.finish(result, current, |_| Vec::new())
+    }
 }
+
+/// The name of a face a copy copies: its feature, generator and ordinal.
+type SourceName = (FeatureId, Generator, u32);
 
 fn kernel_repair(slot: ReferenceSlot, e: KernelError) -> RepairNeeded {
     RepairNeeded { slot, reason: RepairReason::Missing, message: e.to_string(), candidates: Vec::new() }

@@ -1,0 +1,155 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "fillet",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              20,
+              15,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 12000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              20,
+              15,
+              10
+            ],
+            "diameter": 16
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 12,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 14412.743158,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [],
+      "render": false
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [],
+      "render": false
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Boss-Extrude2 \u00b7 Edge 1"
+        ],
+        "radius": 2
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 14458.300902,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "junction fillet build"
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Boss-Extrude1 \u00b7 Edge 1",
+          "Boss-Extrude1 \u00b7 Edge 3"
+        ],
+        "radius": 1
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 14445.424792,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "edge fillet build"
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 3
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 14505.082641,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "junction fillet edit"
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "depth": 15,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 15108.268431,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "fillets follow an earlier edit"
+    }
+  ]
+}

@@ -142,7 +142,7 @@ fn drawing_opens_pinned_rebuilds_repairs_and_lists_locations() {
     let (id, params) = {
         let f = &harness.state().state.doc.features[0];
         let FeatureKind::Extrude(p) = &f.kind else { panic!("the first feature is an extrude") };
-        (f.id, *p)
+        (f.id, p.clone())
     };
     let params = soliddraft_app::document::ExtrudeParams { depth: params.depth + 10.0, ..params };
     push(&mut harness, AppAction::Command(Command::EditExtrude { id, params }));

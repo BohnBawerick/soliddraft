@@ -1,26 +1,26 @@
 {
-  "backend": "catallax 0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b",
+  "backend": "catallax 98068abbba47dd28eb72683b99574920baff8f12",
   "views": {
     "bracket": {
       "front": {
         "visible": 16,
         "hidden": 48,
-        "digest": "c1fe2e61f61f8386089ac64b4e6d175e"
+        "digest": "68a73c9a0856bc8ce1a6387fbf2aff2e"
       },
       "iso": {
         "visible": 48,
         "hidden": 26,
-        "digest": "6c79fed78eeb8268f22575e3faa97b53"
+        "digest": "d431c435cd6014b1c66a770008e09e2c"
       },
       "right": {
         "visible": 26,
         "hidden": 46,
-        "digest": "aa54fe7ec99cef115e369fe162763424"
+        "digest": "e0c247d63cefa321023f28fbff7d9041"
       },
       "top": {
-        "visible": 929,
-        "hidden": 941,
-        "digest": "162a6965ac0950349d315fdccfc015d8"
+        "visible": 1163,
+        "hidden": 1175,
+        "digest": "c47392598070cd94ef5fa9d069cc475b"
       }
     }
   }

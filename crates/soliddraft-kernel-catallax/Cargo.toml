@@ -11,14 +11,14 @@ publish.workspace = true
 [dependencies]
 soliddraft-kernel-api.workspace = true
 serde_json.workspace = true
-catallax-app = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-mesh = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-numbers = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-topology = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-recipe = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-shapes = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-measure = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
-catallax-step = { git = "https://github.com/BohnBawerick/catallax", rev = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b" }
+catallax-app = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-mesh = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-numbers = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-topology = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-recipe = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-shapes = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-measure = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
+catallax-step = { git = "https://github.com/BohnBawerick/catallax", rev = "98068abbba47dd28eb72683b99574920baff8f12" }
 
 [dev-dependencies]
 soliddraft-recipe.workspace = true

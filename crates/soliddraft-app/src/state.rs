@@ -4,8 +4,8 @@
 
 pub use crate::chat::{ChatMessage, ChatState, Role};
 use crate::document::{
-    ChamferParams, Command, CutParams, DisplayMesh, Document, EntityInfo, ExtrudeParams, FeatureId, FilletParams,
-    Preview, Selection, SketchPlane,
+    ChamferParams, Command, CutParams, DisplayMesh, Document, DraftParams, EntityInfo, ExtrudeParams, FeatureId,
+    FilletParams, HoleParams, Preview, Selection, SketchPlane,
 };
 use crate::document::{EdgeRef, EntityRef};
 use crate::drag::{Dimension, DragPreview, Finish};
@@ -45,6 +45,12 @@ pub enum AppAction {
     StartCut,
     StartFillet,
     StartChamfer,
+    StartHole,
+    StartPattern {
+        circular: bool,
+    },
+    StartMirror,
+    StartDraft,
     StartRepair(FeatureId),
     EditFeature(FeatureId),
     SketchTool(Tool),
@@ -165,6 +171,10 @@ pub enum EditorParams {
     Cut(CutParams),
     Fillet(FilletParams),
     Chamfer(ChamferParams),
+    Hole(HoleParams),
+    Pattern(soliddraft_model::PatternFeature),
+    Mirror(soliddraft_model::MirrorFeature),
+    Draft(DraftParams),
     /// Picking a plane or planar face for a new sketch.
     PickPlane,
     /// Choosing replacements for a feature's missing references.
@@ -187,6 +197,13 @@ impl FeatureEditor {
             EditorParams::Cut(_) => format!("{edit}Cut-Extrude"),
             EditorParams::Fillet(_) => format!("{edit}Fillet"),
             EditorParams::Chamfer(_) => format!("{edit}Chamfer"),
+            EditorParams::Hole(_) => format!("{edit}Hole"),
+            EditorParams::Pattern(p) => match p.layout {
+                soliddraft_model::PatternSpec::Linear { .. } => format!("{edit}Linear Pattern"),
+                soliddraft_model::PatternSpec::Circular { .. } => format!("{edit}Circular Pattern"),
+            },
+            EditorParams::Mirror(_) => format!("{edit}Mirror"),
+            EditorParams::Draft(_) => format!("{edit}Draft"),
             EditorParams::PickPlane => "Sketch".to_owned(),
             EditorParams::Repair { .. } => "Repair references".to_owned(),
         }
@@ -224,7 +241,13 @@ impl FeatureEditor {
             EditorParams::Cut(p) => doc.preview_cut(p, before),
             EditorParams::Fillet(f) => doc.preview_rounding(&f.edges, f.radius, false, before),
             EditorParams::Chamfer(c) => doc.preview_rounding(&c.edges, c.distance, true, before),
-            EditorParams::PickPlane | EditorParams::Repair { .. } => Ok(Preview::default()),
+            // These preview once applied; the interface half adds ghosts for them.
+            EditorParams::Hole(_)
+            | EditorParams::Pattern(_)
+            | EditorParams::Mirror(_)
+            | EditorParams::Draft(_)
+            | EditorParams::PickPlane
+            | EditorParams::Repair { .. } => Ok(Preview::default()),
         };
         match result {
             Ok(p) => {

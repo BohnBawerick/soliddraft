@@ -100,9 +100,9 @@ fn unreadable_settings_open_with_the_defaults() {
 fn the_quality_report_follows_the_setting() {
     let mut doc = cylinder();
     let auto = doc.quality_report().unwrap().unwrap();
-    // A 20 x 20 x 20 box around the cylinder: diagonal 20 * sqrt(3).
-    let chord = doc.kernel().topology(doc.body().unwrap()).unwrap().display_chord_height.unwrap();
-    assert!((auto.diagonal_mm - 20.0 * 3f64.sqrt()).abs() <= 2.0 * 3f64.sqrt() * chord + 1e-6, "{}", auto.diagonal_mm);
+    // A 20 x 20 x 20 box around the cylinder: diagonal 20 * sqrt(3). The box is proven,
+    // not read from display triangles.
+    assert!((auto.diagonal_mm - 20.0 * 3f64.sqrt()).abs() <= 1e-6, "{}", auto.diagonal_mm);
     let standard = auto.level(Level::Standard);
     assert!((standard.deviation_mm.unwrap() - 0.002 * auto.diagonal_mm).abs() < 1e-12);
     assert!(auto.level(Level::Fine).triangles > standard.triangles);

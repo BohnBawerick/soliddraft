@@ -33,7 +33,7 @@ mod ids;
 mod profile;
 
 pub use geometry::{Aabb, Plane, Point2, Vec3};
-pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, OpKind, Origin, Split};
+pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, HolePart, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
 pub use profile::{Loop, PROFILE_JOIN_TOLERANCE, Profile, ProfileError, Segment};
 
@@ -81,6 +81,138 @@ pub struct Revolve {
     pub axis_direction: Vec3,
     /// Sweep angle in degrees, in (0, 360].
     pub angle_deg: f64,
+}
+
+/// Where one hole starts and which way it drills.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HolePlacement {
+    /// The point on the hole's axis where depth zero is, usually on the entry face.
+    pub point: Vec3,
+    /// The drilling direction, into the material.
+    pub direction: Vec3,
+}
+
+/// How deep a hole's main wall goes.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HoleDepth {
+    /// To this depth below the placement point.
+    Blind {
+        /// Depth in millimetres, greater than zero.
+        depth: f64,
+    },
+    /// Through everything along the drilling direction.
+    Through,
+}
+
+/// The bottom of a blind hole.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HoleTip {
+    /// A flat floor.
+    Flat,
+    /// A drill-point cone.
+    Cone {
+        /// Full angle in degrees, in (0, 180); 118 for a standard drill.
+        angle_deg: f64,
+    },
+}
+
+/// A counterbore or countersink at a hole's entry.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HoleHead {
+    /// A wider cylinder at the entry.
+    Counterbore {
+        /// Diameter, more than the hole's.
+        diameter: f64,
+        /// Depth below the placement point.
+        depth: f64,
+    },
+    /// A cone at the entry.
+    Countersink {
+        /// Diameter at depth zero, more than the hole's.
+        diameter: f64,
+        /// Full angle in degrees, in (0, 180); 82, 90 and 100 are standard.
+        angle_deg: f64,
+    },
+}
+
+/// Parameters of a set of holes drilled into a solid.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Hole {
+    /// One entry per hole.
+    pub placements: Vec<HolePlacement>,
+    /// Diameter of the main wall.
+    pub diameter: f64,
+    /// Depth of the main wall.
+    pub depth: HoleDepth,
+    /// The bottom of a blind hole.
+    pub tip: HoleTip,
+    /// A counterbore or countersink at the entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<HoleHead>,
+}
+
+/// Where a pattern's copies go. Copy `k` runs from 0, the body itself.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatternLayout {
+    /// Copy `k` is translated by `k` times `step`.
+    Linear {
+        /// The translation between neighbouring copies.
+        step: Vec3,
+        /// Number of copies, including the body itself.
+        count: u32,
+    },
+    /// Copy `k` is turned by `k` times `angle_deg` about the axis.
+    Circular {
+        /// A point on the axis.
+        axis_origin: Vec3,
+        /// The axis direction; positive angles turn counter-clockwise about it.
+        axis_direction: Vec3,
+        /// Number of copies, including the body itself.
+        count: u32,
+        /// The angle between neighbouring copies, in degrees.
+        angle_deg: f64,
+    },
+}
+
+/// Parameters of a reflection of a solid in a plane.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Mirror {
+    /// A point on the mirror plane.
+    pub plane_origin: Vec3,
+    /// The mirror plane's normal.
+    pub plane_normal: Vec3,
+    /// Unites the reflection with the original when true.
+    pub keep_original: bool,
+}
+
+/// Parameters of a draft: faces tilted away from a pull direction about a neutral plane.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Draft {
+    /// The direction the part leaves its mould in.
+    pub pull: Vec3,
+    /// A point on the neutral plane, where drafted faces keep their place.
+    pub neutral_origin: Vec3,
+    /// The neutral plane's normal.
+    pub neutral_normal: Vec3,
+    /// Draft angle in degrees, in (-90, 90).
+    pub angle_deg: f64,
+}
+
+/// Where an extrusion stops when it is not a fixed distance.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExtrudeLimit {
+    /// At the first place the sweep crosses the target's boundary.
+    UpToNext,
+    /// At the first hit on a face of the target.
+    UpToFace {
+        /// A face of the target body.
+        face: FaceId,
+    },
 }
 
 /// Tessellation quality. Zero disables a control.
@@ -492,6 +624,45 @@ pub trait Kernel: Send + Sync {
 
     /// Hollows a solid to wall `thickness`, leaving `open_faces` open.
     fn shell(&self, tag: &OpTag, body: BodyId, open_faces: &[FaceId], thickness: f64) -> KernelResult<OpResult>;
+
+    /// Sweeps a profile along a straight line until it meets `target` as `limit` says,
+    /// and returns the swept solid alone; the caller joins or cuts it. `direction`
+    /// `None` uses the profile plane's normal.
+    fn extrude_to(
+        &self,
+        tag: &OpTag,
+        profile: BodyId,
+        target: BodyId,
+        direction: Option<Vec3>,
+        limit: &ExtrudeLimit,
+    ) -> KernelResult<OpResult> {
+        let _ = (tag, profile, target, direction, limit);
+        Err(KernelError::Unsupported("extrude_to".into()))
+    }
+
+    /// Drills holes into a solid and returns the drilled solid.
+    fn hole(&self, tag: &OpTag, body: BodyId, params: &Hole) -> KernelResult<OpResult> {
+        let _ = (tag, body, params);
+        Err(KernelError::Unsupported("hole".into()))
+    }
+
+    /// Copies a solid along a layout and unites the copies with it.
+    fn pattern(&self, tag: &OpTag, body: BodyId, layout: &PatternLayout) -> KernelResult<OpResult> {
+        let _ = (tag, body, layout);
+        Err(KernelError::Unsupported("pattern".into()))
+    }
+
+    /// Reflects a solid in a plane, keeping or dropping the original.
+    fn mirror(&self, tag: &OpTag, body: BodyId, params: &Mirror) -> KernelResult<OpResult> {
+        let _ = (tag, body, params);
+        Err(KernelError::Unsupported("mirror".into()))
+    }
+
+    /// Tilts faces of a solid away from a pull direction about a neutral plane.
+    fn draft(&self, tag: &OpTag, body: BodyId, faces: &[FaceId], params: &Draft) -> KernelResult<OpResult> {
+        let _ = (tag, body, faces, params);
+        Err(KernelError::Unsupported("draft".into()))
+    }
 
     /// Triangulates a body for display.
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh>;

@@ -9,6 +9,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 
 
 def write(path, value):
@@ -158,6 +159,12 @@ def replay_question(verifier, question, directory, timeout):
     return result
 
 
+def timings(steps):
+    """Labelled steps' elapsed times, such as a feature's build and edit."""
+    return [{"label": s["label"], "tool": s["tool"], "elapsed_ms": s.get("elapsed_ms"), "pass": s["pass"]}
+            for s in steps if "label" in s]
+
+
 def run(args):
     scenario = json.loads(args.scenario.read_text())
     if scenario["format"] != "soliddraft-scenario/1" or not scenario.get("steps"):
@@ -176,9 +183,15 @@ def run(args):
         known = {}
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
+            if "label" in step:
+                entry["label"] = step["label"]
             report["steps"].append(entry)
             arguments = substitute(step.get("arguments", {}), args.out)
+            # Timed from outside the application: the request until its reply, which
+            # includes the rebuild, the display meshes and the bundle capture.
+            started = time.perf_counter()
             result = client.request("tools/call", {"name": step["tool"], "arguments": arguments})
+            entry["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
             directory = args.out / "commands" / f"{number:04}"
             command = json.loads((directory / "command.json").read_text())
             checks = entry["checks"]
@@ -203,15 +216,19 @@ def run(args):
                     replay["expected_refusal"] = code
                     replay["pass"] &= replay.get("refusal") == code and replay.get("status") == "refused"
                     checks.append(replay)
-            if step.get("render", True) and (directory / "recipe.json").exists():
-                view = cli(args.soliddraft, ["view", directory / "recipe.json",
-                    "--dir", "iso", "--svg", directory / "view.svg", "--json"], directory, "view", args.timeout)
-                if view["pass"]:
-                    rendered = json.loads((directory / "view.stdout").read_text())
-                    view["backend"] = rendered["backend"]
-                    view["method"] = rendered["method"]
-                    view["pass"] &= rendered["backend"].startswith("catallax ")
-                checks.append(view)
+            render = step.get("render", True)
+            if render and (directory / "recipe.json").exists():
+                # `viewport` skips the hidden-line view and keeps the application's screenshot.
+                if render != "viewport":
+                    # The saved part rebuilds every feature, including Catallax-native steps.
+                    view = cli(args.soliddraft, ["view", directory / "part.dwprt",
+                        "--dir", "iso", "--svg", directory / "view.svg", "--json"], directory, "view", args.timeout)
+                    if view["pass"]:
+                        rendered = json.loads((directory / "view.stdout").read_text())
+                        view["backend"] = rendered["backend"]
+                        view["method"] = rendered["method"]
+                        view["pass"] &= rendered["backend"].startswith("catallax ")
+                    checks.append(view)
                 checks.append(cli(args.soliddraft, ["screenshot", directory / "part.dwprt", "--png", directory / "viewport.png"],
                     directory, "screenshot", args.timeout))
                 if (directory / "view.svg").exists():
@@ -224,6 +241,12 @@ def run(args):
                     drawing["backend"] = rendered["backend"]
                     drawing["pass"] &= rendered["backend"].startswith("catallax ")
                 checks.append(drawing)
+            for extension in step.get("export", []):
+                exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
+                    "--out", directory / f"part.{extension}"], directory, f"export-{extension}", args.timeout)
+                if exported["pass"]:
+                    exported["report"] = json.loads((directory / f"export-{extension}.stdout").read_text())["report"]
+                checks.append(exported)
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)
@@ -232,6 +255,7 @@ def run(args):
                 entry["questions"] = [str(p.relative_to(args.out)) for p in directory.glob("question-*.json")]
                 break
         report["pass"] = len(report["steps"]) == len(scenario["steps"]) and all(s["pass"] for s in report["steps"])
+        report["timings"] = timings(report["steps"])
     except Exception as error:
         report["error"] = str(error)
     finally:
@@ -243,7 +267,8 @@ def run(args):
             report["pass"] = False
         write(args.out / "protocol.json", client.transcript if client else [])
         write(args.out / "result.json", report)
-    print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error")}))
+    print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error"),
+                      "timings": report.get("timings", [])}))
     return 0 if report["pass"] else 1
 
 

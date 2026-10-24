@@ -3,8 +3,8 @@
 
 use crate::commands;
 use crate::document::{
-    ChamferParams, Command, CutParams, Document, ExtrudeParams, FeatureKind, FeatureStatus, FilletParams, Selection,
-    SketchPlane,
+    ChamferParams, Command, CutParams, Document, DraftParams, EndKind, ExtrudeParams, FeatureKind, FeatureStatus,
+    FilletParams, HoleParams, Selection, SketchPlane,
 };
 use crate::icons::{self, Icon};
 use crate::panels::{self, Layout, Side};
@@ -919,6 +919,55 @@ impl SolidDraftApp {
                 self.open_editor(None, params);
                 self.state.doc.selection = None;
             }
+            AppAction::StartHole => {
+                let face = match self.state.doc.selection {
+                    Some(Selection::Face(f)) => self.state.doc.face_ref(f),
+                    _ => None,
+                };
+                self.open_editor(None, EditorParams::Hole(HoleParams { face, ..Default::default() }));
+                self.state.doc.selection = None;
+            }
+            AppAction::StartPattern { circular } => {
+                let layout = if circular {
+                    soliddraft_model::PatternSpec::Circular {
+                        axis_origin: soliddraft_kernel_api::Vec3::ZERO,
+                        axis_direction: soliddraft_kernel_api::Vec3::Z,
+                        count: 4,
+                        angle: 90.0,
+                    }
+                } else {
+                    soliddraft_model::PatternSpec::Linear {
+                        direction: soliddraft_kernel_api::Vec3::X,
+                        spacing: 20.0,
+                        count: 3,
+                    }
+                };
+                self.open_editor(None, EditorParams::Pattern(soliddraft_model::PatternFeature { layout }));
+            }
+            AppAction::StartMirror => {
+                let plane = match self.state.doc.selection.and_then(|s| match s {
+                    Selection::Face(f) => self.state.doc.face_ref(f),
+                    _ => None,
+                }) {
+                    Some(face) => soliddraft_model::PlaneRef::Face { face },
+                    None => {
+                        soliddraft_model::PlaneRef::Datum { datum: soliddraft_model::DatumPlane::Right, offset: 0.0 }
+                    }
+                };
+                self.open_editor(
+                    None,
+                    EditorParams::Mirror(soliddraft_model::MirrorFeature { plane, keep_original: true }),
+                );
+                self.state.doc.selection = None;
+            }
+            AppAction::StartDraft => {
+                let faces = match self.state.doc.selection {
+                    Some(Selection::Face(f)) => self.state.doc.any_face_ref(f).into_iter().collect(),
+                    _ => Vec::new(),
+                };
+                self.open_editor(None, EditorParams::Draft(DraftParams { faces, ..Default::default() }));
+                self.state.doc.selection = None;
+            }
             AppAction::StartRepair(id) => {
                 let Some(FeatureStatus::NeedsRepair(items)) = self.state.doc.feature(id).map(|f| f.status.clone())
                 else {
@@ -935,10 +984,27 @@ impl SolidDraftApp {
                         self.apply(ctx, AppAction::EditSketch(id));
                         return;
                     }
-                    FeatureKind::Extrude(p) => EditorParams::Extrude(*p),
-                    FeatureKind::Cut(p) => EditorParams::Cut(*p),
+                    FeatureKind::Extrude(p) => EditorParams::Extrude(p.clone()),
+                    FeatureKind::Cut(p) => EditorParams::Cut(p.clone()),
                     FeatureKind::Fillet(p) => EditorParams::Fillet(p.clone()),
                     FeatureKind::Chamfer(p) => EditorParams::Chamfer(p.clone()),
+                    FeatureKind::Hole(h) => EditorParams::Hole(HoleParams {
+                        face: Some(h.face.clone()),
+                        points: h.points.clone(),
+                        diameter: h.diameter,
+                        depth: h.depth,
+                        tip: h.tip,
+                        head: h.head,
+                    }),
+                    FeatureKind::Pattern(p) => EditorParams::Pattern(p.clone()),
+                    FeatureKind::Mirror(m) => EditorParams::Mirror(m.clone()),
+                    FeatureKind::Draft(d) => EditorParams::Draft(DraftParams {
+                        faces: d.faces.clone(),
+                        neutral: d.neutral.clone(),
+                        angle: d.angle,
+                        reverse: d.reverse,
+                        picking_neutral: false,
+                    }),
                 };
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(None));
@@ -957,6 +1023,28 @@ impl SolidDraftApp {
                     (None, EditorParams::Fillet(p)) => Command::AddFillet { params: p },
                     (Some(id), EditorParams::Chamfer(p)) => Command::EditChamfer { id, params: p },
                     (None, EditorParams::Chamfer(p)) => Command::AddChamfer { params: p },
+                    (target, EditorParams::Hole(h)) => match h.to_model() {
+                        Ok(h) => match target {
+                            Some(id) => Command::EditFeature { id, kind: FeatureKind::Hole(h) },
+                            None => Command::AddFeature(FeatureKind::Hole(h)),
+                        },
+                        Err(e) => {
+                            self.state.note(e, NoteKind::Error);
+                            return;
+                        }
+                    },
+                    (target, EditorParams::Pattern(p)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Pattern(p) },
+                        None => Command::AddFeature(FeatureKind::Pattern(p)),
+                    },
+                    (target, EditorParams::Mirror(m)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Mirror(m) },
+                        None => Command::AddFeature(FeatureKind::Mirror(m)),
+                    },
+                    (target, EditorParams::Draft(d)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Draft(d.to_model()) },
+                        None => Command::AddFeature(FeatureKind::Draft(d.to_model())),
+                    },
                     (_, EditorParams::PickPlane) => return,
                     (Some(id), EditorParams::Repair { items, chosen, .. }) => {
                         let mut applied = 0;
@@ -1004,6 +1092,49 @@ impl SolidDraftApp {
                                     list.push(r);
                                 }
                             }
+                            return;
+                        }
+                        (EditorParams::Hole(h), Some(Selection::Face(f))) => {
+                            match self.state.doc.face_ref(f) {
+                                Some(r) => h.face = Some(r),
+                                None => e.error = Some("Holes start on a planar face".into()),
+                            }
+                            return;
+                        }
+                        (EditorParams::Mirror(m), Some(Selection::Face(f))) => {
+                            match self.state.doc.face_ref(f) {
+                                Some(face) => m.plane = soliddraft_model::PlaneRef::Face { face },
+                                None => e.error = Some("Mirror in a planar face or a reference plane".into()),
+                            }
+                            return;
+                        }
+                        (EditorParams::Draft(d), Some(Selection::Face(f))) => {
+                            if d.picking_neutral {
+                                match self.state.doc.face_ref(f) {
+                                    Some(face) => {
+                                        d.neutral = soliddraft_model::PlaneRef::Face { face };
+                                        d.picking_neutral = false;
+                                    }
+                                    None => e.error = Some("The neutral plane must be planar".into()),
+                                }
+                            } else if let Some(r) = self.state.doc.any_face_ref(f) {
+                                if let Some(i) = d.faces.iter().position(|x| x.label == r.label) {
+                                    d.faces.remove(i);
+                                } else {
+                                    d.faces.push(r);
+                                }
+                            }
+                            return;
+                        }
+                        (
+                            EditorParams::Extrude(ExtrudeParams { end: EndKind::UpToFace(face), .. }),
+                            Some(Selection::Face(f)),
+                        )
+                        | (
+                            EditorParams::Cut(CutParams { up_to: Some(EndKind::UpToFace(face)), .. }),
+                            Some(Selection::Face(f)),
+                        ) => {
+                            *face = self.state.doc.any_face_ref(f);
                             return;
                         }
                         (EditorParams::PickPlane, Some(Selection::Face(f))) => {

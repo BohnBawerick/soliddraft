@@ -71,7 +71,9 @@ has `tool` and `arguments`, using the schemas printed by `soliddraft mcp --help`
 Optional `checks` use JSON pointers into `command.json`, with exactly one of
 `equals`, `approx`, `minimum` or `contains`. `approx` accepts an absolute
 `tolerance`, default 0.001. Missing values fail. A step can set `render: false`
-for a sketch without a body, `drawing: true` for drawing output, or `refusal`
+for a sketch without a body, `render: "viewport"` for the application screenshot
+without the hidden-line view, `drawing: true` for drawing output, `export` with a
+list of extensions (`step`, `stl`, `3mf`) for `soliddraft export`, or `refusal`
 with an expected stable kernel code. Unexpected tool errors fail immediately.
 MCP rounds reported volumes to two decimals, so the bracket checks allow
 0.005 mm³ around the analytical volume. A step's `repair` lists the features expected
@@ -116,7 +118,8 @@ MCP tool call has a numbered directory under `commands/` containing:
   records the adapter and kernel calls made while reopening the saved part.
   `view.svg.kernel.json` retains the view command's kernel calls. A drawing step
   also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`, collected
-  by `soliddraft draw --kernel-log`.
+  by `soliddraft draw --kernel-log`. An export step writes `part.<extension>` and
+  keeps the export report in its check.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 

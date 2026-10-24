@@ -238,7 +238,7 @@ jobs:
               assert response["work"]["limit"] == 100_000_000, response["work"]
               print(f"{name} answered with its original geometry: {response['work']}")
           PYTHON
-      - name: Run the bracket, references and refusal scenarios
+      - name: Run every application scenario
         run: |
           status=0
           for scenario in ci/scenarios/*.json; do
