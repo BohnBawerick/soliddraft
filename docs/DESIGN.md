@@ -85,6 +85,15 @@ The sketcher draws on the 3D view with the egui painter; the sketch plane maps p
 - **Sketches on faces** use a frame with u to the right and v up when the face is looked at from outside, and the model origin projected onto the face as origin. A sketch therefore does not move when the face's outline changes, and a bore sketched on a boss reads as x, y of the part.
 - **Entering a sketch** looks straight at the plane, switches to orthographic, and fits the body or, with nothing built yet, a 200 mm workspace. Leaving it restores the projection. The ribbon jumps to the Sketch tab and back.
 
+The sketch properties panel's **Polygon and modify** controls apply regular polygons, trim, extend, offset, mirror, and linear or circular patterns through `soliddraft_sketch::tools::Operation`. Coordinates are in the sketch plane, in millimetres. These tools use the existing `f64` sketch model, solver and joining tolerances. The kernel geometry is exact after the existing Catallax recipe conversion; the sketch calculations are not exact rational arithmetic.
+
+Trim removes the picked interval between intersections with bounded sketch curves. Extend moves the selected start or end to the nearest intersection beyond it with the selected boundary. Both preserve the target entity id when a piece remains and discard its old relations, so an old dimension cannot restore the trimmed or extended geometry. A refused operation leaves the sketch unchanged.
+
+Offset copies a connected chain selected in walking order, starting in the first entity's direction. Positive distance is to the left, negative to the right. Adjacent offset lines and arcs meet at miter intersections. Collapsed radii, consumed edges and self-intersections are refused. The originals remain, so offsetting a closed loop makes a nested profile. Mirror reverses reflected arc endpoints to retain the sketch model's counter-clockwise arc convention. Copies preserve construction status and get coincident relations at matching new endpoints, but do not inherit driving dimensions. Patterns are independent copies, with counts including the seed. Polygon sides are limited to 3 through 1000; pattern counts to 2 through 1000.
+
+Pointer-led selection workflows, tool previews, dedicated ribbon commands and placement feedback for these tools remain interface-design work. Ellipse, spline and text profiles still wait for Catallax stage 5.
+
+
 ## Phase 2: one body, references and repair
 
 - **One running body.** Each extrude merges with the body so far, each cut subtracts a tool through it, fillets and chamfers round its edges. A cut defaults to going against the sketch normal, into a face; a boss along it. "Through all" reaches past the far side of the body.

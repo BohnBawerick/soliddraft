@@ -806,6 +806,15 @@ fn registry() -> Vec<CommandSpec> {
                  Every shape becomes one profile for a later extrude or cut.",
                 tools::sketch_params,
             ),
+        cmd("sketch_geometry", "Sketch geometry", Icon::Sketch, "Create a sketch using polygon and line/arc tools")
+            .agents(
+                Agents::Verb,
+                "Build a sketch from analytic entities and polygon, trim, extend, offset, mirror or pattern operations. \
+                 Coordinates are u/v on the sketch plane. Sketch arithmetic is tolerance-based; Catallax converts the profiles. \
+                 Entity ids start at 1 in insertion order. Construction entities do not enter profiles. \
+                 Copies are independent and instance counts include the seed. Extrude the resulting closed profiles with extrude.",
+                tools::sketch_geometry_params,
+            ),
         cmd("exit_sketch", "Exit", Icon::Check, "Exit the sketch")
             .on(Sketch, "Sketch", Large)
             .run(|_| AppAction::ExitSketch(None))

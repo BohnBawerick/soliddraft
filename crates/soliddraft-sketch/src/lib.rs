@@ -14,9 +14,12 @@
 pub mod profile;
 mod shapes;
 pub mod solve;
+pub mod tools;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tools_tests;
 
 pub use profile::{ProfileError, Region, RegionLoop};
 pub use shapes::{Shape, SketchError};

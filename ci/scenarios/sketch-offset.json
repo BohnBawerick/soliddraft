@@ -1,0 +1,185 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "sketch-offset",
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": -8,
+                "v": -6
+              },
+              "b": {
+                "u": 8,
+                "v": -6
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": 8,
+                "v": -4
+              },
+              "start": {
+                "u": 8,
+                "v": -6
+              },
+              "end": {
+                "u": 10,
+                "v": -4
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 10,
+                "v": -4
+              },
+              "b": {
+                "u": 10,
+                "v": 4
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": 8,
+                "v": 4
+              },
+              "start": {
+                "u": 10,
+                "v": 4
+              },
+              "end": {
+                "u": 8,
+                "v": 6
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 8,
+                "v": 6
+              },
+              "b": {
+                "u": -8,
+                "v": 6
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": -8,
+                "v": 4
+              },
+              "start": {
+                "u": -8,
+                "v": 6
+              },
+              "end": {
+                "u": -10,
+                "v": 4
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": -10,
+                "v": 4
+              },
+              "b": {
+                "u": -10,
+                "v": -4
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "add",
+            "kind": {
+              "type": "arc",
+              "center": {
+                "u": -8,
+                "v": -4
+              },
+              "start": {
+                "u": -10,
+                "v": -4
+              },
+              "end": {
+                "u": -8,
+                "v": -6
+              }
+            },
+            "construction": false
+          },
+          {
+            "tool": "offset",
+            "entities": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "distance": -1
+          }
+        ]
+      },
+      "render": false
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 127.41592653589794,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 2,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}
