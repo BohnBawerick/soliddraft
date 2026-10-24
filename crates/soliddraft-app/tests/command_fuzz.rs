@@ -25,8 +25,10 @@ use proptest::prelude::*;
 use proptest::strategy::Union;
 use proptest::test_runner::RngSeed;
 use serde_json::{Map, Number, Value, json};
+use soliddraft_app::app_tools::AppTools;
 use soliddraft_app::command_tools::{CommandTools, MCP_INSTRUCTIONS, ProposalBook, Surface, board_bracket, tool_specs};
 use soliddraft_app::document::Document;
+use soliddraft_app::state::AppState;
 use soliddraft_assistant::mcp::McpSession;
 use soliddraft_assistant::tools::call_checked;
 use soliddraft_assistant::{Caller, ToolHost};
@@ -118,6 +120,9 @@ struct Pools {
     features: Vec<String>,
     edges: Vec<String>,
     proposals: Vec<String>,
+    templates: Vec<String>,
+    /// The views a drawing of the bracket has.
+    views: Vec<String>,
 }
 
 fn pools(doc: &Document) -> Pools {
@@ -131,6 +136,8 @@ fn pools(doc: &Document) -> Pools {
         features: ahead.clone(),
         edges: Vec::new(),
         proposals: strings(&["P1", "P2", "P3", "P4", "P99"]),
+        templates: strings(&["iso-a3", "ansi-b", "iso-a9"]),
+        views: strings(&["Front", "Top", "Left", "Right", "Isometric", "Section Z-Z"]),
     };
     pools.sketches.extend(ahead);
     for f in &doc.features {
@@ -158,6 +165,8 @@ impl Pools {
             "feature" | "before" => &self.features,
             "edges" => &self.edges,
             "proposal_id" => &self.proposals,
+            "template" => &self.templates,
+            "view" => &self.views,
             _ => &self.any,
         }
     }
@@ -442,11 +451,10 @@ fn assert_reply(request: &Value, reply: &Value) -> bool {
 }
 
 fn run_over_mcp(calls: Vec<Call>) {
-    let mut doc = board_bracket();
-    let mut book = ProposalBook::default();
+    let mut state = AppState::new(board_bracket());
     let mut session = McpSession::new("soliddraft", "0.1.0", MCP_INSTRUCTIONS);
     for (n, call) in calls.iter().enumerate() {
-        let before = snapshot(&doc, &book);
+        let before = snapshot(&state.doc, &state.chat.book);
         let request = json!({
             "jsonrpc": "2.0", "id": n,
             "method": "tools/call",
@@ -455,8 +463,8 @@ fn run_over_mcp(calls: Vec<Call>) {
         if std::env::var_os("FUZZ_TRACE").is_some() {
             eprintln!("calling {}", request["params"].to_string().chars().take(600).collect::<String>());
         }
-        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
-        let reply = session.handle(&mut host, request.clone()).expect("a request is answered");
+        let reply =
+            session.handle(&mut AppTools { state: &mut state }, request.clone()).expect("a request is answered");
         let refused = assert_reply(&request, &reply);
         if std::env::var_os("FUZZ_TRACE").is_some() {
             let why =
@@ -466,7 +474,7 @@ fn run_over_mcp(calls: Vec<Call>) {
         }
         if refused {
             // A refused apply or undo may have moved a proposal's status, never the part.
-            let after = snapshot(&doc, &book);
+            let after = snapshot(&state.doc, &state.chat.book);
             assert_eq!(
                 (&before.revision, &before.features, before.undo_depth, &before.undo_label, before.rollback),
                 (&after.revision, &after.features, after.undo_depth, &after.undo_label, after.rollback),
@@ -476,7 +484,7 @@ fn run_over_mcp(calls: Vec<Call>) {
             );
         }
     }
-    assert_part_survives(&doc);
+    assert_part_survives(&state.doc);
 }
 
 /// The part saves, reopens and rebuilds to the revision it had.
@@ -543,9 +551,8 @@ proptest! {
 /// A call with no arguments is refused, with a message, by every tool that needs some.
 #[test]
 fn every_tool_refuses_an_empty_call_with_a_message() {
-    let mut doc = board_bracket();
-    let mut book = ProposalBook::default();
-    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let mut state = AppState::new(board_bracket());
+    let mut host = AppTools { state: &mut state };
     let caller = Caller::Mcp { client: "test".into() };
     for spec in host.tools() {
         let schema_wants_fields = spec.input_schema["required"].as_array().is_some_and(|r| !r.is_empty());

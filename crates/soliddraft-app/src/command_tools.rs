@@ -415,7 +415,7 @@ fn part_path(input: &Value) -> Result<std::path::PathBuf, String> {
     Ok(path)
 }
 
-fn feature_by_name(doc: &Document, name: &str) -> Result<FeatureId, String> {
+pub(crate) fn feature_by_name(doc: &Document, name: &str) -> Result<FeatureId, String> {
     doc.features
         .iter()
         .find(|f| f.name == name.trim())
@@ -1105,7 +1105,9 @@ pub const MCP_INSTRUCTIONS: &str = "SolidDraft, a parametric CAD application. Th
 the same command layer as the ribbon. Units are millimetres, Z is up, and no length or coordinate may exceed 100000. Read the part with model_summary and \
 feature; change it with the verb tools (each runs at once as one undo step) or with propose and apply; undo and \
 redo step through the undo stack. Entities are named as the interface names them: Boss-Extrude1 for a feature, \
-Boss-Extrude1 · End cap for a face, Boss-Extrude1 · Edge 3 for an edge.";
+Boss-Extrude1 · End cap for a face, Boss-Extrude1 · Edge 3 for an edge. make_drawing or opening a .dwdrw file \
+gives a drawing, which model_summary lists by sheet, view and annotation for the drawing_ tools. Every command of \
+the ribbon is a tool here except those that need the window; `soliddraft commands` says why for each.";
 
 /// How agents are told to name entities, for the tools that take names and their errors.
 macro_rules! names_help {

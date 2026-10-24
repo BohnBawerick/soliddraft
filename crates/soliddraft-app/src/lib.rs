@@ -7,6 +7,7 @@
 #![allow(missing_docs)]
 
 pub mod app;
+pub mod app_tools;
 pub mod assistant;
 pub mod chat;
 #[macro_use]

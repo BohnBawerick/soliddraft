@@ -91,6 +91,11 @@ impl DrawingDoc {
         self.stack.undo_name()
     }
 
+    /// How many steps the undo stack holds.
+    pub fn undo_depth(&self) -> usize {
+        self.stack.depth()
+    }
+
     pub fn redo_label(&self) -> Option<&str> {
         self.stack.redo_name()
     }

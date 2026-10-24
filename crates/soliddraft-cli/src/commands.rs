@@ -1,7 +1,7 @@
 //! `soliddraft commands` lists the command registry: every command of the app and the
 //! MCP server, with its id, shortcuts, ribbon place and doc. A query searches it the
 //! way the app's command search does. `soliddraft mcp --help` lists the MCP tools from
-//! the same table.
+//! the same table, and `soliddraft run` runs them.
 
 use std::process::ExitCode;
 
@@ -19,8 +19,11 @@ does. A query keeps the commands whose label, id, ribbon place or description ma
 every word, best match first, as the app's command search ranks them.
   --json    print one JSON array with every field, parameters included
 
-Who runs it: `app` for the app only; `tool` for the assistant and MCP clients; `verb`
-for a recipe verb, which MCP clients can also call directly; `mcp` for MCP clients only.
+Who runs it: `tool` for the assistant and MCP clients; `verb` for a recipe verb, which
+MCP clients can also call directly; `mcp` for MCP clients only; `app` for a command that
+needs the window, and `later` for one nothing runs yet. `soliddraft run` runs every
+command an MCP client can. The JSON says why an `app` command needs the window and what
+each command does to the undo stacks.
 ";
 
 /// The MCP server's help, with its tools from the registry.
@@ -50,7 +53,8 @@ fn param_names(c: &CommandSpec) -> Vec<&'static str> {
 
 fn who(c: &CommandSpec) -> &'static str {
     match c.agents {
-        Agents::None => "app",
+        Agents::None => "later",
+        Agents::App(_) => "app",
         Agents::Tool => "tool",
         Agents::Verb => "verb",
         Agents::Mcp => "mcp",
@@ -74,6 +78,11 @@ fn to_json(c: &CommandSpec) -> Value {
             Workspace::Both => "both",
         },
         "agents": who(c),
+        "app_only": match c.agents {
+            Agents::App(why) => Value::from(why),
+            _ => Value::Null,
+        },
+        "undo": c.undo.label(),
         "ribbon": c.ribbon.iter().map(|p| json!({ "tab": p.tab.label(), "panel": p.panel })).collect::<Vec<_>>(),
         "shortcuts": c.keys.iter().map(|k| json!({ "keys": k.text(), "where": k.scope.label() })).collect::<Vec<_>>(),
         "params": (c.params)().into_iter().map(|(name, schema)| json!({
