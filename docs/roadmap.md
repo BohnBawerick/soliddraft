@@ -103,7 +103,7 @@ These items from the previous roadmap continue in parallel.
 
 - Modelling and documents: autosave, recovery, thumbnails and a start page for recent documents; assembly editing, drawings of assemblies and Pack and Go; configurations and in-context references after assembly references are stable. Exchange work follows section 6's kernel dependencies.
 - Interface: a shortcut editor and right-click selection tools (the shared command registry and a minimal command palette, opened with Ctrl+Shift+P, are in; `crates/soliddraft-cli/tests/entry_points.rs` checks every entry point against the registry); on-canvas feature handles, display presets, dark theme and interface scaling; material property sources and conditions.
-- Reliability: fuzz command inputs and test damaged document files; record replayable command journals for crash reports; interface scenarios and layout checks at several window sizes; kernel work off the interface thread in the browser build; installers once the document formats and modelling tools are ready.
+- Reliability: command inputs are fuzzed and damaged document files are tested (docs/ci.md); record replayable command journals for crash reports; interface scenarios and layout checks at several window sizes; kernel work off the interface thread in the browser build; installers once the document formats and modelling tools are ready.
 
 On-canvas handles drag with previews. While a handle moves, the application shows a preview computed off the interface thread, from the field kernel or from a cached mesh of the last exact result, and delivers intermediate values as the drag goes on. When the drag settles, the exact B-rep result at the requested value replaces the preview. The viewport and the tree label a preview as a preview. Only the exact result is saved, exported or measured; a preview carries no proof, and a stale preview never stands in for an edit that failed. One drag is one undo step. The interface scenarios drive continuous input, cancellation, a change of selection during a drag and a result that arrives after its drag was superseded.
 
@@ -144,7 +144,7 @@ Some of these items were informed by public work on other open-source CAD projec
 |---|---|---|
 | Release machinery: tagged self-contained builds for three platforms | Stays | Release notes carry the works-today list and name Catallax as the kernel. |
 | Phase 4 as written: a Rust backend, cross-kernel runner, STEP and mesh export | Changes | Rewritten as next items 1, 2 and 6 below. |
-| Cancel superseded CI runs | Stays | Small CI hygiene that saves runner hours. |
+| Cancel superseded CI runs | Done | A push cancels its branch's older runs and never a run on main (docs/ci.md). |
 | Feature plumbing: revolve, shell, hole, patterns, mirror, reference geometry | Changes | Ordered by Catallax's stages, as section 6 says. |
 | Sketch depth: polygon, ellipse, spline, text, offset, mirror, trim and extend, patterns, automatic relations | Changes, split | Tools that make lines and arcs come now. Ellipse, spline and text profiles come with Catallax stage 5, so the sketcher and the kernel gain them together. |
 | Settings, display presets, shortcut map, theme and interface scale | Stays | Kernel-independent. |

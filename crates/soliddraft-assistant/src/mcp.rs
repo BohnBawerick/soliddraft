@@ -8,7 +8,7 @@
 //! each message to the caller through a channel, so the app runs the tools on its own
 //! thread, next to its document.
 
-use crate::tools::{Caller, ToolHost, call_checked};
+use crate::tools::{Caller, ToolHost, call_checked, clip_error};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -43,6 +43,10 @@ impl McpSession {
     /// notifications and responses.
     pub fn handle(&mut self, host: &mut dyn ToolHost, message: Value) -> Option<Value> {
         match message {
+            // An empty batch is an invalid request, and the client waits for the answer.
+            Value::Array(batch) if batch.is_empty() => {
+                Some(error_reply(Value::Null, -32600, "invalid request: empty batch"))
+            }
             Value::Array(batch) => {
                 let replies: Vec<Value> = batch.into_iter().filter_map(|m| self.handle_one(host, m)).collect();
                 (!replies.is_empty()).then_some(Value::Array(replies))
@@ -126,6 +130,7 @@ impl McpSession {
 }
 
 fn error_reply(id: Value, code: i64, message: &str) -> Value {
+    let message = clip_error(message.to_owned());
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
@@ -136,24 +141,55 @@ pub fn serve_stdio(session: &mut McpSession, host: &mut dyn ToolHost) -> std::io
     serve_lines(session, host, stdin.lock(), &mut stdout)
 }
 
-/// Serves newline-delimited JSON-RPC from `input` to `output`.
+/// The longest message either transport takes: a line on stdin or an HTTP body.
+const MAX_MESSAGE: usize = 16 * 1024 * 1024;
+
+/// Serves newline-delimited JSON-RPC from `input` to `output`. A line that is not UTF-8,
+/// not JSON or longer than [`MAX_MESSAGE`] is answered with an error and the loop goes
+/// on: only the end of `input` or a failed read or write ends it.
 pub fn serve_lines(
     session: &mut McpSession,
     host: &mut dyn ToolHost,
-    input: impl BufRead,
+    mut input: impl BufRead,
     output: &mut impl Write,
 ) -> std::io::Result<()> {
-    for line in input.lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = (&mut input).take(MAX_MESSAGE as u64 + 1).read_until(b'\n', &mut line)?;
+        if read == 0 {
+            return Ok(());
         }
-        if let Some(reply) = session.handle_text(host, &line) {
+        let reply = if line.len() > MAX_MESSAGE && line.last() != Some(&b'\n') {
+            // No end of line within the limit: throw the rest of this line away.
+            loop {
+                let buffered = input.fill_buf()?;
+                let Some(end) = buffered.iter().position(|b| *b == b'\n') else {
+                    let n = buffered.len();
+                    if n == 0 {
+                        break;
+                    }
+                    input.consume(n);
+                    continue;
+                };
+                input.consume(end + 1);
+                break;
+            }
+            Some(error_reply(Value::Null, -32600, "invalid request: the message is too long"))
+        } else {
+            match std::str::from_utf8(&line) {
+                Ok(text) if text.trim().is_empty() => continue,
+                Ok(text) => session.handle_text(host, text),
+                Err(e) => {
+                    Some(error_reply(Value::Null, -32700, &format!("parse error: the message is not UTF-8: {e}")))
+                }
+            }
+        };
+        if let Some(reply) = reply {
             writeln!(output, "{reply}")?;
             output.flush()?;
         }
     }
-    Ok(())
 }
 
 /// One message from an HTTP client, waiting for the app to answer it.
@@ -222,6 +258,34 @@ impl Drop for HttpServer {
     }
 }
 
+/// The longest request line or header line, and the most header lines, a request may have.
+const MAX_LINE: usize = 64 * 1024;
+const MAX_HEADERS: usize = 100;
+
+/// One line of a request's head.
+enum Head {
+    Line(String),
+    /// The client closed the connection.
+    Closed,
+    /// No end of line within [`MAX_LINE`] bytes.
+    TooLong,
+    /// The line is not UTF-8.
+    NotText,
+}
+
+/// Reads a line of the head without letting a client make the server buffer more than
+/// [`MAX_LINE`] bytes of it.
+fn head_line(reader: &mut impl BufRead) -> std::io::Result<Head> {
+    let mut bytes = Vec::new();
+    if reader.by_ref().take(MAX_LINE as u64 + 1).read_until(b'\n', &mut bytes)? == 0 {
+        return Ok(Head::Closed);
+    }
+    if bytes.len() > MAX_LINE && bytes.last() != Some(&b'\n') {
+        return Ok(Head::TooLong);
+    }
+    Ok(String::from_utf8(bytes).map_or(Head::NotText, Head::Line))
+}
+
 /// Serves HTTP/1.1 requests on one connection until the client closes it.
 fn connection(
     stream: TcpStream,
@@ -232,23 +296,30 @@ fn connection(
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut writer = stream;
     loop {
-        let mut request_line = String::new();
-        if reader.read_line(&mut request_line)? == 0 {
-            return Ok(());
-        }
+        let request_line = match head_line(&mut reader)? {
+            Head::Line(line) => line,
+            Head::Closed => return Ok(()),
+            Head::TooLong => return respond(&mut writer, 431, None, true),
+            Head::NotText => return respond(&mut writer, 400, None, true),
+        };
         let mut parts = request_line.split_whitespace();
         let (method, path) = (parts.next().unwrap_or_default().to_owned(), parts.next().unwrap_or_default().to_owned());
         let mut length = 0usize;
         let mut origin = None;
         let mut close = false;
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line)? == 0 {
-                return Ok(());
-            }
+        for headers in 0.. {
+            let line = match head_line(&mut reader)? {
+                Head::Line(line) => line,
+                Head::Closed => return Ok(()),
+                Head::TooLong => return respond(&mut writer, 431, None, true),
+                Head::NotText => return respond(&mut writer, 400, None, true),
+            };
             let line = line.trim_end();
             if line.is_empty() {
                 break;
+            }
+            if headers >= MAX_HEADERS {
+                return respond(&mut writer, 431, None, true);
             }
             if let Some((k, v)) = line.split_once(':') {
                 let v = v.trim();
@@ -260,7 +331,7 @@ fn connection(
                 }
             }
         }
-        if length > 16 * 1024 * 1024 {
+        if length > MAX_MESSAGE {
             respond(&mut writer, 413, None, true)?;
             return Ok(());
         }
@@ -319,10 +390,12 @@ fn respond(w: &mut TcpStream, status: u16, body: Option<&Value>, close: bool) ->
     let reason = match status {
         200 => "OK",
         202 => "Accepted",
+        400 => "Bad Request",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
+        431 => "Request Header Fields Too Large",
         _ => "Service Unavailable",
     };
     let text = body.map(Value::to_string).unwrap_or_default();

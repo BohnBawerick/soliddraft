@@ -21,6 +21,14 @@ env:
 permissions:
   contents: read
 
+# A new push to a branch cancels that branch's older runs; a pull request's runs are
+# grouped by its head branch. A run on main is never cancelled: its group is its own run
+# id, so no later push shares it, and GitHub's replacement of a waiting run in a shared
+# group cannot drop a main result either.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   # Formatting and lints.
   lint:
@@ -34,6 +42,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Check that superseded runs are cancelled and main's are not
+        run: python3 -m unittest discover -s ci -p 'test_workflows.py'
 
   kernel:
     name: Catallax adapter and recipes

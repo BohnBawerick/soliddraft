@@ -32,7 +32,10 @@ use serde::Serialize;
 use serde_json::Value;
 use soliddraft_document::hash::without_format;
 use soliddraft_document::manifest::{self, Entry, Manifest, Package, Section};
-use soliddraft_document::{ContentHash, DocKind, DocumentId, EnvelopeError, kind::format_major};
+use soliddraft_document::{
+    ContentHash, DocKind, DocumentId, EnvelopeError,
+    kind::{format_major, found_tag},
+};
 use soliddraft_materials::Snapshots;
 use soliddraft_tessellation::{Level, Quality, Settings, settings};
 
@@ -67,7 +70,7 @@ pub enum FileError {
     #[error("{0}")]
     Invalid(#[from] Invalid),
     /// The format tag is not one this version reads.
-    #[error("the file is {found}, this version reads {FORMAT}")]
+    #[error("the file {}, this version reads {FORMAT}", found_tag(.found))]
     Format {
         /// The tag in the file.
         found: String,
@@ -289,7 +292,10 @@ impl Assembly {
                     #[serde(default)]
                     format: String,
                 }
-                let found = serde_json::from_slice::<Probe>(json).map(|p| p.format).unwrap_or_default();
+                // Text that is not JSON at all is damage, not another version.
+                let Ok(Probe { format: found }) = serde_json::from_slice::<Probe>(json) else {
+                    return Err(e.into());
+                };
                 if format_major(&found, "soliddraft-assembly") != Some(1) {
                     return Err(FileError::Format { found });
                 }
@@ -561,6 +567,20 @@ mod tests {
         assert_eq!(truth["format"], FORMAT);
         let newer = truth.to_string().replace(FORMAT, "draftwell-assembly/2");
         assert!(matches!(Assembly::from_truth(newer.as_bytes(), None), Err(FileError::Format { .. })));
+    }
+
+    #[test]
+    fn a_truth_that_is_not_json_is_damage_and_one_without_a_tag_says_so() {
+        // Text that is not JSON is not "a file of another format".
+        for text in ["", "{ not json", "\u{0}\u{0}"] {
+            assert!(matches!(Assembly::from_truth(text.as_bytes(), None), Err(FileError::Json(_))), "{text:?}");
+        }
+        // A tagless truth is refused as one, in words, not with a blank where the tag goes.
+        let untagged = Assembly::from_truth(br#"{"name": "x"}"#, None).unwrap_err();
+        assert!(matches!(untagged, FileError::Format { .. }), "{untagged}");
+        assert!(untagged.to_string().contains("the file has no format tag"), "{untagged}");
+        let newer = Assembly::from_truth(br#"{"format": "soliddraft-assembly/2"}"#, None).unwrap_err();
+        assert!(newer.to_string().starts_with("the file is soliddraft-assembly/2, this version reads"), "{newer}");
     }
 
     #[test]

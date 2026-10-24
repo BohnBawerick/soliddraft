@@ -34,6 +34,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 soliddraft-kernel-api = { workspace = true, features = ["contract"] }
 dxf = "0.6.2"
 lopdf = "0.45.0"

@@ -21,6 +21,10 @@ Files with `draftwell-document`, `draftwell-part`, `draftwell-assembly` or
 and keeps the document id and revision. Document settings also accept the earlier
 `draftwell-settings/1` tag. The supported major versions have not changed.
 
+## Damaged and newer files
+
+A file that is truncated, is not an archive, has an entry that does not parse or is missing one is refused with an error that says the file is damaged. A file from a newer SolidDraft (a newer envelope, a format major version this build does not read, a required section it does not know) or of another kind is refused with an error that says so. A truth entry with no format tag says that it has none. Nothing that refuses a file writes to it, replaces it or leaves a stray file beside it; the tests are in `crates/soliddraft-cli/tests/damaged_files.rs` (see [ci.md](ci.md)).
+
 ## The envelope
 
 Every document file is a zip whose first entry is `manifest.json`:

@@ -29,5 +29,8 @@ apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = "1.1.0"
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true
