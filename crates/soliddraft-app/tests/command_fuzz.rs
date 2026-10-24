@@ -49,9 +49,15 @@ const LIMIT: Duration = Duration::from_secs(60);
 
 // ----- inputs -----
 
-/// Numbers a call could hold. Nonzero numbers smaller than 0.01 in size are left out, as in
-/// `recipe_fuzz` in soliddraft-cli: a hair off a round value sends Catallax into a recursion
-/// that overflows the stack (see `kernel_abort.rs` there).
+/// Numbers a call could hold.
+///
+/// NOT COVERED: nonzero numbers smaller than 0.01 in size are left out, so a green run says nothing
+/// about them. A plane origin a hair off a round value sends Catallax's boolean region sampling into
+/// a recursion that takes a minute or overflows the stack and aborts the process; the fix is in
+/// Catallax and the isolated reproductions are the ignored tests in `kernel_abort.rs` in
+/// soliddraft-cli. This exclusion comes out with their `#[ignore]` lines. Lengths and coordinates over
+/// `MAX_LENGTH_MM` are refused by the command layer before the kernel, so what the kernel does with
+/// them is not covered either (Catallax meshes a huge shape until it runs out of memory).
 fn numbers() -> impl Strategy<Value = Value> {
     fn float(f: f64) -> Option<Value> {
         Number::from_f64(f).map(Value::Number)

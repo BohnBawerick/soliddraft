@@ -94,10 +94,15 @@ enum Mutation {
     Repeat { times: usize },
 }
 
-/// Numbers a recipe could be made to hold. Nonzero numbers smaller than 0.01 in size are left
-/// out: moved a hair off a round value, a plane origin sends Catallax's boolean region sampling
-/// into a recursion that takes a minute or overflows the stack and aborts the process (see
-/// `kernel_abort.rs`, which holds the isolated reproduction).
+/// Numbers a recipe could be made to hold.
+///
+/// NOT COVERED: nonzero numbers smaller than 0.01 in size are left out, so a green run says
+/// nothing about them. Moved a hair off a round value, a plane origin sends Catallax's boolean
+/// region sampling into a recursion that takes a minute (1e-3 to 1e-12) or overflows the stack and
+/// aborts the process (1e-20 and below, down to 5e-324). The fix is in Catallax; the isolated
+/// reproductions are the ignored tests in `kernel_abort.rs`, and this exclusion comes out with
+/// their `#[ignore]` lines. The bracket is also not mutated (see below), and lengths over 100 m
+/// do not reach the kernel at all.
 fn extreme() -> impl Strategy<Value = Value> {
     fn float(f: f64) -> Option<Value> {
         Number::from_f64(f).map(Value::Number)
