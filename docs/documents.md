@@ -257,9 +257,11 @@ the status bar says so.
 While a part or drawing has unsaved changes, autosave writes a recovery copy of it into
 this run's session folder, `recovery/session-<pid>-<time>/` in the config directory. A
 copy is due when the interval has passed since the first unsaved edit, or sooner after
-the set number of edits (`soliddraft_document::autosave`). The copy is made without the
-display meshes or the drawing's thumbnail, and a writer thread puts it on disk, so the
-interface does not wait. It is written atomically and never touches the user's file.
+the set number of edits (`soliddraft_document::autosave`). The interface captures an
+immutable snapshot of the document data. A writer thread hashes, serializes and writes
+it without display meshes or the drawing's thumbnail. A part snapshot holds no kernel
+bodies, build cache or undo history. The copy is written atomically and never touches
+the user's file.
 Saving a document, or replacing it with New or Open, deletes its copy; quitting deletes
 the session folder.
 

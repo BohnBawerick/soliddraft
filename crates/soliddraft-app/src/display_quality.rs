@@ -59,6 +59,22 @@ impl DisplayQuality {
         }
     }
 
+    pub(crate) fn fork(&self, kernel: Arc<dyn Kernel>) -> Self {
+        Self {
+            thresholds: self.thresholds,
+            choice: self.choice,
+            levels: self.levels,
+            cache: self.cache.clone(),
+            worker: Tessellator::new(kernel),
+            body: self.body,
+            center: self.center,
+            radius: self.radius,
+            shown: self.shown,
+            asked: Vec::new(),
+            recent: self.recent.clone(),
+        }
+    }
+
     /// The level shown, if a mesh is.
     pub fn shown(&self) -> Option<Level> {
         self.shown.map(|(level, _)| level)

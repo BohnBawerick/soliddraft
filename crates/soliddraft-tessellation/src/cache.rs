@@ -43,6 +43,7 @@ impl Weigh for Mesh {
     }
 }
 
+#[derive(Clone)]
 struct Entry<M> {
     key: ParamsKey,
     level: Level,
@@ -51,6 +52,7 @@ struct Entry<M> {
 }
 
 /// Meshes by definition and level, within a device budget.
+#[derive(Clone)]
 pub struct DisplayCache<K, M> {
     budget: DeviceBudget,
     definitions: HashMap<K, Vec<Entry<M>>>,

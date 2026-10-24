@@ -32,6 +32,33 @@ fn cylinder() -> Document {
 }
 
 #[test]
+fn a_recovery_snapshot_releases_bodies_and_restores_its_captured_revision_and_settings() {
+    let mut doc = cylinder();
+    let settings = Settings { viewport: Quality::Slider { value: 9 }, ..Settings::default() };
+    doc.set_settings(settings.clone()).unwrap();
+    let revision = doc.semantic_hash();
+    let geometry = doc.geometry_hash();
+    let id = doc.id();
+    let body = doc.body().unwrap();
+    let kernel = doc.kernel().clone();
+    let snapshot = doc.snapshot();
+    drop(doc);
+    assert!(matches!(kernel.topology(body), Err(soliddraft_kernel_api::KernelError::UnknownBody(_))));
+
+    // Encoding must need only the copied recipe, even after every old body is gone.
+    let (manifest, bytes) = snapshot.encode().unwrap();
+    assert_eq!(manifest.id, id);
+    assert_eq!(manifest.semantic_hash, revision);
+    assert_eq!(manifest.geometry_hash, Some(geometry));
+    let restored = Document::from_bytes(&bytes, kernel).unwrap();
+    assert_eq!(restored.id(), id);
+    assert_eq!(restored.semantic_hash(), revision);
+    assert_eq!(restored.settings(), &settings);
+    let volume = restored.kernel().mass_properties(restored.body().unwrap()).unwrap().volume;
+    assert!((volume - 2000.0 * std::f64::consts::PI).abs() < 1e-6, "{volume}");
+}
+
+#[test]
 fn settings_change_neither_revision_nor_geometry() {
     let mut doc = cylinder();
     let kernel = doc.kernel().clone();
