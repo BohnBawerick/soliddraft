@@ -204,6 +204,41 @@ jobs:
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
       - run: cargo build --locked -p soliddraft-cli
+      - name: Capture the live document without saved inputs
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop/live-display" <<'PYTHON'
+          import importlib.util, json, pathlib, sys
+          spec = importlib.util.spec_from_file_location("scenarios", "ci/run-scenarios.py")
+          scenarios = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(scenarios)
+          root = pathlib.Path(sys.argv[1])
+          root.mkdir(parents=True)
+          client = scenarios.Client(str(pathlib.Path("target/debug/soliddraft").resolve()), root / "commands", 100_000_000, 300)
+          try:
+              client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                  "clientInfo": {"name": "live-display-check", "version": "1"}})
+              client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+              def call(name, arguments):
+                  result = client.request("tools/call", {"name": name, "arguments": arguments})
+                  assert not result.get("isError"), result
+              call("scenario_prepare", {})
+              call("sketch", {"plane": "top", "shapes": [
+                  {"shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30}]})
+              call("extrude", {"sketch": "Sketch1", "depth": 10, "flip": False})
+              directory = root / "commands/0002"
+              for name in ("part.dwprt", "part.json", "recipe.json"):
+                  (directory / name).unlink()
+              call("scenario_display", {})
+              assert (directory / "viewport.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+              assert "<path " in (directory / "view.svg").read_text()
+              log = json.loads((directory / "display.kernel.json").read_text())
+              assert all(call["operation"] not in {"extrude", "boolean", "create_body_from_profile"}
+                  for call in log["calls"]), log
+              print("Live viewport and SVG captured after deleting every saved input; no reconstruction calls.")
+          finally:
+              client.close()
+              scenarios.write(root / "protocol.json", client.transcript)
+          PYTHON
       - name: Build the verifier from the same pinned revision
         run: cargo build --locked --manifest-path .ci-catallax/Cargo.toml -p catallax-cli --bin catallax-verify --target-dir target
       - name: Replay the captured slot and full slot-cut questions
@@ -235,6 +270,28 @@ jobs:
             python3 ci/run-scenarios.py "$scenario" --soliddraft target/debug/soliddraft --catallax-verify target/debug/catallax-verify --out "$RUNNER_TEMP/application-loop/$name" || status=1
           done
           exit "$status"
+      - name: Publish click-budget evidence
+        if: always()
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
+          import json, pathlib, sys
+          rows = ["## Application click budgets", "",
+                  "Hosted shared runner, not a quiet pinned-core performance baseline.", "",
+                  "| Scenario | Step | Tool | Wait ms | Budget ms | Result |",
+                  "|---|---:|---|---:|---:|---|"]
+          for path in sorted(pathlib.Path(sys.argv[1]).glob("*/result.json")):
+              report = json.loads(path.read_text())
+              for step in report["steps"]:
+                  timing = step.get("timing")
+                  if timing:
+                      rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
+                          f"{timing['elapsed_ms']:.3f} | {timing['budget_ms']} | "
+                          f"{'pass' if timing['pass'] else 'OVER BUDGET'} |")
+              if report.get("error"):
+                  rows.extend(["", f"{report['name']}: {report['error']}"])
+          with open(sys.argv[2], "a") as summary:
+              summary.write("\n".join(rows) + "\n")
+          PYTHON
       - uses: actions/upload-artifact@v4
         if: always()
         with:
