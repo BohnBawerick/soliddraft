@@ -93,6 +93,8 @@ pub enum AppAction {
     /// Show or hide one side area.
     TogglePanel(crate::panels::Side),
     ShowShortcuts,
+    /// Opens the command palette, or closes it when it is open.
+    TogglePalette,
     ShowAbout,
     /// Opens the Recover documents window.
     ShowRecovery,
@@ -421,6 +423,8 @@ pub struct AppState {
     pub search: String,
     pub show_about: bool,
     pub show_shortcuts: bool,
+    /// The open command palette.
+    pub palette: Option<crate::palette::Palette>,
     /// The open Provider dialog.
     pub provider_dialog: Option<crate::chat::ProviderDialog>,
     /// The open File locations page.
@@ -470,6 +474,7 @@ impl AppState {
             search: String::new(),
             show_about: false,
             show_shortcuts: false,
+            palette: None,
             provider_dialog: None,
             locations_dialog: None,
             locations_epoch: 0,

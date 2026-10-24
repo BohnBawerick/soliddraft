@@ -19,6 +19,7 @@ pub mod drawing;
 pub mod file;
 pub mod icons;
 pub mod locations;
+pub mod palette;
 pub mod panels;
 pub mod platform;
 pub mod properties;

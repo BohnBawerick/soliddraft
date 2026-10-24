@@ -418,7 +418,8 @@ impl SolidDraftApp {
     /// them for the current context. A key whose command is disabled and has nothing to
     /// say is left for the widgets.
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        let typing = ctx.egui_wants_keyboard_input();
+        // The open palette takes the plain keys, as a focused text field does.
+        let typing = ctx.egui_wants_keyboard_input() || self.state.palette.is_some();
         let state = &self.state;
         let bindings: Vec<_> = commands::bindings(commands::Context::of(state))
             .into_iter()
@@ -574,6 +575,7 @@ impl SolidDraftApp {
             ui.menu_button("Window", |ui| {
                 menu_command(ui, st, "reset_layout", "Reset panel layout");
                 menu_command(ui, st, "ask", "Assistant");
+                menu_command(ui, st, "command_palette", "Command palette");
             });
             ui.menu_button("Help", |ui| {
                 menu_command(ui, st, "shortcuts", "Keyboard shortcuts");
@@ -1258,6 +1260,7 @@ impl SolidDraftApp {
                 self.state.locations_dialog = Some(crate::locations::LocationsDialog::new(kind));
             }
             AppAction::ShowShortcuts => self.state.show_shortcuts = true,
+            AppAction::TogglePalette => crate::palette::toggle(&mut self.state),
             AppAction::ShowAbout => self.state.show_about = true,
             AppAction::ShowRecovery => {
                 if let Some(r) = self.state.recovery.as_mut() {
@@ -1341,6 +1344,7 @@ impl SolidDraftApp {
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
+        crate::palette::show(ctx, &mut self.state);
         let st = &mut self.state;
         if st.show_shortcuts {
             egui::Window::new("Keyboard shortcuts")
