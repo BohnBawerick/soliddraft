@@ -21,7 +21,9 @@ successful and failed bundles as `application-loop`.
 
 `bracket.json` builds the plate, flange, bored boss, four mounting holes and flange
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
-rolls back to the plate and returns to the end. Its final step makes a drawing.
+makes the slot shallower and undoes that, rolls back to the plate and returns to the
+end. The slot edit must rebuild only the slot, and the undo and the return to the end
+must run no kernel operation. Its final step makes a drawing.
 Model commands, viewport screenshots, SVG views and drawing output use Catallax.
 The view and drawing checks require that backend. Views use the same polygon
 hidden-line method as the drawing workspace.
@@ -47,7 +49,12 @@ MCP rounds reported volumes to two decimals, so the bracket checks allow
 Every run has `scenario.json`, `protocol.json` and `result.json`. Each executed
 MCP tool call has a numbered directory under `commands/` containing:
 
-- `command.json`: input, output, backend and the current model summary.
+- `command.json`: input, output, backend, the current model summary and the
+  `rebuild` report. `features_recomputed` lists the features whose kernel operations
+  the command ran, in tree order. `operations` counts those operations and
+  `meshes_rebuilt` the meshes made. The bundle counts by wrapping the kernel, and the
+  application does no counting. `meshes_rebuilt` includes display levels the
+  background worker finished during the command, so scenarios do not check it.
 - `part.json` and `part.dwprt`: the application's complete feature recipe and
   saved part after the command, including undo, rejected proposals and rollback.
 - `recipe.json`, when a solid exists: the recipe that constructed the displayed

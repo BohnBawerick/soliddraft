@@ -141,6 +141,10 @@ three levels:
 
 - A rebuild tessellates the level the camera last asked for at once, so the viewport
   never waits for the worker to show a new shape. The worker then makes the other two.
+- A rebuild that leaves the shown body as it was, such as a rename, keeps its meshes
+  and picks; only the face names are read again. The meshes of the last four bodies
+  shown stay while the part keeps those bodies, so undo, redo and a value put back show
+  the earlier mesh without tessellating.
 - Each frame, `Document::update_display(projection, dt)` moves the level choice on with
   the viewport's pixels per millimetre (`ViewportState::projection`) and swaps in a finer
   or coarser mesh when it is ready. It returns true while the worker still owes a level,

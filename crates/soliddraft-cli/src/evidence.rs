@@ -1,15 +1,20 @@
 //! MCP evidence is captured after execution, including proposals rejected on scratch parts.
 
+use std::collections::BTreeSet;
 use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 use soliddraft_app::command_tools::CommandTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
+use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
+use soliddraft_model::{Document, feature_of_tag};
 
 pub(crate) struct Evidence<'a> {
     host: CommandTools<'a>,
     kernel: Option<Arc<CatallaxKernel>>,
+    /// The kernel calls each command makes, counted outside the application.
+    work: Option<Arc<Counting>>,
     directory: Option<PathBuf>,
     sequence: usize,
     max_work: u64,
@@ -20,17 +25,23 @@ impl<'a> Evidence<'a> {
     pub(crate) fn new(
         host: CommandTools<'a>,
         kernel: Option<Arc<CatallaxKernel>>,
+        work: Option<Arc<Counting>>,
         directory: Option<PathBuf>,
         max_work: u64,
     ) -> Result<Self, String> {
         if let Some(dir) = &directory {
             std::fs::create_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
-        Ok(Self { host, kernel, directory, sequence: 0, max_work, failed: false })
+        // Opening a part is not a command's work.
+        if let Some(w) = &work {
+            w.take();
+        }
+        Ok(Self { host, kernel, work, directory, sequence: 0, max_work, failed: false })
     }
 
     fn snapshot(&mut self, name: &str, input: &Value, output: &ToolOutput) -> Result<(), Box<dyn std::error::Error>> {
         let (Some(root), Some(kernel)) = (&self.directory, &self.kernel) else { return Ok(()) };
+        let work = self.work.as_ref().map(|w| w.take()).unwrap_or_default();
         self.sequence += 1;
         let dir = root.join(format!("{:04}", self.sequence));
         std::fs::create_dir(&dir)?;
@@ -54,10 +65,37 @@ impl<'a> Evidence<'a> {
             &json!({
                 "tool":name,"arguments":input,"is_error":output.is_error,"output":output.content,
                 "backend":doc.kernel().backend(),"summary":summary,
+                "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
+        // Saving the bundle's part file is not the next command's work.
+        if let Some(w) = &self.work {
+            w.take();
+        }
         Ok(())
     }
+}
+
+/// What a command rebuilt: the features whose kernel operations ran, in tree order
+/// (with the ids of features of scratch parts, such as a rejected proposal's, after
+/// them), how many operations ran and how many meshes were made.
+fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
+    let mut ids = BTreeSet::new();
+    let mut operations = 0;
+    let mut meshes = 0;
+    for w in work {
+        match w {
+            Work::Operation(tag) => {
+                operations += 1;
+                ids.extend(feature_of_tag(tag));
+            }
+            Work::Mesh(_) => meshes += 1,
+        }
+    }
+    let mut features: Vec<String> =
+        doc.features().iter().filter(|f| ids.remove(&f.id)).map(|f| f.name.clone()).collect();
+    features.extend(ids.into_iter().map(|id| id.to_string()));
+    json!({"features_recomputed":features,"operations":operations,"meshes_rebuilt":meshes})
 }
 
 fn write_json(path: PathBuf, value: &Value) -> Result<(), std::io::Error> {

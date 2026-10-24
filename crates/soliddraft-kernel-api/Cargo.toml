@@ -11,6 +11,8 @@ publish.workspace = true
 [features]
 # Backend-independent contract checks for backends' test suites.
 contract = []
+# A kernel that writes down the work asked of it, for tests and application-loop bundles.
+counting = []
 
 [dependencies]
 serde.workspace = true

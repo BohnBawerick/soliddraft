@@ -346,6 +346,47 @@
       ]
     },
     {
+      "tool": "edit_cut",
+      "arguments": {
+        "feature": "Cut-Extrude6",
+        "through_all": false,
+        "depth": 6,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 164030.17672705388,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/rebuild/features_recomputed",
+          "equals": [
+            "Cut-Extrude6"
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "approx": 162110.17672705388,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/rebuild/features_recomputed",
+          "equals": []
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
       "tool": "rollback",
       "arguments": {
         "before": "Boss-Extrude2"
@@ -369,6 +410,10 @@
           "pointer": "/summary/body/volume_mm3",
           "approx": 162110.17672705388,
           "tolerance": 0.005
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
         }
       ]
     }

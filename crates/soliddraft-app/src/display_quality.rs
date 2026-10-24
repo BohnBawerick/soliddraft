@@ -7,13 +7,20 @@
 //! with the hysteresis of `soliddraft_tessellation::select`, and says when the shown
 //! mesh should change. A quality change asks the worker for all three levels and keeps
 //! the old mesh on screen until the new one arrives.
+//!
+//! The meshes of the last few bodies shown stay while the part keeps those bodies, so
+//! undo, redo and a value put back show their body's mesh again without tessellating.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::{BodyId, Kernel, Mesh, TessellationParams, Topology, Vec3};
 use soliddraft_tessellation::{
     Choice, DeviceBudget, DisplayCache, Level, Levels, ParamsKey, Projection, Quality, Tessellator, Thresholds,
 };
+
+/// How many bodies shown before the current one keep their meshes.
+pub(crate) const RECENT: usize = 4;
 
 /// The open part's display levels.
 pub struct DisplayQuality {
@@ -30,6 +37,8 @@ pub struct DisplayQuality {
     shown: Option<(Level, ParamsKey)>,
     /// The levels the worker's latest request for the body asked for, in order.
     asked: Vec<Level>,
+    /// Bodies shown before this one whose meshes are kept, latest last.
+    recent: VecDeque<BodyId>,
 }
 
 impl DisplayQuality {
@@ -46,6 +55,7 @@ impl DisplayQuality {
             radius: 0.0,
             shown: None,
             asked: Vec::new(),
+            recent: VecDeque::new(),
         }
     }
 
@@ -70,19 +80,41 @@ impl DisplayQuality {
     }
 
     /// A new body to show after a rebuild: the parameters to tessellate it with at once.
-    /// The meshes of the previous body are dropped.
+    /// The previous body joins the recent ones, and the oldest recent body's meshes are
+    /// dropped.
     pub fn retarget(&mut self, body: BodyId, topology: &Topology, quality: &Quality) -> TessellationParams {
         if let Some(old) = self.body.replace(body)
             && old != body
         {
-            self.cache.remove(&old);
             self.worker.cancel(&old);
+            self.remember(old);
         }
+        self.recent.retain(|b| *b != body);
         self.center = topology.bbox.center();
         self.radius = topology.bbox.diagonal() / 2.0;
         self.levels = Levels::new(quality, topology.bbox.diagonal());
         self.shown = None;
         *self.levels.params(self.choice.level)
+    }
+
+    /// The mesh of the shown level when the cache still holds it from an earlier showing
+    /// of `body`, the body [`retarget`](Self::retarget) just set. Shows it, and asks the
+    /// worker for any level the cache lacks.
+    pub fn reuse(&mut self, body: BodyId) -> Option<Arc<Mesh>> {
+        let level = self.choice.level;
+        let mesh = self.cache.get(&body, self.levels.key(level))?;
+        self.shown = Some((level, self.levels.key(level)));
+        self.request_missing(body);
+        Some(mesh)
+    }
+
+    /// Drops the meshes of recent bodies `keep` refuses, such as bodies the part released.
+    pub fn retain(&mut self, keep: impl Fn(BodyId) -> bool) {
+        let (kept, gone): (VecDeque<BodyId>, VecDeque<BodyId>) = self.recent.drain(..).partition(|b| keep(*b));
+        self.recent = kept;
+        for b in gone {
+            self.cache.remove(&b);
+        }
     }
 
     /// Records the mesh made at once for the shown level, and asks the worker for the
@@ -94,13 +126,24 @@ impl DisplayQuality {
         self.request_missing(body);
     }
 
-    /// Clears what is shown, as when the part has no body.
+    /// Clears what is shown, as when the part has no body. The body shown joins the
+    /// recent ones.
     pub fn clear(&mut self) {
         if let Some(old) = self.body.take() {
-            self.cache.remove(&old);
             self.worker.cancel(&old);
+            self.remember(old);
         }
         self.shown = None;
+    }
+
+    fn remember(&mut self, body: BodyId) {
+        self.recent.retain(|b| *b != body);
+        self.recent.push_back(body);
+        while self.recent.len() > RECENT {
+            if let Some(oldest) = self.recent.pop_front() {
+                self.cache.remove(&oldest);
+            }
+        }
     }
 
     /// A new quality for the same body: every level comes from the worker, and the

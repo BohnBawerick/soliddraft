@@ -494,6 +494,37 @@ impl Kernel for CatallaxKernel {
         self.observe("release", || self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body)))
     }
 
+    /// The recipe text, the history, the certified display mesh and the cached meshes,
+    /// plus a fixed allowance per B-rep face and edge of every body the build kept.
+    /// Catallax does not report its model's size, so the allowance is an estimate.
+    fn retained_bytes(&self, body: BodyId) -> KernelResult<u64> {
+        const FACE: usize = 2048;
+        const EDGE: usize = 512;
+        let mesh_bytes = |m: &catallax_mesh::Mesh| {
+            m.positions.len() * 24
+                + m.triangles.len() * 32
+                + m.faces.len() * 64
+                + m.edges.iter().map(|e| 64 + e.vertices.len() * 8).sum::<usize>()
+        };
+        let state = self.state()?;
+        let stored = state.get(body)?;
+        let recipe: usize = stored.steps.values().map(|s| s.to_string().len()).sum();
+        let history: usize = stored.history.iter().map(|r| 256 + r.face_roles.len() * 32).sum();
+        let mut bytes = recipe + history;
+        if let Some(solid) = &stored.solid {
+            let display = &solid.app.display.value;
+            let brep = solid.app.built.bodies.len().max(1) * (display.faces.len() * FACE + display.edges.len() * EDGE);
+            bytes += brep + mesh_bytes(display);
+            // The display cache holds its own copy, even of the certified mesh.
+            if let Ok(cached) = solid.display.lock()
+                && let Some((_, mesh)) = cached.as_ref()
+            {
+                bytes += mesh_bytes(mesh);
+            }
+        }
+        Ok(bytes as u64)
+    }
+
     fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
         self.observe("view_curves", || drawing_queries::view_curves(self, body, spec))
     }

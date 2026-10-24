@@ -2,9 +2,9 @@
 //! from a worker off the interface thread, and the exact result of the final value is
 //! applied as one command, so one drag is one undo step.
 //!
-//! The worker holds a scratch copy of the part on the same kernel. For each value it
-//! edits the dragged feature in the copy and lets the model rebuild from that feature
-//! down, so an intermediate result is the whole part as the edit would leave it. It
+//! The worker holds a fork of the part, which shares the part's feature builds on the
+//! same kernel. For each value it edits the dragged feature in the fork and lets the
+//! model rebuild from that feature down, so an intermediate result is the whole part as the edit would leave it. It
 //! answers only the newest value it has been asked for, so a fast drag gets results at
 //! the worker's pace and none for values the drag has already passed. Results arrive as
 //! display meshes without picks: a preview is shown and labelled, never saved, exported,
@@ -179,13 +179,12 @@ impl DragPreview {
             cache.push(Intermediate { value: start, mesh: mesh.clone() });
         }
         let scratch = Scratch {
-            part: doc.model().part_json(),
+            model: doc.model().fork(),
             kernel: doc.kernel().clone(),
             params: doc.tess_params,
             feature: model::FeatureId(feature as u32),
             base: f.kind.clone(),
             dimension,
-            model: None,
         };
         Ok(DragPreview {
             setup: Setup::of(doc, feature, dimension),
@@ -357,15 +356,14 @@ struct Answer {
     result: Result<Arc<DisplayMesh>, String>,
 }
 
-/// The worker's copy of the part, rebuilt from its features on the first job.
+/// The worker's fork of the part.
 struct Scratch {
-    part: String,
+    model: model::Document,
     kernel: Arc<dyn Kernel>,
     params: TessellationParams,
     feature: model::FeatureId,
     base: FeatureKind,
     dimension: Dimension,
-    model: Option<Result<model::Document, String>>,
 }
 
 impl Scratch {
@@ -374,14 +372,7 @@ impl Scratch {
     }
 
     fn build(&mut self, value: f64) -> Result<Arc<DisplayMesh>, String> {
-        let kernel = self.kernel.clone();
-        let model = self
-            .model
-            .get_or_insert_with(|| {
-                model::Document::from_part_json(&self.part, kernel).map_err(|e| format!("cannot copy the part: {e}"))
-            })
-            .as_mut()
-            .map_err(|e| e.clone())?;
+        let model = &mut self.model;
         let kind = self.dimension.with(&self.base, value).to_model();
         model.execute(model::Command::EditFeature { id: self.feature, kind }).map_err(|e| e.to_string())?;
         match model.status(self.feature) {

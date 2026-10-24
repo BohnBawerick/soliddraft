@@ -7,7 +7,7 @@
 //! entry each, and mirrors the model's tree after every change in the shape
 //! the panels read.
 
-use crate::display_quality::DisplayQuality;
+use crate::display_quality::{self, DisplayQuality};
 use crate::sketch::{self, Sketch};
 use glam::Vec3;
 use soliddraft_kernel_api::{
@@ -598,6 +598,16 @@ impl Command {
     }
 }
 
+/// A body's display mesh and picks as it was last shown.
+struct Shown {
+    body: BodyId,
+    /// The feature the body was shown after; picks name it.
+    feature: FeatureId,
+    params: TessellationParams,
+    mesh: Arc<DisplayMesh>,
+    picks: Vec<PickEntry>,
+}
+
 /// Ghost geometry of an unapplied feature.
 #[derive(Clone, Debug, Default)]
 pub struct Preview {
@@ -618,7 +628,7 @@ pub struct Document {
     /// What the display meshes are tessellated with: the shown level's parameters,
     /// from the part's viewport quality. Previews use them too.
     pub tess_params: TessellationParams,
-    /// Display meshes keyed by body. Replaced wholesale on every rebuild.
+    /// Display meshes keyed by body. Replaced when the displayed body changes.
     pub meshes: HashMap<BodyId, Arc<DisplayMesh>>,
     /// Bumped on every rebuild so the renderer knows to re-upload.
     pub mesh_version: u64,
@@ -639,6 +649,10 @@ pub struct Document {
     revision: u64,
     /// Pick id (index + 1) to entity, rebuilt with the meshes.
     picks: Vec<PickEntry>,
+    /// The body `meshes` and `picks` show, and the feature it was shown after.
+    shown: Option<(BodyId, FeatureId)>,
+    /// Bodies shown before, latest last, kept while the part keeps them.
+    recent: Vec<Shown>,
     model: model::Document,
     /// Which display level is shown, and the worker that makes the others.
     quality: DisplayQuality,
@@ -673,6 +687,8 @@ impl Document {
             edits: 0,
             revision: 0,
             picks: Vec::new(),
+            shown: None,
+            recent: Vec::new(),
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
             assistant_mark: false,
@@ -1009,20 +1025,65 @@ impl Document {
     }
 
     /// Tessellates and names the displayed body. The level the camera last asked for is
-    /// tessellated at once; the worker makes the other two.
+    /// tessellated at once; the worker makes the other two. A body already shown keeps
+    /// its mesh: the same body only has its faces named again, and a recent body the
+    /// part still keeps, such as the one undo brings back, shows its kept mesh.
     fn refresh_display(&mut self) {
+        let model = &self.model;
+        self.quality.retain(|b| model.keeps(b));
+        self.recent.retain(|s| model.keeps(s.body));
+        let next = self.display_index().and_then(|i| Some((self.features[i].body?, self.features[i].id)));
+        if let Some((body, _)) = next
+            && next == self.shown
+            && !self.meshes.is_empty()
+        {
+            if let Ok(topology) = self.kernel().topology(body) {
+                self.name_entities(body, &topology);
+            }
+            self.apply_appearances();
+            self.mesh_version += 1;
+            return;
+        }
+        if let Some((body, feature)) = self.shown.take()
+            && let Some(mesh) = self.meshes.get(&body).cloned()
+        {
+            self.recent.retain(|s| s.body != body);
+            self.recent.push(Shown {
+                body,
+                feature,
+                params: self.tess_params,
+                mesh,
+                picks: std::mem::take(&mut self.picks),
+            });
+            if self.recent.len() > display_quality::RECENT {
+                self.recent.remove(0);
+            }
+        }
         self.faces.clear();
         self.edges.clear();
         self.meshes = HashMap::new();
         self.picks = Vec::new();
-        if let Some(body) = self.display_body()
+        if let Some((body, feature)) = next
             && let Ok(topology) = self.kernel().topology(body)
         {
             self.name_entities(body, &topology);
             self.tess_params = self.quality.retarget(body, &topology, &self.model.settings().viewport);
-            if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
+            let kept =
+                self.recent.iter().position(|s| s.body == body && s.feature == feature && s.params == self.tess_params);
+            let cached = self.quality.reuse(body);
+            if let (Some(i), Some(_)) = (kept, &cached) {
+                let s = self.recent.remove(i);
+                self.meshes = HashMap::from([(body, s.mesh)]);
+                self.picks = s.picks;
+                self.apply_appearances();
+                self.shown = next;
+            } else if let Some(mesh) = cached {
+                self.show_mesh(body, &topology, &mesh);
+                self.shown = next;
+            } else if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
                 self.show_mesh(body, &topology, &mesh);
                 self.quality.made(body, mesh);
+                self.shown = next;
             }
         } else {
             self.quality.clear();
