@@ -8,6 +8,7 @@ use crate::document::{
     Preview, Selection, SketchPlane,
 };
 use crate::document::{EdgeRef, EntityRef};
+use crate::drag::{Dimension, DragPreview, Finish};
 use crate::sketch::{ConstraintId, EntityId, P2, PointRef, Sketch};
 use crate::viewport::ViewportState;
 use crate::viewport::camera::StandardView;
@@ -97,6 +98,22 @@ pub enum AppAction {
     Quit,
     /// Everything the drawing tab does.
     Drawing(crate::drawing::DrawingAction),
+    /// A step of a drag of a feature's dimension.
+    DragDimension(DragStep),
+}
+
+/// The steps of a drag of a feature's dimension, in the order a drag makes them.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DragStep {
+    Start {
+        feature: FeatureId,
+        dimension: Dimension,
+    },
+    Move(f64),
+    /// The pointer let go: the final value is applied.
+    Finish,
+    /// Escape: nothing is applied.
+    Cancel,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -408,6 +425,8 @@ pub struct AppState {
     pub rename: Option<Rename>,
     /// The tree row being dragged for reordering.
     pub drag_feature: Option<FeatureId>,
+    /// The feature dimension being dragged, with its previews.
+    pub drag_preview: Option<DragPreview>,
     pub drag_rollback: bool,
     /// The feature whose row the tree last scrolled to.
     pub tree_followed: Option<FeatureId>,
@@ -451,6 +470,7 @@ impl AppState {
             locations_epoch: 0,
             rename: None,
             drag_feature: None,
+            drag_preview: None,
             drag_rollback: false,
             tree_followed: None,
             recent: crate::file::recent(),
@@ -514,10 +534,68 @@ impl AppState {
 
     /// A body drawn in place of the document's while a feature is previewed.
     pub fn preview_body(&self) -> Option<Arc<DisplayMesh>> {
+        if let Some(d) = &self.drag_preview {
+            return d.mesh();
+        }
         match &self.editor {
             Some(e) => e.preview.result.clone(),
             None => self.chat.preview.as_ref().and_then(|(_, p)| p.result.clone()),
         }
+    }
+
+    /// Runs one step of a dimension drag. Only the final value reaches the document, as
+    /// one command; a drag the part changed under applies nothing.
+    pub fn drag_dimension(&mut self, step: DragStep) {
+        match step {
+            DragStep::Start { feature, dimension } => {
+                if self.editor.is_some() || self.sketch.is_some() {
+                    return;
+                }
+                match DragPreview::start(&self.doc, feature, dimension) {
+                    Ok(d) => self.drag_preview = Some(d),
+                    Err(e) => self.note(e, NoteKind::Error),
+                }
+            }
+            DragStep::Move(value) => {
+                if let Some(d) = self.drag_preview.as_mut() {
+                    d.request(value);
+                }
+            }
+            DragStep::Finish => {
+                let Some(d) = self.drag_preview.take() else { return };
+                let what = d.dimension().label();
+                match d.finish(&mut self.doc) {
+                    Finish::Applied { value } => {
+                        self.note(format!("{what} {} mm", crate::document::fmt_mm(value)), NoteKind::Ok)
+                    }
+                    Finish::Failed { value, message } | Finish::Refused { value, message } => self.note(
+                        format!("{what} {} mm did not build: {message}", crate::document::fmt_mm(value)),
+                        NoteKind::Error,
+                    ),
+                    Finish::Obsolete => self.note("The part changed during the drag; nothing applied", NoteKind::Info),
+                    Finish::Unchanged => {}
+                }
+            }
+            DragStep::Cancel => {
+                if self.drag_preview.take().is_some() {
+                    self.note("Drag cancelled", NoteKind::Info);
+                }
+            }
+        }
+    }
+
+    /// Takes a dimension drag's answers, once per frame. A drag whose setup changed under
+    /// it, such as by an undo, an assistant command or a new selection, ends with nothing
+    /// applied. Returns true while the drag waits for an answer.
+    pub fn poll_drag(&mut self) -> bool {
+        let Some(d) = self.drag_preview.as_mut() else { return false };
+        if !d.is_current(&self.doc) {
+            self.drag_preview = None;
+            self.note("The part changed during the drag; nothing applied", NoteKind::Info);
+            return false;
+        }
+        d.poll();
+        d.pending()
     }
 
     pub fn selected_feature(&self) -> Option<FeatureId> {

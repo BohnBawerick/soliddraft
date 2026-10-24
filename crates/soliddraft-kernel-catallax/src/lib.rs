@@ -86,51 +86,6 @@ impl State {
     fn solid(&self, body: BodyId) -> KernelResult<Arc<Solid>> {
         self.get(body)?.solid.clone().ok_or_else(|| gap("profile sheet queries", "1"))
     }
-
-    fn operation(&mut self, tag: &OpTag, op: OpKind, inputs: &[BodyId], mut step: Value) -> KernelResult<OpResult> {
-        let mut steps = BTreeMap::new();
-        let mut history = BTreeMap::new();
-        let mut parents = Vec::new();
-        for input in inputs {
-            let stored = self.get(*input)?;
-            steps.extend(stored.steps.clone());
-            history.extend(stored.history.iter().map(|r| (r.seq, r.clone())));
-            if let Some(solid) = &stored.solid {
-                parents.push(solid.clone());
-            }
-        }
-        let seq = self.id();
-        let result = format!("op_{seq}");
-        step["id"] = result.clone().into();
-        steps.insert(seq, step);
-        let input = json!({"format":"soliddraft-recipe/1", "name":"SolidDraft", "steps": steps.values().collect::<Vec<_>>(), "result": result});
-        let questions = self.capture.then_some(&mut self.questions);
-        let app = build(&input, op, questions)?;
-        if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
-            return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
-        }
-        let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &mut self.next);
-        let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
-        history.insert(seq, record.clone());
-        let body = BodyId::from_raw(self.id());
-        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
-        self.bodies.insert(
-            body,
-            Stored {
-                steps,
-                result,
-                history: history.into_values().collect(),
-                solid: Some(Arc::new(Solid {
-                    app,
-                    ids,
-                    display: Mutex::new(Some(display)),
-                    topology: OnceLock::new(),
-                    mass: OnceLock::new(),
-                })),
-            },
-        );
-        Ok(OpResult { body, record })
-    }
 }
 
 impl CatallaxKernel {
@@ -177,6 +132,66 @@ impl CatallaxKernel {
             Some(d) => d.observe(operation, run),
             None => run(),
         }
+    }
+
+    /// Builds a body from `inputs` and one more step. The Catallax build runs without the
+    /// body arena lock, so other threads keep reading and building bodies meanwhile.
+    fn operation(
+        &self,
+        mut state: MutexGuard<'_, State>,
+        tag: &OpTag,
+        op: OpKind,
+        inputs: &[BodyId],
+        mut step: Value,
+    ) -> KernelResult<OpResult> {
+        let mut steps = BTreeMap::new();
+        let mut history = BTreeMap::new();
+        let mut parents = Vec::new();
+        for input in inputs {
+            let stored = state.get(*input)?;
+            steps.extend(stored.steps.clone());
+            history.extend(stored.history.iter().map(|r| (r.seq, r.clone())));
+            if let Some(solid) = &stored.solid {
+                parents.push(solid.clone());
+            }
+        }
+        let seq = state.id();
+        let result = format!("op_{seq}");
+        step["id"] = result.clone().into();
+        steps.insert(seq, step);
+        let input = json!({"format":"soliddraft-recipe/1", "name":"SolidDraft", "steps": steps.values().collect::<Vec<_>>(), "result": result});
+        let capture = state.capture;
+        drop(state);
+        let mut questions = Vec::new();
+        let built = build(&input, op, capture.then_some(&mut questions));
+        let mut state = self.state()?;
+        // A refused build keeps its question too.
+        state.questions.extend(questions);
+        let app = built?;
+        if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
+            return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
+        }
+        let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &mut state.next);
+        let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
+        history.insert(seq, record.clone());
+        let body = BodyId::from_raw(state.id());
+        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
+        state.bodies.insert(
+            body,
+            Stored {
+                steps,
+                result,
+                history: history.into_values().collect(),
+                solid: Some(Arc::new(Solid {
+                    app,
+                    ids,
+                    display: Mutex::new(Some(display)),
+                    topology: OnceLock::new(),
+                    mass: OnceLock::new(),
+                })),
+            },
+        );
+        Ok(OpResult { body, record })
     }
 
     fn state(&self) -> KernelResult<MutexGuard<'_, State>> {
@@ -331,20 +346,20 @@ impl Kernel for CatallaxKernel {
 
     fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
         self.observe("extrude", || {
-            let mut state = self.state()?;
+            let state = self.state()?;
             let p = state.get(profile)?;
             if p.solid.is_some() {
                 return Err(KernelError::InvalidInput("extrude needs a profile".into()));
             }
             let step =
                 json!({"op":"extrude","profile":p.result,"distance":params.distance,"direction":params.direction});
-            state.operation(tag, OpKind::Extrude, &[profile], step)
+            self.operation(state, tag, OpKind::Extrude, &[profile], step)
         })
     }
 
     fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
         self.observe("revolve", || {
-            let mut state = self.state()?;
+            let state = self.state()?;
             let p = state.get(profile)?;
             if p.solid.is_some() {
                 return Err(KernelError::InvalidInput("revolve needs a profile".into()));
@@ -353,18 +368,18 @@ impl Kernel for CatallaxKernel {
                 "op":"revolve","profile":p.result,"axis_origin":params.axis_origin,
                 "axis_direction":params.axis_direction,"angle_deg":params.angle_deg
             });
-            state.operation(tag, OpKind::Revolve, &[profile], step)
+            self.operation(state, tag, OpKind::Revolve, &[profile], step)
         })
     }
 
     fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
         self.observe("boolean", || {
-            let mut state = self.state()?;
+            let state = self.state()?;
             state.solid(target)?;
             state.solid(tool)?;
             let step =
                 json!({"op":"boolean","kind":op,"target":state.get(target)?.result,"tool":state.get(tool)?.result});
-            state.operation(tag, op.kind(), &[target, tool], step)
+            self.operation(state, tag, op.kind(), &[target, tool], step)
         })
     }
 

@@ -157,7 +157,9 @@ impl TabViewer for Panels<'_> {
                 } else {
                     None
                 };
-                let overlay = Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive };
+                let preview_label = st.drag_preview.as_ref().map(|d| d.label());
+                let overlay =
+                    Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive, preview_label };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref());
                 let (dt, ppp) = ui.input(|i| (i.stable_dt.min(0.1), i.pixels_per_point));
                 if st.doc.update_display(&st.viewport.projection(ppp), dt) {
@@ -979,6 +981,7 @@ impl SolidDraftApp {
             AppAction::CancelEditor => {
                 self.close_editor();
             }
+            AppAction::DragDimension(step) => self.state.drag_dimension(step),
             AppAction::Select(sel) => {
                 // Editors that collect picks take the click instead of selecting.
                 if let Some(e) = self.state.editor.as_mut() {
@@ -1676,6 +1679,10 @@ impl eframe::App for SolidDraftApp {
 
         if let Some(e) = self.state.editor.as_mut() {
             e.refresh(&self.state.doc);
+        }
+        // The answers arrive between frames; look again soon while one is owed.
+        if self.state.poll_drag() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Hover info is derived from the viewport's last pick so every panel sees the same name.
         self.state.hover_info = self

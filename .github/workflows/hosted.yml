@@ -126,6 +126,8 @@ jobs:
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
       - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
       - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview_interface -- --nocapture
       - uses: actions/upload-artifact@v4
         if: always()
         with:
