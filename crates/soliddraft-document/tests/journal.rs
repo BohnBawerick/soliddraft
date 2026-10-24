@@ -24,7 +24,7 @@ fn live_sessions_are_not_offered_and_unfinished_intents_survive_a_torn_tail() {
     let records = journal::read(&path).unwrap();
     assert!(matches!(&records[2], Record::Result { sequence:1, error:Some(e) } if e == "nothing to undo"));
     assert!(matches!(&records[3], Record::Command { sequence: 2, .. }));
-    assert_eq!(journal::abandoned(&root), [path.clone()]);
+    assert_eq!(journal::abandoned(&root), std::slice::from_ref(&path));
     // A malformed complete record is corruption, not an interrupted write to ignore.
     std::fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(b"\n").unwrap();
     assert!(journal::read(&path).unwrap_err().contains("journal record 5"));

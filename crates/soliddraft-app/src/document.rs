@@ -1021,7 +1021,7 @@ impl Document {
     /// first feature whose state moved.
     pub fn rebuild(&mut self) -> Result<(), String> {
         let journal = self.model.journal_command(|| serde_json::json!({"op":"app_rebuild", "rollback":self.rollback}));
-        journal.finish((|| {
+        journal.finish({
             let before = self.rollback.and_then(|c| self.features.get(c)).map(|f| model_id(f.id));
             self.model.set_rollback(before);
             self.after_change();
@@ -1032,7 +1032,7 @@ impl Document {
                 Some(e) => Err(e),
                 None => Ok(()),
             }
-        })())
+        })
     }
 
     /// Mirrors the model and refreshes the display, keeping the selection by name.

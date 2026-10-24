@@ -229,10 +229,10 @@ fn journals_are_offered_without_autosave_copies_and_survive_later() {
     let recovery = Recovery::start(&root, policy).unwrap();
     assert!(recovery.offers.is_empty(), "a crash report does not depend on an autosave copy");
     assert!(recovery.show, "the recovery window must open for the journal alone");
-    assert_eq!(recovery.journals, [path.clone()]);
+    assert_eq!(recovery.journals, std::slice::from_ref(&path));
     recovery.close();
     let mut next = Recovery::start(&root, policy).unwrap();
-    assert_eq!(next.journals, [path.clone()], "Later and a normal exit retain crash reports");
+    assert_eq!(next.journals, std::slice::from_ref(&path), "Later and a normal exit retain crash reports");
     next.discard(&path).unwrap();
     assert!(!path.exists());
     assert!(next.journals.is_empty());
