@@ -97,7 +97,7 @@ def timing(tool, segments):
             remaining -= call_ms
         if remaining < -0.001:
             raise ValueError("kernel call timings exceed external wait time")
-        split[fallback] += max(0.0, remaining)
+        split[segment.get("overhead_phase", fallback)] += max(0.0, remaining)
         sources.append({"source": segment["source"], "elapsed_ms": elapsed})
     elapsed = sum(s["elapsed_ms"] for s in sources)
     return {"check": "click budget", "class": kind, "budget_ms": BUDGET_MS[kind],
@@ -290,8 +290,11 @@ def run(args):
                 checks.append(drawing)
                 if drawing["pass"]:
                     segments.append({"source": "drawing.kernel.json", "elapsed_ms": drawing["elapsed_ms"],
-                                     "phase": "display",
+                                     "phase": "construction", "overhead_phase": "display",
                                      "kernel": json.loads((directory / "drawing.kernel.json").read_text())})
+            # Preserve external waits even if the log cannot support a phase split.
+            entry["waits_ms"] = [{"source": s["source"], "elapsed_ms": s["elapsed_ms"]} for s in segments]
+            write(directory / "waits.json", entry["waits_ms"])
             latency = timing(step["tool"], segments)
             entry["timing"] = latency
             checks.append(latency)

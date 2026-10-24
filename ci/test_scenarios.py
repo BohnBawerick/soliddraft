@@ -78,6 +78,15 @@ class Latency(unittest.TestCase):
         self.assertEqual(result["work"]["refusal"], 7)
         self.assertEqual(result["split_ms"]["display"], 0)
 
+    def test_drawing_reconstruction_is_not_hidden_as_rendering(self):
+        result = scenarios.timing("rollback", [self.segment(400, [
+            self.call("extrude", 200),
+            self.call("view_curves", 100),
+        ], phase="construction", overhead_phase="display")])
+        self.assertEqual(result["split_ms"]["construction"], 200)
+        self.assertEqual(result["split_ms"]["display"], 200)
+        self.assertEqual(result["split_ms"]["edit"], 0)
+
     def test_exact_budget_boundary_and_one_microsecond_over(self):
         for tool, limit in (("box", 100), ("boolean", 500), ("edit_extrude", 1000), ("compare", 2000)):
             with self.subTest(tool=tool):

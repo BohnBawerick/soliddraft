@@ -82,6 +82,7 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `timing.json`: external command, live display and requested drawing waits,
   their total, five phase totals, deterministic work counts and the click-budget
   verdict. The same record appears in `checks.json` and `result.json`.
+- `waits.json`: external segment durations, also kept if phase attribution fails.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 
@@ -136,6 +137,9 @@ or edit according to the command. Nested `log_scope` calls are already included
 by their parent and are never charged twice. Work counts follow the same
 ownership rule. External time outside kernel calls belongs to the command phase,
 or to display for capture. Missing or invalid timing evidence fails the run.
+Concurrent top-level calls without enough log information to separate their
+intervals fail attribution rather than double-counting elapsed time. Their
+external waits remain in `waits.json`.
 The pinned kernel does not log initial meshing inside its application build as
 a separate operation. That inseparable cost remains in construction or edit,
 not in the display subtotal; no timing is invented to separate it.
