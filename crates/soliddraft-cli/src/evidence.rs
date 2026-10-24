@@ -4,14 +4,14 @@ use std::collections::BTreeSet;
 use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
-use soliddraft_app::command_tools::CommandTools;
+use soliddraft_app::app_tools::AppTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::{Document, FaceRef, FeatureKind, FeatureStatus, ReferenceSlot, SketchPlane, feature_of_tag};
 
 pub(crate) struct Evidence<'a> {
-    host: CommandTools<'a>,
+    host: AppTools<'a>,
     kernel: Option<Arc<CatallaxKernel>>,
     /// The kernel calls each command makes, counted outside the application.
     work: Option<Arc<Counting>>,
@@ -23,7 +23,7 @@ pub(crate) struct Evidence<'a> {
 
 impl<'a> Evidence<'a> {
     pub(crate) fn new(
-        host: CommandTools<'a>,
+        host: AppTools<'a>,
         kernel: Option<Arc<CatallaxKernel>>,
         work: Option<Arc<Counting>>,
         directory: Option<PathBuf>,
@@ -45,13 +45,13 @@ impl<'a> Evidence<'a> {
         self.sequence += 1;
         let dir = root.join(format!("{:04}", self.sequence));
         std::fs::create_dir(&dir)?;
-        let doc = &*self.host.doc;
+        let summary = self.host.summary();
+        let doc = &self.host.state.doc;
         std::fs::write(dir.join("part.json"), doc.model().part_json())?;
         doc.model().save(dir.join("part.dwprt"))?;
         if let Some(body) = doc.display_body() {
             write_json(dir.join("recipe.json"), &kernel.body_recipe(body)?)?;
         }
-        let summary = self.host.summary();
         let references = references(doc.model());
         let mut diagnostics = kernel.take_diagnostics()?;
         if let Some(questions) = diagnostics["questions"].as_array_mut() {

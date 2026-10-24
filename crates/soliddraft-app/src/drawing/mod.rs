@@ -39,7 +39,7 @@ use soliddraft_drawing::{
 use soliddraft_kernel_api::Point2;
 use soliddraft_kernel_api::drawing::StandardView;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use web_time::Instant;
 
 /// The drawing's ribbon tabs.
@@ -990,6 +990,13 @@ pub fn frame(state: &mut AppState, dock: &mut DockState<Tab>) {
     if dock.find_tab(&Tab::Drawing).is_none() && state.drawing.session.is_some() && state.drawing.active {
         state.drawing.active = false;
     }
+    follow_part(state);
+}
+
+/// Keeps the model reference resolved and, when the part changed, re-resolves the
+/// drawing (automatic update) or marks it stale: [`frame`] without the window. The
+/// agent tools run it after every call.
+pub fn follow_part(state: &mut AppState) {
     reference::refresh(state);
     let Some(session) = state.drawing.session.as_mut() else { return };
     if session.seen_version == state.doc.mesh_version {
@@ -1024,7 +1031,7 @@ pub fn frame(state: &mut AppState, dock: &mut DockState<Tab>) {
 }
 
 /// True when the open part is the one the drawing references.
-fn part_is_model(state: &AppState) -> bool {
+pub(crate) fn part_is_model(state: &AppState) -> bool {
     state.drawing.session.as_ref().is_some_and(|s| s.model_is(state.doc.model().id()))
 }
 
@@ -1076,39 +1083,39 @@ fn rebuild(state: &mut AppState) {
         }
         return;
     }
-    let Some(ctx) = PartContext::new(&state.doc) else {
-        if let Some(s) = state.drawing.session.as_mut() {
-            s.say("The part has no body; the drawing keeps its last views");
-        }
-        return;
-    };
-    let Some(session) = state.drawing.session.as_mut() else { return };
-    match session.doc.apply(Command::UpdateFromModel, Some(&ctx)) {
-        Ok(()) => {
-            if let Some(t) = session.model_target().cloned() {
-                soliddraft_document::resolve::rebind(&mut session.doc.drawing.model, &t);
-            }
-            let report = session.doc.last_update.clone();
-            if let Some(r) = report {
-                let text = format!(
-                    "Rebuilt to {} rev {} · {} view{} · {} changed · {} dangling",
-                    ctx.name,
-                    r.to_revision.short(),
-                    r.views,
-                    if r.views == 1 { "" } else { "s" },
-                    r.changed.len(),
-                    r.dangling.len()
-                );
-                session.say(text);
-                if !r.dangling.is_empty() {
-                    session.attention_focus = r.dangling.first().copied();
-                }
-            }
-            session.fold_cache.clear();
-            session.pending = None;
-        }
-        Err(e) => session.say(format!("Rebuild failed: {e}")),
+    let said = update_views(state).unwrap_or_else(|e| e);
+    if let Some(s) = state.drawing.session.as_mut() {
+        s.say(said);
     }
+}
+
+/// The Rebuild itself, once the open part is the drawing's model: one undo step that
+/// brings the views to the part's revision. Says what it did.
+pub(crate) fn update_views(state: &mut AppState) -> Result<String, String> {
+    let ctx = PartContext::new(&state.doc).ok_or("The part has no body; the drawing keeps its last views")?;
+    let session = state.drawing.session.as_mut().ok_or("No drawing is open")?;
+    session.doc.apply(Command::UpdateFromModel, Some(&ctx)).map_err(|e| format!("Rebuild failed: {e}"))?;
+    if let Some(t) = session.model_target().cloned() {
+        soliddraft_document::resolve::rebind(&mut session.doc.drawing.model, &t);
+    }
+    let mut text = format!("Rebuilt to {}", ctx.name);
+    if let Some(r) = session.doc.last_update.clone() {
+        text = format!(
+            "Rebuilt to {} rev {} · {} view{} · {} changed · {} dangling",
+            ctx.name,
+            r.to_revision.short(),
+            r.views,
+            if r.views == 1 { "" } else { "s" },
+            r.changed.len(),
+            r.dangling.len()
+        );
+        if !r.dangling.is_empty() {
+            session.attention_focus = r.dangling.first().copied();
+        }
+    }
+    session.fold_cache.clear();
+    session.pending = None;
+    Ok(text)
 }
 
 /// Opens a drawing file in the drawing tab. The drawing shows the part revision it is
@@ -1133,6 +1140,22 @@ pub fn restore(state: &mut AppState, dock: &mut DockState<Tab>, doc: DrawingDoc)
 }
 
 fn show_opened(state: &mut AppState, dock: &mut DockState<Tab>, doc: DrawingDoc, verb: &str) {
+    let said = put_opened(state, doc);
+    show_drawing_tab(dock);
+    state.note(format!("{verb} {said}"), NoteKind::Ok);
+    let Some(session) = state.drawing.session.as_ref() else { return };
+    let part_open = session.model_is(state.doc.model().id());
+    if session.link_state() == LinkState::Missing {
+        state.drawing.repair = RepairDialog::new(state, false);
+    } else if !part_open {
+        open_model(state);
+    }
+}
+
+/// Makes an opened drawing the session's drawing and the active document, and
+/// resolves its part. Returns the drawing's title, view count and how it stands
+/// against its part.
+pub(crate) fn put_opened(state: &mut AppState, doc: DrawingDoc) -> String {
     let mut session = DrawingSession::new(doc);
     // Let the frame hook see the open part as first contact.
     session.seen_version = u64::MAX;
@@ -1141,73 +1164,79 @@ fn show_opened(state: &mut AppState, dock: &mut DockState<Tab>, doc: DrawingDoc,
     state.drawing.session = Some(session);
     state.drawing.repair = None;
     state.drawing.active = true;
-    show_drawing_tab(dock);
     reference::refresh(state);
-    let Some(session) = state.drawing.session.as_ref() else { return };
-    let part_open = session.model_is(state.doc.model().id());
-    let link = session.link_state();
-    let words = match &link {
-        LinkState::Missing => "the part was not found",
-        LinkState::Newer { .. } => "a newer version of the part is available",
-        LinkState::Current => "up to date with the part",
-        LinkState::Unverified => "the source is not a SolidDraft document",
-        LinkState::Unknown => "the part is not resolved",
+    let words = match state.drawing.session.as_ref().map(DrawingSession::link_state) {
+        Some(LinkState::Missing) => "the part was not found",
+        Some(LinkState::Newer { .. }) => "a newer version of the part is available",
+        Some(LinkState::Current) => "up to date with the part",
+        Some(LinkState::Unverified) => "the source is not a SolidDraft document",
+        Some(LinkState::Unknown) | None => "the part is not resolved",
     };
-    state.note(format!("{verb} {title} · {views} view{} · {words}", if views == 1 { "" } else { "s" }), NoteKind::Ok);
-    if link == LinkState::Missing {
-        state.drawing.repair = RepairDialog::new(state, false);
-    } else if !part_open {
-        open_model(state);
-    }
+    format!("{title} · {views} view{} · {words}", if views == 1 { "" } else { "s" })
 }
 
 /// Opens the drawing's part, found by the resolver, in the part tab when the part tab
 /// holds nothing unsaved.
 fn open_model(state: &mut AppState) {
-    let Some(session) = state.drawing.session.as_ref() else { return };
-    let Some(file) = session.model_file() else { return };
+    match model_to_open(state) {
+        Ok(Some(file)) => state.push(crate::state::AppAction::Open(Some(file))),
+        Ok(None) => {}
+        Err(e) => {
+            if let Some(s) = state.drawing.session.as_mut() {
+                s.say(e);
+            }
+        }
+    }
+}
+
+/// The drawing's part file to open in the part tab: `None` when it is the open part
+/// or was not found, and an error when the open part has unsaved changes.
+pub(crate) fn model_to_open(state: &AppState) -> Result<Option<PathBuf>, String> {
+    let Some(session) = state.drawing.session.as_ref() else { return Ok(None) };
+    let Some(file) = session.model_file() else { return Ok(None) };
     if session.model_is(state.doc.model().id()) {
-        return;
+        return Ok(None);
     }
     if state.doc.dirty {
-        let name = state.doc.name.clone();
-        if let Some(s) = state.drawing.session.as_mut() {
-            s.say(format!("{name} has unsaved changes; the drawing's part was not opened"));
-        }
-        return;
+        return Err(format!("{} has unsaved changes; the drawing's part was not opened", state.doc.name));
     }
-    state.push(crate::state::AppAction::Open(Some(file)));
+    Ok(Some(file))
 }
 
 /// Points the model reference at `path`, as the repair dialog asked.
 fn repair_model(state: &mut AppState, path: PathBuf, replace: bool) {
-    let Some(session) = state.drawing.session.as_mut() else { return };
-    let Some(drawing_path) = session.doc.path.clone() else {
-        if let Some(d) = state.drawing.repair.as_mut() {
-            d.error = Some("Save the drawing first, so the reference has a folder to be relative to".into());
-        }
-        return;
-    };
-    let was = session.doc.drawing.model.id;
-    match soliddraft_document::resolve::repair(&mut session.doc.drawing.model, &drawing_path, &path, replace) {
-        Ok(identity) => {
-            session.doc.touch();
-            session.link = None;
-            session.marker_dismissed = false;
-            let what = if was.is_some_and(|w| w != identity.id) { "Model replaced" } else { "Reference repaired" };
-            let shown = session.doc.drawing.model.path.clone();
-            session.say(format!("{what}: {shown}"));
+    match repoint_model(state, &path, replace) {
+        Ok(said) => {
             state.drawing.repair = None;
-            state.note(format!("{what}: {shown}"), NoteKind::Ok);
-            reference::refresh(state);
+            state.note(said, NoteKind::Ok);
             open_model(state);
         }
         Err(e) => {
             if let Some(d) = state.drawing.repair.as_mut() {
-                d.error = Some(e.to_string());
+                d.error = Some(e);
             }
         }
     }
+}
+
+/// Points the model reference at `path`; `replace` accepts a different document.
+/// Returns what changed. The drawing's own file must be saved first, so the
+/// reference has a folder to be relative to.
+pub(crate) fn repoint_model(state: &mut AppState, path: &Path, replace: bool) -> Result<String, String> {
+    let session = state.drawing.session.as_mut().ok_or("No drawing is open")?;
+    let drawing_path =
+        session.doc.path.clone().ok_or("Save the drawing first, so the reference has a folder to be relative to")?;
+    let was = session.doc.drawing.model.id;
+    let identity = soliddraft_document::resolve::repair(&mut session.doc.drawing.model, &drawing_path, path, replace)
+        .map_err(|e| e.to_string())?;
+    session.doc.touch();
+    session.link = None;
+    session.marker_dismissed = false;
+    let what = if was.is_some_and(|w| w != identity.id) { "Model replaced" } else { "Reference repaired" };
+    let said = format!("{what}: {}", session.doc.drawing.model.path);
+    session.say(said.clone());
+    reference::refresh(state);
+    Ok(said)
 }
 
 /// Applies one drawing action. Called from the app's action loop.
@@ -1266,53 +1295,26 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
             }
         }
         DrawingAction::Command(cmd) => {
-            let needs_part = matches!(
-                cmd,
-                Command::UpdateFromModel
-                    | Command::Reattach { .. }
-                    | Command::EditView { .. }
-                    | Command::SetViewCrop { .. }
-                    | Command::AddBrokenOut { .. }
-                    | Command::RemoveBrokenOut { .. }
-                    | Command::ReattachView { .. }
-                    | Command::SetViewDisplay { .. }
-            );
-            if needs_part && !part_is_model(state) {
-                if let Some(s) = state.drawing.session.as_mut() {
-                    s.say("The open part is not the one this drawing shows");
-                }
-                return;
-            }
-            let part = if needs_part { PartContext::new(&state.doc) } else { None };
-            let Some(session) = state.drawing.session.as_mut() else { return };
-            let label = cmd.name();
-            let result = session.doc.apply(cmd, part.as_ref());
-            match result {
-                Ok(()) => {
-                    if label == "Update from model" {
-                        session.fold_cache.clear();
-                    }
-                }
-                Err(e) => session.say(format!("{label}: {e}")),
+            if let Err(e) = run_command(state, cmd)
+                && let Some(s) = state.drawing.session.as_mut()
+            {
+                s.say(e);
             }
         }
         DrawingAction::Undo => {
             if let Some(s) = state.drawing.session.as_mut() {
-                match s.doc.undo() {
+                match undo(s) {
                     Some(l) => s.say(format!("Undid {l}")),
                     None => s.say("Nothing to undo"),
                 }
-                s.selection = None;
-                s.fold_cache.clear();
             }
         }
         DrawingAction::Redo => {
             if let Some(s) = state.drawing.session.as_mut() {
-                match s.doc.redo() {
+                match redo(s) {
                     Some(l) => s.say(format!("Redid {l}")),
                     None => s.say("Nothing to redo"),
                 }
-                s.selection = None;
             }
         }
         DrawingAction::SetTab(t) => {
@@ -1417,24 +1419,13 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
         DrawingAction::Export { format, path } => export_sheet(state, format, path),
         DrawingAction::Save(path) => save_drawing(state, path),
         DrawingAction::ModelItems => {
-            let Some(ctx) = PartContext::new(&state.doc) else { return };
-            let Some(s) = state.drawing.session.as_mut() else { return };
-            let items = match model_items(&ctx, &s.doc.drawing, s.sheet) {
-                Ok(items) => items,
-                Err(e) => {
-                    s.say(format!("Model items: {e}"));
-                    return;
-                }
-            };
-            let n = items.len();
-            for a in items {
-                let _ = s.doc.apply(Command::AddAnnotation { annotation: a }, None);
+            if PartContext::new(&state.doc).is_none() {
+                return;
             }
-            s.say(if n == 0 {
-                "Model items: every model dimension is already on the sheet".to_owned()
-            } else {
-                format!("Model items: {n} dimension{} imported", if n == 1 { "" } else { "s" })
-            });
+            let said = import_model_items(state).unwrap_or_else(|e| e);
+            if let Some(s) = state.drawing.session.as_mut() {
+                s.say(said);
+            }
         }
         DrawingAction::AutoCentreMarks => {
             let Some(s) = state.drawing.session.as_mut() else { return };
@@ -1442,23 +1433,7 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
                 Some(DrawingSel::View(id)) => vec![id],
                 _ => s.sheet().views.iter().map(|v| v.id).collect(),
             };
-            let mut added = 0;
-            for id in views {
-                let Some(p) = s.doc.projected_of(id) else { continue };
-                let marks = project::centre_marks(&p, id, s.doc.next_annotation_id().0);
-                for m in marks {
-                    let dup = s.sheet().annotations.iter().any(|a| {
-                        a.view == id
-                            && matches!(a.body, AnnotationKind::CentreMark)
-                            && (a.placement.u - m.placement.u).abs() < 1e-3
-                            && (a.placement.v - m.placement.v).abs() < 1e-3
-                    });
-                    if !dup {
-                        let _ = s.doc.apply(Command::AddAnnotation { annotation: m }, None);
-                        added += 1;
-                    }
-                }
-            }
+            let added = add_centre_marks(s, &views);
             s.say(format!("{added} centre mark{} added", if added == 1 { "" } else { "s" }));
         }
         DrawingAction::StartReattach { annotation, end } => {
@@ -1487,8 +1462,7 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
         DrawingAction::ToggleAutomaticUpdate => {
             let Some(s) = state.drawing.session.as_mut() else { return };
             let on = !s.doc.drawing.settings.automatic_update;
-            let _ = s.doc.apply(Command::SetAutomaticUpdate { on }, None);
-            if on && s.doc.is_stale() {
+            if set_automatic_update(s, on).is_ok_and(|stale| stale) {
                 rebuild(state);
             }
         }
@@ -1511,16 +1485,8 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
         }
         DrawingAction::AddSheet => {
             let Some(s) = state.drawing.session.as_mut() else { return };
-            let n = s.doc.drawing.sheets.len();
-            let template = s.doc.drawing.sheets[0].template.clone();
-            let name = sheets::fresh_name(&s.doc.drawing);
-            match s.doc.apply(Command::AddSheet { name: name.clone(), template }, None) {
-                Ok(()) => {
-                    s.sheet = n;
-                    s.needs_fit = true;
-                    s.selection = None;
-                    s.say(format!("{name} added"));
-                }
+            match add_sheet(s) {
+                Ok(name) => s.say(format!("{name} added")),
                 Err(e) => s.say(e),
             }
         }
@@ -1581,6 +1547,108 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
     }
 }
 
+/// Runs a drawing command as one undo step, with the open part when the command reads
+/// it. A command that reads the part refuses when the open part is not the drawing's.
+pub(crate) fn run_command(state: &mut AppState, cmd: Command) -> Result<(), String> {
+    let needs_part = matches!(
+        cmd,
+        Command::UpdateFromModel
+            | Command::Reattach { .. }
+            | Command::EditView { .. }
+            | Command::SetViewCrop { .. }
+            | Command::AddBrokenOut { .. }
+            | Command::RemoveBrokenOut { .. }
+            | Command::ReattachView { .. }
+            | Command::SetViewDisplay { .. }
+    );
+    if needs_part && !part_is_model(state) {
+        return Err("The open part is not the one this drawing shows".into());
+    }
+    let part = if needs_part { PartContext::new(&state.doc) } else { None };
+    let session = state.drawing.session.as_mut().ok_or("No drawing is open")?;
+    let label = cmd.name();
+    session.doc.apply(cmd, part.as_ref()).map_err(|e| format!("{label}: {e}"))?;
+    if label == "Update from model" {
+        session.fold_cache.clear();
+    }
+    Ok(())
+}
+
+/// Undoes the drawing's last step, returning its label.
+pub(crate) fn undo(s: &mut DrawingSession) -> Option<String> {
+    let label = s.doc.undo();
+    s.selection = None;
+    s.fold_cache.clear();
+    label
+}
+
+/// Redoes the drawing's last undone step, returning its label.
+pub(crate) fn redo(s: &mut DrawingSession) -> Option<String> {
+    let label = s.doc.redo();
+    s.selection = None;
+    label
+}
+
+/// Model items: imports the part's own dimensions into the current sheet's views, one
+/// undo step each. Says how many.
+pub(crate) fn import_model_items(state: &mut AppState) -> Result<String, String> {
+    let ctx = PartContext::new(&state.doc).ok_or("Model items: the part has no body")?;
+    let s = state.drawing.session.as_mut().ok_or("No drawing is open")?;
+    let items = model_items(&ctx, &s.doc.drawing, s.sheet).map_err(|e| format!("Model items: {e}"))?;
+    let n = items.len();
+    for a in items {
+        let _ = s.doc.apply(Command::AddAnnotation { annotation: a }, None);
+    }
+    Ok(if n == 0 {
+        "Model items: every model dimension is already on the sheet".to_owned()
+    } else {
+        format!("Model items: {n} dimension{} imported", if n == 1 { "" } else { "s" })
+    })
+}
+
+/// Adds a centre mark to every circle the views show face-on that has none, one undo
+/// step each. Returns how many it added.
+pub(crate) fn add_centre_marks(s: &mut DrawingSession, views: &[ViewId]) -> usize {
+    let mut added = 0;
+    for &id in views {
+        let Some(p) = s.doc.projected_of(id) else { continue };
+        let marks = project::centre_marks(&p, id, s.doc.next_annotation_id().0);
+        for m in marks {
+            let dup = s.sheet().annotations.iter().any(|a| {
+                a.view == id
+                    && matches!(a.body, AnnotationKind::CentreMark)
+                    && (a.placement.u - m.placement.u).abs() < 1e-3
+                    && (a.placement.v - m.placement.v).abs() < 1e-3
+            });
+            if !dup {
+                let _ = s.doc.apply(Command::AddAnnotation { annotation: m }, None);
+                added += 1;
+            }
+        }
+    }
+    added
+}
+
+/// Turns automatic updates on or off, as one undo step. Returns whether the drawing
+/// is older than its part and so wants a Rebuild now.
+pub(crate) fn set_automatic_update(s: &mut DrawingSession, on: bool) -> Result<bool, String> {
+    s.doc.apply(Command::SetAutomaticUpdate { on }, None)?;
+    Ok(on && s.doc.is_stale())
+}
+
+/// Adds a sheet after the last one, from the first sheet's template, and shows it.
+/// Returns its name.
+pub(crate) fn add_sheet(s: &mut DrawingSession) -> Result<String, String> {
+    let n = s.doc.drawing.sheets.len();
+    let template = s.doc.drawing.sheets[0].template.clone();
+    let name = sheets::fresh_name(&s.doc.drawing);
+    s.doc.apply(Command::AddSheet { name: name.clone(), template }, None)?;
+    s.sheet = n;
+    s.needs_fit = true;
+    s.selection = None;
+    Ok(name)
+}
+
 /// Writes the current sheet as a file, asking for a path unless automation set one.
 fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathBuf>) {
     let Some(s) = state.drawing.session.as_mut() else { return };
@@ -1600,6 +1668,21 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
     });
     let Some(path) = path else { return };
     let path = if path.extension().is_none() { path.with_extension(format.extension()) } else { path };
+    match write_sheet(s, format, &path) {
+        Ok(()) => {
+            s.say(format!("Exported {}", path.display()));
+            state.note(format!("Exported {}", path.display()), NoteKind::Ok);
+        }
+        Err(e) => {
+            s.say(e.clone());
+            state.note(e, NoteKind::Error);
+        }
+    }
+}
+
+/// Writes the drawing as `format` at `path`: the current sheet, or every sheet as a
+/// page of a PDF.
+pub(crate) fn write_sheet(s: &mut DrawingSession, format: export::Format, path: &Path) -> Result<(), String> {
     let stale = s.doc.stale_views();
     let count = s.doc.drawing.sheets.len();
     let list_of = |i: usize| {
@@ -1624,18 +1707,9 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
         }
         _ => export::bytes(&list_of(s.sheet), format, &s.doc.drawing.meta.title),
     };
-    let written = bytes.map_err(|e| e.to_string()).and_then(|bytes| crate::platform::write_file(&path, &bytes));
-    match written {
-        Ok(()) => {
-            s.last_export = Some(path.clone());
-            s.say(format!("Exported {}", path.display()));
-            state.note(format!("Exported {}", path.display()), NoteKind::Ok);
-        }
-        Err(e) => {
-            s.say(e.clone());
-            state.note(e, NoteKind::Error);
-        }
-    }
+    bytes.map_err(|e| e.to_string()).and_then(|bytes| crate::platform::write_file(path, &bytes))?;
+    s.last_export = Some(path.to_path_buf());
+    Ok(())
 }
 
 fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {
@@ -1646,21 +1720,9 @@ fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {
         crate::platform::save_path("Save drawing", "SolidDraft drawing", extension, &name)
     });
     let Some(path) = path else { return };
-    let path = soliddraft_document::kind::saved_path(&path, DocKind::Drawing);
-    // The stored path to the part follows where both files are now, and an unbound
-    // reference takes the id of the document it resolved to.
-    let target = s.model_target().map(|t| (t.path().map(std::path::Path::to_path_buf), t.id()));
-    if let Some((file, id)) = target {
-        if let Some(file) = file {
-            s.doc.drawing.model.set_path(&path, &file);
-        }
-        if s.doc.drawing.model.id.is_none() {
-            s.doc.drawing.model.id = id;
-        }
-    }
     let kernel = state.doc.kernel().backend();
-    match s.doc.save(&path, &format!("{} {}", kernel.name, kernel.version)) {
-        Ok(warning) => {
+    match save_session(s, &path, &format!("{} {}", kernel.name, kernel.version)) {
+        Ok((path, warning)) => {
             s.say(format!("Saved {}", path.display()));
             match warning {
                 Some(w) => state.note(format!("Saved {} · {w}", path.display()), NoteKind::Error),
@@ -1669,6 +1731,29 @@ fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {
         }
         Err(e) => state.note(e, NoteKind::Error),
     }
+}
+
+/// Saves the drawing at `path`, with the drawing extension, written by `kernel`. The
+/// stored path to the part follows where both files are now, and an unbound reference
+/// takes the id of the document it resolved to. Returns the path written and a warning
+/// when the backup could not be made.
+pub(crate) fn save_session(
+    s: &mut DrawingSession,
+    path: &Path,
+    kernel: &str,
+) -> Result<(PathBuf, Option<String>), String> {
+    let path = soliddraft_document::kind::saved_path(path, DocKind::Drawing);
+    let target = s.model_target().map(|t| (t.path().map(Path::to_path_buf), t.id()));
+    if let Some((file, id)) = target {
+        if let Some(file) = file {
+            s.doc.drawing.model.set_path(&path, &file);
+        }
+        if s.doc.drawing.model.id.is_none() {
+            s.doc.drawing.model.id = id;
+        }
+    }
+    let warning = s.doc.save(&path, kernel)?;
+    Ok((path, warning))
 }
 
 /// The status bar while the drawing is active: sheet, size, scale, projection, view
