@@ -127,6 +127,12 @@ pub fn format_major(tag: &str, prefix: &str) -> Option<u32> {
     version.strip_prefix('/')?.split('.').next()?.parse().ok()
 }
 
+/// How an error says which format tag a file carries: "is soliddraft-part/3", or "has no
+/// format tag" when the truth entry has none.
+pub fn found_tag(found: &str) -> String {
+    if found.trim().is_empty() { "has no format tag".to_owned() } else { format!("is {found}") }
+}
+
 /// `path` with the extension its kind is saved under: a `.dwpart` path becomes `.dwprt`,
 /// a `.dwdrawing` path `.dwdrw`, a path without an extension gets the kind's.
 pub fn saved_path(path: &Path, kind: DocKind) -> std::path::PathBuf {
@@ -160,6 +166,12 @@ mod tests {
         assert_eq!(saved_path(Path::new("b"), DocKind::Part), Path::new("b.dwprt"));
         assert_eq!(saved_path(Path::new("b.dwdrawing"), DocKind::Drawing), Path::new("b.dwdrw"));
         assert_eq!(saved_path(Path::new("b.zip"), DocKind::Part), Path::new("b.zip"));
+    }
+
+    #[test]
+    fn a_missing_format_tag_is_named() {
+        assert_eq!(found_tag("soliddraft-part/3"), "is soliddraft-part/3");
+        assert_eq!(found_tag(""), "has no format tag");
     }
 
     #[test]

@@ -41,7 +41,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use soliddraft_document::manifest::{self, Entry, LEGACY_PART_TRUTH, Manifest, Package, Section};
-use soliddraft_document::{ContentHash, DocKind, EnvelopeError, kind::format_major};
+use soliddraft_document::{
+    ContentHash, DocKind, EnvelopeError,
+    kind::{format_major, found_tag},
+};
 use soliddraft_kernel_api::Kernel;
 
 use soliddraft_materials::Snapshots;
@@ -77,7 +80,7 @@ pub enum FileError {
     #[error("the part's recipe is not valid: {0}")]
     Json(#[from] serde_json::Error),
     /// The format tag is not one this version reads.
-    #[error("the file is {found}, this version reads {FORMAT} and {LEGACY_FORMAT}")]
+    #[error("the file {}, this version reads {FORMAT} and {LEGACY_FORMAT}", found_tag(.found))]
     Format {
         /// The tag in the file.
         found: String,
