@@ -8,6 +8,17 @@ A Linux job exports the bracket as STEP, STL and 3MF and opens the STEP in OpenC
 
 Run the same checks with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features --locked` and `cargo build -p soliddraft-web --target wasm32-unknown-unknown --locked`.
 
+The browser job also packages a runnable `web-application` artifact with trunk.
+`ci/browser-journal.js` runs against that complete application through
+`chrome-devtools-axi` and headless Chromium, using real localStorage quota and Web
+Locks. It covers a full store, reload, failed retry, redacted report export without
+deletion, explicit discard without clearing unrelated data, and successful startup
+after space is available. To rerun it locally, serve the packaged app, open its
+origin in an isolated `chrome-devtools-axi` session, then run
+`chrome-devtools-axi run < ci/browser-journal.js`. The scenario clears that
+session's origin storage when seeding each case; never use a profile with user
+documents.
+
 After a deliberate Catallax pin change, manually dispatch Hosted CI with `refresh_catallax_views` enabled to run the existing view and drawing baseline generators. Download the `catallax-view-baseline` artifact, review its diff and commit the generated JSON and SVG files. Require a normal run against that committed baseline before merging.
 
 `release.yml` builds installers and portable archives in a separate workflow. Manual dispatch and release-configuration pull requests are non-publishing dry runs. Version tags can publish after Hosted CI passes; Pages remains disabled behind a repository variable. See [releasing](RELEASING.md) for artifacts, signing secrets, smoke checks and the first-release gate.
