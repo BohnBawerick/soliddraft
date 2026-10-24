@@ -137,9 +137,14 @@ or edit according to the command. Nested `log_scope` calls are already included
 by their parent and are never charged twice. Work counts follow the same
 ownership rule. External time outside kernel calls belongs to the command phase,
 or to display for capture. Missing or invalid timing evidence fails the run.
-Concurrent top-level calls without enough log information to separate their
-intervals fail attribution rather than double-counting elapsed time. Their
-external waits remain in `waits.json`.
+Opt-in diagnostic calls identify whether they ran on the kernel capture thread.
+Only that thread's outer calls partition the command wait. Background calls keep
+their phase work and aggregate call durations under `background`; these durations
+can overlap and are never added to, or subtracted from, the external wait.
+Nested calls are still owned by their enclosing log scope on either thread.
+The ownership marker adds no clock and is absent from the normal kernel path.
+Unexplained capture-thread overlap still fails attribution and preserves
+`waits.json`.
 The pinned kernel does not log initial meshing inside its application build as
 a separate operation. That inseparable cost remains in construction or edit,
 not in the display subtotal; no timing is invented to separate it.

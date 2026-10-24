@@ -28,8 +28,8 @@ class Checks(unittest.TestCase):
 
 class Latency(unittest.TestCase):
     @staticmethod
-    def call(name, elapsed, operations=(), *, nested=False, refused=False, work=None):
-        return {"operation": name, "wall_ms": elapsed, "nested": nested,
+    def call(name, elapsed, operations=(), *, nested=False, refused=False, work=None, foreground=True):
+        return {"operation": name, "wall_ms": elapsed, "nested": nested, "on_capture_thread": foreground,
                 "status": "refused" if refused else "answered", "work": work,
                 "operation_log": {"format": "catallax-operation-log/1", "operations": list(operations)}}
 
@@ -69,6 +69,21 @@ class Latency(unittest.TestCase):
         self.assertEqual(result["split_ms"]["edit"], 100)
         self.assertEqual(sum(result["work"].values()), 5)
 
+    def test_concurrent_background_mesh_keeps_external_wait_and_its_work(self):
+        result = scenarios.timing("edit_extrude", [self.segment(1100, [
+            self.call("tessellate", 3000, [self.operation("mesh", 2900, 15)],
+                      work={"used": 15}, foreground=False),
+            self.call("tessellate_edges", 500, nested=True, foreground=False),
+            self.call("extrude", 500, work={"used": 25}),
+        ])])
+        self.assertFalse(result["pass"])
+        self.assertEqual(result["elapsed_ms"], 1100)
+        self.assertEqual(result["split_ms"]["edit"], 1100)
+        self.assertEqual(sum(result["split_ms"].values()), 1100)
+        self.assertEqual(result["work"]["edit"], 25)
+        self.assertEqual(result["background"]["call_ms"]["display"], 3000)
+        self.assertEqual(result["background"]["work"]["display"], 15)
+
     def test_refusal_keeps_its_whole_wait_and_work(self):
         result = scenarios.timing("cut", [self.segment(600, [
             self.call("boolean", 500, [self.operation("mesh", 50, 3)],
@@ -105,6 +120,10 @@ class Latency(unittest.TestCase):
             scenarios.timing("extrude", [self.segment(10, [
                 self.call("extrude", 5, [self.operation("mesh", 6)]),
             ])])
+        call = self.call("extrude", 1)
+        del call["on_capture_thread"]
+        with self.assertRaises(KeyError):
+            scenarios.timing("extrude", [self.segment(10, [call])])
 
 
 if __name__ == "__main__":

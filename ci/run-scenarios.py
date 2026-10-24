@@ -62,6 +62,8 @@ def timing(tool, segments):
     default = command_phase(tool)
     split = dict.fromkeys(PHASES, 0.0)
     work = dict.fromkeys(PHASES, 0)
+    background_split = dict.fromkeys(PHASES, 0.0)
+    background_work = dict.fromkeys(PHASES, 0)
     sources = []
     for segment in segments:
         elapsed = milliseconds(segment["elapsed_ms"])
@@ -70,6 +72,11 @@ def timing(tool, segments):
         for call in segment["kernel"]["calls"]:
             if call.get("nested", False):
                 continue  # Included by the enclosing log_scope; never charge it twice.
+            on_capture_thread = call["on_capture_thread"]
+            if not isinstance(on_capture_thread, bool):
+                raise ValueError("missing capture-thread ownership")
+            call_split = split if on_capture_thread else background_split
+            call_work = work if on_capture_thread else background_work
             call_ms = milliseconds(call["wall_ms"])
             owner = phase(call, fallback)
             log = call["operation_log"]
@@ -85,16 +92,17 @@ def timing(tool, segments):
                 if owner == "refusal":
                     target = owner
                 if target != owner:
-                    split[target] += op_ms
+                    call_split[target] += op_ms
                     allocated += op_ms
-                work[target] += op_work
+                call_work[target] += op_work
                 used += op_work
             if allocated > call_ms + 0.001:
                 raise ValueError("overlapping operation timings exceed their enclosing call")
-            split[owner] += max(0.0, call_ms - allocated)
+            call_split[owner] += max(0.0, call_ms - allocated)
             if call.get("work") is not None:
-                work[owner] += max(0, call["work"]["used"] - used)
-            remaining -= call_ms
+                call_work[owner] += max(0, call["work"]["used"] - used)
+            if on_capture_thread:
+                remaining -= call_ms
         if remaining < -0.001:
             raise ValueError("kernel call timings exceed external wait time")
         split[segment.get("overhead_phase", fallback)] += max(0.0, remaining)
@@ -102,6 +110,7 @@ def timing(tool, segments):
     elapsed = sum(s["elapsed_ms"] for s in sources)
     return {"check": "click budget", "class": kind, "budget_ms": BUDGET_MS[kind],
             "elapsed_ms": elapsed, "split_ms": split, "work": work, "segments": sources,
+            "background": {"call_ms": background_split, "work": background_work},
             "pass": elapsed <= BUDGET_MS[kind]}
 
 
