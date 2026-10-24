@@ -1,0 +1,310 @@
+name: Release packages
+
+on:
+  push:
+    tags: ['v*.*.*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'packaging/**'
+      - 'docs/RELEASING.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_RELEASE_DEBUG: 0
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        name: Validate version and release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 packaging/release.py version)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            [[ "$GITHUB_REF_NAME" == "v$version" ]]
+            git merge-base --is-ancestor HEAD origin/main
+            # A release never substitutes packaging success for the main application checks.
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hosted.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+              --jq '.workflow_runs | any(.conclusion == "success")' | grep -x true
+          fi
+
+  desktop:
+    name: Package ${{ matrix.platform }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            formats: appimage,deb
+          - platform: windows
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            formats: wix
+          - platform: macos
+            os: macos-14
+            target: universal-apple-darwin
+            formats: dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.platform }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-packager@0.11.8
+      - name: Install Linux packaging and software rendering dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libssl-dev libdbus-1-dev libfuse2 patchelf \
+            libegl1-mesa libgl1-mesa-dri mesa-vulkan-drivers xvfb
+      - name: Build desktop
+        if: runner.os != 'macOS'
+        env:
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
+        run: cargo build --release --locked -p soliddraft-app --target '${{ matrix.target }}'
+      - name: Build both macOS architectures and join them
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --locked -p soliddraft-app --target aarch64-apple-darwin
+          cargo build --release --locked -p soliddraft-app --target x86_64-apple-darwin
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create target/aarch64-apple-darwin/release/soliddraft-app \
+            target/x86_64-apple-darwin/release/soliddraft-app \
+            -output target/universal-apple-darwin/release/soliddraft-app
+          lipo target/universal-apple-darwin/release/soliddraft-app -verify_arch arm64 x86_64
+      - name: Import optional Windows signing certificate
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ($env:WINDOWS_CERTIFICATE) {
+            $path = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+            try {
+              [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+              $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+              $cert = Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password $password
+              "WINDOWS_CERTIFICATE_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+            } finally { Remove-Item $path -ErrorAction SilentlyContinue }
+          }
+      - name: Package with optional platform signing and notarization
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          FORMATS: ${{ matrix.formats }}
+          APPLE_CERTIFICATE: ${{ github.event_name == 'push' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name == 'push' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ github.event_name == 'push' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ github.event_name == 'push' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ github.event_name == 'push' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          python3 packaging/release.py configure "$PLATFORM"
+          cargo packager --config packaging/Packager.generated.json --formats "$FORMATS"
+          python3 packaging/release.py collect "$PLATFORM"
+      - name: Start packaged AppImage without a display
+        if: runner.os == 'Linux'
+        env:
+          WGPU_BACKEND: vulkan
+          SOLIDDRAFT_NO_KEYCHAIN: '1'
+          XDG_RUNTIME_DIR: /tmp/soliddraft-release-runtime
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          chmod +x dist/*.AppImage
+          timeout 120 xvfb-run -a dist/*.AppImage --demo --no-assistant \
+            --screenshot "$RUNNER_TEMP/appimage.png" --after 12
+          test -s "$RUNNER_TEMP/appimage.png"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: appimage-smoke
+          path: ${{ runner.temp }}/appimage.png
+          if-no-files-found: error
+
+  web:
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-web
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.21.14
+      - name: Build the browser application for a relative Pages path
+        working-directory: crates/soliddraft-web
+        run: trunk build --release --locked --public-url ./ --dist ../../target/web-dist
+      - run: python3 packaging/release.py web target/web-dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Smoke-test the packaged browser build
+        run: |
+          mkdir -p "$RUNNER_TEMP/web-smoke"
+          unzip dist/*-web.zip -d "$RUNNER_TEMP/web-smoke/site"
+          npm install --prefix "$RUNNER_TEMP/web-smoke" playwright@1.56.1
+          "$RUNNER_TEMP/web-smoke/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/web-smoke/node_modules" node packaging/smoke-web.cjs \
+            "$RUNNER_TEMP/web-smoke/site" "$RUNNER_TEMP/web-smoke/browser.png"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-web
+          path: dist/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke
+          path: ${{ runner.temp }}/web-smoke/browser.png
+          if-no-files-found: error
+      # This produces the deploy payload in dry runs too, without enabling Pages.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/web-dist
+
+  assemble:
+    needs: [plan, desktop, web]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Require the portable Windows executable to carry its C runtime
+        run: |
+          unzip -p dist/*-windows-x64.zip soliddraft-app.exe > "$RUNNER_TEMP/soliddraft-app.exe"
+          objdump -p "$RUNNER_TEMP/soliddraft-app.exe" > "$RUNNER_TEMP/windows-imports.txt"
+          if grep -Ei 'DLL Name: (VCRUNTIME|MSVCP)[0-9]' "$RUNNER_TEMP/windows-imports.txt"; then
+            echo 'The portable Windows build must not require a Visual C++ runtime installation.'
+            exit 1
+          fi
+      - name: Generate notes from merged pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Pick the closest released version reachable from this commit, not an unrelated tag.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --slurp \
+            > "$RUNNER_TEMP/release-pages.json"
+          jq '[.[][] | select(.draft == false) | .tag_name]' "$RUNNER_TEMP/release-pages.json" \
+            > "$RUNNER_TEMP/releases.json"
+          previous=$(python3 packaging/release.py previous "$RUNNER_TEMP/releases.json")
+          gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" --paginate --slurp \
+            > "$RUNNER_TEMP/pulls.json"
+          note_args=()
+          if [[ -n "$previous" ]]; then note_args+=(--previous "$previous"); fi
+          python3 packaging/release.py notes "$RUNNER_TEMP/pulls.json" "${note_args[@]}"
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/soliddraft-${{ needs.plan.outputs.version }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Require the complete artifact set and hash every download
+        run: python3 packaging/release.py checksums
+      - name: Attest every downloadable file, including SBOM and checksums
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [plan, assemble]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dry-run
+          path: dist
+      - name: Publish only an explicitly pushed version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          args=()
+          title="SolidDraft $VERSION"
+          if [[ "$VERSION" == 0.* ]]; then args+=(--prerelease); title="$title alpha"; fi
+          gh release create "v$VERSION" dist/* --verify-tag --title "$title" \
+            --notes-file dist/release-notes.md "${args[@]}"
+
+  pages:
+    if: github.event_name == 'push' && vars.SOLIDDRAFT_PAGES_ENABLED == 'true'
+    needs: publish
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy the exact browser payload already smoke-tested
+        id: deployment
+        uses: actions/deploy-pages@v4

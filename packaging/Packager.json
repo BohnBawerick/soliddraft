@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/crabnebula-dev/cargo-packager/main/crates/packager/schema.json",
+  "name": "soliddraft-app",
+  "productName": "SolidDraft",
+  "identifier": "io.github.bohnbawerick.soliddraft",
+  "publisher": "SolidDraft contributors",
+  "version": "0.1.0",
+  "description": "Parametric CAD with a local geometry kernel",
+  "homepage": "https://github.com/BohnBawerick/soliddraft",
+  "authors": ["SolidDraft contributors"],
+  "licenseFile": "../LICENSE",
+  "category": "GraphicsAndDesign",
+  "binaries": [{"path": "soliddraft-app", "main": true}],
+  "icons": ["icon.png"],
+  "resources": ["../LICENSE", "../NOTICE"],
+  "fileAssociations": [
+    {"extensions": ["dwprt"], "name": "SolidDraft part", "role": "editor"},
+    {"extensions": ["dwdrw"], "name": "SolidDraft drawing", "role": "editor"}
+  ],
+  "appimage": {
+    "libs": ["libxkbcommon.so*", "libxkbcommon-x11.so*", "libxcb-xkb.so*"]
+  },
+  "deb": {
+    "depends": [
+      "libc6 (>= 2.35)", "libgcc-s1", "libxkbcommon0", "libxkbcommon-x11-0",
+      "libx11-6", "libxcursor1", "libxi6", "libxrandr2", "libxcb1",
+      "libwayland-client0", "libwayland-cursor0", "libwayland-egl1",
+      "libegl1", "libgl1", "libvulkan1"
+    ]
+  },
+  "macos": {"minimumSystemVersion": "11.0"},
+  "windows": {"allowDowngrades": false}
+}
