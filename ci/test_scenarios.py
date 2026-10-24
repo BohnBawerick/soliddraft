@@ -31,11 +31,13 @@ class Checks(unittest.TestCase):
 
     def test_references_keep_their_origins(self):
         ref = {"feature_id": "F5", "feature": "Sketch3", "slot": "sketch plane", "origin": "F2 End cap #1",
-            "resolved": True}
+            "resolved": True, "kernel_origins": [{"tag": "F2.r0.sweep", "role": "end_cap"}], "matches_origin": True}
         known = {}
         self.assertTrue(scenarios.references_kept(known, [ref], [], False)["pass"])
         self.assertTrue(scenarios.references_kept(known, [dict(ref, feature="Boss sketch")], [], False)["pass"])
         self.assertFalse(scenarios.references_kept(known, [dict(ref, origin="F2 Start cap #1")], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [dict(ref, kernel_origins=[{"tag": "F8.r0.sweep"}])], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [dict(ref, matches_origin=False)], [], False)["pass"])
         self.assertFalse(scenarios.references_kept(known, [dict(ref, resolved=False)], [], False)["pass"])
         self.assertTrue(scenarios.references_kept(known, [dict(ref, resolved=False)], ["Sketch3"], False)["pass"])
         self.assertFalse(scenarios.references_kept(known, [dict(ref, resolved=True)], ["Sketch3"], False)["pass"])

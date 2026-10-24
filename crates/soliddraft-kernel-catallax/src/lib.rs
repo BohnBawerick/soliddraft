@@ -87,7 +87,6 @@ impl State {
     fn solid(&self, body: BodyId) -> KernelResult<Arc<Solid>> {
         self.get(body)?.solid.clone().ok_or_else(|| gap("profile sheet queries", "1"))
     }
-
 }
 
 impl CatallaxKernel {

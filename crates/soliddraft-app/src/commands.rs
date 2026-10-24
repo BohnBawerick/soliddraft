@@ -1161,6 +1161,11 @@ fn registry() -> Vec<CommandSpec> {
             .key(Scope::Part, none, Key::F2)
             .run(|_| AppAction::RenameSelected)
             .agents(Agents::Mcp, "References to the feature's faces keep working.", tools::rename_params),
+        cmd("rename_plane", "Rename plane", Icon::Plane, "Rename a reference plane").agents(
+            Agents::Mcp,
+            "Sketches keep their datum identity when its display name changes.",
+            tools::rename_plane_params,
+        ),
         cmd("edit_dimension", "Edit dimension", Icon::Props, "Change a dimension of a sketch").agents(
             Agents::Mcp,
             "The sketch solves again and everything after it rebuilds.",

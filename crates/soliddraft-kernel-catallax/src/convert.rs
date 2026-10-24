@@ -85,7 +85,10 @@ impl Ids {
             let mut named: Vec<_> = origins
                 .iter()
                 .filter_map(|o| {
-                    Some(soliddraft_kernel_api::Origin { tag: tags.get(o.step.as_str())?.clone(), role: face_role(&o.role)? })
+                    Some(soliddraft_kernel_api::Origin {
+                        tag: tags.get(o.step.as_str())?.clone(),
+                        role: face_role(&o.role)?,
+                    })
                 })
                 .collect();
             named.sort();

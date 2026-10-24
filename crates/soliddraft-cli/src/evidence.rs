@@ -98,9 +98,8 @@ fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
     json!({"features_recomputed":features,"operations":operations,"meshes_rebuilt":meshes})
 }
 
-/// Every persistent reference in the part, with the origin it names and whether the last
-/// rebuild resolved it, for scenario checks. It reads the rebuild's statuses and resolves
-/// nothing itself. `resolved` is null for a feature that was not built.
+/// Reference evidence is collected only for an explicitly requested command bundle,
+/// after the edit. Survival assertions live in the scenario runner, not in rebuild.
 fn references(doc: &soliddraft_model::Document) -> Value {
     let origin = |r: &FaceRef| format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1);
     let mut out = Vec::new();
@@ -108,7 +107,9 @@ fn references(doc: &soliddraft_model::Document) -> Value {
         let refs: Vec<(ReferenceSlot, String, Vec<&FaceRef>)> = match &f.kind {
             FeatureKind::Sketch(s) => match &s.plane {
                 SketchPlane::Face { face } => vec![(ReferenceSlot::SketchPlane, origin(face), vec![face])],
-                SketchPlane::Datum { .. } => Vec::new(),
+                SketchPlane::Datum { datum, .. } => {
+                    vec![(ReferenceSlot::SketchPlane, format!("datum:{datum:?}"), Vec::new())]
+                }
             },
             FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) => b
                 .edges
@@ -121,13 +122,56 @@ fn references(doc: &soliddraft_model::Document) -> Value {
                 .collect(),
             FeatureKind::Extrude(_) => Vec::new(),
         };
+        if refs.is_empty() {
+            continue;
+        }
         let status = doc.status(f.id);
+        let topology = doc.body_before(f.id).and_then(|b| doc.kernel().topology(b).ok());
         for (slot, text, faces) in refs {
             let repair = match status {
                 Some(FeatureStatus::RepairNeeded(items)) => items.iter().find(|r| r.slot == slot),
                 _ => None,
             };
-            let built = matches!(status, Some(FeatureStatus::Ok | FeatureStatus::RepairNeeded(_) | FeatureStatus::Failed(_)));
+            let built =
+                matches!(status, Some(FeatureStatus::Ok | FeatureStatus::RepairNeeded(_) | FeatureStatus::Failed(_)));
+            let origins: Vec<_> = faces
+                .iter()
+                .map(|r| {
+                    doc.generated_faces(r.feature)
+                        .iter()
+                        .find(|n| n.generator == r.generator && n.ordinal == r.ordinal)
+                        .map(|n| &n.origin)
+                })
+                .collect();
+            let carriers: Vec<Vec<_>> = origins
+                .iter()
+                .map(|origin| {
+                    topology
+                        .as_ref()
+                        .map(|t| t.faces.iter().filter(|f| origin.is_some_and(|o| f.origins.contains(o))).collect())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let matches_origin = if !matches!(status, Some(FeatureStatus::Ok)) {
+                None
+            } else {
+                Some(match &f.kind {
+                    FeatureKind::Sketch(s) => doc.built_sketch(f.id).is_some_and(|built| match &s.plane {
+                        SketchPlane::Datum { datum, offset } => {
+                            let p = datum.plane();
+                            built.plane == p.with_origin(p.origin + p.normal * *offset)
+                        }
+                        SketchPlane::Face { .. } => carriers.iter().all(|set| {
+                            !set.is_empty()
+                                && set.iter().all(|f| {
+                                    f.normal == Some(built.plane.normal)
+                                        && (f.centroid - built.plane.origin).dot(built.plane.normal).abs() <= 1e-6
+                                })
+                        }),
+                    }),
+                    _ => carriers.iter().all(|set| !set.is_empty()),
+                })
+            };
             out.push(json!({
                 "feature_id": f.id.to_string(),
                 "feature": f.name,
@@ -135,6 +179,10 @@ fn references(doc: &soliddraft_model::Document) -> Value {
                 "origin": text,
                 "of": faces.iter().map(|r| doc.feature(r.feature).map(|g| g.name.clone())).collect::<Vec<_>>(),
                 "resolved": built.then_some(repair.is_none()),
+                "kernel_origins": origins,
+                "carrier_counts": carriers.iter().map(Vec::len).collect::<Vec<_>>(),
+                "carrier_origin_counts": carriers.iter().map(|set| set.iter().map(|f| f.origins.len()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+                "matches_origin": matches_origin,
                 "repair": repair.map(|r| r.message.clone()),
             }));
         }

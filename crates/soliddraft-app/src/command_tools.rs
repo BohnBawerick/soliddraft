@@ -290,12 +290,20 @@ pub fn rename_params() -> Vec<(&'static str, Value)> {
     vec![feature_param(), ("name", string("The new tree name, not empty and not used by another feature"))]
 }
 
+/// The `rename_plane` tool's parameters.
+pub fn rename_plane_params() -> Vec<(&'static str, Value)> {
+    vec![("plane", string("top, front, right, or the plane's current name")), ("name", string("The new display name"))]
+}
+
 /// The `edit_dimension` tool's parameters.
 pub fn edit_dimension_params() -> Vec<(&'static str, Value)> {
     vec![
         ("sketch", string("The sketch's tree name")),
         ("dimension", integer("The dimension's number, from 1, as `feature` lists the sketch's dimensions")),
-        ("value", number("The new value: mm for lengths, a diameter or radius as the dimension is, degrees for angles")),
+        (
+            "value",
+            number("The new value: mm for lengths, a diameter or radius as the dimension is, degrees for angles"),
+        ),
     ]
 }
 
@@ -415,15 +423,18 @@ fn edge_ref(doc: &Document, name: &str) -> Result<EdgeRef, String> {
     doc.edge_ref(edge).ok_or_else(|| format!("`{name}` cannot be referenced"))
 }
 
+fn datum_by_name(doc: &Document, name: &str) -> Option<PlaneKind> {
+    let key = name.trim().to_ascii_lowercase();
+    let key = key.trim_end_matches(" plane");
+    PlaneKind::ALL.into_iter().find(|p| {
+        [doc.model().datum_name(p.to_model()), p.label()]
+            .iter()
+            .any(|label| label.to_ascii_lowercase().trim_end_matches(" plane") == key)
+    })
+}
+
 fn sketch_plane(doc: &Document, plane: &str) -> Result<SketchPlane, String> {
-    let p = plane.trim().to_ascii_lowercase();
-    let reference = match p.trim_end_matches(" plane") {
-        "top" => Some(PlaneKind::Top),
-        "front" => Some(PlaneKind::Front),
-        "right" => Some(PlaneKind::Right),
-        _ => None,
-    };
-    if let Some(plane) = reference {
+    if let Some(plane) = datum_by_name(doc, plane) {
         return Ok(SketchPlane::Reference { plane });
     }
     let face = face_by_name(doc, plane).ok_or_else(|| {
@@ -1200,14 +1211,17 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
     match kind {
         FeatureKind::Sketch(s) => json!({
             "type": "sketch",
-            "plane": s.plane.label(),
+            "plane": match &s.plane {
+                SketchPlane::Reference { plane } => doc.model().datum_name(plane.to_model()).to_owned(),
+                other => other.label(),
+            },
             "entities": s.sketch.drawn().count(),
             "state": s.sketch.status.label(),
         }),
         FeatureKind::Extrude(p) => match p.sketch {
             Some(s) => json!({ "type": "extrude", "sketch": name(s), "depth": p.depth, "flip": p.flip }),
             None => json!({
-                "type": "extrude", "profile": p.profile.summary(), "plane": p.plane.label(), "depth": p.depth, "flip": p.flip,
+                "type": "extrude", "profile": p.profile.summary(), "plane": doc.model().datum_name(p.plane.to_model()), "depth": p.depth, "flip": p.flip,
             }),
         },
         FeatureKind::Cut(p) => json!({
@@ -1227,6 +1241,7 @@ impl CommandTools<'_> {
         json!({
             "part": doc.name,
             "units": "mm",
+            "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {
                 let mut v = params_json(doc, &f.kind);
                 v["name"] = f.name.clone().into();
@@ -1348,9 +1363,10 @@ impl CommandTools<'_> {
         let mut sketch = s.sketch.clone();
         let number = input["dimension"].as_u64().unwrap_or(0) as usize;
         let value = input["value"].as_f64().filter(|v| v.is_finite()).ok_or("the value must be a finite number")?;
-        let target = dimensions(&sketch).nth(number.wrapping_sub(1)).map(|c| c.id).ok_or_else(|| {
-            format!("`{name}` has {} dimensions; number them from 1", dimensions(&sketch).count())
-        })?;
+        let target = dimensions(&sketch)
+            .nth(number.wrapping_sub(1))
+            .map(|c| c.id)
+            .ok_or_else(|| format!("`{name}` has {} dimensions; number them from 1", dimensions(&sketch).count()))?;
         sketch.constraint_mut(target).expect("listed by dimensions").set_value(value);
         self.doc.apply(Command::EditSketch { id, sketch })?;
         Ok(json!({ "sketch": name, "dimension": number, "value": value }))
@@ -1398,6 +1414,14 @@ impl ToolHost for CommandTools<'_> {
                 self.doc.apply(Command::Rename { id, name: name.clone() })?;
                 Ok(json!({ "renamed": name }))
             })(),
+            "rename_plane" if mcp => (|| {
+                let requested = input["plane"].as_str().unwrap_or_default();
+                let plane =
+                    datum_by_name(self.doc, requested).ok_or_else(|| format!("no plane named `{requested}`"))?;
+                let name = input["name"].as_str().unwrap_or_default().trim().to_owned();
+                self.doc.apply(Command::RenamePlane { plane, name: name.clone() })?;
+                Ok(json!({ "renamed_plane": name }))
+            })(),
             "edit_dimension" if mcp => self.edit_dimension(&input),
             "save" if mcp => (|| {
                 let path = part_path(&input)?;
@@ -1415,6 +1439,13 @@ impl ToolHost for CommandTools<'_> {
                 *self.doc = doc;
                 Ok(json!({ "opened": path }))
             })(),
+            "delete_feature" | "suppress" if mcp => {
+                let mut line = input.clone();
+                line["op"] = json!(name);
+                serde_json::from_value::<Line>(line)
+                    .map_err(|e| format!("bad input: {e}"))
+                    .and_then(|line| run_lines(self.doc, &[line]).map(|_| self.summary()))
+            }
             "redo" if mcp => self.doc.redo().map(|label| json!({ "redone": label })),
             verb if mcp && commands::verbs().any(|v| v.id == verb) => {
                 let mut line = input.clone();

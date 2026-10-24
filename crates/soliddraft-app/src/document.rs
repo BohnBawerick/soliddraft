@@ -88,7 +88,7 @@ impl PlaneKind {
         self.to_model().plane()
     }
 
-    fn to_model(self) -> model::DatumPlane {
+    pub(crate) fn to_model(self) -> model::DatumPlane {
         match self {
             PlaneKind::Top => model::DatumPlane::Top,
             PlaneKind::Front => model::DatumPlane::Front,
@@ -554,6 +554,10 @@ pub enum Command {
         id: FeatureId,
         name: String,
     },
+    RenamePlane {
+        plane: PlaneKind,
+        name: String,
+    },
     Suppress {
         id: FeatureId,
         suppressed: bool,
@@ -589,6 +593,7 @@ impl Command {
             Command::EditChamfer { .. } => "Edit chamfer".into(),
             Command::DeleteFeature(_) => "Delete feature".into(),
             Command::Rename { .. } => "Rename".into(),
+            Command::RenamePlane { .. } => "Rename plane".into(),
             Command::Suppress { suppressed: true, .. } => "Suppress".into(),
             Command::Suppress { suppressed: false, .. } => "Unsuppress".into(),
             Command::Reorder { .. } => "Reorder".into(),
@@ -904,6 +909,9 @@ impl Document {
                     return Err("a name cannot be empty".into());
                 }
                 vec![model::Command::RenameFeature { id: model_id(id), name }]
+            }
+            Command::RenamePlane { plane, name } => {
+                vec![model::Command::RenameDatumPlane { datum: plane.to_model(), name }]
             }
             Command::Suppress { id, suppressed } => {
                 let f = self.feature(id).ok_or("no such feature")?;

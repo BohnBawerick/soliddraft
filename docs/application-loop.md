@@ -31,11 +31,11 @@ hidden-line method as the drawing workspace.
 `references.json` is the reference survival scenario. It builds the bracket with
 sketches on the plate's and the boss's top faces, splits the plate's top with a groove,
 sketches on one piece, and merges the top with a flush tab. It then changes the plate
-thickness and the boss diameter, renames features, suppresses and restores the boss,
-undoes and redoes, saves and reopens the part, and deletes the boss. Every step checks
-that each reference keeps the origin it named and resolves, or raises the repair prompt
-where the step expects it. Reference planes are fixed datums today, so the scenario
-renames features only.
+thickness and the boss diameter, renames features and the Top reference plane, suppresses
+and restores the groove, undoes and redoes, and saves and reopens the part. Every
+reference must survive these steps, including the datum references. Deleting the boss
+then raises the repair prompt for the bore's missing plane. Split and merge checks
+inspect the actual origin sets, not just feature statuses.
 
 `refusal.json` sets the deterministic per-call work allowance to zero. The
 extrusion refuses with `numbers.operation-budget`, leaves the part unchanged,
@@ -58,17 +58,20 @@ to raise the repair prompt; features that wait for them may report it, and every
 feature must build. `{bundle}` in a string argument is replaced by the run's bundle
 directory, for `save` and `open`.
 
-Every step also checks references: each reference in `command.json` must name the same
-origin as at the previous step, and must resolve unless its feature is in `repair`. A
-reference may disappear only when the step deletes a feature.
+Every step also checks references: each reference in `command.json` must keep its
+original identity and Catallax operation tag and role. A built face sketch must lie on
+the plane of the input body's faces carrying that origin. The reference must resolve
+unless its feature is in `repair`. A reference may disappear only when the step deletes
+a feature.
 
 Every run has `scenario.json`, `protocol.json` and `result.json`. Each executed
 MCP tool call has a numbered directory under `commands/` containing:
 
 - `command.json`: input, output, backend, the current model summary and every
-  persistent reference: the feature holding it, its slot, the origin it names and
-  whether the last rebuild resolved it (null when that feature was not built). The
-  bundle writer reads these from the rebuild; it resolves nothing itself.
+  persistent reference: the feature holding it, its slot, its identity, the Catallax
+  origins, carrier counts and whether the built sketch's plane matches those carriers.
+  `resolved` is null when that feature was not built. These observations run only after
+  execution when `--bundle` was requested; the scenario runner makes the assertions.
   The `rebuild` report's `features_recomputed` lists the features whose kernel
   operations the command ran, in tree order. `operations` counts those operations and
   `meshes_rebuilt` the meshes made. The bundle counts by wrapping the kernel, and the

@@ -502,7 +502,8 @@ pub(crate) fn name_plane(face: FaceId, view: &View, names: &NameMap) -> Result<F
     let r = origin_name(face, view, names)?;
     let plane_of = |id: FaceId| view.topology.face(id).and_then(|f| f.normal.map(|n| (n, f.centroid.dot(n))));
     let (Some((n, d)), Ok(back)) = (plane_of(face), resolve_plane(&r, view, names)) else {
-        let why = if plane_of(face).is_none() { "it is not planar".to_owned() } else { "its name finds no plane".into() };
+        let why =
+            if plane_of(face).is_none() { "it is not planar".to_owned() } else { "its name finds no plane".into() };
         return Err(NamingError::NotUnique(face.to_string(), why));
     };
     match plane_of(back) {

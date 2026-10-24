@@ -86,6 +86,11 @@ fn check(doc: &Document, origins: &mut BTreeMap<FeatureId, FaceRef>, repair: &[F
         let FeatureKind::Sketch(SketchFeature { plane: SketchPlane::Face { face }, .. }) = &f.kind else {
             let built = status.is_ok() || *status == FeatureStatus::Suppressed || waits_for_repair;
             assert!(built, "{step}: {} is {status:?}\n{}", f.name, report(doc));
+            if let FeatureKind::Sketch(SketchFeature { plane: SketchPlane::Datum { datum, offset }, .. }) = &f.kind {
+                let expected = datum.plane();
+                let expected = expected.with_origin(expected.origin + expected.normal * *offset);
+                assert_eq!(doc.built_sketch(f.id).unwrap().plane, expected, "{step}: datum changed");
+            }
             continue;
         };
         let was = origins.entry(f.id).or_insert_with(|| face.clone());
@@ -129,23 +134,39 @@ fn references_survive_edits_renames_splits_merges_suppression_undo_and_reopening
     let mut origins = BTreeMap::new();
     let pi = std::f64::consts::PI;
 
-    let s = add(&mut doc, "Plate sketch", sketch(top(), |s| {
-        s.rectangle(P2::new(60.0, 45.0), 120.0, 90.0).unwrap();
-    }));
+    let s = add(
+        &mut doc,
+        "Plate sketch",
+        sketch(top(), |s| {
+            s.rectangle(P2::new(60.0, 45.0), 120.0, 90.0).unwrap();
+        }),
+    );
     let plate = add(&mut doc, "Plate", extrude(s, ExtrudeOp::Boss, blind(10.0)));
-    let s = add(&mut doc, "Flange sketch", sketch(top(), |s| {
-        s.rectangle(P2::new(5.0, 45.0), 10.0, 90.0).unwrap();
-    }));
+    let s = add(
+        &mut doc,
+        "Flange sketch",
+        sketch(top(), |s| {
+            s.rectangle(P2::new(5.0, 45.0), 10.0, 90.0).unwrap();
+        }),
+    );
     add(&mut doc, "Flange", extrude(s, ExtrudeOp::Boss, blind(60.0)));
     let plane = on(&doc, plate, Generator::EndCap);
-    let boss_sketch = add(&mut doc, "Boss sketch", sketch(plane, |s| {
-        s.circle_at(P2::new(70.0, 45.0), 24.0).unwrap();
-    }));
+    let boss_sketch = add(
+        &mut doc,
+        "Boss sketch",
+        sketch(plane, |s| {
+            s.circle_at(P2::new(70.0, 45.0), 24.0).unwrap();
+        }),
+    );
     let boss = add(&mut doc, "Boss", extrude(boss_sketch, ExtrudeOp::Boss, blind(20.0)));
     let plane = on(&doc, boss, Generator::EndCap);
-    let bore_sketch = add(&mut doc, "Bore sketch", sketch(plane, |s| {
-        s.circle_at(P2::new(70.0, 45.0), 12.0).unwrap();
-    }));
+    let bore_sketch = add(
+        &mut doc,
+        "Bore sketch",
+        sketch(plane, |s| {
+            s.circle_at(P2::new(70.0, 45.0), 12.0).unwrap();
+        }),
+    );
     add(&mut doc, "Bore", extrude(bore_sketch, ExtrudeOp::Cut, EndCondition::ThroughAll));
     check(&doc, &mut origins, &[], "bracket");
     let plate_top = face_ref(&doc, boss_sketch);
@@ -153,35 +174,53 @@ fn references_survive_edits_renames_splits_merges_suppression_undo_and_reopening
 
     // A groove across the plate splits its top in two; a pin hole is sketched on one piece.
     let plane = on(&doc, plate, Generator::EndCap);
-    let s = add(&mut doc, "Groove sketch", sketch(plane, |s| {
-        s.rectangle(P2::new(100.0, 45.0), 6.0, 100.0).unwrap();
-    }));
-    add(&mut doc, "Groove", extrude(s, ExtrudeOp::Cut, blind(3.0)));
+    let s = add(
+        &mut doc,
+        "Groove sketch",
+        sketch(plane, |s| {
+            s.rectangle(P2::new(100.0, 45.0), 6.0, 100.0).unwrap();
+        }),
+    );
+    let groove = add(&mut doc, "Groove", extrude(s, ExtrudeOp::Cut, blind(3.0)));
     assert_eq!(faces_carrying(&doc, &plate_top), 2, "the groove splits the plate's top");
     let plane = on(&doc, plate, Generator::EndCap);
-    let pin_sketch = add(&mut doc, "Pin sketch", sketch(plane, |s| {
-        s.circle_at(P2::new(112.0, 45.0), 6.0).unwrap();
-    }));
+    let pin_sketch = add(
+        &mut doc,
+        "Pin sketch",
+        sketch(plane, |s| {
+            s.circle_at(P2::new(112.0, 45.0), 6.0).unwrap();
+        }),
+    );
     add(&mut doc, "Pin hole", extrude(pin_sketch, ExtrudeOp::Cut, blind(5.0)));
     check(&doc, &mut origins, &[], "split");
 
     // A tab flush with the plate merges its top with one piece of the plate's top.
-    let s = add(&mut doc, "Tab sketch", sketch(top(), |s| {
-        s.rectangle(P2::new(130.0, 45.0), 20.0, 20.0).unwrap();
-    }));
+    let s = add(
+        &mut doc,
+        "Tab sketch",
+        sketch(top(), |s| {
+            s.rectangle(P2::new(130.0, 45.0), 20.0, 20.0).unwrap();
+        }),
+    );
     let tab = add(&mut doc, "Tab", extrude(s, ExtrudeOp::Boss, blind(10.0)));
     let tab_top = doc.generated_faces(tab).iter().find(|n| n.generator == Generator::EndCap).unwrap().origin.clone();
     let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
     let merged = t.faces.iter().find(|f| f.origins.contains(&tab_top)).unwrap();
     assert!(merged.origins.len() > 1, "the tab's top merged with the plate's: {:?}", merged.origins);
     let plane = on(&doc, tab, Generator::EndCap);
-    let hole_sketch = add(&mut doc, "Tab hole sketch", sketch(plane, |s| {
-        s.circle_at(P2::new(130.0, 45.0), 5.0).unwrap();
-    }));
+    let hole_sketch = add(
+        &mut doc,
+        "Tab hole sketch",
+        sketch(plane, |s| {
+            s.circle_at(P2::new(130.0, 45.0), 5.0).unwrap();
+        }),
+    );
     add(&mut doc, "Tab hole", extrude(hole_sketch, ExtrudeOp::Cut, blind(4.0)));
     check(&doc, &mut origins, &[], "merge");
     let made = volume(&doc);
-    let expected = 120.0 * 90.0 * 10.0 + 10.0 * 90.0 * 50.0 + pi * 144.0 * 20.0 - pi * 36.0 * 30.0 - 6.0 * 90.0 * 3.0
+    let expected = 120.0 * 90.0 * 10.0 + 10.0 * 90.0 * 50.0 + pi * 144.0 * 20.0
+        - pi * 36.0 * 30.0
+        - 6.0 * 90.0 * 3.0
         - pi * 9.0 * 5.0
         + 4000.0
         - pi * 6.25 * 4.0;
@@ -202,15 +241,27 @@ fn references_survive_edits_renames_splits_merges_suppression_undo_and_reopening
         doc.execute(Command::RenameFeature { id, name: name.into() }).unwrap();
         check(&doc, &mut origins, &[], "rename");
     }
-
-    // Suppressing the boss loses the bore's face, which raises the repair prompt; the
-    // restore brings it back. Undo and redo walk the same states.
-    doc.execute(Command::SetSuppressed { id: boss, suppressed: true }).unwrap();
-    check(&doc, &mut origins, &[bore_sketch], "suppress");
-    doc.execute(Command::SetSuppressed { id: boss, suppressed: false }).unwrap();
-    check(&doc, &mut origins, &[], "restore");
+    let shape_hash = doc.geometry_hash();
+    doc.execute(Command::RenameDatumPlane { datum: DatumPlane::Top, name: "Mounting plane".into() }).unwrap();
+    assert_eq!(doc.datum_name(DatumPlane::Top), "Mounting plane");
+    assert_eq!(doc.geometry_hash(), shape_hash);
+    check(&doc, &mut origins, &[], "rename datum");
     doc.undo().unwrap();
-    check(&doc, &mut origins, &[bore_sketch], "undo");
+    assert_eq!(doc.datum_name(DatumPlane::Top), "Top plane");
+    check(&doc, &mut origins, &[], "undo datum rename");
+    doc.redo().unwrap();
+    check(&doc, &mut origins, &[], "redo datum rename");
+
+    // Suppressing the groove merges the split top back into one plane. No reference
+    // disappears. Restore, undo and redo retain the same origins in both states.
+    doc.execute(Command::SetSuppressed { id: groove, suppressed: true }).unwrap();
+    check(&doc, &mut origins, &[], "suppress");
+    assert_eq!(faces_carrying(&doc, &plate_top), 1);
+    doc.execute(Command::SetSuppressed { id: groove, suppressed: false }).unwrap();
+    check(&doc, &mut origins, &[], "restore");
+    assert_eq!(faces_carrying(&doc, &plate_top), 2);
+    doc.undo().unwrap();
+    check(&doc, &mut origins, &[], "undo");
     doc.redo().unwrap();
     check(&doc, &mut origins, &[], "redo");
 
@@ -219,6 +270,7 @@ fn references_survive_edits_renames_splits_merges_suppression_undo_and_reopening
     let before = volume(&doc);
     let mut doc = Document::from_bytes(&bytes, Arc::new(CatallaxKernel::new())).unwrap();
     check(&doc, &mut origins, &[], "reopen");
+    assert_eq!(doc.datum_name(DatumPlane::Top), "Mounting plane");
     assert!((volume(&doc) - before).abs() < 1e-9);
 
     // A genuinely lost reference: the boss is deleted, and the bore's sketch asks for a

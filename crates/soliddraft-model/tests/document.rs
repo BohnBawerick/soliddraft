@@ -90,7 +90,8 @@ fn features_get_names_and_faces_get_labels() {
     assert_eq!(generators.iter().filter(|g| matches!(g, Generator::Side { .. })).count(), 4);
     let end = carrier(&d, d.generated_faces(e).iter().find(|n| n.generator == Generator::EndCap).unwrap());
     assert_eq!(d.face_label(end).unwrap().text, "Boss-Extrude1 · End cap");
-    let side = carrier(&d, d.generated_faces(e).iter().find(|n| matches!(n.generator, Generator::Side { .. })).unwrap());
+    let side =
+        carrier(&d, d.generated_faces(e).iter().find(|n| matches!(n.generator, Generator::Side { .. })).unwrap());
     assert!(d.face_label(side).unwrap().text.starts_with("Boss-Extrude1 · Side of line "));
 }
 

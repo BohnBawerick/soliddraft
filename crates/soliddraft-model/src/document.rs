@@ -1,12 +1,12 @@
 //! The part document: features in tree order, rebuilt through the kernel trait.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use soliddraft_document::DocumentId;
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, KernelResult, OpTag,
-    Origin, Plane, Topology, Vec3,
+    BodyId, BooleanOp, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, KernelResult, OpTag, Origin, Plane,
+    Topology, Vec3,
 };
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
@@ -14,7 +14,7 @@ use soliddraft_tessellation::{Report, Settings};
 
 use crate::command::UndoEntry;
 use crate::feature::{
-    BlendFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
+    BlendFeature, DatumPlane, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, ProfileSource,
     SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
@@ -120,6 +120,7 @@ pub struct Document {
     pub(crate) id: DocumentId,
     pub(crate) name: String,
     pub(crate) features: Vec<Feature>,
+    pub(crate) datum_names: BTreeMap<DatumPlane, String>,
     /// The first feature below the rollback bar.
     pub(crate) rollback: Option<FeatureId>,
     pub(crate) next_id: u32,
@@ -159,6 +160,7 @@ impl Document {
             id: DocumentId::new(),
             name: name.into(),
             features: Vec::new(),
+            datum_names: BTreeMap::new(),
             rollback: None,
             next_id: 1,
             materials: PartMaterials::default(),
@@ -188,6 +190,11 @@ impl Document {
     /// The part's name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// The reference plane's display name. References store the datum, not this label.
+    pub fn datum_name(&self, datum: DatumPlane) -> &str {
+        self.datum_names.get(&datum).map(String::as_str).unwrap_or_else(|| datum.label())
     }
 
     /// Renames the part. Not an undoable command: the name is the file's, not the model's.
@@ -384,8 +391,7 @@ impl Document {
     pub fn resolve_edge(&self, r: &EdgeRef, body: BodyId) -> Result<EdgeId, RepairNeeded> {
         let slot = ReferenceSlot::Edge { index: 0 };
         let t = self.view_of(body).map_err(|e| kernel_repair(slot, e))?;
-        reference::resolve_edge(r, &View { topology: &t }, &self.name_map())
-            .map_err(|u| u.into_repair(slot))
+        reference::resolve_edge(r, &View { topology: &t }, &self.name_map()).map_err(|u| u.into_repair(slot))
     }
 
     /// Moves the rollback bar without an undo entry and rebuilds, for views that show
@@ -705,9 +711,9 @@ impl Document {
                     let generator = match o.role {
                         FaceRole::StartCap => Some(Generator::StartCap),
                         FaceRole::EndCap => Some(Generator::EndCap),
-                        FaceRole::Side { loop_index, segment } => {
-                            region.entity(loop_index as usize, segment as usize).map(|entity| Generator::Side { entity })
-                        }
+                        FaceRole::Side { loop_index, segment } => region
+                            .entity(loop_index as usize, segment as usize)
+                            .map(|entity| Generator::Side { entity }),
                         _ => None,
                     };
                     if let Some(generator) = generator {

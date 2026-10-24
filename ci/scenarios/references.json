@@ -188,7 +188,10 @@
           }
         ]
       },
-      "render": false
+      "render": false,
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+      ]
     },
     {
       "tool": "cut",
@@ -256,7 +259,10 @@
           }
         ]
       },
-      "render": false
+      "render": false,
+      "checks": [
+        { "pointer": "/references/7/carrier_origin_counts/0", "contains": 2 }
+      ]
     },
     {
       "tool": "cut",
@@ -312,28 +318,53 @@
       }
     },
     {
-      "tool": "suppress",
+      "tool": "rename_plane",
       "arguments": {
-        "feature": "Boss",
-        "suppressed": true
+        "plane": "top",
+        "name": "Mounting plane"
       },
-      "repair": [
-        "Sketch4"
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
+        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
       ]
-    },
-    {
-      "tool": "suppress",
-      "arguments": {
-        "feature": "Boss",
-        "suppressed": false
-      }
     },
     {
       "tool": "undo",
       "arguments": {},
-      "repair": [
-        "Sketch4"
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Top plane" }
       ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude2",
+        "suppressed": true
+      },
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 1 }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude2",
+        "suppressed": false
+      },
+      "checks": [
+        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {}
     },
     {
       "tool": "redo",
@@ -349,7 +380,24 @@
       "tool": "open",
       "arguments": {
         "path": "{bundle}/survival.dwprt"
-      }
+      },
+      "checks": [
+        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
+        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Mounting plane",
+        "shapes": [
+          { "shape": "circle", "center": [20, 20, 0], "diameter": 2 }
+        ]
+      },
+      "render": false,
+      "checks": [
+        { "pointer": "/summary/features/16/plane", "equals": "Mounting plane" }
+      ]
     },
     {
       "tool": "delete_feature",

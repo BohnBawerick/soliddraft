@@ -77,9 +77,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             state.origin_open = !state.origin_open;
         }
         if open {
-            for (plane, name) in
-                [(PlaneKind::Front, "Front plane"), (PlaneKind::Top, "Top plane"), (PlaneKind::Right, "Right plane")]
-            {
+            for plane in [PlaneKind::Front, PlaneKind::Top, PlaneKind::Right] {
+                let name = state.doc.model().datum_name(plane.to_model());
                 let r = row(
                     ui,
                     RowSpec {

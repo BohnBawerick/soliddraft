@@ -113,12 +113,17 @@ def rebuilds(features, repair):
 def references_kept(known, references, repair, deleted):
     """Each reference names the origin it named before, and resolves or raises the repair prompt."""
     now = {(r["feature_id"], r["slot"]): r for r in references}
-    changed = [{"reference": list(key), "was": origin, "now": now[key]["origin"]}
-        for key, origin in known.items() if key in now and now[key]["origin"] != origin]
+    changed = [{"reference": list(key), "was": identity, "now": now[key]["origin"]}
+        for key, identity in known.items() if key in now
+        and (now[key]["origin"] != identity["name"]
+            or (all(o is not None for o in now[key]["kernel_origins"])
+                and now[key]["kernel_origins"] != identity["kernel"]))]
     lost = [list(key) for key in known if key not in now and not deleted]
-    wrong = [r for r in references if r["resolved"] is not None and r["resolved"] != (r["feature"] not in repair)]
-    known.clear()
-    known.update({key: r["origin"] for key, r in now.items()})
+    wrong = [r for r in references
+        if (r["resolved"] is not None and r["resolved"] != (r["feature"] not in repair))
+        or (r["resolved"] is True and r["matches_origin"] is not True)]
+    for key, r in now.items():
+        known.setdefault(key, {"name": r["origin"], "kernel": r["kernel_origins"]})
     return {"check": "references kept", "changed": changed, "lost": lost, "unexpected": wrong,
         "pass": not changed and not lost and not wrong}
 

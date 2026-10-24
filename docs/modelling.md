@@ -173,12 +173,17 @@ plane reference and also accepts a piece of a split face. `Document::face_label`
 face for people, such as "Boss-Extrude1 · End cap".
 
 `tests/references.rs` checks survival on the bracket. It edits the plate thickness and
-the boss diameter, renames features, splits the plate's top with a groove, merges it with
-a flush tab, suppresses and restores the boss, undoes and redoes, and saves and reopens
-the part. After each step every sketch on a face lies on a face carrying the origin it
-names, or raises the repair prompt where the step removed that face. The same steps run
-through MCP as the `references` application scenario
+the boss diameter, renames features and the Top datum, splits the plate's top with a
+groove, merges it with a flush tab, suppresses and restores the groove, undoes and redoes,
+and saves and reopens the part. Every reference survives these steps. Deleting the boss
+then raises the repair prompt for the bore's missing plane instead of choosing another.
+The same steps run through MCP as the `references` application scenario
 ([application-loop.md](application-loop.md)).
+
+Datum references store `DatumPlane`, never its display name. `RenameDatumPlane` changes
+the label without rebuilding geometry; it is undoable and saved in `part.json` as
+`datum_names`. Files without labels use Top, Front and Right. Labels affect the semantic
+hash, not the geometry hash.
 
 ## Native files
 
