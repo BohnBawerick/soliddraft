@@ -349,8 +349,21 @@ pub fn line_schema(verb: &CommandSpec) -> Value {
     object(&params)
 }
 
+/// The largest length, in millimetres, an agent's command takes: a size, a depth, a radius
+/// or a coordinate. The kernel meshes every result, and the time and memory it takes grow
+/// with the size of the shape (about 0.3 GB and 7 s for a 10 m circle, 0.9 GB and 40 s for
+/// a 100 m one, and several gigabytes for a 1,000 km one), so a size no part has is refused
+/// by name before it reaches the kernel.
+pub const MAX_LENGTH_MM: f64 = 100_000.0;
+
 fn positive(what: &str, v: f64) -> Result<f64, String> {
-    if v.is_finite() && v > 0.0 { Ok(v) } else { Err(format!("{what} must be greater than 0, got {v}")) }
+    if !v.is_finite() || v <= 0.0 {
+        return Err(format!("{what} must be greater than 0, got {v}"));
+    }
+    if v > MAX_LENGTH_MM {
+        return Err(format!("{what} must be at most {MAX_LENGTH_MM} mm, got {v}"));
+    }
+    Ok(v)
 }
 
 fn feature_names(doc: &Document) -> String {
@@ -451,6 +464,9 @@ fn to_plane(plane: &Plane, p: Point, what: &str) -> Result<P2, String> {
     if !w.is_finite() {
         return Err(format!("{what} is not a finite point"));
     }
+    if p.iter().any(|c| c.abs() > MAX_LENGTH_MM) {
+        return Err(format!("{what} must lie within {MAX_LENGTH_MM} mm of the origin on every axis"));
+    }
     let d = w - plane.origin;
     let off = d.dot(plane.normal);
     if off.abs() > 0.5 {
@@ -474,10 +490,12 @@ fn draw(sketch: &mut Sketch, plane: &Plane, shape: &Shape, n: usize) -> Result<(
     match *shape {
         Shape::Rectangle { center, width, height } => {
             let c = to_plane(plane, center, &what("centre"))?;
+            let (width, height) = (positive("width", width)?, positive("height", height)?);
             sketch.rectangle(c, width, height).map_err(|e| format!("{}: {e}", what("rectangle")))?;
         }
         Shape::Circle { center, diameter } => {
             let c = to_plane(plane, center, &what("centre"))?;
+            let diameter = positive("diameter", diameter)?;
             sketch.circle_at(c, diameter).map_err(|e| format!("{}: {e}", what("circle")))?;
         }
         Shape::Slot { start, end, width } => {
@@ -593,7 +611,7 @@ impl Line {
             Line::Cut { sketch, through_all, depth, flip } => {
                 let params = CutParams {
                     sketch: run.sketch(doc, sketch)?,
-                    depth: if *through_all { depth.max(1.0) } else { positive("depth", *depth)? },
+                    depth: if *through_all { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? },
                     through_all: *through_all,
                     flip: *flip,
                 };
@@ -622,7 +640,7 @@ impl Line {
                 let Some(FeatureKind::Cut(p)) = doc.feature(id).map(|f| f.kind.clone()) else {
                     return Err(format!("{feature} is not a cut"));
                 };
-                let depth = if *through_all { depth.max(1.0) } else { positive("depth", *depth)? };
+                let depth = if *through_all { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? };
                 let params = CutParams { through_all: *through_all, depth, flip: *flip, ..p };
                 run.apply(doc, Command::EditCut { id, params })?;
             }
@@ -1046,7 +1064,7 @@ pub struct CommandTools<'a> {
 
 /// What an MCP client is told about this server in `initialize`.
 pub const MCP_INSTRUCTIONS: &str = "SolidDraft, a parametric CAD application. The tools drive the open part through \
-the same command layer as the ribbon. Units are millimetres and Z is up. Read the part with model_summary and \
+the same command layer as the ribbon. Units are millimetres, Z is up, and no length or coordinate may exceed 100000. Read the part with model_summary and \
 feature; change it with the verb tools (each runs at once as one undo step) or with propose and apply; undo and \
 redo step through the undo stack. Entities are named as the interface names them: Boss-Extrude1 for a feature, \
 Boss-Extrude1 · End cap for a face, Boss-Extrude1 · Edge 3 for an edge.";

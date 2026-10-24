@@ -442,6 +442,9 @@ fn run_over_mcp(calls: Vec<Call>) {
             "method": "tools/call",
             "params": { "name": call.tool, "arguments": call.arguments },
         });
+        if std::env::var_os("FUZZ_TRACE").is_some() {
+            eprintln!("calling {}", request["params"].to_string().chars().take(600).collect::<String>());
+        }
         let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
         let reply = session.handle(&mut host, request.clone()).expect("a request is answered");
         let refused = assert_reply(&request, &reply);
@@ -481,6 +484,9 @@ fn run_as_assistant(calls: Vec<Call>, auto_apply: bool) {
     let caller = Caller::Assistant { prompt: "fuzz".into(), model: "none".into() };
     for call in &calls {
         let before = snapshot(&doc, &book);
+        if std::env::var_os("FUZZ_TRACE").is_some() {
+            eprintln!("calling {} {}", call.tool, call.arguments.to_string().chars().take(600).collect::<String>());
+        }
         let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
         let out = call_checked(&mut host, &call.tool, call.arguments.clone(), &caller);
         assert!(!out.content.trim().is_empty(), "{} says nothing", call.tool);
@@ -538,4 +544,48 @@ fn every_tool_refuses_an_empty_call_with_a_message() {
             assert!(out.is_error && !out.content.trim().is_empty(), "{}: {}", spec.name, out.content);
         }
     }
+}
+
+/// Found by the fuzz: a through-all cut of a Ø1,000 km circle made the kernel mesh a disc until
+/// the machine ran out of memory (about 9 GB), and a Ø100 m one took 40 s. A length or
+/// coordinate beyond `MAX_LENGTH_MM` is refused by name before the kernel meets it.
+#[test]
+fn a_size_no_part_has_is_refused_before_the_kernel_meets_it() {
+    use soliddraft_app::command_tools::MAX_LENGTH_MM;
+    let big = MAX_LENGTH_MM * 10.0;
+    let sketch = |shape: Value| ("sketch", json!({ "plane": "top", "shapes": [shape] }));
+    let calls = [
+        sketch(json!({ "shape": "circle", "center": [0, 0, 0], "diameter": 1e9 })),
+        sketch(json!({ "shape": "rectangle", "center": [0, 0, 0], "width": big, "height": 10 })),
+        sketch(json!({ "shape": "rectangle", "center": [0, 0, 0], "width": 10, "height": big })),
+        sketch(json!({ "shape": "slot", "start": [0, 0, 0], "end": [10, 0, 0], "width": big })),
+        sketch(json!({ "shape": "circle", "center": [big, 0, 0], "diameter": 5 })),
+        sketch(json!({ "shape": "circle", "center": [0, -1e300, 0], "diameter": 5 })),
+        ("extrude", json!({ "sketch": "Sketch1", "depth": big, "flip": false })),
+        ("cut", json!({ "sketch": "Sketch1", "through_all": false, "depth": big, "flip": false })),
+        ("edit_extrude", json!({ "feature": "Boss-Extrude1", "depth": 1e300, "flip": false })),
+        ("fillet", json!({ "edges": ["Boss-Extrude1 · Edge 1"], "radius": big })),
+    ];
+    let mut doc = board_bracket();
+    let mut book = ProposalBook::default();
+    let caller = Caller::Mcp { client: "test".into() };
+    let started = std::time::Instant::now();
+    for (tool, arguments) in calls {
+        let before = snapshot(&doc, &book);
+        let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+        let out = call_checked(&mut host, tool, arguments.clone(), &caller);
+        assert!(out.is_error, "{tool} {arguments} ran");
+        assert!(out.content.contains("at most") || out.content.contains("within"), "{tool}: {}", out.content);
+        assert_eq!(before, snapshot(&doc, &book), "{tool} changed the part");
+    }
+    assert!(started.elapsed() < Duration::from_secs(10), "refusing took {:?}", started.elapsed());
+    // A through-all cut ignores its depth, whatever it says.
+    let mut host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+    let out = call_checked(
+        &mut host,
+        "cut",
+        json!({ "sketch": "Sketch4", "through_all": true, "depth": 1e300, "flip": false }),
+        &caller,
+    );
+    assert!(!out.content.contains("at most"), "{}", out.content);
 }
