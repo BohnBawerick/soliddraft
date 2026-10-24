@@ -15,7 +15,6 @@
   "resources": ["../LICENSE", "../NOTICE"],
   "fileAssociations": [
     {"extensions": ["dwprt"], "name": "SolidDraft part", "role": "editor"},
-    {"extensions": ["dwasm"], "name": "SolidDraft assembly", "role": "editor"},
     {"extensions": ["dwdrw"], "name": "SolidDraft drawing", "role": "editor"}
   ],
   "appimage": {
