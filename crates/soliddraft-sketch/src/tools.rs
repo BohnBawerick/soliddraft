@@ -133,6 +133,18 @@ fn valid(kind: EntityKind) -> bool {
     }
 }
 
+// Degree inputs name right angles exactly. Keep their zero components exact
+// rather than sending trig residuals into Catallax's rational arc conversion.
+fn rotation_sin_cos(degrees: f64) -> (f64, f64) {
+    match degrees.rem_euclid(360.0) {
+        0.0 => (0.0, 1.0),
+        90.0 => (1.0, 0.0),
+        180.0 => (0.0, -1.0),
+        270.0 => (-1.0, 0.0),
+        angle => angle.to_radians().sin_cos(),
+    }
+}
+
 fn ends(kind: EntityKind) -> Option<[P2; 2]> {
     match kind {
         EntityKind::Line { a, b } => Some([a, b]),
@@ -305,14 +317,14 @@ impl Sketch {
                 if !finite(*center) || !finite(*vertex) || center.dist(*vertex) <= EPS || !(3..=1000).contains(sides) {
                     return refuse("a polygon needs a finite centre, a distinct vertex and 3 to 1000 sides");
                 }
-                let r = center.dist(*vertex);
-                let angle = (*vertex - *center).angle();
+                let d = *vertex - *center;
                 let corners: Vec<_> = (0..*sides)
                     .map(|i| {
                         if i == 0 {
                             *vertex
                         } else {
-                            *center + P2::from_angle(angle + TAU * f64::from(i) / f64::from(*sides)).scale(r)
+                            let (s, c) = rotation_sin_cos(360.0 * f64::from(i) / f64::from(*sides));
+                            *center + P2::new(c * d.u - s * d.v, s * d.u + c * d.v)
                         }
                     })
                     .collect();
@@ -330,16 +342,21 @@ impl Sketch {
                     return refuse("the mirror axis needs two distinct finite points");
                 }
                 let dir = (*axis_end - *axis_start).normalized();
-                self.transform_copies(entities, 2, true, |p, _| {
-                    let v = p - *axis_start;
-                    *axis_start + dir.scale(2.0 * v.dot(dir)) - v
+                self.transform_copies(entities, 2, true, |_| {
+                    move |p| {
+                        let v = p - *axis_start;
+                        *axis_start + dir.scale(2.0 * v.dot(dir)) - v
+                    }
                 })
             }
             Operation::LinearPattern { entities, step, count } => {
                 if !finite(*step) || step.len() <= EPS {
                     return refuse("pattern step must be finite and nonzero");
                 }
-                self.transform_copies(entities, *count, false, |p, i| p + step.scale(f64::from(i)))
+                self.transform_copies(entities, *count, false, |i| {
+                    let delta = step.scale(f64::from(i));
+                    move |p| p + delta
+                })
             }
             Operation::CircularPattern { entities, center, angle_degrees, count } => {
                 if !(2..=1000).contains(count) {
@@ -358,21 +375,23 @@ impl Sketch {
                         return refuse("circular pattern repeats an instance");
                     }
                 }
-                self.transform_copies(entities, *count, false, |p, i| {
-                    let (s, c) = (angle_degrees.to_radians() * f64::from(i)).sin_cos();
-                    let d = p - *center;
-                    *center + P2::new(c * d.u - s * d.v, s * d.u + c * d.v)
+                self.transform_copies(entities, *count, false, |i| {
+                    let (s, c) = rotation_sin_cos(angle_degrees * f64::from(i));
+                    move |p: P2| {
+                        let d = p - *center;
+                        *center + P2::new(c * d.u - s * d.v, s * d.u + c * d.v)
+                    }
                 })
             }
         }
     }
 
-    fn transform_copies(
+    fn transform_copies<F: Fn(P2) -> P2>(
         &mut self,
         ids: &[EntityId],
         count: u32,
         reflect: bool,
-        map: impl Fn(P2, u32) -> P2,
+        transform: impl Fn(u32) -> F,
     ) -> Result<Vec<EntityId>> {
         if !(2..=1000).contains(&count) {
             return refuse("pattern count including the seed must be from 2 to 1000");
@@ -380,15 +399,16 @@ impl Sketch {
         let selected = self.tool_selection(ids)?;
         let mut out = Vec::new();
         for i in 1..count {
+            let map = transform(i);
             for e in &selected {
                 let kind = match e.kind {
-                    EntityKind::Point { p } => EntityKind::Point { p: map(p, i) },
-                    EntityKind::Line { a, b } => EntityKind::Line { a: map(a, i), b: map(b, i) },
+                    EntityKind::Point { p } => EntityKind::Point { p: map(p) },
+                    EntityKind::Line { a, b } => EntityKind::Line { a: map(a), b: map(b) },
                     EntityKind::Arc { center, start, end } => {
                         let (start, end) = if reflect { (end, start) } else { (start, end) };
-                        EntityKind::Arc { center: map(center, i), start: map(start, i), end: map(end, i) }
+                        EntityKind::Arc { center: map(center), start: map(start), end: map(end) }
                     }
-                    EntityKind::Circle { center, radius } => EntityKind::Circle { center: map(center, i), radius },
+                    EntityKind::Circle { center, radius } => EntityKind::Circle { center: map(center), radius },
                 };
                 out.push((kind, e.construction));
             }

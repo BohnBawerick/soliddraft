@@ -91,6 +91,8 @@ Trim removes the picked interval between intersections with bounded sketch curve
 
 Offset copies a connected chain selected in walking order, starting in the first entity's direction. Positive distance is to the left, negative to the right. Adjacent offset lines and arcs meet at miter intersections. Collapsed radii, consumed edges and self-intersections are refused. The originals remain, so offsetting a closed loop makes a nested profile. Mirror reverses reflected arc endpoints to retain the sketch model's counter-clockwise arc convention. Copies preserve construction status and get coincident relations at matching new endpoints, but do not inherit driving dimensions. Patterns are independent copies, with counts including the seed. Polygon sides are limited to 3 through 1000; pattern counts to 2 through 1000.
 
+Polygon and circular-pattern rotations preserve exact degree-specified right angles with coordinate swaps and signs. Other angles retain their trigonometric values, without a near-angle snapping tolerance. This avoids introducing tiny nonzero coordinates at 90-degree increments that can make the rational arc converter refuse an otherwise valid profile. Each pattern instance computes its transform once for all copied points.
+
 Pointer-led selection workflows, tool previews, dedicated ribbon commands and placement feedback for these tools remain interface-design work. Ellipse, spline and text profiles still wait for Catallax stage 5.
 
 
