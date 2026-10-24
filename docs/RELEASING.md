@@ -20,6 +20,8 @@ SolidDraft uses `0.x.y` versions. Every `0.x` release is labelled **alpha** and 
 
 Linux packages build on Ubuntu 22.04. The portable tar needs the host's graphics drivers and desktop libraries; the AppImage bundles dependencies through cargo-packager. The archive packages include LICENSE and NOTICE. The Debian package and installers also include them as resources.
 
+Winit loads XKB libraries at runtime rather than linking them into the executable. `packaging/Packager.json` explicitly includes those libraries and the XCB XKB dependency in the AppImage, and declares desktop/graphics runtime dependencies for Debian. Keep these declarations aligned with the packaged startup smoke, not just the binary's `ldd` output.
+
 The SBOM comes from Syft through `anchore/sbom-action`. It inventories the checked-out source, locked dependencies and staged packages; it is not a claim that every workspace dependency is linked into every executable. The tag workflow creates GitHub build-provenance attestations for every downloadable file, including the notes, SBOM and checksum manifest. Dry runs do not publish attestations.
 
 Verify a download with `sha256sum -c SHA256SUMS` after downloading the complete set, or check its individual entry. Verify provenance with:

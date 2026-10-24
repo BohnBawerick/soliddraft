@@ -18,6 +18,17 @@
     {"extensions": ["dwasm"], "name": "SolidDraft assembly", "role": "editor"},
     {"extensions": ["dwdrw"], "name": "SolidDraft drawing", "role": "editor"}
   ],
+  "appimage": {
+    "libs": ["libxkbcommon.so*", "libxkbcommon-x11.so*", "libxcb-xkb.so*"]
+  },
+  "deb": {
+    "depends": [
+      "libc6 (>= 2.35)", "libgcc-s1", "libxkbcommon0", "libxkbcommon-x11-0",
+      "libx11-6", "libxcursor1", "libxi6", "libxrandr2", "libxcb1",
+      "libwayland-client0", "libwayland-cursor0", "libwayland-egl1",
+      "libegl1", "libgl1", "libvulkan1"
+    ]
+  },
   "macos": {"minimumSystemVersion": "11.0"},
   "windows": {"allowDowngrades": false}
 }
