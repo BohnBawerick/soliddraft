@@ -192,6 +192,13 @@ fn noise(len: usize) -> Vec<u8> {
         .collect()
 }
 
+/// Whether the archive holds the entry and it reads to its end with a good checksum.
+fn reads(bytes: &[u8], name: &str) -> bool {
+    let Ok(mut zip) = zip::ZipArchive::new(std::io::Cursor::new(bytes)) else { return false };
+    let Ok(mut file) = zip.by_name(name) else { return false };
+    file.read_to_end(&mut Vec::new()).is_ok()
+}
+
 /// Offset and length of an entry's stored bytes within the archive.
 fn stored_range(bytes: &[u8], name: &str) -> (usize, usize) {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
@@ -223,9 +230,15 @@ fn cases(kind: DocKind, valid: &[u8]) -> Vec<Case> {
     no_end[end..end + 4].copy_from_slice(b"XXXX");
     all.push(case("the archive's end record destroyed", no_end, Refusal::Damaged));
     let (start, size) = stored_range(valid, truth);
+    // A flipped byte can land in the padding of the compressed stream and change nothing;
+    // only flips that make the entry unreadable are variants.
     for (what, at) in [("start", start), ("middle", start + size / 2), ("end", start + size - 1)] {
         let mut flipped = valid.to_vec();
         flipped[at] ^= 0x5a;
+        if reads(&flipped, truth) {
+            assert_ne!(what, "middle", "a flip in the middle of {truth} changed nothing");
+            continue;
+        }
         all.push(case(&format!("a byte flipped at the {what} of {truth}"), flipped, Refusal::Damaged));
     }
     all.push(case(

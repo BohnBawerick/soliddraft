@@ -390,10 +390,15 @@ fn snapshot(doc: &Document, book: &ProposalBook) -> Snapshot {
 /// Runs `body` on a thread of its own, and fails with `what` if it outlasts [`LIMIT`].
 fn within_limit(what: String, body: impl FnOnce() + Send + 'static) {
     let (done, finished) = channel();
-    let worker = std::thread::spawn(move || {
-        body();
-        let _ = done.send(());
-    });
+    // The stack of a Unix main thread, which is where the app runs a command (see recipe_fuzz
+    // in soliddraft-cli for why the 2 MiB of a default thread is not enough for the kernel).
+    let worker = std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            body();
+            let _ = done.send(());
+        })
+        .expect("a thread to run the case on");
     match finished.recv_timeout(LIMIT) {
         Ok(()) => worker.join().expect("the case finished"),
         // The thread ended without finishing: it panicked. Report its panic.
