@@ -85,7 +85,7 @@ impl<'a> Evidence<'a> {
             return Ok(json!({"prepared":true}));
         }
         let dir = root.join(format!("{:04}", self.sequence));
-        let doc = &*self.host.doc;
+        let doc = &self.host.state.doc;
         let body = doc.display_body().ok_or("part has no displayed solid")?;
         self.renderer
             .as_mut()
