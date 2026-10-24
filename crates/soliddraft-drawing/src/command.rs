@@ -951,6 +951,11 @@ impl UndoStack {
         Some(name)
     }
 
+    /// How many commands [`undo`](Self::undo) can undo.
+    pub fn depth(&self) -> usize {
+        self.undo.len()
+    }
+
     /// The name of the command [`undo`](Self::undo) would undo.
     pub fn undo_name(&self) -> Option<&'static str> {
         self.undo.last().map(|(n, _)| *n)

@@ -43,6 +43,9 @@
 //! `soliddraft commands [--json] [QUERY]` lists or searches the command registry that the
 //! app, the assistant and the MCP server share; see [`commands::USAGE`].
 //!
+//! `soliddraft run <command> [JSON]` and `soliddraft run --script FILE` run the registry's
+//! commands without a window, as the MCP server's tools; see [`run::USAGE`].
+//!
 //! `soliddraft key set|delete openrouter|anthropic` manages a provider's API key in the OS
 //! keychain; `soliddraft key status` says which keys exist and which provider the assistant uses.
 
@@ -57,6 +60,7 @@ mod generate;
 mod journal;
 mod material;
 mod quality;
+mod run;
 mod screenshot;
 mod view;
 
@@ -78,6 +82,7 @@ usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft commands [--json] [<query>...]
        soliddraft journal replay <journal.jsonl> [--out <report.json>]
        soliddraft journal export <journal.jsonl> <report.jsonl>
+       soliddraft run [--demo | --open <file>] <command> [<arguments>] | --script <file>
        soliddraft key set|delete openrouter|anthropic
        soliddraft key status
        soliddraft draw <part.dwprt | recipe.json> [--template iso-a3] [--out <file>]...
@@ -108,6 +113,9 @@ mcp     Serves a part's command layer to an MCP client such as Claude Code, on
 commands
         Lists or searches every command of the app and the MCP server, from the
         command registry. `soliddraft commands --help` describes it.
+
+run     Runs commands of the registry without a window, one or a script of them, as
+        the MCP server's tools. `soliddraft run --help` describes it.
 
 key     The assistant's API keys in the OS keychain, one per provider: OpenRouter or
         Anthropic. `set` reads the named provider's key from standard input;
@@ -157,6 +165,11 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("commands") => commands::run(&args[1..]),
+        Some("run") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
+            print!("{}", run::USAGE);
+            ExitCode::SUCCESS
+        }
+        Some("run") => run::run(&args[1..]),
         Some("key") => key(&args[1..]),
         Some("draw") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
             print!("{}", draw::USAGE);
@@ -391,7 +404,8 @@ fn part(args: &[String]) -> ExitCode {
 }
 
 fn mcp(args: &[String]) -> ExitCode {
-    use soliddraft_app::command_tools::{CommandTools, MCP_INSTRUCTIONS, ProposalBook, Surface};
+    use soliddraft_app::app_tools::AppTools;
+    use soliddraft_app::command_tools::MCP_INSTRUCTIONS;
     use soliddraft_assistant::mcp::{HttpServer, McpSession, serve_stdio};
 
     let mut bundle = None;
@@ -475,7 +489,7 @@ fn mcp(args: &[String]) -> ExitCode {
     // A bundle counts the work each command asks of the kernel, outside the application.
     let counting = evidence_kernel.clone().map(|k| Arc::new(Counting::new(k)));
     let kernel: Arc<dyn Kernel> = counting.clone().map(|k| k as Arc<dyn Kernel>).unwrap_or_else(soliddraft_app::kernel);
-    let mut doc = match open {
+    let doc = match open {
         Some(path) => match soliddraft_app::file::open(&path, kernel.clone()) {
             Ok(doc) => doc,
             Err(e) => {
@@ -490,7 +504,7 @@ fn mcp(args: &[String]) -> ExitCode {
         }
         None => soliddraft_app::document::Document::new("Part1", kernel),
     };
-    let mut drawing = match drawing_path {
+    let drawing = match drawing_path {
         Some(path) => match soliddraft_app::drawing::document::DrawingDoc::open(&path) {
             Ok(doc) => Some(doc),
             Err(e) => {
@@ -500,9 +514,15 @@ fn mcp(args: &[String]) -> ExitCode {
         },
         None => None,
     };
-    let mut book = ProposalBook::default();
+    let mut state = soliddraft_app::state::AppState::new(doc);
+    // The drawing opens beside the part: undo and redo stay with the part until show_drawing.
+    if let Some(doc) = drawing {
+        let mut session = soliddraft_app::drawing::DrawingSession::new(doc);
+        session.seen_version = u64::MAX;
+        state.drawing.session = Some(session);
+    }
     let mut session = McpSession::new("soliddraft", env!("CARGO_PKG_VERSION"), MCP_INSTRUCTIONS);
-    let host = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: drawing.as_mut() };
+    let host = AppTools { state: &mut state };
     let mut host = match evidence::Evidence::new(host, evidence_kernel, counting, bundle, max_work) {
         Ok(host) => host,
         Err(e) => {

@@ -2,6 +2,7 @@
 //! proposals, and the MCP endpoint, all driven once per frame on the interface thread,
 //! where the document lives.
 
+use crate::app_tools::AppTools;
 use crate::command_tools::{CommandTools, ProposalBook, ProposalStatus, Surface};
 use crate::document::Preview;
 use crate::state::{AppState, NoteKind};
@@ -561,22 +562,17 @@ impl AppState {
         Ok(url)
     }
 
-    /// Answers waiting MCP calls against the open part.
+    /// Answers waiting MCP calls against the open part and drawing.
     pub fn service_mcp(&mut self) {
-        let Some(mcp) = &mut self.chat.mcp else { return };
+        let Some(mut mcp) = self.chat.mcp.take() else { return };
         let mut changed = false;
         while let Ok(call) = mcp.calls.try_recv() {
             let before = self.doc.mesh_version;
-            let mut host = CommandTools {
-                doc: &mut self.doc,
-                book: &mut self.chat.book,
-                surface: Surface::Mcp,
-                drawing: self.drawing.session.as_mut().map(|s| &mut s.doc),
-            };
-            let reply = mcp.session.handle(&mut host, call.message.clone());
+            let reply = mcp.session.handle(&mut AppTools { state: self }, call.message.clone());
             call.respond(reply);
             changed |= self.doc.mesh_version != before;
         }
+        self.chat.mcp = Some(mcp);
         if changed {
             self.after_change();
         }
