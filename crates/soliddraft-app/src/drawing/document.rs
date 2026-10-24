@@ -51,9 +51,41 @@ pub struct DrawingDoc {
     /// How many commands the part's log held at the last update, so the banner can say
     /// what changed since. Not saved.
     pub log_mark: usize,
+    journal: soliddraft_document::journal::Identity,
 }
 
 impl DrawingDoc {
+    pub fn journal_key(&self) -> u64 {
+        soliddraft_document::journal::register(
+            &self.journal,
+            "drawing",
+            || serde_json::json!({"drawing":self.drawing, "id":self.id}),
+        );
+        self.journal.key()
+    }
+
+    fn journal_command(
+        &self,
+        command: impl FnOnce() -> serde_json::Value,
+    ) -> soliddraft_document::journal::CommandGuard {
+        self.journal_key();
+        soliddraft_document::journal::begin(&self.journal, command)
+    }
+
+    /// The canonical drawing command handler shared with MCP and journal replay.
+    pub fn run_journal_command(
+        &mut self,
+        input: serde_json::Value,
+        part: Option<&PartContext<'_>>,
+    ) -> Result<(), String> {
+        match input["op"].as_str().unwrap_or_default() {
+            "execute" => self.apply(serde_json::from_value(input["command"].clone()).map_err(|e| e.to_string())?, part),
+            "undo" => self.undo().map(|_| ()).ok_or_else(|| "nothing to undo".into()),
+            "redo" => self.redo().map(|_| ()).ok_or_else(|| "nothing to redo".into()),
+            _ => Err("unknown drawing journal command".into()),
+        }
+    }
+
     pub fn new(drawing: Drawing) -> DrawingDoc {
         let seen = drawing.model.pinned.clone();
         DrawingDoc {
@@ -68,6 +100,7 @@ impl DrawingDoc {
             last_update: None,
             seen_digest: seen,
             log_mark: 0,
+            journal: Default::default(),
         }
     }
 
@@ -96,15 +129,25 @@ impl DrawingDoc {
     }
 
     pub fn undo(&mut self) -> Option<String> {
-        let name = self.stack.undo(&mut self.drawing)?;
-        self.touch();
-        Some(name.to_owned())
+        let journal = self.journal_command(|| serde_json::json!({"op":"undo"}));
+        let result = (|| {
+            let name = self.stack.undo(&mut self.drawing)?;
+            self.touch();
+            Some(name.to_owned())
+        })();
+        let _ = journal.finish(result.as_ref().ok_or("nothing to undo"));
+        result
     }
 
     pub fn redo(&mut self) -> Option<String> {
-        let name = self.stack.redo(&mut self.drawing)?;
-        self.touch();
-        Some(name.to_owned())
+        let journal = self.journal_command(|| serde_json::json!({"op":"redo"}));
+        let result = (|| {
+            let name = self.stack.redo(&mut self.drawing)?;
+            self.touch();
+            Some(name.to_owned())
+        })();
+        let _ = journal.finish(result.as_ref().ok_or("nothing to redo"));
+        result
     }
 
     /// True when the part changed since the drawing's views were made: the drawing
@@ -138,53 +181,57 @@ impl DrawingDoc {
 
     /// Applies a command, with the part when the command reads it.
     pub fn apply(&mut self, cmd: Command, part: Option<&PartContext<'_>>) -> Result<(), String> {
-        let from = self.drawing.model.pinned.clone();
-        let p = part.map(|c| c.part());
-        // Commands that remake one view's line work through the kernel; its transform
-        // and circles are remembered again afterwards, since a flipped section or a
-        // cropped view sees the part from a new frame.
-        let remade = match &cmd {
-            Command::EditView { view, .. }
-            | Command::SetViewCrop { view, .. }
-            | Command::AddBrokenOut { view, .. }
-            | Command::RemoveBrokenOut { view, .. }
-            | Command::ReattachView { view, .. } => Some(*view),
-            Command::SetViewDisplay { view, display } => {
-                let before = self.drawing.view(*view).map(|v| v.display);
-                before.filter(|b| b.tangent != display.tangent || b.seams != display.seams).map(|_| *view)
+        let part_key = part.and_then(|p| p.doc.model().journal_key());
+        let journal = self.journal_command(|| serde_json::json!({"op":"execute", "command":cmd, "part":part_key}));
+        journal.finish((|| {
+            let from = self.drawing.model.pinned.clone();
+            let p = part.map(|c| c.part());
+            // Commands that remake one view's line work through the kernel; its transform
+            // and circles are remembered again afterwards, since a flipped section or a
+            // cropped view sees the part from a new frame.
+            let remade = match &cmd {
+                Command::EditView { view, .. }
+                | Command::SetViewCrop { view, .. }
+                | Command::AddBrokenOut { view, .. }
+                | Command::RemoveBrokenOut { view, .. }
+                | Command::ReattachView { view, .. } => Some(*view),
+                Command::SetViewDisplay { view, display } => {
+                    let before = self.drawing.view(*view).map(|v| v.display);
+                    before.filter(|b| b.tangent != display.tangent || b.seams != display.seams).map(|_| *view)
+                }
+                _ => None,
+            };
+            let report = self.stack.run(&mut self.drawing, &cmd, p.as_ref()).map_err(|e| e.to_string())?;
+            self.touch();
+            if let (Some(id), Some(p)) = (remade, p.as_ref())
+                && let Ok(index) = soliddraft_drawing::PartIndex::build(p)
+                && let Ok(ctx) = project::ViewContext::compute(&self.drawing, p, &index, id)
+            {
+                self.remember(id, &ctx.projected);
             }
-            _ => None,
-        };
-        let report = self.stack.run(&mut self.drawing, &cmd, p.as_ref()).map_err(|e| e.to_string())?;
-        self.touch();
-        if let (Some(id), Some(p)) = (remade, p.as_ref())
-            && let Ok(index) = soliddraft_drawing::PartIndex::build(p)
-            && let Ok(ctx) = project::ViewContext::compute(&self.drawing, p, &index, id)
-        {
-            self.remember(id, &ctx.projected);
-        }
-        if let (Some(r), Some(ctx)) = (report, part) {
-            for (id, projected) in &r.projections {
-                self.remember(*id, projected);
+            if let (Some(r), Some(ctx)) = (report, part) {
+                for (id, projected) in &r.projections {
+                    self.remember(*id, projected);
+                }
+                self.seen_digest = ctx.digest.clone();
+                let changed = r.changed.iter().map(|c| c.annotation).collect();
+                let dangling = r.dangling.iter().map(|d| d.annotation).collect();
+                let log = ctx.doc.command_log();
+                let change = log.get(self.log_mark..).map(|l| l.join(", ")).unwrap_or_default();
+                self.log_mark = log.len();
+                self.last_update = Some(UpdateReport {
+                    from_revision: from,
+                    to_revision: ctx.digest.clone(),
+                    change,
+                    views: r.projections.len(),
+                    changed,
+                    dangling,
+                    at: Instant::now(),
+                    dismissed: false,
+                });
             }
-            self.seen_digest = ctx.digest.clone();
-            let changed = r.changed.iter().map(|c| c.annotation).collect();
-            let dangling = r.dangling.iter().map(|d| d.annotation).collect();
-            let log = ctx.doc.command_log();
-            let change = log.get(self.log_mark..).map(|l| l.join(", ")).unwrap_or_default();
-            self.log_mark = log.len();
-            self.last_update = Some(UpdateReport {
-                from_revision: from,
-                to_revision: ctx.digest.clone(),
-                change,
-                views: r.projections.len(),
-                changed,
-                dangling,
-                at: Instant::now(),
-                dismissed: false,
-            });
-        }
-        Ok(())
+            Ok(())
+        })())
     }
 
     /// The last projection of a view, rebuilt from the cached geometry.

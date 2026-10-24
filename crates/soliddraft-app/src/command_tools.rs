@@ -205,6 +205,14 @@ fn edges_param() -> (&'static str, Value) {
     ("edges", non_empty_array(string("An edge name, such as Boss-Extrude2 · Edge 5"), "The edges"))
 }
 
+/// The canonical command tool's parameters.
+pub fn document_command_params() -> Vec<(&'static str, Value)> {
+    vec![(
+        "command_json",
+        string("Canonical journal command as JSON: op execute, undo, redo, rollback, settings, group_undo or abandon"),
+    )]
+}
+
 /// The rollback tool's parameters.
 pub fn rollback_params() -> Vec<(&'static str, Value)> {
     vec![("before", any_of(vec![string("First inactive feature, or null for the end"), json!({"type":"null"})]))]
@@ -1098,6 +1106,8 @@ pub struct CommandTools<'a> {
     pub book: &'a mut ProposalBook,
     /// Which tools to offer.
     pub surface: Surface,
+    /// The open drawing, when this command host has one.
+    pub drawing: Option<&'a mut crate::drawing::document::DrawingDoc>,
 }
 
 /// What an MCP client is told about this server in `initialize`.
@@ -1439,8 +1449,32 @@ impl ToolHost for CommandTools<'_> {
     }
 
     fn call(&mut self, name: &str, input: Value, caller: &Caller) -> ToolOutput {
+        let drawing_key = self.drawing.as_deref().map(|d| d.journal_key());
+        let journal = self.doc.model().journal_command(|| {
+            json!({
+                "op":"tool", "name":name, "input":input,
+                "assistant":matches!(caller, Caller::Assistant { .. }),
+                "auto_apply":self.book.auto_apply,
+                "drawing":drawing_key,
+                "surface":if self.surface == Surface::Mcp {"mcp"} else {"assistant"}
+            })
+        });
         let mcp = self.surface == Surface::Mcp;
         let result = match name {
+            "document_command" if mcp => input["command_json"]
+                .as_str()
+                .ok_or_else(|| "missing command_json".to_owned())
+                .and_then(|s| serde_json::from_str(s).map_err(|e| format!("bad command JSON: {e}")))
+                .and_then(|command| self.doc.run_journal_command(command))
+                .map(|()| json!({"status":"applied"})),
+            "drawing_command" if mcp => (|| {
+                let command = serde_json::from_str(input["command_json"].as_str().ok_or("missing command_json")?)
+                    .map_err(|e| format!("bad command JSON: {e}"))?;
+                let drawing = self.drawing.as_deref_mut().ok_or("no open drawing")?;
+                let part = crate::drawing::part::PartContext::new(self.doc);
+                drawing.run_journal_command(command, part.as_ref())?;
+                Ok(json!({"status":"applied"}))
+            })(),
             "model_summary" => Ok(self.summary()),
             "feature" => self.feature(input["name"].as_str().unwrap_or_default()),
             "selection" => Ok(json!({
@@ -1482,15 +1516,14 @@ impl ToolHost for CommandTools<'_> {
             "save" if mcp => (|| {
                 let path = part_path(&input)?;
                 // The part file alone: no backups or recent-file list, which belong to the user's session.
-                self.doc.model().save(&path).map_err(|e| format!("cannot save {}: {e}", path.display()))?;
+                crate::journal::save_part(self.doc, &path)?;
                 self.doc.path = Some(path.clone());
                 self.doc.dirty = false;
                 Ok(json!({ "saved": path }))
             })(),
             "open" if mcp => (|| {
                 let path = part_path(&input)?;
-                let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let mut doc = crate::file::open_bytes(&path.display().to_string(), &bytes, self.doc.kernel().clone())?;
+                let mut doc = crate::journal::open_part(&path, self.doc.kernel().clone())?;
                 doc.path = Some(path.clone());
                 *self.doc = doc;
                 Ok(json!({ "opened": path }))
@@ -1522,6 +1555,10 @@ impl ToolHost for CommandTools<'_> {
             }
             other => Err(format!("unknown tool `{other}`")),
         };
+        let result = journal.finish(result);
+        if name == "open" && result.is_ok() {
+            self.doc.model().journal_key();
+        }
         match result {
             Ok(v) => ToolOutput::json(&v),
             Err(e) => ToolOutput::error(e),
@@ -1635,7 +1672,7 @@ mod tests {
         let mut book = ProposalBook::default();
         let before = doc.features.len();
         let depth = doc.undo_depth();
-        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
         let input = json!({
             "summary": "Four Ø9 holes on 90 × 44",
             "commands": [
@@ -1674,7 +1711,7 @@ mod tests {
     fn unresolved_references_are_rejected_before_preview() {
         let mut doc = board_bracket();
         let mut book = ProposalBook::default();
-        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
         for (commands, expect) in [
             (json!([{ "op": "fillet", "edges": ["Boss-Extrude2 · Edge 99"], "radius": 8 }]), "no edge named"),
             (json!([{ "op": "delete_feature", "feature": "Fillet9" }]), "no feature named `Fillet9`"),
@@ -1698,7 +1735,7 @@ mod tests {
     fn the_inside_corner_reads_as_concave() {
         let mut doc = board_bracket();
         let mut book = ProposalBook::default();
-        let tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant };
+        let tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
         let all: Vec<Value> = tools
             .doc
             .features
@@ -1723,7 +1760,7 @@ mod tests {
     fn mcp_verbs_run_directly_and_undo() {
         let mut doc = crate::new_document();
         let mut book = ProposalBook::default();
-        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp };
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
         let mcp = Caller::Mcp { client: "test".into() };
         let out = call_checked(
             &mut tools,

@@ -208,7 +208,7 @@ pub struct Executed {
 }
 
 /// One entry of the undo or redo stack.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct UndoEntry {
     pub label: String,
     pub undo: Command,
@@ -252,40 +252,49 @@ impl Document {
     /// changed. A rebuild problem does not refuse the command: it shows up in the
     /// features' statuses.
     pub fn execute(&mut self, command: Command) -> Result<Executed, CommandError> {
-        let applied = self.apply(command)?;
-        self.log.push(applied.label.clone());
-        self.undo.push(UndoEntry { label: applied.label.clone(), undo: applied.inverse, redo: applied.redo });
-        self.redo.clear();
-        self.rebuild();
-        Ok(Executed { created: applied.created, label: applied.label })
+        let journal = self.journal_command(|| serde_json::json!({"op":"execute", "command":command}));
+        journal.finish((|| {
+            let applied = self.apply(command)?;
+            self.log.push(applied.label.clone());
+            self.undo.push(UndoEntry { label: applied.label.clone(), undo: applied.inverse, redo: applied.redo });
+            self.redo.clear();
+            self.rebuild();
+            Ok(Executed { created: applied.created, label: applied.label })
+        })())
     }
 
     /// Reverts the last command. Returns its label.
     pub fn undo(&mut self) -> Result<String, CommandError> {
-        let entry = self.undo.pop().ok_or(CommandError::Empty("undo"))?;
-        if let Err(e) = self.apply(entry.undo.clone()) {
-            self.undo.push(entry);
-            return Err(e);
-        }
-        self.log.push(format!("undo {}", entry.label));
-        let label = entry.label.clone();
-        self.redo.push(entry);
-        self.rebuild();
-        Ok(label)
+        let journal = self.journal_command(|| serde_json::json!({"op":"undo"}));
+        journal.finish((|| {
+            let entry = self.undo.pop().ok_or(CommandError::Empty("undo"))?;
+            if let Err(e) = self.apply(entry.undo.clone()) {
+                self.undo.push(entry);
+                return Err(e);
+            }
+            self.log.push(format!("undo {}", entry.label));
+            let label = entry.label.clone();
+            self.redo.push(entry);
+            self.rebuild();
+            Ok(label)
+        })())
     }
 
     /// Repeats the last undone command. Returns its label.
     pub fn redo(&mut self) -> Result<String, CommandError> {
-        let entry = self.redo.pop().ok_or(CommandError::Empty("redo"))?;
-        if let Err(e) = self.apply(entry.redo.clone()) {
-            self.redo.push(entry);
-            return Err(e);
-        }
-        self.log.push(format!("redo {}", entry.label));
-        let label = entry.label.clone();
-        self.undo.push(entry);
-        self.rebuild();
-        Ok(label)
+        let journal = self.journal_command(|| serde_json::json!({"op":"redo"}));
+        journal.finish((|| {
+            let entry = self.redo.pop().ok_or(CommandError::Empty("redo"))?;
+            if let Err(e) = self.apply(entry.redo.clone()) {
+                self.redo.push(entry);
+                return Err(e);
+            }
+            self.log.push(format!("redo {}", entry.label));
+            let label = entry.label.clone();
+            self.undo.push(entry);
+            self.rebuild();
+            Ok(label)
+        })())
     }
 
     /// How many entries the undo stack holds.
@@ -298,27 +307,36 @@ impl Document {
     /// proposal needs this: its later commands read features its earlier ones made, so
     /// it cannot be a [`Command::Batch`] written in advance.
     pub fn group_undo(&mut self, depth: usize, label: impl Into<String>) {
-        if self.undo.len() <= depth {
-            return;
-        }
         let label = label.into();
-        let entries = self.undo.split_off(depth);
-        let undo =
-            Command::Batch { label: label.clone(), commands: entries.iter().rev().map(|e| e.undo.clone()).collect() };
-        let redo = Command::Batch { label: label.clone(), commands: entries.into_iter().map(|e| e.redo).collect() };
-        self.undo.push(UndoEntry { label, undo, redo });
+        let journal = self.journal_command(|| serde_json::json!({"op":"group_undo", "depth":depth, "label":label}));
+        let _ = journal.finish((|| {
+            if self.undo.len() <= depth {
+                return Ok::<_, String>(());
+            }
+            let entries = self.undo.split_off(depth);
+            let undo = Command::Batch {
+                label: label.clone(),
+                commands: entries.iter().rev().map(|e| e.undo.clone()).collect(),
+            };
+            let redo = Command::Batch { label: label.clone(), commands: entries.into_iter().map(|e| e.redo).collect() };
+            self.undo.push(UndoEntry { label, undo, redo });
+            Ok(())
+        })());
     }
 
     /// Reverts the commands recorded since the undo stack was `depth` deep and forgets
     /// them, leaving nothing to redo: for a group of commands that failed partway.
     pub fn abandon(&mut self, depth: usize) -> Result<(), CommandError> {
-        while self.undo.len() > depth {
-            let entry = self.undo.pop().expect("the stack is deeper than depth");
-            self.apply(entry.undo)?;
-            self.log.push(format!("abandon {}", entry.label));
-        }
-        self.rebuild();
-        Ok(())
+        let journal = self.journal_command(|| serde_json::json!({"op":"abandon", "depth":depth}));
+        journal.finish((|| {
+            while self.undo.len() > depth {
+                let entry = self.undo.pop().expect("the stack is deeper than depth");
+                self.apply(entry.undo)?;
+                self.log.push(format!("abandon {}", entry.label));
+            }
+            self.rebuild();
+            Ok(())
+        })())
     }
 
     /// Adds a line to the command log, such as who asked for the commands that follow.

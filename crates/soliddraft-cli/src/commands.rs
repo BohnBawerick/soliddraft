@@ -26,7 +26,7 @@ for a recipe verb, which MCP clients can also call directly; `mcp` for MCP clien
 /// The MCP server's help, with its tools from the registry.
 pub fn mcp_usage() -> String {
     let mut out = String::from(
-        "usage: soliddraft mcp [--demo | --open <part.dwprt>] [--http PORT] [--bundle DIR] [--max-work N]\n\n\
+        "usage: soliddraft mcp [--demo | --open <part.dwprt>] [--drawing <drawing.dwdrw>] [--http PORT] [--bundle DIR] [--max-work N]\n\n\
          Serves a part's command layer to an MCP client such as Claude Code, on stdin and\n\
          stdout (the default) or at http://127.0.0.1:PORT/mcp. The part starts empty unless\n\
          --demo or --open says otherwise.\n  \
@@ -34,6 +34,7 @@ pub fn mcp_usage() -> String {
            --max-work deterministic work allowance per kernel call in a bundle (default 100000000)\n  \
            --demo    start from the sample part\n  \
            --open    start from a saved part file\n  \
+           --drawing open a drawing for drawing_command, beside the part\n  \
            --http    serve over HTTP on PORT instead of stdio\n\nTools:\n",
     );
     for tool in tool_specs(Surface::Mcp) {

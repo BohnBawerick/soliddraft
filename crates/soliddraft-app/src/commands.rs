@@ -742,6 +742,16 @@ fn registry() -> Vec<CommandSpec> {
     let ctrl_shift = Modifiers::COMMAND | Modifiers::SHIFT;
     let cmd = CommandSpec::new;
     vec![
+        cmd("document_command", "Document command", Icon::Tree, "Run a canonical part journal command").agents(
+            Agents::Mcp,
+            "Uses the application's model command loop. command_json holds the journal command.",
+            tools::document_command_params,
+        ),
+        cmd("drawing_command", "Drawing command", Icon::Tree, "Run a canonical drawing journal command").agents(
+            Agents::Mcp,
+            "Requires an open drawing. Accepts execute, undo and redo.",
+            tools::document_command_params,
+        ),
         // Reading the part, for agents.
         cmd("model_summary", "Model summary", Icon::Tree, "The part as it is now").agents(
             Agents::Tool,

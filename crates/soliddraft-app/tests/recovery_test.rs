@@ -217,3 +217,25 @@ fn saves_keep_backups_and_part_files_carry_thumbnails() {
     assert_eq!(back.features.len(), 2, "a part with a thumbnail opens");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn journals_are_offered_without_autosave_copies_and_survive_later() {
+    let root = folder("journals");
+    let journal = soliddraft_document::journal::Session::start(&root.join("journals")).unwrap();
+    let path = journal.path().to_owned();
+    let _doc = part();
+    drop(journal);
+    let policy = AutosavePolicy { enabled: false, ..Default::default() };
+    let recovery = Recovery::start(&root, policy).unwrap();
+    assert!(recovery.offers.is_empty(), "a crash report does not depend on an autosave copy");
+    assert!(recovery.show, "the recovery window must open for the journal alone");
+    assert_eq!(recovery.journals, std::slice::from_ref(&path));
+    recovery.close();
+    let mut next = Recovery::start(&root, policy).unwrap();
+    assert_eq!(next.journals, std::slice::from_ref(&path), "Later and a normal exit retain crash reports");
+    next.discard(&path).unwrap();
+    assert!(!path.exists());
+    assert!(next.journals.is_empty());
+    next.close();
+    std::fs::remove_dir_all(root).unwrap();
+}

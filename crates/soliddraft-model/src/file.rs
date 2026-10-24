@@ -251,6 +251,25 @@ impl Document {
     /// Reads a part from a file's bytes and rebuilds it on `kernel`. A file from before
     /// the envelope gets the id derived from its content.
     pub fn from_bytes(bytes: &[u8], kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
+        let mut doc = Self::from_bytes_unbuilt(bytes, kernel)?;
+        doc.rebuild();
+        Ok(doc)
+    }
+
+    /// Loads through the ordinary parser and rebuild loop, exposing authored input
+    /// once before kernel work so a crash journal does not need the source file.
+    pub fn from_bytes_with_input(
+        bytes: &[u8],
+        kernel: Arc<dyn Kernel>,
+        input: impl FnOnce(&Document),
+    ) -> Result<Document, FileError> {
+        let mut doc = Self::from_bytes_unbuilt(bytes, kernel)?;
+        input(&doc);
+        doc.rebuild();
+        Ok(doc)
+    }
+
+    fn from_bytes_unbuilt(bytes: &[u8], kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
         let mut package = Package::from_bytes(bytes)?;
         let Some(m) = package.manifest().cloned() else {
             let text = package
@@ -272,6 +291,13 @@ impl Document {
     /// rebuilds it on `kernel`. Without a manifest there is no recorded id, so the part
     /// gets the id derived from its content, as a pre-envelope file does.
     pub fn from_part_json(text: &str, kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
+        let mut doc = Self::read_truth(text, kernel, 2)?;
+        doc.rebuild();
+        Ok(doc)
+    }
+
+    /// Decodes authored truth without starting a kernel operation.
+    pub(crate) fn from_part_json_unbuilt(text: &str, kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
         Self::read_truth(text, kernel, 2)
     }
 
@@ -318,7 +344,6 @@ impl Document {
         doc.features = recipe.features;
         doc.rollback = recipe.rollback;
         doc.next_id = recipe.next_feature;
-        doc.rebuild();
         Ok(doc)
     }
 

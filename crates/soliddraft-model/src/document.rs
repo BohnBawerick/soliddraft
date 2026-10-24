@@ -141,6 +141,7 @@ pub struct Document {
     pub(crate) log: Vec<String>,
     /// The solver's verdict on the last sketch a command solved.
     pub(crate) last_solve: Option<SolveStatus>,
+    pub(crate) journal: Option<soliddraft_document::journal::Identity>,
 }
 
 impl std::fmt::Debug for Document {
@@ -154,6 +155,81 @@ impl std::fmt::Debug for Document {
 }
 
 impl Document {
+    /// Restores a journal's starting part without reading any user file.
+    pub fn from_journal_state(state: &serde_json::Value, kernel: Arc<dyn Kernel>) -> Result<Self, String> {
+        if state["backend"] != serde_json::to_value(kernel.backend()).map_err(|e| e.to_string())? {
+            return Err("journal kernel backend or version differs from this build".into());
+        }
+        let mut doc = Self::from_part_json_unbuilt(&state["part"].to_string(), kernel).map_err(|e| e.to_string())?;
+        doc.id = serde_json::from_value(state["id"].clone()).map_err(|e| e.to_string())?;
+        doc.settings = serde_json::from_value(state["settings"].clone()).map_err(|e| e.to_string())?;
+        doc.undo = serde_json::from_value(state["undo"].clone()).map_err(|e| e.to_string())?;
+        doc.redo = serde_json::from_value(state["redo"].clone()).map_err(|e| e.to_string())?;
+        doc.rebuild();
+        Ok(doc)
+    }
+
+    /// Runs the canonical part commands accepted by MCP and journal replay.
+    pub fn run_journal_command(&mut self, input: serde_json::Value) -> Result<(), String> {
+        let parse = |key: &str| input.get(key).cloned().ok_or_else(|| format!("missing {key}"));
+        match input["op"].as_str().unwrap_or_default() {
+            "execute" => self
+                .execute(serde_json::from_value(parse("command")?).map_err(|e| e.to_string())?)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "undo" => self.undo().map(|_| ()).map_err(|e| e.to_string()),
+            "redo" => self.redo().map(|_| ()).map_err(|e| e.to_string()),
+            "rollback" => {
+                self.set_rollback(serde_json::from_value(parse("before")?).map_err(|e| e.to_string())?);
+                Ok(())
+            }
+            "settings" => self.set_settings(serde_json::from_value(parse("settings")?).map_err(|e| e.to_string())?),
+            "group_undo" => {
+                self.group_undo(
+                    input["depth"].as_u64().ok_or("missing depth")? as usize,
+                    input["label"].as_str().ok_or("missing label")?,
+                );
+                Ok(())
+            }
+            "abandon" => {
+                self.abandon(input["depth"].as_u64().ok_or("missing depth")? as usize).map_err(|e| e.to_string())
+            }
+            _ => Err("unknown part journal command".into()),
+        }
+    }
+
+    /// Registers this part for a drawing command that reads it.
+    pub fn journal_key(&self) -> Option<u64> {
+        if let Some(id) = &self.journal {
+            soliddraft_document::journal::register(id, "part", || self.journal_state());
+            Some(id.key())
+        } else {
+            None
+        }
+    }
+
+    /// Registers the starting part once and records an application command before it runs.
+    /// Scratch forks do not journal speculative edits.
+    pub fn journal_command(
+        &self,
+        command: impl FnOnce() -> serde_json::Value,
+    ) -> soliddraft_document::journal::CommandGuard {
+        use soliddraft_document::journal;
+        if let Some(id) = &self.journal {
+            journal::register(id, "part", || self.journal_state());
+            journal::begin(id, command)
+        } else {
+            journal::disabled()
+        }
+    }
+
+    /// Authored state and history for a portable journal baseline or file input.
+    /// No display caches, kernel handles or measurements are included.
+    pub fn journal_state(&self) -> serde_json::Value {
+        serde_json::json!({"part":self.truth(), "id":self.id, "settings":self.settings,
+            "undo":self.undo, "redo":self.redo, "backend":self.kernel.backend()})
+    }
+
     /// An empty part.
     pub fn new(name: impl Into<String>, kernel: Arc<dyn Kernel>) -> Self {
         Document {
@@ -173,6 +249,7 @@ impl Document {
             redo: Vec::new(),
             log: Vec::new(),
             last_solve: None,
+            journal: Some(Default::default()),
         }
     }
 
@@ -211,9 +288,12 @@ impl Document {
     /// not a change to the part: its revision and geometry hash stay the same, so no
     /// assembly or drawing that pins it sees a change.
     pub fn set_settings(&mut self, settings: Settings) -> Result<(), String> {
-        settings.check()?;
-        self.settings = settings;
-        Ok(())
+        let journal = self.journal_command(|| serde_json::json!({"op":"settings", "settings":settings}));
+        journal.finish((|| {
+            settings.check()?;
+            self.settings = settings;
+            Ok(())
+        })())
     }
 
     /// What the part's viewport quality gives its body: each level's deviation in
@@ -398,14 +478,18 @@ impl Document {
     /// the part as it was before a feature, such as editing that feature. A command
     /// that rolls back for good is [`Command::RollTo`](crate::Command::RollTo).
     pub fn set_rollback(&mut self, before: Option<FeatureId>) {
-        if before == self.rollback {
-            return;
-        }
-        let end = |r: Option<FeatureId>| r.and_then(|id| self.index_of(id)).unwrap_or(self.features.len());
-        let first = end(self.rollback).min(end(before));
-        self.rollback = before;
-        self.touch(first);
-        self.rebuild();
+        let journal = self.journal_command(|| serde_json::json!({"op":"rollback", "before":before}));
+        let _ = journal.finish((|| {
+            if before == self.rollback {
+                return Ok::<_, String>(());
+            }
+            let end = |r: Option<FeatureId>| r.and_then(|id| self.index_of(id)).unwrap_or(self.features.len());
+            let first = end(self.rollback).min(end(before));
+            self.rollback = before;
+            self.touch(first);
+            self.rebuild();
+            Ok(())
+        })());
     }
 
     /// The name of a face for people, such as "Boss-Extrude1 · End cap".
@@ -499,6 +583,7 @@ impl Document {
             redo: Vec::new(),
             log: Vec::new(),
             last_solve: None,
+            journal: None,
         }
     }
 
