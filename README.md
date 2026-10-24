@@ -64,7 +64,7 @@ Waiting commands stay visible and disabled with a tooltip naming their Catallax 
 | Sweep and loft; spline, ellipse and text profiles | 5 |
 | STEP import | 6 |
 
-Catallax stage 1 already provides STEP AP242 and shared-edge meshes. The application's STEP, STL and 3MF export commands still need wiring. IGES import and export, surfacing and sheet metal are not available. Assemblies are in progress. The [roadmap](docs/roadmap.md) orders the remaining work.
+Parts export as STEP AP242 with Catallax's proven deviation, and as STL and 3MF from Catallax's meshes, from File > Export or `soliddraft export`; see [part export](docs/exchange.md). IGES import and export, surfacing and sheet metal are not available. Assemblies are in progress. The [roadmap](docs/roadmap.md) orders the remaining work.
 
 ## Building
 
@@ -104,10 +104,11 @@ Without a key the app runs and the chat panel says the assistant is off. `--mcp 
 cargo run --release -p soliddraft-cli -- replay --steps recipes/union.json
 cargo run --release -p soliddraft-cli -- view recipes/bracket.json --dir front,top,right,iso --svg 'bracket-{view}.svg'
 cargo run --release -p soliddraft-cli -- part bracket.dwprt
+cargo run --release -p soliddraft-cli -- export recipes/bracket.json --out bracket.step --out bracket.3mf
 cargo run --release -p soliddraft-cli -- draw recipes/bracket.json --template iso-a3
 ```
 
-Replay prints each step's face, edge and vertex counts, volume, area, validity and a geometric digest. View writes hidden-line views. Part rebuilds a saved part and prints every feature's state. Draw makes a full drawing of a recipe's result. Each subcommand has `--help`.
+Replay prints each step's face, edge and vertex counts, volume, area, validity and a geometric digest. Export writes STEP, STL or 3MF, chosen by each `--out` file's extension, with each file's deviation. View writes hidden-line views. Part rebuilds a saved part and prints every feature's state. Draw makes a full drawing of a recipe's result. Each subcommand has `--help`.
 
 ## Tests
 

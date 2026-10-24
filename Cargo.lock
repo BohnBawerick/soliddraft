@@ -842,6 +842,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "catallax-step"
+version = "0.0.0"
+source = "git+https://github.com/BohnBawerick/catallax?rev=0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b#0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b"
+dependencies = [
+ "catallax-intersect",
+ "catallax-numbers",
+ "catallax-shapes",
+ "catallax-topology",
+]
+
+[[package]]
 name = "catallax-topology"
 version = "0.0.0"
 source = "git+https://github.com/BohnBawerick/catallax?rev=0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b#0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b"
@@ -4870,6 +4881,7 @@ dependencies = [
  "soliddraft-assistant",
  "soliddraft-document",
  "soliddraft-drawing",
+ "soliddraft-exchange",
  "soliddraft-kernel-api",
  "soliddraft-kernel-catallax",
  "soliddraft-materials",
@@ -4935,6 +4947,7 @@ dependencies = [
  "soliddraft-assistant",
  "soliddraft-document",
  "soliddraft-drawing",
+ "soliddraft-exchange",
  "soliddraft-kernel-api",
  "soliddraft-kernel-catallax",
  "soliddraft-materials",
@@ -4979,6 +4992,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "soliddraft-exchange"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soliddraft-kernel-api",
+ "soliddraft-kernel-catallax",
+ "soliddraft-recipe",
+ "soliddraft-tessellation",
+ "thiserror 2.0.21",
+ "zip",
+]
+
+[[package]]
 name = "soliddraft-kernel-api"
 version = "0.1.0"
 dependencies = [
@@ -4997,6 +5024,7 @@ dependencies = [
  "catallax-numbers",
  "catallax-recipe",
  "catallax-shapes",
+ "catallax-step",
  "catallax-topology",
  "serde_json",
  "soliddraft-kernel-api",
@@ -5023,6 +5051,7 @@ dependencies = [
  "serde",
  "serde_json",
  "soliddraft-document",
+ "soliddraft-exchange",
  "soliddraft-kernel-api",
  "soliddraft-kernel-catallax",
  "soliddraft-materials",

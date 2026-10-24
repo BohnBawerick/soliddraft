@@ -360,3 +360,8 @@ fn captured_manual_slot_question_builds_without_changing_its_geometry() {
     assert!(body.built.model.check(body.built.result).is_empty());
     assert!(!body.display.value.triangles.is_empty());
 }
+
+#[test]
+fn bracket_step_export_reports_its_proven_deviation() {
+    contract::step_export_reports_what_it_wrote(&CatallaxKernel::new());
+}

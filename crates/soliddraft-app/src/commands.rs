@@ -31,6 +31,7 @@ use soliddraft_drawing::export::Format;
 use soliddraft_drawing::{
     Command as DrawingCommand, HiddenLines, SetKind, TangentEdges, View as SheetView, ViewDisplay,
 };
+use soliddraft_exchange::Format as ExportFormat;
 use std::sync::LazyLock;
 
 /// A ribbon tab.
@@ -1128,6 +1129,15 @@ fn registry() -> Vec<CommandSpec> {
         cmd("save_as", "Save as", Icon::Save, "Save the part under a new name")
             .key(Scope::Part, ctrl_shift, Key::S)
             .run(|_| AppAction::SaveAs(None)),
+        cmd("export_step", "STEP", Icon::Save, "Export the part as STEP AP242, with its proven deviation")
+            .run(|_| AppAction::Export { format: ExportFormat::Step, path: None })
+            .when(has_body),
+        cmd("export_stl", "STL", Icon::Save, "Export the part's mesh as binary STL at the export tolerance")
+            .run(|_| AppAction::Export { format: ExportFormat::Stl, path: None })
+            .when(has_body),
+        cmd("export_3mf", "3MF", Icon::Save, "Export the part's mesh as 3MF at the export tolerance")
+            .run(|_| AppAction::Export { format: ExportFormat::ThreeMf, path: None })
+            .when(has_body),
         cmd("quit", "Quit", Icon::Close, "Quit SolidDraft")
             .both()
             .key(Scope::App, ctrl, Key::Q)

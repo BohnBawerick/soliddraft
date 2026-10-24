@@ -83,6 +83,11 @@ pub enum AppAction {
     Open(Option<PathBuf>),
     Save,
     SaveAs(Option<PathBuf>),
+    /// Exports the part's body. `None` asks with a file dialog.
+    Export {
+        format: soliddraft_exchange::Format,
+        path: Option<PathBuf>,
+    },
     ClearRecent,
     ResetLayout,
     /// Show or hide one side area.

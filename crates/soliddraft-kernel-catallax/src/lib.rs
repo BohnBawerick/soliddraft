@@ -8,6 +8,7 @@ mod convert;
 mod diagnostics;
 mod drawing_queries;
 mod frames;
+mod step;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -544,5 +545,9 @@ impl Kernel for CatallaxKernel {
         self.observe("lines_and_arcs", || {
             Err(gap("curve approximation for drawings", "1, drawing queries (roadmap section 7)"))
         })
+    }
+
+    fn export_step(&self, body: BodyId, options: &StepOptions) -> KernelResult<StepExport> {
+        self.observe("export_step", || step::export(&self.solid(body)?.app, options))
     }
 }

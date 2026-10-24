@@ -482,6 +482,11 @@ impl SolidDraftApp {
                 ui.separator();
                 menu_command(ui, st, "save", "Save");
                 menu_command(ui, st, "save_as", "Save as…");
+                ui.menu_button("Export", |ui| {
+                    menu_command(ui, st, "export_step", "STEP AP242…");
+                    menu_command(ui, st, "export_stl", "STL…");
+                    menu_command(ui, st, "export_3mf", "3MF…");
+                });
                 if st.recovery.as_ref().is_some_and(|r| !r.offers.is_empty())
                     && ui.button("Recover documents…").clicked()
                 {
@@ -1206,6 +1211,26 @@ impl SolidDraftApp {
                         }
                     }
                     Err(e) => self.state.note(e, NoteKind::Error),
+                }
+            }
+            AppAction::Export { format, path } => {
+                let path = path.or_else(|| {
+                    let name = format!("{}.{}", self.state.doc.name, format.extension());
+                    let title = format!("Export {}", format.name());
+                    crate::platform::save_path(&title, format.name(), format.extension(), &name)
+                });
+                let Some(path) = path else { return };
+                let exported = self.state.doc.model().export(format);
+                match exported.and_then(|out| crate::platform::write_file(&path, &out.bytes).map(|()| out.report)) {
+                    Ok(report) => {
+                        let kind = match &report {
+                            soliddraft_exchange::Report::Step(r) if !r.within_tolerance => NoteKind::Error,
+                            soliddraft_exchange::Report::Mesh(r) if !r.closed => NoteKind::Error,
+                            _ => NoteKind::Ok,
+                        };
+                        self.state.note(format!("Exported {} · {}", path.display(), report.summary()), kind);
+                    }
+                    Err(e) => self.state.note(format!("Export: {e}"), NoteKind::Error),
                 }
             }
             AppAction::ClearRecent => {

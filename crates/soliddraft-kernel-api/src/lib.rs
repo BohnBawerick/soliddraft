@@ -314,6 +314,61 @@ pub struct Validation {
     pub issues: Vec<String>,
 }
 
+/// What a STEP export writes and how closely it must follow the exact body.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StepOptions {
+    /// Product name written into the file.
+    pub product_name: String,
+    /// Largest distance, in millimetres, the written geometry may lie from the exact
+    /// body, including decimal rounding and fitted curves. Greater than zero.
+    pub tolerance: f64,
+}
+
+impl Default for StepOptions {
+    /// 0.0000001 mm, Catallax's default export tolerance.
+    fn default() -> Self {
+        StepOptions { product_name: "part".into(), tolerance: 1e-7 }
+    }
+}
+
+/// What a STEP export wrote and how far it is from the exact body.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StepReport {
+    /// Proven upper bound, in millimetres, on the distance between the written and the
+    /// exact geometry, as a decimal rounded up.
+    pub max_deviation: String,
+    /// The same bound as the nearest `f64` not below it.
+    pub max_deviation_mm: f64,
+    /// True when the bound meets the requested tolerance.
+    pub within_tolerance: bool,
+    /// Solids written.
+    pub solids: usize,
+    /// Faces written.
+    pub faces: usize,
+    /// Edges written, including edges STEP needs that the body lacks.
+    pub edges: usize,
+    /// Vertices written, including vertices STEP needs that the body lacks.
+    pub vertices: usize,
+    /// Intersection curves written as fitted splines.
+    pub fitted_curves: usize,
+    /// Vertices added because STEP needs them, such as on closed edges and at poles.
+    pub added_vertices: usize,
+    /// Edges added because STEP needs them, such as seams of faces without a boundary.
+    pub added_edges: usize,
+    /// Warnings the backend attached to the export, in words. Empty for a clean export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+/// A STEP AP242 file and its report.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StepExport {
+    /// The file's text.
+    pub text: String,
+    /// What was written and its proven deviation.
+    pub report: StepReport,
+}
+
 /// Which backend is answering.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackendInfo {
@@ -524,5 +579,15 @@ pub trait Kernel: Send + Sync {
     fn lines_and_arcs(&self, curve: &drawing::Curve3, tolerance: f64) -> KernelResult<Vec<drawing::Curve3>> {
         let _ = (curve, tolerance);
         Err(KernelError::Unsupported("lines_and_arcs".into()))
+    }
+
+    // Exchange.
+
+    /// Writes a solid as a STEP AP242 file, with a proven bound on the distance between
+    /// the written and the exact geometry. A bound over `options.tolerance` is reported,
+    /// not hidden: the report says so and carries the backend's warning.
+    fn export_step(&self, body: BodyId, options: &StepOptions) -> KernelResult<StepExport> {
+        let _ = (body, options);
+        Err(KernelError::Unsupported("export_step".into()))
     }
 }

@@ -27,6 +27,7 @@ soliddraft-sketch.workspace = true
 soliddraft-document.workspace = true
 soliddraft-materials.workspace = true
 soliddraft-drawing.workspace = true
+soliddraft-exchange.workspace = true
 kurbo.workspace = true
 toml.workspace = true
 serde.workspace = true

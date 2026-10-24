@@ -18,6 +18,10 @@ Topology contains exact definitions and incidence. Face centroids, edge lengths,
 
 Drawings use polygon hidden-line removal on the meshes and Catallax booleans for plane sections. Whole lines and untrimmed circles keep their geometry after polygon visibility. Other curves retain polylines until conversion queries arrive. Drawing documents and SVG, PDF and DXF exports keep their formats.
 
+## Export
+
+`Kernel::export_step` writes a solid as STEP AP242 through Catallax's exporter, `catallax-step`, from the body's exact build. Its report gives Catallax's proven bound on the distance between the written and the exact geometry, rounded up to a decimal and to the next `f64`, with the counts of solids, faces, edges and vertices written and of fitted intersection curves. A bound over the requested tolerance is reported with Catallax's warning, not hidden. STL and 3MF come from `tessellate` meshes. See [part export](exchange.md).
+
 ## Interface work that follows removal
 
 This change removes SMLib and its callers without changing the kernel trait's contract. Several parts still reflect SMLib's design and belong to the next roadmap step:

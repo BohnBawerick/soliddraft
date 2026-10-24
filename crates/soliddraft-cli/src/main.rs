@@ -35,6 +35,9 @@
 //! `soliddraft mcp [--demo | --open PART.dwprt] [--http PORT]` serves a headless part's command
 //! layer to an MCP client, on stdin and stdout or on a loopback HTTP port.
 //!
+//! `soliddraft export <part.dwprt | recipe.json> --out bracket.step` writes a part or a
+//! recipe's result as STEP, STL or 3MF with each file's deviation; see [`export::USAGE`].
+//!
 //! `soliddraft screenshot <part.dwprt> --png out.png` captures the viewport without a window.
 //!
 //! `soliddraft commands [--json] [QUERY]` lists or searches the command registry that the
@@ -49,6 +52,7 @@ mod commands;
 mod doc;
 mod draw;
 mod evidence;
+mod export;
 mod generate;
 mod material;
 mod quality;
@@ -75,6 +79,7 @@ usage: soliddraft replay [--json] [--steps] <recipe.json>...
        soliddraft key status
        soliddraft draw <part.dwprt | recipe.json> [--template iso-a3] [--out <file>]...
        soliddraft draw --update <drawing.dwdrw>
+       soliddraft export <part.dwprt | recipe.json> --out <file.step|.stl|.3mf>... [--json]
        soliddraft doc info|refs|rebuild|repair|migrate|where-used <file>...
        soliddraft asm new|info|tree|insert|pattern|move|hide|show|colour|rename|delete|rebuild|generate|bench ...
        soliddraft locations [list | add <kind> <path> | remove <kind> <path>]
@@ -109,6 +114,10 @@ key     The assistant's API keys in the OS keychain, one per provider: OpenRoute
         over the keychain.
 
 draw    `soliddraft draw --help` describes the draw command.
+
+export  Writes a part or a recipe's result as STEP AP242, STL or 3MF, with how far
+        each file may lie from the exact part. `soliddraft export --help`
+        describes it.
 
 doc     `soliddraft doc --help` describes the doc and locations commands.
 
@@ -150,6 +159,11 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("draw") => draw::run(&args[1..]),
+        Some("export") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
+            print!("{}", export::USAGE);
+            ExitCode::SUCCESS
+        }
+        Some("export") => export::run(&args[1..]),
         Some("doc" | "locations") if args[1..].iter().any(|a| a == "-h" || a == "--help") => {
             print!("{}", doc::USAGE);
             ExitCode::SUCCESS
