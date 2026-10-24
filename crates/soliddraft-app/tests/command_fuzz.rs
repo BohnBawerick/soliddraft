@@ -137,7 +137,7 @@ fn pools(doc: &Document) -> Pools {
         edges: Vec::new(),
         proposals: strings(&["P1", "P2", "P3", "P4", "P99"]),
         templates: strings(&["iso-a3", "ansi-b", "iso-a9"]),
-        views: strings(&["Front", "Top", "Left", "Right", "Isometric", "Section Z-Z"]),
+        views: strings(&["Front view", "Top view", "Left view", "right VIEW", "Isometric view", "Section Z-Z"]),
     };
     pools.sketches.extend(ahead);
     for f in &doc.features {

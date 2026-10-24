@@ -35,8 +35,20 @@ use crate::state::AppState;
 
 const NO_DRAWING: &str = "no drawing is open: make_drawing makes one of the part, and open opens a .dwdrw file";
 
+/// A view, by its id or by a label only it has. Labels repeat: two sheets can each have
+/// a Front view, so model_summary lists every view with its id.
+fn view_schema(what: &str) -> Vec<Value> {
+    vec![
+        integer(&format!("{what}: the view's id, as model_summary lists it under drawing")),
+        string(&format!(
+            "{what}: a label only that view has, such as Front view or Section A-A, ignoring case; a label several \
+             views share is refused, and their ids are listed"
+        )),
+    ]
+}
+
 fn view_param() -> (&'static str, Value) {
-    ("view", string("A view's name, such as Front or Section A-A, as model_summary lists it under drawing"))
+    ("view", any_of(view_schema("The view")))
 }
 
 fn path_param(what: &str) -> Vec<(&'static str, Value)> {
@@ -141,10 +153,12 @@ pub fn auto_update_params() -> Vec<(&'static str, Value)> {
 pub fn centre_marks_params() -> Vec<(&'static str, Value)> {
     vec![(
         "view",
-        any_of(vec![
-            string("The view whose circles get marks, as model_summary lists it under drawing"),
-            json!({ "type": "null", "description": "Every view of the current sheet" }),
-        ]),
+        any_of(
+            view_schema("The view whose circles get marks")
+                .into_iter()
+                .chain([json!({ "type": "null", "description": "Every view of the current sheet" })])
+                .collect(),
+        ),
     )]
 }
 
@@ -152,7 +166,15 @@ pub fn centre_marks_params() -> Vec<(&'static str, Value)> {
 pub fn drawing_delete_params() -> Vec<(&'static str, Value)> {
     let or_null = |s: Value| any_of(vec![s, json!({ "type": "null" })]);
     vec![
-        ("view", or_null(string("The view to delete, with its annotations, or null to delete an annotation"))),
+        (
+            "view",
+            any_of(
+                view_schema("The view to delete, with its annotations")
+                    .into_iter()
+                    .chain([json!({ "type": "null", "description": "Deletes the annotation instead" })])
+                    .collect(),
+            ),
+        ),
         ("annotation", or_null(integer("The annotation's id, as model_summary lists it, or null to delete a view"))),
     ]
 }
@@ -365,9 +387,8 @@ impl AppTools<'_> {
 
     /// The view `input` names, with the sheet's name for it.
     fn view(&mut self, input: &Value) -> Result<(ViewId, String), String> {
-        let name = input["view"].as_str().unwrap_or_default();
         let s = self.session()?;
-        find_view(&s.doc.drawing, name).map(|id| (id, name.trim().to_owned()))
+        find_view(&s.doc.drawing, &input["view"])
     }
 
     /// Runs a drawing command as one undo step and answers with the drawing.
@@ -476,9 +497,9 @@ impl AppTools<'_> {
     }
 
     fn centre_marks(&mut self, input: &Value) -> Result<Value, String> {
-        let views = match input["view"].as_str() {
-            Some(_) => vec![self.view(input)?.0],
-            None => self.session()?.sheet().views.iter().map(|v| v.id).collect(),
+        let views = match input["view"] {
+            Value::Null => self.session()?.sheet().views.iter().map(|v| v.id).collect(),
+            _ => vec![self.view(input)?.0],
         };
         let added = drawing::add_centre_marks(self.session()?, &views);
         Ok(self.drawing_said(format!("{added} centre mark{} added", if added == 1 { "" } else { "s" })))
@@ -506,12 +527,12 @@ impl AppTools<'_> {
     }
 
     fn delete(&mut self, input: &Value) -> Result<Value, String> {
-        match (input["view"].as_str(), input["annotation"].as_u64()) {
-            (Some(_), None) => {
+        match (input["view"].is_null(), input["annotation"].as_u64()) {
+            (false, None) if input["annotation"].is_null() => {
                 let (view, _) = self.view(input)?;
                 self.command(DrawingCommand::DeleteView { view })
             }
-            (None, Some(n)) => {
+            (true, Some(n)) => {
                 let annotation = u32::try_from(n).map(AnnotationId).map_err(|_| format!("no annotation {n}"))?;
                 if self.session()?.doc.drawing.annotation(annotation).is_none() {
                     return Err(format!("no annotation {n}; model_summary lists them under drawing"));
@@ -544,16 +565,32 @@ impl ToolHost for AppTools<'_> {
     }
 }
 
-/// The view a name means, on any sheet, ignoring case.
-fn find_view(drawing: &Drawing, name: &str) -> Result<ViewId, String> {
-    let wanted = name.trim();
-    let all = || drawing.sheets.iter().flat_map(|sheet| sheet.views.iter().map(move |v| (view_label(sheet, v), v.id)));
-    if let Some((_, id)) = all().find(|(label, _)| label.eq_ignore_ascii_case(wanted)) {
-        return Ok(id);
+/// The view `wanted` means, on any sheet: its id, or a label no other view has,
+/// ignoring case. Returns it with a name for messages. A label several views share is
+/// refused with their ids, so a command never lands on one of them by chance.
+fn find_view(drawing: &Drawing, wanted: &Value) -> Result<(ViewId, String), String> {
+    let all = || drawing.sheets.iter().flat_map(|sheet| sheet.views.iter().map(move |v| (sheet, v)));
+    let listed = || {
+        let views: Vec<String> =
+            all().map(|(sheet, v)| format!("{} (id {}, {})", view_label(sheet, v), v.id.0, sheet.name)).collect();
+        if views.is_empty() { "no views".to_owned() } else { views.join(", ") }
+    };
+    if let Some(n) = wanted.as_u64() {
+        return all()
+            .find(|(_, v)| u64::from(v.id.0) == n)
+            .map(|(sheet, v)| (v.id, view_label(sheet, v)))
+            .ok_or_else(|| format!("no view has id {n} (the drawing has: {})", listed()));
     }
-    let names: Vec<String> = all().map(|(label, _)| label).collect();
-    let names = if names.is_empty() { "no views".to_owned() } else { names.join(", ") };
-    Err(format!("no view named `{name}` (the drawing has: {names})"))
+    let name = wanted.as_str().unwrap_or_default().trim();
+    let found: Vec<_> = all().filter(|(sheet, v)| view_label(sheet, v).eq_ignore_ascii_case(name)).collect();
+    match found[..] {
+        [(sheet, v)] => Ok((v.id, view_label(sheet, v))),
+        [] => Err(format!("no view named `{name}` (the drawing has: {})", listed())),
+        _ => {
+            let ids: Vec<String> = found.iter().map(|(sheet, v)| format!("{} ({})", v.id.0, sheet.name)).collect();
+            Err(format!("`{name}` names {} views, ids {}; give the id of the one meant", found.len(), ids.join(", ")))
+        }
+    }
 }
 
 /// The open drawing as agents read it: its sheets with their views and annotations by
@@ -572,8 +609,10 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                 .iter()
                 .map(|v| {
                     json!({
+                        "id": v.id.0,
                         "name": view_label(sheet, v),
                         "parent": v.parent().and_then(name_of),
+                        "parent_id": v.parent().map(|p| p.0),
                         "aligned": v.alignment.is_some(),
                         "hidden_lines": v.display.hidden == HiddenLines::Visible,
                         "tangent_edges": match v.display.tangent {
@@ -590,7 +629,8 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                 .iter()
                 .map(|a| {
                     let view = if a.view == SHEET { Some("sheet".to_owned()) } else { name_of(a.view) };
-                    json!({ "id": a.id.0, "name": annotation_name(a, style), "view": view })
+                    let view_id = (a.view != SHEET).then_some(a.view.0);
+                    json!({ "id": a.id.0, "name": annotation_name(a, style), "view": view, "view_id": view_id })
                 })
                 .collect();
             json!({ "name": sheet.name, "views": views, "annotations": annotations })
