@@ -21,7 +21,9 @@ use crate::sketch::{self, ConstraintKind, EntityKind, P2, PointRef, Sketch};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use soliddraft_assistant::tools::schema::{any_of, array, boolean, constant, non_empty_array, number, object, string};
+use soliddraft_assistant::tools::schema::{
+    any_of, array, boolean, constant, integer, non_empty_array, number, object, string,
+};
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::{FaceId, Plane, SurfaceKind};
 
@@ -283,6 +285,25 @@ pub fn delete_feature_params() -> Vec<(&'static str, Value)> {
     vec![feature_param()]
 }
 
+/// The `rename` tool's parameters.
+pub fn rename_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("name", string("The new tree name, not empty and not used by another feature"))]
+}
+
+/// The `edit_dimension` tool's parameters.
+pub fn edit_dimension_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("sketch", string("The sketch's tree name")),
+        ("dimension", integer("The dimension's number, from 1, as `feature` lists the sketch's dimensions")),
+        ("value", number("The new value: mm for lengths, a diameter or radius as the dimension is, degrees for angles")),
+    ]
+}
+
+/// The `save` and `open` tools' parameters.
+pub fn part_path_params() -> Vec<(&'static str, Value)> {
+    vec![("path", string("A part file path ending in .dwprt"))]
+}
+
 /// The `feature` tool's parameters.
 pub fn feature_params() -> Vec<(&'static str, Value)> {
     vec![("name", string("The feature's tree name, such as Boss-Extrude1"))]
@@ -327,6 +348,29 @@ fn positive(what: &str, v: f64) -> Result<f64, String> {
 fn feature_names(doc: &Document) -> String {
     let names: Vec<&str> = doc.features.iter().map(|f| f.name.as_str()).collect();
     if names.is_empty() { "nothing".into() } else { names.join(", ") }
+}
+
+/// A sketch's dimensions, in the order `feature` numbers them.
+fn dimensions(sketch: &Sketch) -> impl Iterator<Item = &sketch::Constraint> {
+    sketch.constraints.iter().filter(|c| c.is_dimension())
+}
+
+fn dimension_kind(c: &sketch::Constraint) -> &'static str {
+    match c.kind {
+        ConstraintKind::Radius { diameter: true, .. } => "diameter",
+        ConstraintKind::Radius { .. } => "radius",
+        ConstraintKind::Angle { .. } => "angle",
+        _ => "distance",
+    }
+}
+
+/// The part file a `save` or `open` call names.
+fn part_path(input: &Value) -> Result<std::path::PathBuf, String> {
+    let path = std::path::PathBuf::from(input["path"].as_str().unwrap_or_default());
+    if path.extension().is_none_or(|e| e != "dwprt") {
+        return Err("the path must name a .dwprt part file".into());
+    }
+    Ok(path)
 }
 
 fn feature_by_name(doc: &Document, name: &str) -> Result<FeatureId, String> {
@@ -1218,6 +1262,12 @@ impl CommandTools<'_> {
         v["faces"] = doc.faces.iter().filter(|x| x.feature == id).map(|x| face_json(doc, x.id)).collect();
         v["edges"] =
             doc.edges.iter().filter(|x| x.feature == id).map(|x| edge_json(doc, x.id, topology.as_ref())).collect();
+        if let FeatureKind::Sketch(s) = &f.kind {
+            v["dimensions"] = dimensions(&s.sketch)
+                .enumerate()
+                .map(|(i, c)| json!({ "number": i + 1, "kind": dimension_kind(c), "value": c.value() }))
+                .collect();
+        }
         if let Some(plane) = f.plane {
             v["sketch_frame"] = json!({
                 "origin": kvec(plane.origin), "normal": kvec(plane.normal), "u": kvec(plane.x_dir), "v": kvec(plane.y_dir()),
@@ -1289,6 +1339,23 @@ impl CommandTools<'_> {
         Ok(json!({ "proposal_id": id, "status": "applied", "made": self.names(&made) }))
     }
 
+    fn edit_dimension(&mut self, input: &Value) -> Result<Value, String> {
+        let name = input["sketch"].as_str().unwrap_or_default();
+        let id = feature_by_name(self.doc, name)?;
+        let Some(FeatureKind::Sketch(s)) = self.doc.feature(id).map(|f| &f.kind) else {
+            return Err(format!("`{name}` is not a sketch"));
+        };
+        let mut sketch = s.sketch.clone();
+        let number = input["dimension"].as_u64().unwrap_or(0) as usize;
+        let value = input["value"].as_f64().filter(|v| v.is_finite()).ok_or("the value must be a finite number")?;
+        let target = dimensions(&sketch).nth(number.wrapping_sub(1)).map(|c| c.id).ok_or_else(|| {
+            format!("`{name}` has {} dimensions; number them from 1", dimensions(&sketch).count())
+        })?;
+        sketch.constraint_mut(target).expect("listed by dimensions").set_value(value);
+        self.doc.apply(Command::EditSketch { id, sketch })?;
+        Ok(json!({ "sketch": name, "dimension": number, "value": value }))
+    }
+
     fn names(&self, ids: &[FeatureId]) -> Vec<String> {
         ids.iter().filter_map(|id| self.doc.feature(*id)).map(|f| f.name.clone()).collect()
     }
@@ -1322,6 +1389,32 @@ impl ToolHost for CommandTools<'_> {
                 Ok(json!({"before":input["before"]}))
             })(),
             "undo" if mcp => self.doc.undo().map(|label| json!({ "undone": label, "undo": self.doc.undo_label() })),
+            "rename" if mcp => (|| {
+                let id = feature_by_name(self.doc, input["feature"].as_str().unwrap_or_default())?;
+                let name = input["name"].as_str().unwrap_or_default().trim().to_owned();
+                if self.doc.features.iter().any(|f| f.name == name && f.id != id) {
+                    return Err(format!("a feature is already named `{name}`"));
+                }
+                self.doc.apply(Command::Rename { id, name: name.clone() })?;
+                Ok(json!({ "renamed": name }))
+            })(),
+            "edit_dimension" if mcp => self.edit_dimension(&input),
+            "save" if mcp => (|| {
+                let path = part_path(&input)?;
+                // The part file alone: no backups or recent-file list, which belong to the user's session.
+                self.doc.model().save(&path).map_err(|e| format!("cannot save {}: {e}", path.display()))?;
+                self.doc.path = Some(path.clone());
+                self.doc.dirty = false;
+                Ok(json!({ "saved": path }))
+            })(),
+            "open" if mcp => (|| {
+                let path = part_path(&input)?;
+                let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let mut doc = crate::file::open_bytes(&path.display().to_string(), &bytes, self.doc.kernel().clone())?;
+                doc.path = Some(path.clone());
+                *self.doc = doc;
+                Ok(json!({ "opened": path }))
+            })(),
             "redo" if mcp => self.doc.redo().map(|label| json!({ "redone": label })),
             verb if mcp && commands::verbs().any(|v| v.id == verb) => {
                 let mut line = input.clone();

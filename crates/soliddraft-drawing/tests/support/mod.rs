@@ -219,6 +219,7 @@ impl Kernel for BoxKernel {
                         bbox: Aabb { min: b.min, max: b.max },
                         edges: edges.iter().filter(|e| e.faces.contains(&id)).map(|e| e.id).collect(),
                         normal: Some(FACES[f].0),
+                        origins: Vec::new(),
                     }
                 })
                 .collect();

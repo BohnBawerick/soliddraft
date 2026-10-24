@@ -108,6 +108,11 @@ fn bracket_builds_displays_picks_named_faces_and_edits_through_the_trait() {
 }
 
 #[test]
+fn faces_report_catallax_origins_through_merges_and_splits() {
+    contract::faces_keep_their_origins(&CatallaxKernel::new());
+}
+
+#[test]
 fn supported_queries_keep_the_existing_contract() {
     let k = CatallaxKernel::new();
     contract::mass_properties_match_closed_form(&k);

@@ -22,6 +22,8 @@ pub(super) struct Ids {
     edge_keys: BTreeMap<EdgeId, String>,
     vertex_keys: BTreeMap<VertexId, String>,
     origins: BTreeMap<FaceId, Vec<Origin>>,
+    /// The same origins in the interface's terms, by the caller's operation tags.
+    pub face_origins: BTreeMap<FaceId, Vec<soliddraft_kernel_api::Origin>>,
     supports: BTreeMap<FaceId, String>,
     edge_names: BTreeMap<EdgeId, String>,
 }
@@ -46,7 +48,7 @@ fn edge_key(model: &Model, edge: CatEdge) -> String {
 }
 
 impl Ids {
-    pub fn new(app: &ApplicationBody, parents: &[&Ids], next: &mut u64) -> Self {
+    pub fn new(app: &ApplicationBody, parents: &[&Ids], tags: &BTreeMap<String, OpTag>, next: &mut u64) -> Self {
         let model = &app.built.model;
         let mut ids = Self {
             faces: BTreeMap::new(),
@@ -56,6 +58,7 @@ impl Ids {
             edge_keys: BTreeMap::new(),
             vertex_keys: BTreeMap::new(),
             origins: BTreeMap::new(),
+            face_origins: BTreeMap::new(),
             supports: BTreeMap::new(),
             edge_names: BTreeMap::new(),
         };
@@ -78,6 +81,16 @@ impl Ids {
             let id = assign(&key, &parents.iter().map(|p| &p.face_keys).collect::<Vec<_>>(), next, FaceId::from_raw);
             ids.faces.insert(*face, id);
             ids.face_keys.insert(id, key);
+            // An origin whose role the interface cannot express is left out, never guessed.
+            let mut named: Vec<_> = origins
+                .iter()
+                .filter_map(|o| {
+                    Some(soliddraft_kernel_api::Origin { tag: tags.get(o.step.as_str())?.clone(), role: face_role(&o.role)? })
+                })
+                .collect();
+            named.sort();
+            named.dedup();
+            ids.face_origins.insert(id, named);
             ids.origins.insert(id, origins);
             ids.supports.insert(id, support);
         }
@@ -132,7 +145,7 @@ impl Ids {
                 let role = self.origins[face]
                     .iter()
                     .find(|o| o.step.as_str() == step)
-                    .map(|o| face_role(&o.role))
+                    .and_then(|o| face_role(&o.role))
                     .unwrap_or(FaceRole::Other);
                 FaceOrigin { face: *face, role }
             })
@@ -164,23 +177,17 @@ fn changes<I: Copy + Ord>(
     out
 }
 
-fn face_role(role: &Role) -> FaceRole {
+/// The interface's role for a Catallax role, when the interface has one.
+fn face_role(role: &Role) -> Option<FaceRole> {
     match role {
-        Role::Start => FaceRole::StartCap,
-        Role::End => FaceRole::EndCap,
-        Role::Side { segment, .. } => {
-            if let Some((loop_index, segment)) = segment
-                .as_str()
-                .strip_prefix('l')
-                .and_then(|s| s.split_once('s'))
-                .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
-            {
-                FaceRole::Side { loop_index, segment }
-            } else {
-                FaceRole::Other
-            }
-        }
-        _ => FaceRole::Other,
+        Role::Start => Some(FaceRole::StartCap),
+        Role::End => Some(FaceRole::EndCap),
+        Role::Side { segment, .. } => segment
+            .as_str()
+            .strip_prefix('l')
+            .and_then(|s| s.split_once('s'))
+            .and_then(|(a, b)| Some(FaceRole::Side { loop_index: a.parse().ok()?, segment: b.parse().ok()? })),
+        _ => None,
     }
 }
 
@@ -271,6 +278,7 @@ pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topolog
             bbox,
             edges,
             normal,
+            origins: ids.face_origins[&ids.faces[&face_mesh.face]].clone(),
         });
     }
     let mut edges = Vec::new();

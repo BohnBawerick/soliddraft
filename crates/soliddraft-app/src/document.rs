@@ -1396,13 +1396,14 @@ impl Document {
         self.model.edge_ref(edge).ok()
     }
 
-    /// A persistent reference to a planar face of the part, for sketching on it.
+    /// A persistent reference to a planar face of the part, for sketching on it. A piece
+    /// of a split face names the plane all its pieces share.
     pub fn face_ref(&self, face: FaceId) -> Option<FaceRef> {
         let nf = self.faces.iter().find(|f| f.id == face)?;
         if nf.surface != SurfaceKind::Plane {
             return None;
         }
-        self.model.face_ref(face).ok()
+        self.model.plane_ref(face).ok()
     }
 
     /// The sketch plane on a planar face of the displayed body.

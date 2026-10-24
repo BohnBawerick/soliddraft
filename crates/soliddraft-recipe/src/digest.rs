@@ -106,6 +106,7 @@ mod tests {
                 bbox,
                 edges: vec![],
                 normal: None,
+                origins: vec![],
             })
             .collect();
         if reverse {

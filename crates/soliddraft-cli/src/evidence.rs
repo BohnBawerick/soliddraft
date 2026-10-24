@@ -8,7 +8,7 @@ use soliddraft_app::command_tools::CommandTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
-use soliddraft_model::{Document, feature_of_tag};
+use soliddraft_model::{Document, FaceRef, FeatureKind, FeatureStatus, ReferenceSlot, SketchPlane, feature_of_tag};
 
 pub(crate) struct Evidence<'a> {
     host: CommandTools<'a>,
@@ -64,7 +64,7 @@ impl<'a> Evidence<'a> {
             dir.join("command.json"),
             &json!({
                 "tool":name,"arguments":input,"is_error":output.is_error,"output":output.content,
-                "backend":doc.kernel().backend(),"summary":summary,
+                "backend":doc.kernel().backend(),"summary":summary,"references":references(doc.model()),
                 "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
@@ -96,6 +96,50 @@ fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
         doc.features().iter().filter(|f| ids.remove(&f.id)).map(|f| f.name.clone()).collect();
     features.extend(ids.into_iter().map(|id| id.to_string()));
     json!({"features_recomputed":features,"operations":operations,"meshes_rebuilt":meshes})
+}
+
+/// Every persistent reference in the part, with the origin it names and whether the last
+/// rebuild resolved it, for scenario checks. It reads the rebuild's statuses and resolves
+/// nothing itself. `resolved` is null for a feature that was not built.
+fn references(doc: &soliddraft_model::Document) -> Value {
+    let origin = |r: &FaceRef| format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1);
+    let mut out = Vec::new();
+    for f in doc.features() {
+        let refs: Vec<(ReferenceSlot, String, Vec<&FaceRef>)> = match &f.kind {
+            FeatureKind::Sketch(s) => match &s.plane {
+                SketchPlane::Face { face } => vec![(ReferenceSlot::SketchPlane, origin(face), vec![face])],
+                SketchPlane::Datum { .. } => Vec::new(),
+            },
+            FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) => b
+                .edges
+                .iter()
+                .enumerate()
+                .map(|(i, e)| {
+                    let text = format!("{} | {}", origin(&e.faces[0]), origin(&e.faces[1]));
+                    (ReferenceSlot::Edge { index: i as u32 }, text, e.faces.iter().collect())
+                })
+                .collect(),
+            FeatureKind::Extrude(_) => Vec::new(),
+        };
+        let status = doc.status(f.id);
+        for (slot, text, faces) in refs {
+            let repair = match status {
+                Some(FeatureStatus::RepairNeeded(items)) => items.iter().find(|r| r.slot == slot),
+                _ => None,
+            };
+            let built = matches!(status, Some(FeatureStatus::Ok | FeatureStatus::RepairNeeded(_) | FeatureStatus::Failed(_)));
+            out.push(json!({
+                "feature_id": f.id.to_string(),
+                "feature": f.name,
+                "slot": slot.to_string(),
+                "origin": text,
+                "of": faces.iter().map(|r| doc.feature(r.feature).map(|g| g.name.clone())).collect::<Vec<_>>(),
+                "resolved": built.then_some(repair.is_none()),
+                "repair": repair.map(|r| r.message.clone()),
+            }));
+        }
+    }
+    Value::Array(out)
 }
 
 fn write_json(path: PathBuf, value: &Value) -> Result<(), std::io::Error> {

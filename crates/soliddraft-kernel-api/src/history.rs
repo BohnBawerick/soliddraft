@@ -1,12 +1,15 @@
-//! What each operation did to faces and edges: the foundation of persistent naming.
+//! Where faces came from, and what each operation did to faces and edges.
 //!
-//! Every face, edge and vertex a backend reports carries an id ([`FaceId`], [`EdgeId`],
-//! [`VertexId`]) that survives later operations for as long as the entity does. Each
-//! operation appends one [`HistoryRecord`], keyed by the caller's [`OpTag`], that lists the
-//! entities it created, modified, deleted or split, and says what part of the operation
-//! made each face it created ([`FaceRole`]). The document layer names an entity by the
-//! operation that created it and the role it played, checks it with its geometry, and
-//! follows it through the records.
+//! Every face a backend reports lists its [`Origin`]s: the operations, by the caller's
+//! [`OpTag`], that made it and the part each one played ([`FaceRole`]), kept through
+//! splits and merges. The document layer names a face by one of its origins and finds
+//! it again by that origin; this is the foundation of persistent naming.
+//!
+//! Every face, edge and vertex also carries an id ([`FaceId`], [`EdgeId`], [`VertexId`])
+//! that survives later operations for as long as the entity does. Each operation appends
+//! one [`HistoryRecord`] that lists the entities it created, modified, deleted or split,
+//! and the role of each face it created. Drawings, the recipe runner and edge labels read
+//! these records.
 
 use serde::{Deserialize, Serialize};
 
@@ -104,7 +107,7 @@ impl<Id: Copy + PartialEq> EntityChanges<Id> {
 }
 
 /// What part of an operation made a face it created.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "snake_case")]
 pub enum FaceRole {
     /// The planar region of a profile body.
@@ -134,6 +137,18 @@ pub enum FaceRole {
     /// A face the operation made that fits none of the other roles, such as a patch a
     /// boolean added.
     Other,
+}
+
+/// One origin of a face: the operation that made it, by the caller's tag, and the part
+/// of that operation that made it. A face keeps its origins through later operations:
+/// every piece of a split face keeps the whole set, and a face merged from several
+/// carries all of theirs. [`FaceInfo::origins`](crate::FaceInfo::origins) lists them.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Origin {
+    /// The operation's tag.
+    pub tag: OpTag,
+    /// What part of it made the face.
+    pub role: FaceRole,
 }
 
 /// The role of one created face.

@@ -1,29 +1,32 @@
 //! Persistent references: naming faces and edges by where they came from.
 //!
 //! Kernel ids change on every rebuild, so a feature never stores one. It stores a name
-//! made of the feature that generated the entity, the part of that feature that made it
+//! made of the feature that generated the face, the part of that feature that made it
 //! (its [`Generator`]: a cap, the side swept from a given sketch entity, the blend of a
-//! given edge) and an ordinal among faces with the same generator. On each rebuild the
-//! name is looked up among the faces the generating feature made in this rebuild and
-//! followed through the kernel's history: split faces become their pieces, deleted ones
-//! drop out. An edge is named by the two faces it separates.
+//! given edge) and an ordinal among faces with the same generator. An edge is named by
+//! the two faces it separates.
+//!
+//! The name stands for an origin. On each rebuild the generating feature says which
+//! kernel origin (operation tag and role) each of its names stands for, and the kernel
+//! reports every face's origins: the pieces of a split face all keep the origin, and a
+//! face merged from several carries all of theirs. A name resolves to the faces that
+//! carry its origin, so it survives renames, splits, merges and dimension edits without
+//! following history or comparing geometry.
 //!
 //! The result is checked against a geometric fingerprint taken when the reference was
 //! made: the surface or curve type must not change, and a planar face must still face
-//! the same way. Position and size are allowed to change, since that is what editing a
-//! dimension does; they are used to rank candidates when a reference breaks.
+//! the same way. The fingerprint never chooses a face; its position and size only rank
+//! the candidates offered when a reference breaks.
 //!
 //! A reference that resolves to no entity, to several, or to one that fails the check
 //! does not guess. The feature stops with a [`RepairNeeded`] that says which reference
 //! broke, why, and which entities could replace it.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use soliddraft_kernel_api::{
-    CurveKind, EdgeId, EdgeInfo, FaceId, FaceInfo, HistoryRecord, SurfaceKind, Topology, Vec3,
-};
+use soliddraft_kernel_api::{CurveKind, EdgeId, EdgeInfo, FaceId, FaceInfo, Origin, SurfaceKind, Topology, Vec3};
 use soliddraft_sketch::EntityId;
 
 use crate::feature::FeatureId;
@@ -62,17 +65,16 @@ impl fmt::Display for Generator {
     }
 }
 
-/// A face as a feature generated it during a rebuild.
+/// A name a feature defined during a rebuild, with the kernel origin it stands for.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedFace {
-    /// The kernel face, valid in this rebuild only.
-    pub face: FaceId,
+    /// The operation and role the kernel reports on the faces this name finds. Valid in
+    /// this rebuild only: operation tags are the document's, but a rebuild may rename them.
+    pub origin: Origin,
     /// What made it.
     pub generator: Generator,
     /// Its rank among the feature's faces with the same generator.
     pub ordinal: u32,
-    /// The history record that created it.
-    pub(crate) seq: u64,
 }
 
 /// What must stay true of a referenced face.
@@ -245,7 +247,7 @@ pub enum NamingError {
     /// The entity is not in any body of the document's current rebuild.
     #[error("{0} is not part of the model")]
     NotInModel(String),
-    /// No feature generated the entity, or the history does not reach its origin.
+    /// No feature defines a name for any origin the kernel reports on the entity.
     #[error("{0} has no origin in the feature tree")]
     NoOrigin(String),
     /// The name would match other entities too, for example a piece of a face that a
@@ -254,13 +256,12 @@ pub enum NamingError {
     NotUnique(String, String),
 }
 
-/// The faces each feature generated in the current rebuild.
+/// The names each feature defined in the current rebuild.
 pub(crate) type NameMap<'a> = HashMap<FeatureId, &'a [NamedFace]>;
 
 /// A body as references see it.
 pub(crate) struct View<'a> {
     pub topology: &'a Topology,
-    pub history: &'a [HistoryRecord],
 }
 
 /// A reference that did not resolve.
@@ -279,21 +280,14 @@ impl Unresolved {
 
 const CANDIDATES: usize = 5;
 
-/// The faces the named face became, following splits and deletions after the record
-/// that created it.
-fn descendants(seed: FaceId, seq: u64, history: &[HistoryRecord]) -> HashSet<FaceId> {
-    let mut set: HashSet<FaceId> = [seed].into();
-    for r in history.iter().filter(|r| r.seq > seq) {
-        for s in &r.faces.split {
-            if set.remove(&s.from) {
-                set.extend(s.into.iter().copied());
-            }
-        }
-        for d in &r.faces.deleted {
-            set.remove(d);
-        }
-    }
-    set
+/// How far apart, in millimetres, two planar pieces of one origin may lie and still
+/// count as one sketch plane. The pieces of a split face share their surface exactly;
+/// this only absorbs the display mesh's round-off in their centroids.
+const SAME_PLANE: f64 = 1e-6;
+
+/// The faces of the body that carry an origin, in topology order.
+fn carriers<'a>(origin: &'a Origin, view: &'a View) -> impl Iterator<Item = FaceId> + 'a {
+    view.topology.faces.iter().filter(move |f| f.origins.contains(origin)).map(|f| f.id)
 }
 
 fn ranked_faces(fp: &FaceFingerprint, faces: impl Iterator<Item = FaceId>, view: &View) -> Vec<Candidate> {
@@ -316,8 +310,7 @@ fn face_set(r: &FaceRef, view: &View, names: &NameMap) -> Result<Vec<FaceId>, Un
     let Some(seed) = made.iter().find(|n| n.generator == r.generator && n.ordinal == r.ordinal) else {
         return Err(missing(format!("{} no longer makes its {} #{}", r.feature, r.generator, r.ordinal + 1)));
     };
-    let alive = descendants(seed.face, seed.seq, view.history);
-    let present: Vec<FaceId> = view.topology.faces.iter().map(|f| f.id).filter(|id| alive.contains(id)).collect();
+    let present: Vec<FaceId> = carriers(&seed.origin, view).collect();
     if present.is_empty() {
         return Err(missing(format!("the {} of {} is gone", r.generator, r.feature)));
     }
@@ -345,6 +338,40 @@ pub(crate) fn resolve_face(r: &FaceRef, view: &View, names: &NameMap) -> Result<
     Ok(face.id)
 }
 
+/// The plane a sketch-plane reference names: the one face it names, or the pieces of a
+/// split planar face when they all lie in one plane, since any of them gives the same
+/// sketch plane. Returns the first such face in topology order.
+pub(crate) fn resolve_plane(r: &FaceRef, view: &View, names: &NameMap) -> Result<FaceId, Unresolved> {
+    let set = face_set(r, view, names)?;
+    let face = |id: FaceId| view.topology.face(id).expect("face_set returns faces of the topology");
+    let first = face(set[0]);
+    let mismatch = set.iter().find_map(|id| r.fingerprint.mismatch(face(*id)));
+    let coplanar = first.normal.is_some_and(|n| {
+        set.iter().all(|id| {
+            let f = face(*id);
+            f.normal == Some(n) && (f.centroid - first.centroid).dot(n).abs() <= SAME_PLANE
+        })
+    });
+    match mismatch {
+        Some(detail) => Err(Unresolved {
+            reason: RepairReason::Mismatch { detail: detail.clone() },
+            message: format!("the {} of {}: {detail}", r.generator, r.feature),
+            candidates: ranked_faces(&r.fingerprint, set.into_iter(), view),
+        }),
+        None if set.len() > 1 && !coplanar => Err(Unresolved {
+            reason: RepairReason::Ambiguous,
+            message: format!(
+                "the {} of {} was split into {} faces that do not share a plane",
+                r.generator,
+                r.feature,
+                set.len()
+            ),
+            candidates: ranked_faces(&r.fingerprint, set.into_iter(), view),
+        }),
+        None => Ok(first.id),
+    }
+}
+
 /// Every current face a face reference names, for an assignment that follows a face
 /// through later features, such as an appearance: every piece of a split face matches.
 /// Only a missing face, or one whose surface type or facing changed, breaks it.
@@ -363,15 +390,11 @@ pub(crate) fn resolve_faces(r: &FaceRef, view: &View, names: &NameMap) -> Result
     Ok(fits)
 }
 
-/// Every current face a feature generated, through any splits since, in topology
-/// order.
+/// Every current face that carries an origin of a feature's names, in topology order.
 pub(crate) fn faces_of_feature(feature: FeatureId, view: &View, names: &NameMap) -> Vec<FaceId> {
     let Some(made) = names.get(&feature) else { return Vec::new() };
-    let mut alive = HashSet::new();
-    for n in made.iter() {
-        alive.extend(descendants(n.face, n.seq, view.history));
-    }
-    view.topology.faces.iter().map(|f| f.id).filter(|id| alive.contains(id)).collect()
+    let origins: Vec<&Origin> = made.iter().map(|n| &n.origin).collect();
+    view.topology.faces.iter().filter(|f| f.origins.iter().any(|o| origins.contains(&o))).map(|f| f.id).collect()
 }
 
 fn ranked_edges(fp: &EdgeFingerprint, edges: impl Iterator<Item = EdgeId>, view: &View) -> Vec<Candidate> {
@@ -381,8 +404,9 @@ fn ranked_edges(fp: &EdgeFingerprint, edges: impl Iterator<Item = EdgeId>, view:
     scored.into_iter().take(CANDIDATES).map(|(_, id)| Candidate::Edge(id)).collect()
 }
 
-/// The one edge a reference names: the edge between a face the first name became and a
-/// face the second became. Faces may have been split, as long as one edge remains.
+/// The one edge a reference names: the edge between a face carrying the first name's
+/// origin and a face carrying the second's. Faces may have been split or merged, as long
+/// as one edge remains.
 pub(crate) fn resolve_edge(r: &EdgeRef, view: &View, names: &NameMap) -> Result<EdgeId, Unresolved> {
     let all_edges = || view.topology.edges.iter().map(|e| e.id);
     let sides = [face_set(&r.faces[0], view, names), face_set(&r.faces[1], view, names)];
@@ -441,28 +465,14 @@ pub(crate) fn resolve_edge(r: &EdgeRef, view: &View, names: &NameMap) -> Result<
     }
 }
 
-/// The face a face came from: the face a record created, through any splits since.
-fn origin_of(face: FaceId, history: &[HistoryRecord]) -> Option<(FaceId, u64)> {
-    let mut x = face;
-    for r in history.iter().rev() {
-        if r.faces.created.contains(&x) {
-            return Some((x, r.seq));
-        }
-        if let Some(s) = r.faces.split.iter().find(|s| s.into.contains(&x)) {
-            x = s.from;
-        }
-    }
-    None
-}
-
-/// The origin-based name of a face, without checking that it is unique.
+/// The origin-based name of a face, without checking that it is unique. A face merged
+/// from several carries several names; the earliest feature's comes first.
 fn origin_name(face: FaceId, view: &View, names: &NameMap) -> Result<FaceRef, NamingError> {
     let info = view.topology.face(face).ok_or_else(|| NamingError::NotInModel(face.to_string()))?;
-    let (seed, seq) = origin_of(face, view.history).ok_or_else(|| NamingError::NoOrigin(face.to_string()))?;
     let mut ids: Vec<&FeatureId> = names.keys().collect();
     ids.sort();
     for id in ids {
-        if let Some(n) = names[id].iter().find(|n| n.face == seed && n.seq == seq) {
+        if let Some(n) = names[id].iter().find(|n| info.origins.contains(&n.origin)) {
             return Ok(FaceRef {
                 feature: *id,
                 generator: n.generator,
@@ -482,6 +492,22 @@ pub(crate) fn name_face(face: FaceId, view: &View, names: &NameMap) -> Result<Fa
         Ok(back) if back == face => Ok(r),
         Ok(other) => Err(NamingError::NotUnique(face.to_string(), format!("the name finds {other}"))),
         Err(u) => Err(NamingError::NotUnique(face.to_string(), u.message)),
+    }
+}
+
+/// A persistent name for a planar face to sketch on, checked to resolve back to that
+/// face's plane. A piece of a split face can carry a sketch, since all the pieces of
+/// its origin share one plane; [`name_face`] refuses it.
+pub(crate) fn name_plane(face: FaceId, view: &View, names: &NameMap) -> Result<FaceRef, NamingError> {
+    let r = origin_name(face, view, names)?;
+    let plane_of = |id: FaceId| view.topology.face(id).and_then(|f| f.normal.map(|n| (n, f.centroid.dot(n))));
+    let (Some((n, d)), Ok(back)) = (plane_of(face), resolve_plane(&r, view, names)) else {
+        let why = if plane_of(face).is_none() { "it is not planar".to_owned() } else { "its name finds no plane".into() };
+        return Err(NamingError::NotUnique(face.to_string(), why));
+    };
+    match plane_of(back) {
+        Some((m, e)) if m == n && (e - d).abs() <= SAME_PLANE => Ok(r),
+        _ => Err(NamingError::NotUnique(face.to_string(), format!("the name finds {back}"))),
     }
 }
 
@@ -511,33 +537,63 @@ pub(crate) fn origin_label(face: FaceId, view: &View, names: &NameMap) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soliddraft_kernel_api::{EntityChanges, OpKind, OpTag, Split};
+    use soliddraft_kernel_api::{Aabb, FaceRole, OpTag};
 
-    fn record(seq: u64, created: &[u64], deleted: &[u64], split: &[(u64, &[u64])]) -> HistoryRecord {
-        let ids = |v: &[u64]| v.iter().map(|&i| FaceId::from_raw(i)).collect();
-        HistoryRecord {
-            seq,
-            tag: OpTag::new(format!("op{seq}")),
-            op: OpKind::Union,
-            faces: EntityChanges {
-                created: ids(created),
-                modified: vec![],
-                deleted: ids(deleted),
-                split: split.iter().map(|(f, i)| Split { from: FaceId::from_raw(*f), into: ids(i) }).collect(),
-            },
-            edges: EntityChanges::default(),
-            vertices: EntityChanges::default(),
-            face_roles: vec![],
+    fn origin(tag: &str, role: FaceRole) -> Origin {
+        Origin { tag: OpTag::new(tag), role }
+    }
+
+    fn face(id: u64, z: f64, origins: Vec<Origin>) -> FaceInfo {
+        FaceInfo {
+            id: FaceId::from_raw(id),
+            surface: SurfaceKind::Plane,
+            area: 1.0,
+            centroid: Vec3::new(id as f64, 0.0, z),
+            bbox: Aabb { min: Vec3::ZERO, max: Vec3::ZERO },
+            edges: Vec::new(),
+            normal: Some(Vec3::Z),
+            origins,
+        }
+    }
+
+    fn topology(faces: Vec<FaceInfo>) -> Topology {
+        Topology {
+            kind: soliddraft_kernel_api::BodyKind::Solid,
+            faces,
+            edges: Vec::new(),
+            vertex_count: 0,
+            vertices: Vec::new(),
+            bbox: Aabb { min: Vec3::ZERO, max: Vec3::new(1.0, 1.0, 1.0) },
+            display_chord_height: None,
         }
     }
 
     #[test]
-    fn descendants_follow_splits_after_the_creating_record() {
-        let h = vec![record(1, &[1, 2], &[], &[]), record(2, &[], &[], &[(1, &[3, 4])]), record(3, &[], &[3], &[])];
-        let d = descendants(FaceId::from_raw(1), 1, &h);
-        assert_eq!(d, [FaceId::from_raw(4)].into());
-        assert_eq!(origin_of(FaceId::from_raw(4), &h), Some((FaceId::from_raw(1), 1)));
-        assert_eq!(origin_of(FaceId::from_raw(2), &h), Some((FaceId::from_raw(2), 1)));
-        assert_eq!(origin_of(FaceId::from_raw(9), &h), None);
+    fn names_resolve_by_origin_through_splits_and_merges() {
+        let plate = origin("F2.r0.sweep", FaceRole::EndCap);
+        let tab = origin("F4.r0.sweep", FaceRole::EndCap);
+        let named = [NamedFace { origin: plate.clone(), generator: Generator::EndCap, ordinal: 0 }];
+        let tab_named = [NamedFace { origin: tab.clone(), generator: Generator::EndCap, ordinal: 0 }];
+        let names: NameMap = [(FeatureId(2), &named[..]), (FeatureId(4), &tab_named[..])].into();
+        // The plate's top merged with the tab's: one face with both origins.
+        let merged = topology(vec![face(1, 10.0, vec![plate.clone(), tab.clone()]), face(2, 0.0, vec![])]);
+        let view = View { topology: &merged };
+        let r = name_face(FaceId::from_raw(1), &view, &names).unwrap();
+        assert_eq!((r.feature, r.generator), (FeatureId(2), Generator::EndCap), "the earliest feature names it");
+        assert_eq!(resolve_face(&r, &view, &names).unwrap(), FaceId::from_raw(1));
+        // A later cut split it into two coplanar pieces: one sketch plane, two faces.
+        let split = topology(vec![face(3, 10.0, vec![plate.clone()]), face(4, 10.0, vec![plate.clone(), tab])]);
+        let view = View { topology: &split };
+        assert_eq!(resolve_plane(&r, &view, &names).unwrap(), FaceId::from_raw(3));
+        assert!(matches!(resolve_face(&r, &view, &names).unwrap_err().reason, RepairReason::Ambiguous));
+        assert_eq!(resolve_faces(&r, &view, &names).unwrap().len(), 2);
+        // Pieces in different planes are not one sketch plane.
+        let apart = topology(vec![face(3, 10.0, vec![plate.clone()]), face(4, 12.0, vec![plate])]);
+        let view = View { topology: &apart };
+        assert!(matches!(resolve_plane(&r, &view, &names).unwrap_err().reason, RepairReason::Ambiguous));
+        // Nothing carries the origin any more.
+        let gone = topology(vec![face(5, 10.0, vec![])]);
+        let view = View { topology: &gone };
+        assert!(matches!(resolve_plane(&r, &view, &names).unwrap_err().reason, RepairReason::Missing));
     }
 }
