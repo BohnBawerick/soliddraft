@@ -282,10 +282,10 @@ fn polygon_controls_commit_undo_redo_and_extrude_on_catallax() {
         h.state().state.sketch.as_ref().unwrap().sketch.regions().unwrap().iter().map(|r| r.area()).sum::<f64>()
     };
     assert!((sketch_area(&harness) - area).abs() < 1e-5);
-    harness.key_press_modifiers(egui::Modifiers::CTRL, Key::Z);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, Key::Z);
     harness.run_steps(4);
     assert!(harness.state().state.sketch.as_ref().unwrap().sketch.is_empty());
-    harness.key_press_modifiers(egui::Modifiers::CTRL, Key::Y);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, Key::Y);
     harness.run_steps(4);
     assert!((sketch_area(&harness) - area).abs() < 1e-5);
     let image = harness.render().expect("polygon numeric controls render");
