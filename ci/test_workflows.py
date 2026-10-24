@@ -17,8 +17,12 @@ def top_level(text, key):
 def evaluate(expr, **github):
     """Evaluates the subset of the expression language the concurrency settings use."""
     python = re.sub(r"github\.(\w+)", r"g['\1']", expr).replace("&&", " and ").replace("||", " or ")
+    python = re.sub(r"!(?!=)", " not ", python)
     context = {"workflow": "Hosted CI", "head_ref": "", "run_id": "1", **github}
-    return eval(python, {"__builtins__": {}}, {"g": context})
+    return eval(python, {"__builtins__": {}}, {
+        "g": context,
+        "startsWith": lambda value, prefix: value.lower().startswith(prefix.lower()),
+    })
 
 
 def render(template, **github):
@@ -78,6 +82,15 @@ class Concurrency(unittest.TestCase):
             fork = render(group, ref="refs/pull/9/merge", head_ref="main", run_id="300")
             self.assertNotEqual(fork, render(group, ref=MAIN, run_id="300"), path.name)
             self.assertNotEqual(fork, render(group, ref=MAIN, run_id="301"), path.name)
+
+    def test_tag_releases_cannot_cancel_or_replace_one_another(self):
+        path = pathlib.Path(__file__).resolve().parent.parent / ".github/workflows/release.yml"
+        group, cancel, _ = settings(path)
+        first = dict(ref="refs/tags/v0.1.0", run_id="400")
+        second = dict(first, run_id="401")
+        self.assertNotEqual(render(group, **first), render(group, **second))
+        self.assertEqual(render(cancel, **first), "false")
+        self.assertEqual(render(cancel, **second), "false")
 
     def test_the_setting_is_not_overridden_per_job(self):
         for path in WORKFLOWS:

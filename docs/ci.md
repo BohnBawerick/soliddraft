@@ -10,6 +10,8 @@ Run the same checks with `cargo fmt --all --check`, `cargo clippy --workspace --
 
 After a deliberate Catallax pin change, manually dispatch Hosted CI with `refresh_catallax_views` enabled to run the existing view and drawing baseline generators. Download the `catallax-view-baseline` artifact, review its diff and commit the generated JSON and SVG files. Require a normal run against that committed baseline before merging.
 
+`release.yml` builds installers and portable archives in a separate workflow. Manual dispatch and release-configuration pull requests are non-publishing dry runs. Version tags can publish after Hosted CI passes; Pages remains disabled behind a repository variable. See [releasing](RELEASING.md) for artifacts, signing secrets, smoke checks and the first-release gate.
+
 ## Superseded runs
 
 Hosted CI has a concurrency group keyed on the pull request's head branch (the pushed ref for a manual run), so a new push cancels that branch's older runs. A run on main is never cancelled: its group is its own run id, so no later push shares it and GitHub's replacement of a waiting run in a shared group cannot drop a main result. `ci/test_workflows.py`, run in the lint job, evaluates the group and cancel expressions for pull request, manual and main runs, and for a pull request from a branch that is itself called `main`.
@@ -30,4 +32,3 @@ Four property-test files use `proptest` as a dev-dependency. Each runs a fixed n
 `crates/soliddraft-cli/tests/damaged_files.rs` opens truncated, corrupted and wrong-version variants of a part, an assembly and a drawing through the libraries, the application's open functions and the binary's reading and writing commands. Each must be refused with a typed error of the right kind (damage, or a version or kind this build does not read) and a message, and the file's bytes, hash and folder must be unchanged afterwards. `soliddraft doc info`, `doc refs`, `doc where-used`, `doc migrate` and `asm insert` of a part read the manifest alone, so they report a file whose manifest reads even when the truth entry is damaged; opening it is what refuses.
 
 `FUZZ_TRACE=1 cargo test ... -- --nocapture` prints each command-line run's exit status and arguments, and each tool call's outcome in `command_fuzz`.
-
