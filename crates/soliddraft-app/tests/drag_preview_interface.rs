@@ -75,8 +75,10 @@ fn dragging_the_depth_field_previews_and_applies_one_undo_step() {
         end = pos2(start.x + 4.0 * step as f32, start.y);
         harness.hover_at(end);
         harness.run_steps(1);
-        let state = &harness.state().state;
-        assert!(state.drag_preview.is_some(), "the drag is under way at step {step}");
+        // egui counts the press as a drag once the pointer has moved past its click distance.
+        if step >= 4 {
+            assert!(harness.state().state.drag_preview.is_some(), "the drag is under way at step {step}");
+        }
         assert_eq!(plate_depth(&harness), 10.0, "the part is unchanged during the drag");
     }
     // Hold still until the worker has answered the value the drag rests on.
