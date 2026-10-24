@@ -1,8 +1,8 @@
 //! The command registry: one row per command a person or an agent can run.
 //!
-//! The ribbon, the keyboard shortcuts, the menus, the shortcuts window, the command
-//! search, the assistant's recipe verbs, the MCP server and the CLI all read this
-//! table, so a command has one id, one label, one description and one set of shortcuts
+//! The ribbon, the keyboard shortcuts, the menus, the shortcuts window, the command palette,
+//! the command search, the assistant's recipe verbs, the MCP server and the CLI all read
+//! this table, so a command has one id, one label, one description and one set of shortcuts
 //! everywhere.
 //!
 //! A row describes and dispatches a command; it does not replace the typed commands
@@ -1261,6 +1261,10 @@ fn registry() -> Vec<CommandSpec> {
             })
             .when(|s| s.drawing.new.is_some() || s.editor.is_some() || s.in_sketch()),
         // Help.
+        cmd("command_palette", "Command palette", Icon::Search, "Search the commands and run one")
+            .both()
+            .key(Scope::App, ctrl_shift, Key::P)
+            .run(|_| AppAction::TogglePalette),
         cmd("shortcuts", "Keyboard shortcuts", Icon::Config, "List the keyboard shortcuts")
             .key(Scope::Model, none, Key::Questionmark)
             .run(|_| AppAction::ShowShortcuts),
