@@ -161,13 +161,30 @@ fn for_schema(root: &Value, schema: &Value, pools: &Pools, hint: &str) -> BoxedS
     prop_oneof![30 => typed, 1 => any_json()].boxed()
 }
 
+/// A coordinate in the part's own range, now and then far outside it.
+fn coord() -> BoxedStrategy<Value> {
+    prop_oneof![
+        20 => (-40i32..=40).prop_map(|n| json!(n as f64 / 2.0)),
+        1 => prop::sample::select(vec![1e-300, -1e-9, 0.3, 1e6, -1e6, 1e15, -1e15, 1e300, -1e300, 1e308]).prop_map(|f| json!(f)),
+    ]
+    .boxed()
+}
+
+/// A length: in the part's own range, now and then absurdly small or large.
+fn length() -> BoxedStrategy<Value> {
+    prop_oneof![
+        20 => (1u32..=120).prop_map(|n| json!(n as f64 / 2.0)),
+        1 => prop::sample::select(vec![1e-300, 1e-9, 1e-6, 1e6, 1e15, 1e100, 1e300]).prop_map(|f| json!(f)),
+    ]
+    .boxed()
+}
+
 /// A point `[x, y, z]` on the top, front or right plane, and now and then anywhere.
 fn point() -> BoxedStrategy<Value> {
-    let n = || (-40i32..=40).prop_map(|n| json!(n as f64 / 2.0));
     prop_oneof![
-        3 => (n(), n()).prop_map(|(x, y)| json!([x, y, 0])),
-        1 => (n(), n()).prop_map(|(x, z)| json!([x, 0, z])),
-        1 => (n(), n()).prop_map(|(y, z)| json!([0, y, z])),
+        3 => (coord(), coord()).prop_map(|(x, y)| json!([x, y, 0])),
+        1 => (coord(), coord()).prop_map(|(x, z)| json!([x, 0, z])),
+        1 => (coord(), coord()).prop_map(|(y, z)| json!([0, y, z])),
         1 => prop::collection::vec(numbers(), 0..5).prop_map(Value::Array),
     ]
     .boxed()
@@ -257,11 +274,11 @@ fn call(tool: &str, arguments: Value) -> Call {
 /// A call that is right in form and mostly in substance, so that sequences go on to
 /// change the part and the later calls meet a part that has changed.
 fn sane_call(pools: Pools) -> BoxedStrategy<Call> {
-    let size = || (1u32..=120).prop_map(|n| json!(n as f64 / 2.0));
+    let size = length;
     let pick = |names: Vec<String>| prop::sample::select(names);
     // A sketch on a reference plane, with points on it, or on any face, with points that mostly miss it.
     let on = |plane: &'static str| {
-        let n = || (-40i32..=40).prop_map(|n| json!(n as f64 / 2.0));
+        let n = coord;
         let at = move |a: Value, b: Value| match plane {
             "top" => json!([a, b, 0]),
             "front" => json!([a, 0, b]),
