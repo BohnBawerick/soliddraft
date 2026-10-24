@@ -572,6 +572,31 @@ mod rebuild {
     }
 
     #[test]
+    fn a_fork_builds_only_what_changes_in_it() {
+        let kernel = counting();
+        let mut doc = Document::new("Mount bracket", kernel.clone());
+        let ids = build_bracket(&mut doc);
+        let slot = doc.features().last().unwrap().id;
+        let built = bodies(&doc);
+        kernel.take();
+
+        // A dry run on a fork, as an assistant proposal makes, builds only the slot.
+        let mut fork = doc.fork();
+        assert_eq!(bodies(&fork), built);
+        fork.execute(Command::EditFeature { id: slot, kind: cut(ids.slot_sketch, blind(5.0)) }).unwrap();
+        assert_eq!(recomputed(&kernel.take()), ([slot].into(), 0), "the fork built only the slot");
+        assert_matches_full_replay(&fork, "in the fork");
+        kernel.take();
+
+        // Dropping the fork leaves the part's bodies alive.
+        drop(fork);
+        assert_eq!(bodies(&doc), built);
+        assert!(built.iter().flatten().all(|b| doc.keeps(*b) && doc.kernel().topology(*b).is_ok()));
+        assert!(doc.kernel().validate(doc.body().unwrap()).unwrap().valid);
+        assert_matches_full_replay(&doc, "after the fork was dropped");
+    }
+
+    #[test]
     fn the_cache_keeps_to_its_budget() {
         let kernel = counting();
         let mut doc = Document::new("Mount bracket", kernel.clone());

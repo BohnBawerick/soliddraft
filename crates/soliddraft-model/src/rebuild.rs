@@ -11,12 +11,13 @@
 //! building. An edit misses from the edited feature down. Undo, redo and a value put
 //! back find the earlier builds and reuse their bodies.
 //!
-//! The cache owns the bodies its builds made and releases them when it drops a build.
-//! It keeps the retained bytes of its builds within a budget by dropping the least
+//! The cache owns the bodies its builds made. A copy of the part shares them, and the
+//! last cache to drop a build releases its body. It keeps the retained bytes of its builds within a budget by dropping the least
 //! recently used builds the current tree does not use, and with them every build that
 //! started from a body it released.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use soliddraft_kernel_api::{BodyId, Kernel};
 
@@ -49,13 +50,29 @@ enum Definition {
     Unmatched(u64),
 }
 
+/// A body a kept build made, released when the last cache holding it lets go.
+struct Kept {
+    kernel: Arc<dyn Kernel>,
+    body: BodyId,
+}
+
+impl Drop for Kept {
+    fn drop(&mut self) {
+        let _ = self.kernel.release(self.body);
+    }
+}
+
+#[derive(Clone)]
 struct Entry {
     built: Built,
+    /// Holds `built.owned` alive.
+    _body: Option<Arc<Kept>>,
     bytes: u64,
     used: u64,
 }
 
-/// Feature builds by exact inputs, within a byte budget.
+/// Feature builds by exact inputs, within a byte budget. A clone shares the bodies.
+#[derive(Clone)]
 pub(crate) struct BuildCache {
     entries: HashMap<StepKey, Entry>,
     budget: u64,
@@ -114,29 +131,27 @@ impl BuildCache {
 
     /// Keeps `built` under `key`, charging the size of the body it made, and returns it
     /// with its version.
-    pub(crate) fn insert(&mut self, key: StepKey, mut built: Built, kernel: &dyn Kernel) -> Built {
+    pub(crate) fn insert(&mut self, key: StepKey, mut built: Built, kernel: &Arc<dyn Kernel>) -> Built {
         self.clock += 1;
         built.version = self.next_version;
         self.next_version += 1;
         let body = built.owned.map_or(0, |b| kernel.retained_bytes(b).unwrap_or(UNKNOWN_BODY));
         let bytes = body + weight(&key, &built);
         self.retained += bytes;
-        let entry = Entry { built: built.clone(), bytes, used: self.clock };
+        let kept = built.owned.map(|body| Arc::new(Kept { kernel: kernel.clone(), body }));
+        let entry = Entry { built: built.clone(), _body: kept, bytes, used: self.clock };
         if let Some(old) = self.entries.insert(key, entry) {
             // A key is only inserted after it missed, so this is not expected; keep the
             // books right if it happens.
             self.retained -= old.bytes;
-            if let Some(b) = old.built.owned {
-                let _ = kernel.release(b);
-            }
         }
         built
     }
 
     /// Drops the least recently used builds outside `live` until the cache fits its
     /// budget, then every build that started from a body or sketch build no longer
-    /// kept. Releases the bodies of what it drops. Returns how many builds it dropped.
-    pub(crate) fn trim(&mut self, live: &[Built], kernel: &dyn Kernel) -> usize {
+    /// kept. Lets go of the bodies of what it drops. Returns how many builds it dropped.
+    pub(crate) fn trim(&mut self, live: &[Built]) -> usize {
         if self.retained <= self.budget {
             return 0;
         }
@@ -153,7 +168,7 @@ impl BuildCache {
             if self.retained <= self.budget {
                 break;
             }
-            self.remove(&key, kernel);
+            self.remove(&key);
             dropped += 1;
         }
         // Builds that read a dropped body or sketch build can never be asked for again.
@@ -174,29 +189,16 @@ impl BuildCache {
                 break;
             }
             for key in orphans {
-                self.remove(&key, kernel);
+                self.remove(&key);
                 dropped += 1;
             }
         }
         dropped
     }
 
-    /// Releases every kept body.
-    pub(crate) fn clear(&mut self, kernel: &dyn Kernel) {
-        for (_, e) in self.entries.drain() {
-            if let Some(b) = e.built.owned {
-                let _ = kernel.release(b);
-            }
-        }
-        self.retained = 0;
-    }
-
-    fn remove(&mut self, key: &StepKey, kernel: &dyn Kernel) {
+    fn remove(&mut self, key: &StepKey) {
         if let Some(e) = self.entries.remove(key) {
             self.retained -= e.bytes;
-            if let Some(b) = e.built.owned {
-                let _ = kernel.release(b);
-            }
         }
     }
 }

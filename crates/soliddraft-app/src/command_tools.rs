@@ -698,13 +698,11 @@ fn body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassProperties> {
     doc.kernel().mass_properties(doc.display_body()?).ok()
 }
 
-/// An independent copy of the part on the same kernel, rebuilt from its features.
-fn scratch_copy(doc: &Document) -> Result<Document, String> {
-    let bytes = doc.model().to_bytes().map_err(|e| format!("cannot copy the part: {e}"))?;
-    let model = soliddraft_model::Document::from_bytes(&bytes, doc.kernel().clone())
-        .map_err(|e| format!("cannot copy the part: {e}"))?;
-    // The viewport quality travels in the bytes, with the rest of the settings.
-    Ok(Document::from_model(model))
+/// An independent copy of the part on the same kernel. It shares the part's feature
+/// builds, so a dry run builds only what its lines change.
+fn scratch_copy(doc: &Document) -> Document {
+    // The viewport quality travels with the rest of the settings.
+    Document::from_model(doc.model().fork())
 }
 
 fn status_text(doc: &Document, id: FeatureId) -> String {
@@ -734,7 +732,7 @@ struct DryRun {
 }
 
 fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
-    let mut scratch = scratch_copy(doc)?;
+    let mut scratch = scratch_copy(doc);
     let before: Vec<(FeatureId, String, FeatureKind, bool, bool)> =
         scratch.features.iter().map(|f| (f.id, f.name.clone(), f.kind.clone(), f.suppressed, broken(f))).collect();
     let volume_before = body_mass(&scratch).map(|m| m.volume).unwrap_or(0.0);

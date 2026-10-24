@@ -107,6 +107,10 @@ says otherwise, using the kernel's `retained_bytes` estimate for each body. The 
 current tree are always kept; beyond the budget the least recently used others go, with
 every build that started from a body they held.
 
+`Document::fork` copies a part and shares its kept builds, so the copy builds only what
+changes in it. An assistant proposal's dry run uses a fork. A body is released when the
+last document holding it lets go.
+
 Tests count the work, not the rebuild. `soliddraft_kernel_api::counting::Counting`,
 behind the `counting` feature, wraps a backend and writes down every operation's tag
 and every tessellation. The bracket exit test edits the last feature and checks that only it

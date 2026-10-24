@@ -132,19 +132,14 @@ pub struct Document {
     pub(crate) built: Vec<Built>,
     /// Index of the first feature whose cached build is stale.
     pub(crate) dirty: usize,
-    /// Feature builds by exact inputs; owns every body the builds made.
+    /// Feature builds by exact inputs; owns every body the builds made, shared with
+    /// forks.
     pub(crate) cache: BuildCache,
     pub(crate) undo: Vec<UndoEntry>,
     pub(crate) redo: Vec<UndoEntry>,
     pub(crate) log: Vec<String>,
     /// The solver's verdict on the last sketch a command solved.
     pub(crate) last_solve: Option<SolveStatus>,
-}
-
-impl Drop for Document {
-    fn drop(&mut self) {
-        self.cache.clear(self.kernel.as_ref());
-    }
 }
 
 impl std::fmt::Debug for Document {
@@ -450,8 +445,32 @@ impl Document {
         }
     }
 
+    /// A copy of the part that shares this one's feature builds and bodies, so the copy
+    /// builds only what changes in it. It has the same id, features and settings, and
+    /// an empty undo history, as a part reopened from its file has. For dry runs, such
+    /// as an assistant proposal tried before it is applied.
+    pub fn fork(&self) -> Document {
+        Document {
+            id: self.id,
+            name: self.name.clone(),
+            features: self.features.clone(),
+            rollback: self.rollback,
+            next_id: self.next_id,
+            materials: self.materials.clone(),
+            settings: self.settings.clone(),
+            kernel: self.kernel.clone(),
+            built: self.built.clone(),
+            dirty: self.dirty,
+            cache: self.cache.clone(),
+            undo: Vec::new(),
+            redo: Vec::new(),
+            log: Vec::new(),
+            last_solve: None,
+        }
+    }
+
     /// True while the document keeps `body`: a feature build it holds made it. A body
-    /// it no longer keeps is released and does not come back.
+    /// no document keeps is released and does not come back.
     pub fn keeps(&self, body: BodyId) -> bool {
         self.cache.holds(body)
     }
@@ -465,7 +484,7 @@ impl Document {
     /// the current tree are always kept. A smaller budget applies at once.
     pub fn set_rebuild_budget(&mut self, bytes: u64) {
         self.cache.set_budget(bytes);
-        self.cache.trim(&self.built, self.kernel.as_ref());
+        self.cache.trim(&self.built);
     }
 
     /// Rebuilds from the first stale feature to the end of the tree, reusing every
@@ -488,7 +507,7 @@ impl Document {
             current = built.output;
             self.built.push(built);
         }
-        cache.trim(&self.built, self.kernel.as_ref());
+        cache.trim(&self.built);
         self.cache = cache;
         self.dirty = self.built.len();
     }
@@ -521,7 +540,7 @@ impl Document {
             FeatureKind::Fillet(b) => self.build_blend(f, b, false, current),
             FeatureKind::Chamfer(b) => self.build_blend(f, b, true, current),
         };
-        cache.insert(key, built, self.kernel.as_ref())
+        cache.insert(key, built, &self.kernel)
     }
 
     /// The built sketch an extrusion sweeps, or the extrusion's result when that sketch
