@@ -18,8 +18,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -52,8 +51,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -85,8 +83,7 @@
             "diameter": 24
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -118,8 +115,7 @@
             "diameter": 12
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -152,8 +148,7 @@
             "diameter": 9
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -186,8 +181,7 @@
             "diameter": 9
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -220,8 +214,7 @@
             "diameter": 9
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -254,8 +247,7 @@
             "diameter": 9
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -289,8 +281,7 @@
             "height": 12
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",

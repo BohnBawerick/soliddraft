@@ -19,8 +19,7 @@
             "height": 30
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -30,7 +29,6 @@
         "flip": false
       },
       "refusal": "numbers.operation-budget",
-      "render": false,
       "checks": [
         {
           "pointer": "/summary/features/0/name",

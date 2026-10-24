@@ -55,8 +55,7 @@
             "count": 4
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",

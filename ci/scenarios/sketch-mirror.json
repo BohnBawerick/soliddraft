@@ -57,8 +57,7 @@
             }
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
