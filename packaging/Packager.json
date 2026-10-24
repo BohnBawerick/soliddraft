@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/crabnebula-dev/cargo-packager/main/crates/packager/schema.json",
+  "name": "soliddraft-app",
   "productName": "SolidDraft",
   "identifier": "io.github.bohnbawerick.soliddraft",
   "publisher": "SolidDraft contributors",

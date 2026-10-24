@@ -107,7 +107,7 @@ jobs:
           lipo -create target/aarch64-apple-darwin/release/soliddraft-app \
             target/x86_64-apple-darwin/release/soliddraft-app \
             -output target/universal-apple-darwin/release/soliddraft-app
-          lipo -verify_arch arm64 x86_64 target/universal-apple-darwin/release/soliddraft-app
+          lipo target/universal-apple-darwin/release/soliddraft-app -verify_arch arm64 x86_64
       - name: Import optional Windows signing certificate
         if: runner.os == 'Windows' && github.event_name == 'push'
         shell: pwsh
