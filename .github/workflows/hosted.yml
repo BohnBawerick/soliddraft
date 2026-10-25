@@ -321,7 +321,7 @@ jobs:
           python3 - "$RUNNER_TEMP/application-loop" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
           import json, pathlib, sys
           rows = ["## Application click budgets", "",
-                  "Release build on a hosted shared runner, not a quiet pinned-core performance baseline.", "",
+                  "Release build on ${{ runner.environment }}/${{ runner.os }}/${{ runner.arch }}; raw click-to-display timing, not a matched-core baseline.", "",
                   "| Scenario | Step | Tool | Wait ms | Budget ms | Result |",
                   "|---|---:|---|---:|---:|---|"]
           trends = []

@@ -264,8 +264,9 @@ booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
 progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
 nine known gaps in `ci/known-over-budget.json` record the measured times for
 reference steps 17, 18, 25 and 30, and bracket steps 16, 18, 19, 22 and 25.
-Bracket step 16 records 1,054 ms, so its regression limit is 1,264.8 ms.
-Its entry identifies its source run separately from the other eight records.
+The records identify the local work-PC Linux runner and the calibration run;
+hosted-VM times are not substituted for that machine's baselines.
+Bracket step 16 records 1,189.068388 ms, with a 1,426.8820656 ms regression limit.
 An over-budget listed step is accepted only up to 120% of its recorded time;
 anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
 and `within_budget` stays false. An improved listed step can pass the strict
