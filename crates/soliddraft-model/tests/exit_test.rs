@@ -162,8 +162,9 @@ fn build_bracket(doc: &mut Document) -> Bracket {
         .unwrap();
     assert!(
         corner.midpoint.distance(Vec3::new(0.0, -35.0, 10.0)) < 1e-6,
-        "inside corner edge at {:?}",
-        corner.midpoint
+        "inside corner edge at {:?}\n{}",
+        corner.midpoint,
+        report(doc)
     );
     let edge = doc.edge_ref(corner.id).expect("naming the inside corner");
     let fillet = add(doc, "Inside fillet", FeatureKind::Fillet(BlendFeature { edges: vec![edge], size: 8.0 }));
@@ -594,6 +595,67 @@ mod rebuild {
         assert!(built.iter().flatten().all(|b| doc.keeps(*b) && doc.kernel().topology(*b).is_ok()));
         assert!(doc.kernel().validate(doc.body().unwrap()).unwrap().valid);
         assert_matches_full_replay(&doc, "after the fork was dropped");
+    }
+
+    #[test]
+    fn prepared_builds_remap_fork_versions_without_replacing_live_bodies() {
+        let kernel = counting();
+        let mut doc = Document::new("Prepared cylinder", kernel.clone());
+        let profile = |diameter| {
+            let mut s = Sketch::new();
+            s.circle_at(p(0.0, 0.0), diameter).unwrap();
+            sketch_on(SketchPlane::Datum { datum: DatumPlane::Top, offset: 0.0 }, solved(s))
+        };
+        let sketch = add(&mut doc, "Profile", profile(6.0));
+        add(&mut doc, "Boss", extrude(sketch, ExtrudeOp::Boss, blind(10.0), false));
+        let mut prepared = doc.fork();
+        prepared.execute(Command::EditFeature { id: sketch, kind: profile(12.0) }).unwrap();
+        let prepared_body = prepared.body().unwrap();
+
+        // Both forks allocate the same local sketch version for different inputs.
+        doc.execute(Command::EditFeature { id: sketch, kind: profile(18.0) }).unwrap();
+        let current = doc.body().unwrap();
+        kernel.take();
+        doc.reuse_builds_from(&prepared);
+        assert_eq!(doc.body(), Some(current));
+        assert!(doc.kernel().topology(current).is_ok(), "import released a live body");
+        doc.execute(Command::EditFeature { id: sketch, kind: profile(12.0) }).unwrap();
+        assert_eq!(kernel.take(), [], "applying a prepared edit rebuilt its geometry");
+        assert_eq!(doc.body(), Some(prepared_body));
+        drop(prepared);
+        assert_matches_full_replay(&doc, "after applying a prepared edit");
+        kernel.take();
+        doc.undo().unwrap();
+        assert_eq!(doc.body(), Some(current));
+        doc.redo().unwrap();
+        assert_eq!(doc.body(), Some(prepared_body));
+        assert_eq!(kernel.take(), [], "prepared history rebuilt instead of reusing bodies");
+    }
+
+    #[test]
+    fn a_prepared_bracket_suffix_keeps_full_replay_names_and_repairs() {
+        let kernel = counting();
+        let mut doc = Document::new("Prepared bracket", kernel.clone());
+        let ids = build_bracket(&mut doc);
+        let original = bodies(&doc);
+        let command = Command::SetSuppressed { id: ids.boss, suppressed: true };
+        let mut prepared = doc.fork();
+        prepared.execute(command.clone()).unwrap();
+        let expected = bodies(&prepared);
+        kernel.take();
+
+        doc.reuse_builds_from(&prepared);
+        doc.execute(command).unwrap();
+        assert_eq!(kernel.take(), [], "applying the prepared suffix ran kernel work");
+        assert_eq!(bodies(&doc), expected);
+        drop(prepared);
+        assert_matches_full_replay(&doc, "after importing a bracket suffix with repairs");
+        kernel.take();
+        doc.undo().unwrap();
+        assert_eq!(bodies(&doc), original);
+        doc.redo().unwrap();
+        assert_eq!(bodies(&doc), expected);
+        assert_eq!(kernel.take(), [], "prepared bracket history ran kernel work");
     }
 
     #[test]

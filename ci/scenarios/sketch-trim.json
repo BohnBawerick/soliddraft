@@ -58,8 +58,7 @@
             }
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -70,7 +69,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 78.53981633974483,
           "tolerance": 0.005
         },

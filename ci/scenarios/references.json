@@ -18,8 +18,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -30,7 +29,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 108000,
           "tolerance": 0.005
         }
@@ -52,8 +51,7 @@
             "height": 90
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -64,7 +62,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 153000,
           "tolerance": 0.005
         }
@@ -73,7 +71,7 @@
     {
       "tool": "sketch",
       "arguments": {
-        "plane": "Boss-Extrude1 · End cap",
+        "plane": "Boss-Extrude1 \u00b7 End cap",
         "shapes": [
           {
             "shape": "circle",
@@ -85,8 +83,7 @@
             "diameter": 24
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -97,7 +94,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 162047.7868423386,
           "tolerance": 0.005
         }
@@ -106,7 +103,7 @@
     {
       "tool": "sketch",
       "arguments": {
-        "plane": "Boss-Extrude3 · End cap",
+        "plane": "Boss-Extrude3 \u00b7 End cap",
         "shapes": [
           {
             "shape": "circle",
@@ -118,8 +115,7 @@
             "diameter": 12
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -131,7 +127,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 158654.86677646163,
           "tolerance": 0.005
         }
@@ -140,7 +136,7 @@
     {
       "tool": "sketch",
       "arguments": {
-        "plane": "Boss-Extrude1 · End cap",
+        "plane": "Boss-Extrude1 \u00b7 End cap",
         "shapes": [
           {
             "shape": "rectangle",
@@ -153,8 +149,7 @@
             "height": 100
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "cut",
@@ -166,7 +161,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 157034.86677646163,
           "tolerance": 0.005
         }
@@ -175,7 +170,7 @@
     {
       "tool": "sketch",
       "arguments": {
-        "plane": "Boss-Extrude1 · End cap",
+        "plane": "Boss-Extrude1 \u00b7 End cap",
         "shapes": [
           {
             "shape": "circle",
@@ -188,9 +183,11 @@
           }
         ]
       },
-      "render": false,
       "checks": [
-        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+        {
+          "pointer": "/references/5/carrier_counts/0",
+          "equals": 2
+        }
       ]
     },
     {
@@ -203,7 +200,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 156893.49510705008,
           "tolerance": 0.005
         }
@@ -225,8 +222,7 @@
             "height": 20
           }
         ]
-      },
-      "render": false
+      }
     },
     {
       "tool": "extrude",
@@ -237,7 +233,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 160893.49510705008,
           "tolerance": 0.005
         }
@@ -246,7 +242,7 @@
     {
       "tool": "sketch",
       "arguments": {
-        "plane": "Boss-Extrude1 · End cap",
+        "plane": "Boss-Extrude1 \u00b7 End cap",
         "shapes": [
           {
             "shape": "circle",
@@ -259,9 +255,11 @@
           }
         ]
       },
-      "render": false,
       "checks": [
-        { "pointer": "/references/7/carrier_origin_counts/0", "contains": 2 }
+        {
+          "pointer": "/references/7/carrier_origin_counts/0",
+          "contains": 2
+        }
       ]
     },
     {
@@ -274,7 +272,7 @@
       },
       "checks": [
         {
-          "pointer": "/summary/body/volume_mm3",
+          "pointer": "/measurement/volume_mm3",
           "approx": 160814.95529071035,
           "tolerance": 0.005
         }
@@ -324,22 +322,34 @@
         "name": "Mounting plane"
       },
       "checks": [
-        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
-        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
+        {
+          "pointer": "/summary/planes/0",
+          "equals": "Mounting plane"
+        },
+        {
+          "pointer": "/summary/features/0/plane",
+          "equals": "Mounting plane"
+        }
       ]
     },
     {
       "tool": "undo",
       "arguments": {},
       "checks": [
-        { "pointer": "/summary/planes/0", "equals": "Top plane" }
+        {
+          "pointer": "/summary/planes/0",
+          "equals": "Top plane"
+        }
       ]
     },
     {
       "tool": "redo",
       "arguments": {},
       "checks": [
-        { "pointer": "/summary/planes/0", "equals": "Mounting plane" }
+        {
+          "pointer": "/summary/planes/0",
+          "equals": "Mounting plane"
+        }
       ]
     },
     {
@@ -349,7 +359,10 @@
         "suppressed": true
       },
       "checks": [
-        { "pointer": "/references/5/carrier_counts/0", "equals": 1 }
+        {
+          "pointer": "/references/5/carrier_counts/0",
+          "equals": 1
+        }
       ]
     },
     {
@@ -359,7 +372,10 @@
         "suppressed": false
       },
       "checks": [
-        { "pointer": "/references/5/carrier_counts/0", "equals": 2 }
+        {
+          "pointer": "/references/5/carrier_counts/0",
+          "equals": 2
+        }
       ]
     },
     {
@@ -382,8 +398,14 @@
         "path": "{bundle}/survival.dwprt"
       },
       "checks": [
-        { "pointer": "/summary/planes/0", "equals": "Mounting plane" },
-        { "pointer": "/summary/features/0/plane", "equals": "Mounting plane" }
+        {
+          "pointer": "/summary/planes/0",
+          "equals": "Mounting plane"
+        },
+        {
+          "pointer": "/summary/features/0/plane",
+          "equals": "Mounting plane"
+        }
       ]
     },
     {
@@ -391,12 +413,22 @@
       "arguments": {
         "plane": "Mounting plane",
         "shapes": [
-          { "shape": "circle", "center": [20, 20, 0], "diameter": 2 }
+          {
+            "shape": "circle",
+            "center": [
+              20,
+              20,
+              0
+            ],
+            "diameter": 2
+          }
         ]
       },
-      "render": false,
       "checks": [
-        { "pointer": "/summary/features/16/plane", "equals": "Mounting plane" }
+        {
+          "pointer": "/summary/features/16/plane",
+          "equals": "Mounting plane"
+        }
       ]
     },
     {

@@ -812,16 +812,14 @@ fn run_marked(doc: &mut Document, lines: &[Line]) -> Result<Vec<FeatureId>, Stri
     made
 }
 
-/// Volume and area of the body the part shows.
-fn body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassProperties> {
-    doc.kernel().mass_properties(doc.display_body()?).ok()
+/// Previously requested properties; inspection must not start a measurement.
+fn cached_body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassProperties> {
+    doc.kernel().cached_mass_properties(doc.display_body()?)
 }
 
-/// An independent copy of the part on the same kernel. It shares the part's feature
-/// builds, so a dry run builds only what its lines change.
+/// An independent proposal copy sharing the part's immutable bodies and meshes.
 fn scratch_copy(doc: &Document) -> Document {
-    // The viewport quality travels with the rest of the settings.
-    Document::from_model(doc.model().fork())
+    doc.fork()
 }
 
 fn status_text(doc: &Document, id: FeatureId) -> String {
@@ -848,13 +846,14 @@ struct DryRun {
     rows: Vec<(String, String)>,
     effect: Value,
     preview: Preview,
+    builds: PreparedBuilds,
 }
 
 fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
     let mut scratch = scratch_copy(doc);
     let before: Vec<(FeatureId, String, FeatureKind, bool, bool)> =
         scratch.features.iter().map(|f| (f.id, f.name.clone(), f.kind.clone(), f.suppressed, broken(f))).collect();
-    let volume_before = body_mass(&scratch).map(|m| m.volume).unwrap_or(0.0);
+    let volume_before = cached_body_mass(&scratch).map(|m| m.volume);
     run_marked(&mut scratch, lines)?;
     // A proposal may not break what built before it, nor add something broken.
     let failing: Vec<String> = scratch
@@ -875,7 +874,7 @@ fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
         .map(|f| f.name.clone())
         .collect();
     let removed: Vec<String> = before.iter().filter(|b| scratch.feature(b.0).is_none()).map(|b| b.1.clone()).collect();
-    let volume_after = body_mass(&scratch).map(|m| m.volume).unwrap_or(0.0);
+    let volume_after = cached_body_mass(&scratch).map(|m| m.volume);
     let mut rows: Vec<(String, String)> = lines.iter().map(Line::describe).collect();
     let mut effect = Vec::new();
     if !added.is_empty() {
@@ -888,7 +887,9 @@ fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
         effect.push(format!("{} removed", removed.join(", ")));
     }
     rows.push(("Effect".into(), effect.join(", ")));
-    rows.push(("Volume".into(), format!("{} → {} mm³", fmt_mm(volume_before.round()), fmt_mm(volume_after.round()))));
+    if let (Some(before), Some(after)) = (volume_before, volume_after) {
+        rows.push(("Volume".into(), format!("{} → {} mm³", fmt_mm(before.round()), fmt_mm(after.round()))));
+    }
     let result = scratch.display_body().and_then(|b| scratch.meshes.get(&b).cloned());
     Ok(DryRun {
         rows,
@@ -896,10 +897,11 @@ fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
             "features_added": added,
             "features_changed": changed,
             "features_removed": removed,
-            "volume_before_mm3": round(volume_before),
-            "volume_after_mm3": round(volume_after),
+            "volume_before_mm3": volume_before.map(round),
+            "volume_after_mm3": volume_after.map(round),
         }),
         preview: Preview { result, tool: None, removes: false },
+        builds: PreparedBuilds(std::sync::Arc::new(scratch.into_model())),
     })
 }
 
@@ -928,6 +930,15 @@ pub enum ProposalStatus {
     Discarded,
 }
 
+#[derive(Clone)]
+struct PreparedBuilds(std::sync::Arc<soliddraft_model::Document>);
+
+impl std::fmt::Debug for PreparedBuilds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedBuilds").field("features", &self.0.features().len()).finish_non_exhaustive()
+    }
+}
+
 /// A proposed change.
 #[derive(Clone, Debug)]
 pub struct Proposal {
@@ -945,6 +956,7 @@ pub struct Proposal {
     pub preview: Preview,
     /// Where it stands.
     pub status: ProposalStatus,
+    builds: Option<PreparedBuilds>,
 }
 
 impl Proposal {
@@ -1022,6 +1034,7 @@ impl ProposalBook {
             origin,
             rows: run.rows,
             preview: run.preview,
+            builds: Some(run.builds),
             status: ProposalStatus::Pending,
         });
         Ok((id, run.effect))
@@ -1037,6 +1050,9 @@ impl ProposalBook {
             ProposalStatus::Applied { .. } => return Err(format!("{} is already applied", p.id)),
             ProposalStatus::Undone => return Err(format!("{} was applied and undone; propose it again", p.id)),
             ProposalStatus::Discarded => return Err(format!("{} was discarded", p.id)),
+        }
+        if let Some(builds) = &p.builds {
+            doc.reuse_builds_from(&builds.0);
         }
         let depth = doc.undo_depth();
         let lines = p.lines.clone();
@@ -1058,6 +1074,7 @@ impl ProposalBook {
             doc.selection = Some(Selection::Feature(*last));
         }
         self.proposals[i].status = ProposalStatus::Applied { label, depth: doc.undo_depth(), made: made.clone() };
+        self.proposals[i].builds = None;
         Ok(made)
     }
 
@@ -1085,6 +1102,7 @@ impl ProposalBook {
             return Err(format!("{} is not pending", self.proposals[i].id));
         }
         self.proposals[i].status = ProposalStatus::Discarded;
+        self.proposals[i].builds = None;
         Ok(())
     }
 }
@@ -1305,7 +1323,7 @@ impl CommandTools<'_> {
     pub fn summary(&self) -> Value {
         let doc = &*self.doc;
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
-        let mass = body_mass(doc);
+        let mass = cached_body_mass(doc);
         json!({
             "part": doc.name,
             "units": "mm",
@@ -1357,6 +1375,18 @@ impl CommandTools<'_> {
             });
         }
         Ok(v)
+    }
+
+    fn mass_properties(&self, name: &str) -> Result<Value, String> {
+        let doc = &*self.doc;
+        let id = feature_by_name(doc, name)?;
+        let mass = doc.mass_properties(id).ok_or_else(|| format!("`{name}` has no measurable body"))?;
+        Ok(json!({
+            "feature": name,
+            "volume_mm3": round(mass.volume),
+            "area_mm2": round(mass.area),
+            "centre_of_mass": kvec(mass.centroid),
+        }))
     }
 
     fn measure(&self, a: &str, b: &str) -> Result<Value, String> {
@@ -1479,6 +1509,7 @@ impl ToolHost for CommandTools<'_> {
             })(),
             "model_summary" => Ok(self.summary()),
             "feature" => self.feature(input["name"].as_str().unwrap_or_default()),
+            "mass_properties" => self.mass_properties(input["name"].as_str().unwrap_or_default()),
             "selection" => Ok(json!({
                 "selection": self.doc.selection.map(|s| selection_json(self.doc, s)).unwrap_or(Value::Null)
             })),
@@ -1662,7 +1693,7 @@ mod tests {
             "{:?}",
             doc.features.iter().map(|f| (&f.name, &f.status)).collect::<Vec<_>>()
         );
-        let v = body_mass(&doc).unwrap().volume;
+        let v = doc.kernel().mass_properties(doc.display_body().unwrap()).unwrap().volume;
         let pi = std::f64::consts::PI;
         let expected = 120.0 * 90.0 * 10.0 + 120.0 * 10.0 * 50.0 + pi * 144.0 * 24.0 - pi * 36.0 * 34.0;
         assert!((v - expected).abs() < 50.0, "volume {v}, expected {expected}");
@@ -1674,6 +1705,7 @@ mod tests {
         let mut book = ProposalBook::default();
         let before = doc.features.len();
         let depth = doc.undo_depth();
+        let volume_before = doc.kernel().mass_properties(doc.display_body().unwrap()).unwrap().volume;
         let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
         let input = json!({
             "summary": "Four Ø9 holes on 90 × 44",
@@ -1691,14 +1723,14 @@ mod tests {
         assert!(!out.is_error, "{}", out.content);
         let v: Value = serde_json::from_str(&out.content).unwrap();
         assert_eq!(v["effect"]["features_added"], json!(["Sketch5", "Cut-Extrude2"]));
-        let removed =
-            v["effect"]["volume_before_mm3"].as_f64().unwrap() - v["effect"]["volume_after_mm3"].as_f64().unwrap();
-        assert!((removed - 4.0 * std::f64::consts::PI * 4.5 * 4.5 * 10.0).abs() < 5.0, "removed {removed}");
         assert_eq!(tools.doc.features.len(), before, "proposing changes nothing");
         assert!(tools.book.get("P1").unwrap().preview.result.is_some());
 
         assert!(call_checked(&mut tools, "apply", json!({ "proposal_id": "P1" }), &assistant()).is_error);
         tools.book.apply(tools.doc, "P1").unwrap();
+        let volume_after = tools.doc.kernel().mass_properties(tools.doc.display_body().unwrap()).unwrap().volume;
+        let removed = volume_before - volume_after;
+        assert!((removed - 4.0 * std::f64::consts::PI * 4.5 * 4.5 * 10.0).abs() < 5.0, "removed {removed}");
         assert_eq!(tools.doc.features.len(), before + 2);
         assert_eq!(tools.doc.undo_depth(), depth + 1, "one undo step");
         assert!(tools.doc.features.iter().rev().take(2).all(|f| f.via_assistant));
@@ -1760,7 +1792,9 @@ mod tests {
 
     #[test]
     fn mcp_verbs_run_directly_and_undo() {
-        let mut doc = crate::new_document();
+        use soliddraft_kernel_api::counting::{Counting, Work};
+        let kernel = std::sync::Arc::new(Counting::new(crate::kernel()));
+        let mut doc = Document::new("Part1", kernel.clone());
         let mut book = ProposalBook::default();
         let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
         let mcp = Caller::Mcp { client: "test".into() };
@@ -1771,8 +1805,12 @@ mod tests {
             &mcp,
         );
         assert!(!out.is_error, "{}", out.content);
+        kernel.take();
         let out = call_checked(&mut tools, "extrude", json!({ "sketch": "Sketch1", "depth": 10, "flip": false }), &mcp);
         assert!(!out.is_error, "{}", out.content);
+        let operations = kernel.take().into_iter().filter(|w| matches!(w, Work::Operation(_))).count();
+        assert_eq!(operations, 2, "the dry run's profile and extrusion must not be built again on apply");
+        let body = tools.doc.display_body();
         let m = call_checked(
             &mut tools,
             "measure",
@@ -1785,5 +1823,19 @@ mod tests {
         assert_eq!(tools.doc.features.len(), 1);
         assert!(!call_checked(&mut tools, "redo", json!({}), &mcp).is_error);
         assert_eq!(tools.doc.features.len(), 2);
+        assert_eq!(tools.doc.display_body(), body);
+        assert!(kernel.take().iter().all(|w| !matches!(w, Work::Operation(_))), "history rebuilt the prepared body");
+
+        let mesh = tools.doc.meshes[&body.unwrap()].clone();
+        let out = call_checked(
+            &mut tools,
+            "sketch",
+            json!({ "plane": "top", "shapes": [{ "shape": "circle", "center": [0, 0, 0], "diameter": 5 }] }),
+            &mcp,
+        );
+        assert!(!out.is_error, "{}", out.content);
+        let preview = tools.book.proposals.last().unwrap().preview.result.as_ref().unwrap();
+        assert!(std::sync::Arc::ptr_eq(preview, &mesh), "a sketch preflight regenerated the solid's display buffers");
+        assert!(std::sync::Arc::ptr_eq(&tools.doc.meshes[&body.unwrap()], &mesh));
     }
 }

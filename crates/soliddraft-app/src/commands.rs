@@ -1180,13 +1180,14 @@ fn registry() -> Vec<CommandSpec> {
             "mass_properties",
             "Mass props",
             Icon::Mass,
-            "Mass properties of the selected feature show in the property panel",
+            "Calculate mass properties of the selected feature",
         )
         .on(Evaluate, "Measure", Large)
-        .run(|s| AppAction::Select(s.doc.selection))
+        .run(|_| AppAction::MeasureMassProperties)
 .agents(
-            Agents::Mcp,
-            "Volume in mm³, surface area in mm² and centre of mass of the body as it stands after the feature.",
+            Agents::Tool,
+            "Calculate volume in mm³, surface area in mm² and centre of mass after the named feature. \
+             Editing and model_summary do not calculate these quantities; they report only previously requested results.",
             tools::feature_params,
         ),
         cmd("check", "Check", Icon::Check, "Check the body for geometry faults").on(Evaluate, "Check", Large),

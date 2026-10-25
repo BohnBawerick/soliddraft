@@ -356,6 +356,34 @@ fn certified_application_display_serves_matching_requests_and_preserves_finer_me
 }
 
 #[test]
+fn alternating_display_levels_reuse_their_exact_meshes_and_edges() {
+    let k = CatallaxKernel::with_operation_log();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    let params =
+        [0.16, 0.04, 0.01, 0.002].map(|chord_height| TessellationParams { chord_height, ..Default::default() });
+    let meshes = params.map(|p| k.tessellate(body, &p).unwrap());
+    let edges = params.map(|p| k.tessellate_edges(body, &p).unwrap());
+    k.take_diagnostics().unwrap();
+
+    // Viewport levels, file display data and drawing queries alternate on one body.
+    // A return to any kept tolerance must use the same approximation without meshing.
+    for _ in 0..2 {
+        for i in 0..params.len() {
+            assert_eq!(k.tessellate(body, &params[i]).unwrap(), meshes[i]);
+            assert_eq!(k.tessellate_edges(body, &params[i]).unwrap(), edges[i]);
+        }
+    }
+    let log = k.take_diagnostics().unwrap();
+    for call in log["calls"].as_array().unwrap() {
+        assert!(
+            call["operation_log"]["operations"].as_array().unwrap().is_empty(),
+            "an unchanged body was remeshed after switching tolerances: {call}"
+        );
+    }
+    k.release(body).unwrap();
+}
+
+#[test]
 fn captured_manual_slot_question_builds_without_changing_its_geometry() {
     let question: serde_json::Value = serde_json::from_str(include_str!("fixtures/slot-native-question.json")).unwrap();
     let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();

@@ -148,6 +148,43 @@ impl BuildCache {
         built
     }
 
+    /// Imports exact builds from a fork. Sketch versions are local to each cache, so
+    /// dependencies are translated before a key is compared or inserted.
+    pub(crate) fn import(&mut self, source: &BuildCache) {
+        let mut entries: Vec<_> = source.entries.iter().collect();
+        entries.sort_unstable_by_key(|(_, entry)| entry.built.version);
+        let mut versions = HashMap::new();
+        let mut bodies: HashSet<_> = self.entries.values().filter_map(|e| e.built.owned).collect();
+        for (source_key, source_entry) in entries {
+            if matches!(source_key.definition, Definition::Unmatched(_))
+                || source_key.input.is_some_and(|body| !bodies.contains(&body))
+            {
+                continue;
+            }
+            let mut key = source_key.clone();
+            if let Some(profile) = key.profile {
+                let Some(&version) = versions.get(&profile) else { continue };
+                key.profile = Some(version);
+            }
+            if let Some(existing) = self.entries.get(&key) {
+                // Never replace a live body's owner with a separately rebuilt body.
+                if existing.built.output == source_entry.built.output {
+                    versions.insert(source_entry.built.version, existing.built.version);
+                }
+                continue;
+            }
+            let mut entry = source_entry.clone();
+            entry.built.version = self.next_version;
+            self.next_version += 1;
+            self.clock += 1;
+            entry.used = self.clock;
+            versions.insert(source_entry.built.version, entry.built.version);
+            bodies.extend(entry.built.owned);
+            self.retained += entry.bytes;
+            self.entries.insert(key, entry);
+        }
+    }
+
     /// Drops the least recently used builds outside `live` until the cache fits its
     /// budget, then every build that started from a body or sketch build no longer
     /// kept. Lets go of the bodies of what it drops. Returns how many builds it dropped.

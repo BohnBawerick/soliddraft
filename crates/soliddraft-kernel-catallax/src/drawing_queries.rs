@@ -38,7 +38,7 @@ pub(super) fn edge_curve(solid: &Solid, body: BodyId, edge: EdgeId) -> KernelRes
         .iter()
         .find_map(|(id, e)| (*e == edge).then_some(*id))
         .ok_or(KernelError::UnknownEdge { body, edge })?;
-    let model = &solid.app.built.model;
+    let model = &solid.app.checkpoint.built().model;
     let e = model.edge(id);
     let polyline =
         solid.app.display.value.edges.iter().find(|p| p.edge == id).ok_or_else(|| KernelError::QueryFailed {
@@ -68,7 +68,7 @@ pub(super) fn face_loops(solid: &Solid, body: BodyId, face: FaceId) -> KernelRes
         .iter()
         .find_map(|(id, f)| (*f == face).then_some(*id))
         .ok_or(KernelError::UnknownFace { body, face })?;
-    let model = &solid.app.built.model;
+    let model = &solid.app.checkpoint.built().model;
     let mesh = &solid.app.display.value;
     let edges: BTreeMap<_, _> = mesh.edges.iter().map(|e| (e.edge, e)).collect();
     let mut loops = Vec::new();

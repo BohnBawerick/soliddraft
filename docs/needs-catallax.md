@@ -1,6 +1,18 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `5b5477e433f89952e6d4806917fd5f273c835c3f`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+
+Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
+For a new solid, the adapter merges operand recipes, selects the longest operand that
+is a matching leading prefix, and calls `catallax_app::build_incremental`. Independent
+tool recipes are not assumed to be leading prefixes. The selected checkpoint is cloned
+outside the body arena lock, preserving earlier immutable bodies for undo, branches
+and concurrent queries. Catallax shares the immutable checkpoint build and continues
+with persistent geometry, topology and fact storage rather than copying all history.
+It validates native step definitions and numerical policy before resuming; a mismatch
+restarts evaluation rather than accepting stale geometry.
+The document's first-changed-feature cache supplies earlier bodies for parameter edits,
+so both model-feature reuse and native prefix reuse apply to the changed suffix.
 
 - Stage 1 profiles are definitions, not sheet bodies. The recipe runner now defers profiles and reports loop count, closure and tags without querying sheet topology, mass or validity. An extrusion or revolution creates and releases the backend's temporary profile handle. Direct sheet queries return `Unsupported`.
 - Stage 1 empty boolean results cannot be expressed by the existing solid/sheet `BodyKind` and mandatory centroid. The adapter returns `Unsupported` without changing the operands.

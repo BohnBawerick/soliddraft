@@ -1,14 +1,16 @@
 # Application scenarios
 
-The scenario runner drives `soliddraft mcp` over its stdio protocol, then runs
-`soliddraft view`, `soliddraft screenshot` and `soliddraft draw` as child commands.
-MCP uses the command registry and document commands the assistant and ribbon use.
-The runner needs Python 3 and the two built executables. It opens no window.
+The scenario runner drives `soliddraft mcp` over its stdio protocol and captures
+the live document through a retained offscreen viewport and Catallax SVG view.
+It runs `soliddraft draw` only for requested drawings and the pinned verifier for
+refusal replay. MCP uses the command registry and document commands the assistant
+and ribbon use. The runner needs Python 3 and the two release executables. It opens
+no window.
 
 ```sh
-cargo build -p soliddraft-cli
+cargo build --release --locked -p soliddraft-cli
 python3 ci/run-scenarios.py ci/scenarios/bracket.json \
-  --soliddraft target/debug/soliddraft \
+  --soliddraft target/release/soliddraft \
   --catallax-verify /path/to/pinned/catallax-verify \
   --out /tmp/bracket-run
 ```
@@ -63,18 +65,27 @@ Sketch arithmetic remains tolerance-based. These scenarios prove the resulting
 profiles work through Catallax's existing exact conversion, not that sketch
 intersections, offsets or rotations use rational arithmetic.
 
+`progressive.json` creates a 320 × 20 × 10 mm plate, then 30 separate sketches
+and cuts of the same 2 × 4 mm hole at (10, 10), each 12 mm deep. Each cut is undone
+and redone before the next sketch. The surface stays at ten faces after the first
+cut, so the run separates recipe length from live geometry size. Volume and cached
+history work are checked throughout. The four sketch/cut/undo/redo series must not
+develop a feature-count latency trend.
 
 ## Files and checks
 
 A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step
 has `tool` and `arguments`, using the schemas printed by `soliddraft mcp --help`.
-Optional `checks` use JSON pointers into `command.json`, with exactly one of
-`equals`, `approx`, `minimum` or `contains`. `approx` accepts an absolute
-`tolerance`, default 0.001. Missing values fail. A step can set `render: false`
-for a sketch without a body, `drawing: true` for drawing output, or `refusal`
-with an expected stable kernel code. Unexpected tool errors fail immediately.
-MCP rounds reported volumes to two decimals, so the bracket checks allow
-0.005 mm³ around the analytical volume. A step's `repair` lists the features expected
+Optional `checks` use JSON pointers into `command.json`, or `/measurement/...` for an
+explicit live-body measurement requested after the edit and display have been timed.
+Each check has exactly one of `equals`, `approx`, `minimum` or `contains`. `approx`
+accepts an absolute `tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
+for drawing output or `refusal` with an expected stable kernel code. Every step
+with a displayed solid captures the live viewport and SVG, including sketches
+and history changes. Unexpected tool errors fail immediately.
+Volume checks request full-precision results rather than triggering measurement through
+the model summary; the existing 0.005 mm³ bracket allowance is unchanged.
+A step's `repair` lists the features expected
 to raise the repair prompt; features that wait for them may report it, and every other
 feature must build. `{bundle}` in a string argument is replaced by the run's bundle
 directory, for `save` and `open`.
@@ -100,6 +111,8 @@ MCP tool call has a numbered directory under `commands/` containing:
   worker finished during the command, so scenarios do not check it.
 - `part.json` and `part.dwprt`: the application's complete feature recipe and
   saved part after the command, including undo, rejected proposals and rollback.
+  The archive omits optional display caches and thumbnails, as recovery snapshots do.
+  Collecting command evidence must not request more meshes of an unchanged body.
 - `recipe.json`, when a solid exists: the recipe that constructed the displayed
   body, for the existing view command.
 - `kernel.json`: the actual kernel calls, work counts, errors and Catallax's
@@ -107,16 +120,26 @@ MCP tool call has a numbered directory under `commands/` containing:
   marks, refusal codes and timings. Catallax currently reports local tolerances
   as null. Cached queries can have no numeric operations. Nested drawing queries
   share the outer call's log and work allowance, identified by `log_scope`; their
-  own `work` is null rather than a second charge.
+  own `work` is null rather than a second charge. `on_capture_thread` distinguishes
+  the command thread from concurrent display refinement, whose time must not be
+  added to the caller's external wait.
 - `question-*.json`: portable `catallax-question/1` inputs for kernel builds,
   including scratch builds that rejected a proposal. These contain Catallax
   recipes, not numeric body handles or paths into this machine.
-- `view.svg` and `viewport.png`, for rendered steps. The PNG comes from the
-  viewport's `ViewportRenderer`, shader and camera. The adjacent `viewport.json`
-  records the adapter and kernel calls made while reopening the saved part.
-  `view.svg.kernel.json` retains the view command's kernel calls. A drawing step
-  also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`, collected
-  by `soliddraft draw --kernel-log`.
+- `view.svg` and `viewport.png`, when a solid exists. The PNG comes from the
+  viewport's `ViewportRenderer`, shader and camera, without reopening saved input.
+  `viewport.json` records the retained GPU adapter. `display.json` identifies the
+  live document and backend; `display.kernel.json` retains the SVG/display calls.
+  A drawing step also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`,
+  collected by `soliddraft draw --kernel-log`.
+- `measurement.json` and `measurement.kernel.json`, when a check requests
+  `/measurement/volume_mm3` or another quantity. The bundle-only `scenario_measure`
+  request runs after the complete click interval, so it cannot pre-warm that display.
+  It neither advances the command sequence nor changes the part. Its own elapsed time,
+  work and unchanged 1000 ms ceiling are retained as `measurement` in the step result.
+  Any measurement still performed by an edit is charged to that edit, not subtracted.
+- `waits.json` and `timing.json`: external command/display/drawing waits, their
+  disjoint phase split, deterministic work and strict budget verdict.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 
@@ -131,7 +154,8 @@ catallax-verify replay /tmp/bracket-run/commands/0002/question-0000.json \
 ```
 
 Directories must be new. Neither MCP capture nor the runner overwrites an older
-run. Commands have a timeout, and the runner stops at the first unexpected failure.
+run. Commands have a timeout. An unexpected behavioral failure stops the run;
+latency-only failures do not, so later steps retain their measurements.
 To collect the same evidence from another agent, start
 `soliddraft mcp --bundle /tmp/new-agent-run`. `--max-work N` sets its per-call
 kernel allowance. View, drawing and screenshot logging impose no work allowance.
@@ -225,3 +249,43 @@ live-session exclusion, torn writes, path replacement and clean-close retention.
 refused, reloads the compiled application, exports or discards the saved report,
 and starts the editor after storage becomes writable. It checks retained records,
 path redaction and unrelated storage, including another retry while still full.
+
+## Latency and feature-count trends
+
+The runner's monotonic clock measures the command round trip, live viewport/SVG
+capture and any requested drawing. GPU preparation runs once outside the click
+interval. Kernel logs partition that external wait into construction, edit,
+display, measurement and refusal; nested calls are not charged twice. Concurrent
+background calls keep their own time/work record rather than inflating the caller's
+wait. Verifier replay is a survival check outside that interval.
+
+The strict command-class limits remain 100 ms for stock primitives, 500 ms for
+booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
+progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
+eleven known gaps in `ci/known-over-budget.json` record the measured times for
+reference steps 16, 17, 18, 25 and 30, and bracket steps 14, 16, 18, 19, 22 and 25.
+The records identify the local work-PC Linux runner and the calibration run;
+hosted-VM times are not substituted for that machine's baselines.
+Bracket step 16 records 1,189.068388 ms, with a 1,426.8820656 ms regression limit.
+An over-budget listed step is accepted only up to 120% of its recorded time;
+anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
+and `within_budget` stays false. An improved listed step can pass the strict
+budget without changing its baseline. Every unlisted step stays strict, and
+the feature-count trend guard is unchanged. Remaining work:
+https://github.com/BohnBawerick/soliddraft/issues/27 — faster booleans when
+rebuilding after an edit. CI prints known gaps as warnings, regressions as errors,
+and uploads every raw step record; an accepted gap is not a claim of meeting
+the original budget.
+
+An optional `trends` list selects comparable tool series with `tool` and
+`from_step`. Each sample records its current feature count. After the scenario,
+the runner fits the median pairwise slope (Theil–Sen), requiring at least ten
+samples with increasing feature counts. Fitted positive growth over the full
+feature-count range must not exceed the fixed 25 ms noise allowance. This catches
+gradual accumulation even when every individual click stays below 1,000 ms, while
+resisting isolated shared-runner stalls. The progressive scenario excludes only
+the initial empty-document sketch from its sketch trend; its click budget still
+applies. Missing timing or feature-count evidence fails closed.
+
+Timing, rebuild reports and reference-survival assertions remain in the opt-in
+command bundle, scenario runner and CI, not in the model build or normal edit path.

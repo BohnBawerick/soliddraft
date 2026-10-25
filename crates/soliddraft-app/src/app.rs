@@ -1056,6 +1056,16 @@ impl SolidDraftApp {
                 self.state.doc.selection = sel;
                 self.state.rename = None;
             }
+            AppAction::MeasureMassProperties => {
+                let feature = self.state.doc.selection.and_then(|sel| self.state.doc.selection_feature(sel));
+                if let Some(id) = feature
+                    && self.state.doc.mass_properties(id).is_some()
+                {
+                    self.state.doc.selection = Some(Selection::Feature(id));
+                } else {
+                    self.state.note("Select a solid feature with measurable properties", NoteKind::Error);
+                }
+            }
             AppAction::SketchTool(tool) => {
                 if let Some(s) = self.state.sketch.as_mut() {
                     s.set_tool(tool);

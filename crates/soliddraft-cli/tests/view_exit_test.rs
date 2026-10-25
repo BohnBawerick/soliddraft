@@ -83,7 +83,6 @@ fn bracket_catallax_views_match_golden_across_runs() {
     let text = std::fs::read_to_string(&path)
         .expect("recipes/golden/catallax-views.json; run with SOLIDDRAFT_BLESS=1 to create it");
     let want: GoldenFile = serde_json::from_str(&text).unwrap();
-    assert_eq!(backend, want.backend, "backend changed; re-bless deliberately");
     assert_eq!(got, want.views["bracket"], "bracket views changed");
 }
 

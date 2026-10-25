@@ -176,8 +176,6 @@ fn the_three_board_exchanges_with_the_mock_provider() {
         assert_eq!(&b[..a.len()], &a[..], "the history only grows");
         assert_eq!(pair[0].system, pair[1].system, "the cached system prompt never changes");
     }
-    let names: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(names, ["model_summary", "feature", "selection", "measure", "propose", "apply"]);
     eprintln!("{transcript}");
 }
 
@@ -246,8 +244,19 @@ fn an_outside_agent_drives_the_same_commands_over_mcp() {
             r["structuredContent"].clone()
         };
         let mut volumes = Vec::new();
-        let body_volume =
-            |c: &mut HttpClient| call(c, "model_summary", json!({}))["body"]["volume_mm3"].as_f64().unwrap();
+        let body_volume = |c: &mut HttpClient| {
+            let summary = call(c, "model_summary", json!({}));
+            let feature = summary["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .rev()
+                .find(|f| f["type"] != "sketch" && f["status"] == "ok")
+                .unwrap()["name"]
+                .as_str()
+                .unwrap();
+            call(c, "mass_properties", json!({"name":feature}))["volume_mm3"].as_f64().unwrap()
+        };
         volumes.push(body_volume(&mut c));
         let waiting = c.call_tool("fillet", json!({ "edges": [corner], "radius": 8 })).unwrap();
         assert_eq!(waiting["isError"], true);

@@ -42,10 +42,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use soliddraft_document::manifest::{self, Entry, LEGACY_PART_TRUTH, Manifest, Package, Section};
 use soliddraft_document::{
-    ContentHash, DocKind, EnvelopeError,
+    ContentHash, DocKind, DocumentId, EnvelopeError,
     kind::{format_major, found_tag},
 };
-use soliddraft_kernel_api::Kernel;
+use soliddraft_kernel_api::{BackendInfo, Kernel};
 
 use soliddraft_materials::Snapshots;
 use soliddraft_tessellation::{Settings, settings};
@@ -132,7 +132,36 @@ enum Units {
     Mm,
 }
 
+/// An immutable file snapshot without kernel bodies, meshes or undo history.
+/// Capturing it only copies document data; encoding and hashing can run on a worker.
+pub struct Snapshot {
+    id: DocumentId,
+    recipe: Recipe,
+    settings: Settings,
+    backend: BackendInfo,
+}
+
+impl Snapshot {
+    /// Encodes a recovery copy and returns the manifest describing those exact bytes.
+    /// Display data and thumbnails are deliberately absent.
+    pub fn encode(&self) -> Result<(Manifest, Vec<u8>), FileError> {
+        let truth = serde_json::to_value(&self.recipe)?;
+        let m = part_manifest(self.id, &self.backend, &truth, &self.settings);
+        let mut entries = vec![Entry::new(PART, (serde_json::to_string_pretty(&self.recipe)? + "\n").into_bytes())];
+        if !self.settings.is_default() {
+            entries.push(Entry::new(settings::ENTRY, self.settings.to_json().into_bytes()));
+        }
+        let bytes = manifest::write_package(&m, &entries)?;
+        Ok((m, bytes))
+    }
+}
+
 impl Document {
+    /// Copies the data a recovery file needs without serializing it or retaining builds.
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot { id: self.id, recipe: self.recipe(), settings: self.settings.clone(), backend: self.kernel.backend() }
+    }
+
     fn recipe(&self) -> Recipe {
         Recipe {
             format: FORMAT.into(),
@@ -168,20 +197,7 @@ impl Document {
     /// features' names, repair-prompt labels, provenance, material and appearances. Renaming a feature changes
     /// the semantic hash and not this one.
     pub fn geometry_hash(&self) -> ContentHash {
-        let mut truth = soliddraft_document::hash::without_format(&self.truth());
-        if let Value::Object(map) = &mut truth {
-            for key in ["name", "datum_names", "material", "appearances", "snapshots"] {
-                map.remove(key);
-            }
-            if let Some(Value::Array(features)) = map.get_mut("features") {
-                for f in features.iter_mut().filter_map(Value::as_object_mut) {
-                    f.remove("name");
-                    f.remove("via_assistant");
-                }
-            }
-        }
-        strip_labels(&mut truth);
-        ContentHash::of_entries([(PART, &truth)])
+        shape_hash(&self.truth())
     }
 
     /// The part's manifest as this version writes it.
@@ -190,14 +206,7 @@ impl Document {
     }
 
     fn manifest_for(&self, extras: &Extras<'_>) -> Manifest {
-        let backend = self.kernel.backend();
-        let mut m = Manifest::new(self.id, DocKind::Part, self.semantic_hash());
-        m.kernel = Some(format!("{} {}", backend.name, backend.version));
-        m.geometry_hash = Some(self.geometry_hash());
-        m.sections = vec![Section::required(PART)];
-        if !self.settings.is_default() {
-            m.sections.push(Section::optional(settings::ENTRY));
-        }
+        let mut m = part_manifest(self.id, &self.kernel.backend(), &self.truth(), &self.settings);
         if self.saves_display_data(extras) {
             m.sections.push(Section::optional(display::FOLDER));
         }
@@ -361,6 +370,34 @@ pub struct Extras<'a> {
     /// Leave out the display meshes whatever the settings say, for a quick copy such as
     /// autosave's recovery copy. The part opens from it with a rebuild.
     pub no_display_data: bool,
+}
+
+fn part_manifest(id: DocumentId, backend: &BackendInfo, truth: &Value, settings: &Settings) -> Manifest {
+    let mut m = Manifest::new(id, DocKind::Part, manifest::semantic_hash(DocKind::Part, truth));
+    m.kernel = Some(format!("{} {}", backend.name, backend.version));
+    m.geometry_hash = Some(shape_hash(truth));
+    m.sections = vec![Section::required(PART)];
+    if !settings.is_default() {
+        m.sections.push(Section::optional(settings::ENTRY));
+    }
+    m
+}
+
+fn shape_hash(truth: &Value) -> ContentHash {
+    let mut truth = soliddraft_document::hash::without_format(truth);
+    if let Value::Object(map) = &mut truth {
+        for key in ["name", "datum_names", "material", "appearances", "snapshots"] {
+            map.remove(key);
+        }
+        if let Some(Value::Array(features)) = map.get_mut("features") {
+            for f in features.iter_mut().filter_map(Value::as_object_mut) {
+                f.remove("name");
+                f.remove("via_assistant");
+            }
+        }
+    }
+    strip_labels(&mut truth);
+    ContentHash::of_entries([(PART, &truth)])
 }
 
 /// Removes every `label` key: the words a reference keeps for repair prompts.

@@ -170,6 +170,41 @@ fn copies_follow_saves_and_only_newer_ones_are_offered() {
 }
 
 #[test]
+fn queued_recovery_keeps_the_part_and_drawing_at_the_enqueued_revision() {
+    let root = folder("snapshot");
+    let policy = AutosavePolicy { enabled: true, interval_seconds: 3600, edits: 1 };
+    let mut session = Recovery::start(&root, policy).unwrap();
+    let mut doc = part();
+    let mut drawing = DrawingDoc::new(soliddraft_drawing::fixture::bracket_a3());
+    drawing.touch();
+    let part_revision = doc.model().semantic_hash();
+    let drawing_revision = drawing.drawing.semantic_hash().unwrap();
+    session.tick(&doc, Some(&drawing), KERNEL, Instant::now());
+
+    // Editing while the writer owns the queued snapshot must not change that copy.
+    doc.apply(block(20.0)).unwrap();
+    drawing.drawing.meta.title = "Edited after enqueue".into();
+    drawing.touch();
+    session.flush();
+    assert!(session.failures.is_empty(), "{:?}", session.failures);
+    drop(session);
+
+    let mut recovered = Recovery::start(&root, policy).unwrap();
+    let part_copy = recovered.offers.iter().find(|c| c.record.kind == DocKind::Part).unwrap().clone();
+    let (_, bytes) = recovered.restore(&part_copy.file).unwrap();
+    let back = file::open_bytes("Bracket", &bytes, soliddraft_app::kernel()).unwrap();
+    assert_eq!(back.model().semantic_hash(), part_revision);
+    assert_ne!(back.model().semantic_hash(), doc.model().semantic_hash());
+    let drawing_copy = recovered.offers.iter().find(|c| c.record.kind == DocKind::Drawing).unwrap().clone();
+    let (_, bytes) = recovered.restore(&drawing_copy.file).unwrap();
+    let back = DrawingDoc::from_bytes(&bytes).unwrap();
+    assert_eq!(back.drawing.semantic_hash().unwrap(), drawing_revision);
+    assert_ne!(back.drawing.semantic_hash().unwrap(), drawing.drawing.semantic_hash().unwrap());
+    recovered.close();
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn damaged_copies_are_reported_and_skipped_and_running_sessions_are_left_alone() {
     let root = folder("damaged");
     let policy = AutosavePolicy { enabled: true, interval_seconds: 1, edits: 1 };

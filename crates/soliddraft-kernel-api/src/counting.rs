@@ -108,6 +108,10 @@ impl Kernel for Counting {
         self.inner.mass_properties(body)
     }
 
+    fn cached_mass_properties(&self, body: BodyId) -> Option<MassProperties> {
+        self.inner.cached_mass_properties(body)
+    }
+
     fn validate(&self, body: BodyId) -> KernelResult<Validation> {
         self.inner.validate(body)
     }

@@ -21,11 +21,12 @@ impl Drop for Scope {
 pub(crate) struct Diagnostics {
     max_work: Option<u64>,
     calls: Mutex<Vec<Value>>,
+    capture_thread: std::thread::ThreadId,
 }
 
 impl Diagnostics {
     pub(crate) fn new(max_work: Option<u64>) -> Self {
-        Self { max_work, calls: Mutex::new(Vec::new()) }
+        Self { max_work, calls: Mutex::new(Vec::new()), capture_thread: std::thread::current().id() }
     }
 
     pub(crate) fn take(&self) -> Vec<Value> {
@@ -34,10 +35,12 @@ impl Diagnostics {
 
     pub(crate) fn observe<T>(&self, operation: &str, run: impl FnOnce() -> KernelResult<T>) -> KernelResult<T> {
         let start = Instant::now();
+        let on_capture_thread = std::thread::current().id() == self.capture_thread;
         if let Some(parent) = ACTIVE.with(|active| active.borrow().clone()) {
             let result = run();
             self.calls.lock().expect("diagnostics lock").push(json!({
                 "operation":operation,"log_scope":parent,"nested":true,
+                "on_capture_thread":on_capture_thread,
                 "status":if result.is_ok() {"answered"} else {"refused"},
                 "error":result.as_ref().err().map(ToString::to_string),
                 "max_work":null,"work":null,"wall_ms":start.elapsed().as_secs_f64()*1000.0,
@@ -60,6 +63,7 @@ impl Diagnostics {
         }
         self.calls.lock().expect("diagnostics lock").push(json!({
             "operation":operation, "log_scope":operation,"nested":false, "status":if result.is_ok() {"answered"} else {"refused"},
+            "on_capture_thread":on_capture_thread,
             "error":result.as_ref().err().map(ToString::to_string),
             "max_work":self.max_work, "work":work.map(|w| json!({"used":w.used,"exhausted":w.exhausted})),
             "wall_ms":start.elapsed().as_secs_f64()*1000.0,
@@ -125,5 +129,17 @@ mod tests {
         assert_eq!(calls[1]["operation_log"]["operations"][0]["operation"], "mesh");
         diagnostics.observe("next_request", || Ok(())).unwrap();
         assert_eq!(diagnostics.take()[0]["nested"], false);
+    }
+
+    #[test]
+    fn background_calls_remain_distinct_from_the_capture_thread() {
+        let diagnostics = Diagnostics::new(None);
+        std::thread::scope(|scope| {
+            scope.spawn(|| diagnostics.observe("tessellate", || Ok(()))).join().unwrap().unwrap();
+        });
+        diagnostics.observe("extrude", || Ok(())).unwrap();
+        let calls = diagnostics.take();
+        assert_eq!(calls[0]["on_capture_thread"], false);
+        assert_eq!(calls[1]["on_capture_thread"], true);
     }
 }

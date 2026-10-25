@@ -26,7 +26,7 @@ use soliddraft_drawing::{
 use soliddraft_exchange::Format as ExportFormat;
 use soliddraft_kernel_api::Point2;
 
-use crate::command_tools::{CommandTools, Surface, feature_by_name, tool_specs};
+use crate::command_tools::{CommandTools, Surface, tool_specs};
 use crate::document::{Command, Document};
 use crate::drawing::document::DrawingDoc;
 use crate::drawing::reference::LinkState;
@@ -219,7 +219,6 @@ impl AppTools<'_> {
             "export_3mf" => self.export_part(ExportFormat::ThreeMf, input),
             "export_obj" => self.export_part(ExportFormat::Obj, input),
             "roll_to_end" => self.roll_to_end(),
-            "mass_properties" => self.mass_properties(input),
             "make_drawing" => self.make_drawing(input),
             "show_drawing" => self.session().map(|_| ()).map(|()| {
                 self.state.drawing.active = true;
@@ -349,20 +348,6 @@ impl AppTools<'_> {
         }
         self.state.doc.apply(Command::Rollback(None))?;
         Ok(self.summary())
-    }
-
-    fn mass_properties(&mut self, input: &Value) -> Result<Value, String> {
-        let doc = &self.state.doc;
-        let name = input["name"].as_str().unwrap_or_default();
-        let id = feature_by_name(doc, name)?;
-        let m = doc.mass_properties(id).ok_or_else(|| format!("`{name}` has no body"))?;
-        let round = |v: f64| (v * 100.0).round() / 100.0;
-        Ok(json!({
-            "feature": name,
-            "volume_mm3": round(m.volume),
-            "area_mm2": round(m.area),
-            "centre_of_mass": [round(m.centroid.x), round(m.centroid.y), round(m.centroid.z)],
-        }))
     }
 
     /// Makes a drawing as the New drawing PropertyManager does with its defaults.

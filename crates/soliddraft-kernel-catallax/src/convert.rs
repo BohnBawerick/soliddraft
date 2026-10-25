@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use catallax_app::ApplicationBody;
+use catallax_app::IncrementalApplicationBody;
 use catallax_recipe::{Origin, Role};
 use catallax_shapes::{CurveKind as CatCurve, Surface, SurfaceKind as CatSurface};
 use catallax_topology::{Model, Sense};
@@ -48,8 +48,13 @@ fn edge_key(model: &Model, edge: CatEdge) -> String {
 }
 
 impl Ids {
-    pub fn new(app: &ApplicationBody, parents: &[&Ids], tags: &BTreeMap<String, OpTag>, next: &mut u64) -> Self {
-        let model = &app.built.model;
+    pub fn new(
+        app: &IncrementalApplicationBody,
+        parents: &[&Ids],
+        tags: &BTreeMap<String, OpTag>,
+        next: &mut u64,
+    ) -> Self {
+        let model = &app.checkpoint.built().model;
         let mut ids = Self {
             faces: BTreeMap::new(),
             edges: BTreeMap::new(),
@@ -226,8 +231,8 @@ fn bounds(points: impl Iterator<Item = Vec3>, padding: f64) -> Aabb {
     if any { Aabb { min: min - pad, max: max + pad } } else { Aabb { min: Vec3::ZERO, max: Vec3::ZERO } }
 }
 
-pub(super) fn topology(app: &ApplicationBody, ids: &Ids) -> KernelResult<Topology> {
-    let model = &app.built.model;
+pub(super) fn topology(app: &IncrementalApplicationBody, ids: &Ids) -> KernelResult<Topology> {
+    let model = &app.checkpoint.built().model;
     let mesh = &app.display.value;
     let chord = catallax_mesh::MeshOptions::default().chord_tolerance.to_f64_nearest();
     let mut faces = Vec::new();

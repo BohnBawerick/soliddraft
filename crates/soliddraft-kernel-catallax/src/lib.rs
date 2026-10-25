@@ -10,17 +10,17 @@ mod drawing_queries;
 mod frames;
 mod step;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-use catallax_app::{ApplicationBody, Error};
+use catallax_app::{Error, IncrementalApplicationBody};
 use catallax_mesh::{MeshOptions, mesh_body};
 use catallax_numbers::{Decider, Rational};
 use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b";
+pub const CATALLAX_REVISION: &str = "5b5477e433f89952e6d4806917fd5f273c835c3f";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -45,31 +45,54 @@ struct Stored {
 }
 
 struct Solid {
-    app: ApplicationBody,
+    app: IncrementalApplicationBody,
     ids: convert::Ids,
-    display: Mutex<Option<(Rational, Arc<catallax_mesh::Mesh>)>>,
+    display: Mutex<VecDeque<Arc<CachedMesh>>>,
     topology: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
 }
 
+struct CachedMesh {
+    chord: Rational,
+    value: Mutex<Option<Arc<catallax_mesh::Mesh>>>,
+}
+
 impl Solid {
     fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
-        let mut cached =
-            self.display.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
-        if let Some((chord, mesh)) = cached.as_ref()
-            && chord == &options.chord_tolerance
-        {
+        let entry = {
+            let mut cached = self
+                .display
+                .lock()
+                .map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
+            let entry = if let Some(i) = cached.iter().position(|entry| entry.chord == options.chord_tolerance) {
+                cached.remove(i).expect("the cached tolerance exists")
+            } else {
+                // Three viewport levels, the certified mesh and a drawing tolerance coexist.
+                const MESHES: usize = 5;
+                if cached.len() == MESHES {
+                    cached.pop_front();
+                }
+                Arc::new(CachedMesh { chord: options.chord_tolerance.clone(), value: Mutex::new(None) })
+            };
+            cached.push_back(entry.clone());
+            entry
+        };
+        // Only requests for this tolerance wait for its build. Background refinement
+        // must not lock out a viewport or file query for an already available mesh.
+        let mut value =
+            entry.value.lock().map_err(|_| KernelError::Unavailable("Catallax mesh cache lock poisoned".into()))?;
+        if let Some(mesh) = value.as_ref() {
             return Ok(mesh.clone());
         }
         let mesh = Arc::new(if options.chord_tolerance == MeshOptions::default().chord_tolerance {
             self.app.display.value.clone()
         } else {
-            numerical(query, |dec| mesh_body(&self.app.built.model, self.app.built.result, options, dec))
+            let built = self.app.checkpoint.built();
+            numerical(query, |dec| mesh_body(&built.model, built.result, options, dec))
                 .map_err(|e| query_error(query, e))?
                 .value
         });
-        // Keep one tolerance per immutable body so triangles and edges share the same mesh.
-        *cached = Some((options.chord_tolerance.clone(), mesh.clone()));
+        *value = Some(mesh.clone());
         Ok(mesh)
     }
 }
@@ -160,11 +183,24 @@ impl CatallaxKernel {
         let result = format!("op_{seq}");
         step["id"] = result.clone().into();
         steps.insert(seq, step);
+        // A tool's independent recipe need not be a leading prefix of the merged
+        // recipe. Retain the longest matching operand, not merely the largest one.
+        let mut prefix: Option<&Stored> = None;
+        for body in inputs {
+            let stored = state.get(*body)?;
+            if stored.solid.is_some()
+                && prefix.is_none_or(|best| stored.steps.len() > best.steps.len())
+                && stored.steps.iter().eq(steps.iter().take(stored.steps.len()))
+            {
+                prefix = Some(stored);
+            }
+        }
+        let prefix = prefix.and_then(|stored| stored.solid.clone());
         let input = json!({"format":"soliddraft-recipe/1", "name":"SolidDraft", "steps": steps.values().collect::<Vec<_>>(), "result": result});
         let capture = state.capture;
         drop(state);
         let mut questions = Vec::new();
-        let built = build(&input, op, capture.then_some(&mut questions));
+        let built = build(&input, op, prefix.as_ref().map(|solid| &solid.app), capture.then_some(&mut questions));
         let mut state = self.state()?;
         // A refused build keeps its question too.
         state.questions.extend(questions);
@@ -178,14 +214,18 @@ impl CatallaxKernel {
                 Some((id.as_str().to_owned(), tag))
             })
             .collect();
-        if app.built.model.body(app.built.result).kind == catallax_topology::BodyKind::Empty {
+        let exact = app.checkpoint.built();
+        if exact.model.body(exact.result).kind == catallax_topology::BodyKind::Empty {
             return Err(gap("empty results have no BodyKind or centroid in the existing application interface", "1"));
         }
         let ids = convert::Ids::new(&app, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>(), &tags, &mut state.next);
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
-        let display = (MeshOptions::default().chord_tolerance, Arc::new(app.display.value.clone()));
+        let display = Arc::new(CachedMesh {
+            chord: MeshOptions::default().chord_tolerance,
+            value: Mutex::new(Some(Arc::new(app.display.value.clone()))),
+        });
         state.bodies.insert(
             body,
             Stored {
@@ -195,7 +235,7 @@ impl CatallaxKernel {
                 solid: Some(Arc::new(Solid {
                     app,
                     ids,
-                    display: Mutex::new(Some(display)),
+                    display: Mutex::new(VecDeque::from([display])),
                     topology: OnceLock::new(),
                     mass: OnceLock::new(),
                 })),
@@ -223,8 +263,9 @@ fn gap(what: &str, stage: &str) -> KernelError {
 fn build(
     input: &Value,
     op: OpKind,
+    prefix: Option<&IncrementalApplicationBody>,
     questions: Option<&mut Vec<Value>>,
-) -> KernelResult<(ApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
     let mut converted =
         catallax_app::soliddraft::convert(&input.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
     let sources = input["steps"].as_array().expect("generated recipe steps");
@@ -265,8 +306,12 @@ fn build(
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
         questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
     }
-    let app = catallax_app::build(&converted.recipe, &MeshOptions::default(), &mut Decider::default())
-        .map_err(|e| build_error(op, e))?;
+    // Earlier bodies remain immutable for undo, branches and concurrent queries.
+    // Clone only the selected checkpoint, after releasing the body arena lock.
+    let prefix = prefix.map(|app| app.checkpoint.clone());
+    let app =
+        catallax_app::build_incremental(&converted.recipe, prefix, &MeshOptions::default(), &mut Decider::default())
+            .map_err(|e| build_error(op, e))?;
     Ok((app, converted.steps))
 }
 
@@ -310,11 +355,12 @@ fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
     }
     let mut options = MeshOptions::default();
     if params.chord_height > 0.0 {
-        options.chord_tolerance =
+        let requested =
             Rational::parse(&params.chord_height.to_string()).map_err(|e| KernelError::InvalidInput(e.to_string()))?;
+        // Only an explicit bound needs room for the trait's f32 positions.
+        // Zero disables this control; keep the already-certified native default.
+        options.chord_tolerance = &requested / &Rational::from_i64(2);
     }
-    // Reserve half the requested chord bound for the trait's f32 display positions.
-    options.chord_tolerance = &options.chord_tolerance / &Rational::from_i64(2);
     Ok(options)
 }
 
@@ -432,7 +478,7 @@ impl Kernel for CatallaxKernel {
             }) {
                 return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
             }
-            Ok(convert::mesh(&solid.app.built.model, &mesh, &solid.ids, params))
+            Ok(convert::mesh(&solid.app.checkpoint.built().model, &mesh, &solid.ids, params))
         })
     }
 
@@ -457,10 +503,11 @@ impl Kernel for CatallaxKernel {
             solid
                 .mass
                 .get_or_init(|| {
+                    let built = solid.app.checkpoint.built();
                     let mass = numerical("mass_properties", |dec| {
                         catallax_measure::mass_properties(
-                            &solid.app.built.model,
-                            solid.app.built.result,
+                            &built.model,
+                            built.result,
                             &catallax_measure::Accuracy::default(),
                             dec,
                         )
@@ -481,10 +528,15 @@ impl Kernel for CatallaxKernel {
         })
     }
 
+    fn cached_mass_properties(&self, body: BodyId) -> Option<MassProperties> {
+        self.solid(body).ok()?.mass.get()?.as_ref().ok().copied()
+    }
+
     fn validate(&self, body: BodyId) -> KernelResult<Validation> {
         self.observe("validate", || {
             let solid = self.solid(body)?;
-            let faults = solid.app.built.model.check(solid.app.built.result);
+            let built = solid.app.checkpoint.built();
+            let faults = built.model.check(built.result);
             Ok(Validation {
                 valid: faults.is_empty(),
                 kind: BodyKind::Solid,
@@ -529,13 +581,18 @@ impl Kernel for CatallaxKernel {
         let mut bytes = recipe + history;
         if let Some(solid) = &stored.solid {
             let display = &solid.app.display.value;
-            let brep = solid.app.built.bodies.len().max(1) * (display.faces.len() * FACE + display.edges.len() * EDGE);
+            let brep = solid.app.checkpoint.built().bodies.len().max(1)
+                * (display.faces.len() * FACE + display.edges.len() * EDGE);
             bytes += brep + mesh_bytes(display);
             // The display cache holds its own copy, even of the certified mesh.
-            if let Ok(cached) = solid.display.lock()
-                && let Some((_, mesh)) = cached.as_ref()
-            {
-                bytes += mesh_bytes(mesh);
+            if let Ok(cached) = solid.display.lock() {
+                for entry in cached.iter() {
+                    if let Ok(value) = entry.value.try_lock()
+                        && let Some(mesh) = value.as_ref()
+                    {
+                        bytes += mesh_bytes(mesh);
+                    }
+                }
             }
         }
         Ok(bytes as u64)
@@ -564,5 +621,54 @@ impl Kernel for CatallaxKernel {
 
     fn export_step(&self, body: BodyId, options: &StepOptions) -> KernelResult<StepExport> {
         self.observe("export_step", || step::export(&self.solid(body)?.app, options))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_prefixes_branch_and_refuse_without_replaying_or_changing_earlier_bodies() {
+        let kernel = CatallaxKernel::with_operation_log();
+        let base = contract::block(&kernel);
+        let base_recipe = kernel.body_recipe(base).unwrap();
+        let options = StepOptions::default();
+        let original = kernel.export_step(base, &options).unwrap();
+        for x in [-8.0, 8.0] {
+            let profile = kernel
+                .create_body_from_profile(
+                    &OpTag::new("tool_sketch"),
+                    &Profile::rectangle(Plane::XY.with_origin(Vec3::new(x, 0.0, 0.0)), Point2::new(0.0, 0.0), 4.0, 6.0),
+                )
+                .unwrap();
+            let tool = kernel
+                .extrude(&OpTag::new("tool"), profile.body, &Extrude { distance: 10.0, direction: None })
+                .unwrap()
+                .body;
+            kernel.take_diagnostics().unwrap();
+            let cut = kernel.boolean(&OpTag::new("cut"), BooleanOp::Subtract, base, tool).unwrap().body;
+            let evidence = kernel.take_diagnostics().unwrap();
+            let recipe = kernel.body_recipe(cut).unwrap();
+            let (replayed, steps) = build(&recipe, OpKind::Subtract, None, None).unwrap();
+            let operations = evidence["calls"][0]["operation_log"]["operations"].as_array().unwrap();
+            let result = steps[recipe["result"].as_str().unwrap()].as_str();
+            assert!(operations.iter().any(|op| op["id"] == result), "{evidence}");
+            for step in base_recipe["steps"].as_array().unwrap() {
+                let old = steps[step["id"].as_str().unwrap()].as_str();
+                assert!(!operations.iter().any(|op| op["id"] == old), "replayed {old}: {evidence}");
+            }
+            let solid = kernel.solid(cut).unwrap();
+            assert_eq!(solid.app.names, replayed.names);
+            assert_eq!(kernel.export_step(cut, &options).unwrap(), step::export(&replayed, &options).unwrap());
+            assert!((kernel.mass_properties(cut).unwrap().volume - 11760.0).abs() < 1e-6);
+
+            // The later-created target is not the leading operand. This refusal
+            // must neither consume nor mutate the earlier body's checkpoint.
+            let error = kernel.boolean(&OpTag::new("empty"), BooleanOp::Subtract, tool, base).unwrap_err();
+            assert!(matches!(error, KernelError::Unsupported(_)), "{error}");
+            assert_eq!(kernel.export_step(base, &options).unwrap(), original);
+        }
+        assert_eq!(kernel.mass_properties(base).unwrap().volume, 12000.0);
     }
 }

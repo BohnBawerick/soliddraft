@@ -108,8 +108,13 @@ current tree are always kept; beyond the budget the least recently used others g
 every build that started from a body they held.
 
 `Document::fork` copies a part and shares its kept builds, so the copy builds only what
-changes in it. An assistant proposal's dry run uses a fork. A body is released when the
-last document holding it lets go.
+changes in it. An assistant proposal's dry run uses a fork and keeps its new builds
+until Apply or Discard. Apply imports those builds by exact inputs instead of building
+the same geometry again. Import translates the fork's local sketch-build versions;
+an intervening edit cannot make an unrelated cached sketch match. Undo still records
+the actual commands, and a body is released when the last cache holding it lets go.
+The application's proposal copy also shares the current display buffers and cached
+LOD meshes, so a sketch-only dry run does not convert or pack the solid's mesh again.
 
 Tests count the work, not the rebuild. `soliddraft_kernel_api::counting::Counting`,
 behind the `counting` feature, wraps a backend and writes down every operation's tag

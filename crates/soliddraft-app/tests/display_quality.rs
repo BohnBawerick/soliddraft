@@ -169,3 +169,40 @@ fn an_unchanged_body_keeps_its_mesh_and_undo_shows_the_earlier_one_again() {
     assert_eq!(kernel.take(), [], "redo built or tessellated something");
     assert!(!doc.faces.is_empty() && doc.pick_of_face(doc.faces[0].id).is_some(), "the kept picks are in place");
 }
+
+#[test]
+fn datum_sketch_edits_keep_the_solid_mesh_picks_and_gpu_upload() {
+    use soliddraft_app::document::{Selection, SketchPlane};
+    use std::sync::Arc;
+
+    let mut doc = disc();
+    settle(&mut doc, &Projection::Orthographic { pixels_per_mm: 1.0 });
+    let body = doc.display_body().unwrap();
+    let mesh = doc.meshes[&body].clone();
+    let faces = doc.faces.clone();
+    let edges = doc.edges.clone();
+    let selected = faces[0].id;
+    let pick = doc.pick_of_face(selected);
+    doc.selection = Some(Selection::Face(selected));
+    let upload = doc.mesh_version;
+    let sketch =
+        doc.apply(Command::AddSketch { plane: SketchPlane::Reference { plane: PlaneKind::Top } }).unwrap().unwrap();
+    let unchanged = |doc: &Document| {
+        assert_eq!(doc.display_body(), Some(body));
+        assert!(Arc::ptr_eq(&doc.meshes[&body], &mesh), "a sketch replaced the solid's display mesh");
+        assert_eq!(doc.faces, faces);
+        assert_eq!(doc.edges, edges);
+        assert_eq!(doc.pick_of_face(selected), pick);
+        assert_eq!(doc.selection, Some(Selection::Face(selected)));
+        assert_eq!(doc.mesh_version, upload, "a sketch invalidated the solid's GPU upload");
+    };
+    unchanged(&doc);
+    let mut geometry = doc.sketch_of(sketch).unwrap().sketch.clone();
+    geometry.circle_at(soliddraft_sketch::P2::new(0.0, 0.0), 5.0).unwrap();
+    doc.apply(Command::EditSketch { id: sketch, sketch: geometry }).unwrap();
+    unchanged(&doc);
+    doc.undo().unwrap();
+    unchanged(&doc);
+    doc.redo().unwrap();
+    unchanged(&doc);
+}
