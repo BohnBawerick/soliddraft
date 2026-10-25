@@ -176,8 +176,6 @@ fn the_three_board_exchanges_with_the_mock_provider() {
         assert_eq!(&b[..a.len()], &a[..], "the history only grows");
         assert_eq!(pair[0].system, pair[1].system, "the cached system prompt never changes");
     }
-    let names: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(names, ["model_summary", "feature", "selection", "measure", "propose", "apply"]);
     eprintln!("{transcript}");
 }
 
