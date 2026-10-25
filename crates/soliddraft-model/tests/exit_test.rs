@@ -162,8 +162,9 @@ fn build_bracket(doc: &mut Document) -> Bracket {
         .unwrap();
     assert!(
         corner.midpoint.distance(Vec3::new(0.0, -35.0, 10.0)) < 1e-6,
-        "inside corner edge at {:?}",
-        corner.midpoint
+        "inside corner edge at {:?}\n{}",
+        corner.midpoint,
+        report(doc)
     );
     let edge = doc.edge_ref(corner.id).expect("naming the inside corner");
     let fillet = add(doc, "Inside fillet", FeatureKind::Fillet(BlendFeature { edges: vec![edge], size: 8.0 }));
