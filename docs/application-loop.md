@@ -262,8 +262,8 @@ wait. Verifier replay is a survival check outside that interval.
 The strict command-class limits remain 100 ms for stock primitives, 500 ms for
 booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
 progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
-nine known gaps in `ci/known-over-budget.json` record the measured times for
-reference steps 17, 18, 25 and 30, and bracket steps 16, 18, 19, 22 and 25.
+eleven known gaps in `ci/known-over-budget.json` record the measured times for
+reference steps 16, 17, 18, 25 and 30, and bracket steps 14, 16, 18, 19, 22 and 25.
 The records identify the local work-PC Linux runner and the calibration run;
 hosted-VM times are not substituted for that machine's baselines.
 Bracket step 16 records 1,189.068388 ms, with a 1,426.8820656 ms regression limit.

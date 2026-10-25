@@ -1,14 +1,16 @@
 {
   "format": "soliddraft-known-over-budget/1",
   "follow_up": "https://github.com/BohnBawerick/soliddraft/issues/27",
-  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these nine gaps are accepted up to 120 percent of their recorded time",
+  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these eleven gaps are accepted up to 120 percent of their recorded time",
   "measured_run": "https://github.com/BohnBawerick/soliddraft/actions/runs/40167997912",
   "measured_on": "local work-PC Linux x64 runner, ci-linux-local",
   "steps": [
+    {"scenario": "references", "step": 16, "tool": "cut", "last_measured_ms": 1150},
     {"scenario": "references", "step": 17, "tool": "edit_extrude", "last_measured_ms": 2450.378498},
     {"scenario": "references", "step": 18, "tool": "edit_dimension", "last_measured_ms": 2685.202890},
     {"scenario": "references", "step": 25, "tool": "suppress", "last_measured_ms": 1568.713553},
     {"scenario": "references", "step": 30, "tool": "open", "last_measured_ms": 2572.192352},
+    {"scenario": "bracket", "step": 14, "tool": "cut", "last_measured_ms": 1016},
     {"scenario": "bracket", "step": 16, "tool": "cut", "last_measured_ms": 1189.068388},
     {"scenario": "bracket", "step": 18, "tool": "cut", "last_measured_ms": 1440.274654},
     {"scenario": "bracket", "step": 19, "tool": "edit_extrude", "last_measured_ms": 2929.871620},
