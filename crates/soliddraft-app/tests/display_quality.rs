@@ -206,3 +206,35 @@ fn datum_sketch_edits_keep_the_solid_mesh_picks_and_gpu_upload() {
     doc.redo().unwrap();
     unchanged(&doc);
 }
+
+#[test]
+fn a_late_answer_for_another_quality_does_not_replace_the_cached_levels() {
+    let mut doc = disc();
+    let close = Projection::Orthographic { pixels_per_mm: 10.0 };
+    let far = Projection::Orthographic { pixels_per_mm: 0.1 };
+    let auto = doc.model().settings().viewport;
+
+    // Every level of the current quality is cached, and the fine one is shown.
+    settle(&mut doc, &close);
+    doc.update_display(&close, 0.016);
+    assert_eq!(doc.display_quality().shown(), Some(Level::Fine));
+    let fine = triangles(&doc);
+
+    // Ask for another quality, then return to the cached one before the worker's answer
+    // is taken: the frame loop only takes answers in `update_display`.
+    doc.set_viewport_quality(Quality::Slider { value: 10 }).unwrap();
+    doc.set_viewport_quality(auto).unwrap();
+    assert!(doc.display_quality().pending(), "the other quality's request is still out");
+    settle(&mut doc, &close);
+
+    // Step down to the coarse level and back up: the fine mesh comes from the cache and
+    // must still be the one made for this quality.
+    for _ in 0..9 {
+        doc.update_display(&far, 1.0);
+    }
+    assert_eq!(doc.display_quality().shown(), Some(Level::Coarse));
+    settle(&mut doc, &close);
+    doc.update_display(&close, 0.016);
+    assert_eq!(doc.display_quality().shown(), Some(Level::Fine));
+    assert_eq!(triangles(&doc), fine, "the fine level shows another quality's mesh");
+}

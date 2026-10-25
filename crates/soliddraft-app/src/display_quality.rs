@@ -35,8 +35,9 @@ pub struct DisplayQuality {
     radius: f64,
     /// The level of the shown mesh and the parameters it was made with.
     shown: Option<(Level, ParamsKey)>,
-    /// The levels the worker's latest request for the body asked for, in order.
-    asked: Vec<Level>,
+    /// The levels the worker's latest request for the body asked for, in order, with the
+    /// parameters they were asked at: the levels may change before the answer arrives.
+    asked: Vec<(Level, ParamsKey)>,
     /// Bodies shown before this one whose meshes are kept, latest last.
     recent: VecDeque<BodyId>,
 }
@@ -176,8 +177,9 @@ impl DisplayQuality {
             return;
         }
         let params: Vec<TessellationParams> = missing.iter().map(|l| *self.levels.params(*l)).collect();
-        // The worker answers in level order; remember which levels were asked for.
-        self.asked = missing;
+        // The worker answers in level order; remember which levels were asked for, and
+        // at which parameters, since the quality can change before the answer.
+        self.asked = missing.into_iter().map(|l| (l, self.levels.key(l))).collect();
         self.worker.request(body, body, &params);
     }
 
@@ -191,8 +193,8 @@ impl DisplayQuality {
             }
             match done.result {
                 Ok(meshes) => {
-                    for (level, mesh) in self.asked.clone().into_iter().zip(meshes) {
-                        self.cache.insert(body, level, self.levels.key(level), mesh);
+                    for ((level, key), mesh) in self.asked.clone().into_iter().zip(meshes) {
+                        self.cache.insert(body, level, key, mesh);
                     }
                 }
                 Err(e) => log::warn!("tessellating body {body:?}: {e}"),
