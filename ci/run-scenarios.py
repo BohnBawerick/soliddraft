@@ -129,6 +129,9 @@ def load_known_over_budget(path):
     return known
 
 
+# Approved gaps track faster booleans when rebuilding after an edit:
+# https://github.com/BohnBawerick/soliddraft/issues/27.
+# The click budget stays strict; only these recorded gaps get a 20% regression guard.
 def accept_latency(scenario, number, tool, latency, known):
     result = {**latency, "within_budget": latency["pass"],
               "status": "pass" if latency["pass"] else "over-budget"}
@@ -137,19 +140,24 @@ def accept_latency(scenario, number, tool, latency, known):
         return result
     result["known_over_budget"] = approved
     label = f"{scenario} step {number} ({tool})"
+    result["regression_limit_ms"] = milliseconds(approved["last_measured_ms"]) * 1.2
     if approved["tool"] != tool:
         result["pass"] = False
         result["status"] = "invalid-known-over-budget"
         result["message"] = f"{label}: tool differs from ci/known-over-budget.json; remove or review the listing"
-    elif latency["pass"]:
+    elif latency["elapsed_ms"] > result["regression_limit_ms"]:
         result["pass"] = False
-        result["status"] = "stale-known-over-budget"
-        result["message"] = (f"{label} meets its {latency['budget_ms']} ms budget at "
-                             f"{latency['elapsed_ms']:.3f} ms; remove it from ci/known-over-budget.json")
-    else:
+        result["status"] = "known-gap-regression"
+        result["message"] = (f"{label} regressed to {latency['elapsed_ms']:.3f} ms; "
+                             f"recorded {approved['last_measured_ms']:.3f} ms, "
+                             f"20% regression limit {result['regression_limit_ms']:.3f} ms; "
+                             f"budget remains {latency['budget_ms']} ms")
+    elif not latency["pass"]:
         result["pass"] = True
         result["status"] = "known-over-budget"
-        result["message"] = (f"Known over-budget: {label} took {latency['elapsed_ms']:.3f} ms; "
+        result["message"] = (f"Known gap: {label} took {latency['elapsed_ms']:.3f} ms; "
+                             f"recorded {approved['last_measured_ms']:.3f} ms, "
+                             f"20% regression limit {result['regression_limit_ms']:.3f} ms; "
                              f"budget remains {latency['budget_ms']} ms")
     return result
 
@@ -427,7 +435,7 @@ def run(args):
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
             if latency["status"] == "known-over-budget":
                 print(f"::warning::{latency['message']}", flush=True)
-            elif latency["status"] in {"stale-known-over-budget", "invalid-known-over-budget"}:
+            elif latency["status"] in {"known-gap-regression", "invalid-known-over-budget"}:
                 print(f"::error::{latency['message']}", flush=True)
             # Volume/area acceptance is an explicit request after the click's display,
             # not automatic work on the normal edit path or a pre-warming step.

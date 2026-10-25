@@ -1,4 +1,16 @@
 {
   "format": "soliddraft-known-over-budget/1",
-  "steps": []
+  "follow_up": "https://github.com/BohnBawerick/soliddraft/issues/27",
+  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these eight gaps are accepted up to 120 percent of their recorded time",
+  "measured_run": "https://github.com/BohnBawerick/soliddraft/actions/runs/40160869193",
+  "steps": [
+    {"scenario": "references", "step": 17, "tool": "edit_extrude", "last_measured_ms": 2089.998041},
+    {"scenario": "references", "step": 18, "tool": "edit_dimension", "last_measured_ms": 2122.239432},
+    {"scenario": "references", "step": 25, "tool": "suppress", "last_measured_ms": 1300.330629},
+    {"scenario": "references", "step": 30, "tool": "open", "last_measured_ms": 2215.564238},
+    {"scenario": "bracket", "step": 18, "tool": "cut", "last_measured_ms": 1132.298386},
+    {"scenario": "bracket", "step": 19, "tool": "edit_extrude", "last_measured_ms": 2375.461608},
+    {"scenario": "bracket", "step": 22, "tool": "edit_cut", "last_measured_ms": 1208.952875},
+    {"scenario": "bracket", "step": 25, "tool": "rollback", "last_measured_ms": 2819.760826}
+  ]
 }

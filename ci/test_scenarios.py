@@ -155,7 +155,7 @@ class Latency(unittest.TestCase):
 
 class KnownBudgets(unittest.TestCase):
     known = {("bracket", 6): {"scenario": "bracket", "step": 6, "tool": "extrude",
-                            "last_measured_ms": 2240.892348}}
+                            "last_measured_ms": 2000}}
 
     def verdict(self, elapsed, scenario="bracket", number=6, tool="extrude"):
         latency = scenarios.timing(tool, [Latency.segment(elapsed)])
@@ -170,13 +170,24 @@ class KnownBudgets(unittest.TestCase):
         self.assertFalse(self.verdict(2240, number=7)["pass"])
         self.assertFalse(self.verdict(2240, tool="cut")["pass"])
 
-    def test_listed_step_that_meets_the_budget_fails_as_stale(self):
+    def test_listed_step_still_fails_above_20_percent_regression(self):
+        boundary = self.verdict(2400)
+        self.assertTrue(boundary["pass"])
+        self.assertFalse(boundary["within_budget"])
+        self.assertEqual(boundary["budget_ms"], 1000)
+        over = self.verdict(2400.001)
+        self.assertFalse(over["pass"])
+        self.assertFalse(over["within_budget"])
+        self.assertEqual(over["status"], "known-gap-regression")
+        self.assertEqual(over["budget_ms"], 1000)
+
+    def test_listed_step_can_improve_without_changing_the_strict_budget(self):
         for elapsed in (999.999, 1000):
             with self.subTest(elapsed=elapsed):
-                stale = self.verdict(elapsed)
-                self.assertFalse(stale["pass"])
-                self.assertTrue(stale["within_budget"])
-                self.assertEqual(stale["status"], "stale-known-over-budget")
+                improved = self.verdict(elapsed)
+                self.assertTrue(improved["pass"])
+                self.assertTrue(improved["within_budget"])
+                self.assertEqual(improved["status"], "pass")
 
     def test_unlisted_step_keeps_its_strict_budget_boundary(self):
         self.assertTrue(self.verdict(1000, number=7)["pass"])

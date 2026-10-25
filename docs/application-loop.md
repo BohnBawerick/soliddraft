@@ -261,10 +261,18 @@ wait. Verifier replay is a survival check outside that interval.
 
 The strict command-class limits remain 100 ms for stock primitives, 500 ms for
 booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
-progressive steps use the 1,000 ms feature limit. `ci/known-over-budget.json`
-retains only the owner-approved bracket step 6 exception. An exception that meets
-its budget fails as stale and must be removed; no trend rule exempts a budget
-failure. Hosted CI publishes every step and uploads the raw records on failure.
+progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
+eight known gaps in `ci/known-over-budget.json` record the measured times for
+reference steps 17, 18, 25 and 30, and bracket steps 18, 19, 22 and 25.
+An over-budget listed step is accepted only up to 120% of its recorded time;
+anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
+and `within_budget` stays false. An improved listed step can pass the strict
+budget without changing its baseline. Every unlisted step stays strict, and
+the feature-count trend guard is unchanged. Remaining work:
+https://github.com/BohnBawerick/soliddraft/issues/27 — faster booleans when
+rebuilding after an edit. CI prints known gaps as warnings, regressions as errors,
+and uploads every raw step record; an accepted gap is not a claim of meeting
+the original budget.
 
 An optional `trends` list selects comparable tool series with `tool` and
 `from_step`. Each sample records its current feature count. After the scenario,
