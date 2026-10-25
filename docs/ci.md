@@ -1,6 +1,6 @@
 # Continuous integration
 
-`hosted.yml` runs on pushes, pull requests and manual dispatch. All jobs use GitHub-hosted runners and read-only repository permissions.
+`hosted.yml` runs on pushes, pull requests and manual dispatch. Windows and macOS jobs use GitHub-hosted runners. Linux jobs use the repository's self-hosted runners while the repository variable `USE_LOCAL_RUNNERS` is `true`, except for pull requests from forks, and `ubuntu-latest` otherwise. All jobs use read-only repository permissions.
 
 The complete Catallax-only workspace builds and tests on Linux, macOS and Windows from a checkout with no submodules. Linux also runs formatting, clippy, the browser application build and Rust 1.88 checks for the crates that still support it. The browser build compiles Catallax into the same `wasm32-unknown-unknown` module as the application. Linux and macOS also drive the rendered Catallax bracket and drawing flows, retaining screenshots and part files as artifacts. No job needs SMLib, Emscripten or a C++ kernel toolchain.
 
