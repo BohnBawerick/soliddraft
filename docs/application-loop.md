@@ -262,8 +262,10 @@ wait. Verifier replay is a survival check outside that interval.
 The strict command-class limits remain 100 ms for stock primitives, 500 ms for
 booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
 progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
-eight known gaps in `ci/known-over-budget.json` record the measured times for
-reference steps 17, 18, 25 and 30, and bracket steps 18, 19, 22 and 25.
+nine known gaps in `ci/known-over-budget.json` record the measured times for
+reference steps 17, 18, 25 and 30, and bracket steps 16, 18, 19, 22 and 25.
+Bracket step 16 records 1,054 ms, so its regression limit is 1,264.8 ms.
+Its entry identifies its source run separately from the other eight records.
 An over-budget listed step is accepted only up to 120% of its recorded time;
 anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
 and `within_budget` stays false. An improved listed step can pass the strict
