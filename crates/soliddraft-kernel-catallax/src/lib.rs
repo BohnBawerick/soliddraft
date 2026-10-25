@@ -7,6 +7,8 @@
 mod convert;
 mod diagnostics;
 mod drawing_queries;
+#[allow(dead_code)] // The tessellation hook in this file uses it.
+mod edge_control;
 mod frames;
 mod native;
 mod step;
