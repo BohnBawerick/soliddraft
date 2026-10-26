@@ -45,9 +45,11 @@ fn check_segments(
     segments: impl Iterator<Item = (usize, usize)>,
 ) -> KernelResult<()> {
     let Some(limit) = limit else { return Ok(()) };
+    // A coordinate beyond the f32 range rounds to infinity and cannot be displayed.
     let rounded = |i: usize| positions[i].map(|v| f64::from(v as f32));
     for (a, b) in segments {
-        if exceeds(rounded(a), rounded(b), limit) {
+        let (a, b) = (rounded(a), rounded(b));
+        if !a.iter().chain(&b).all(|v| v.is_finite()) || exceeds(a, b, limit) {
             return Err(refusal());
         }
     }
@@ -74,11 +76,14 @@ fn exceeds(a: [f64; 3], b: [f64; 3], limit: &Rational) -> bool {
     if squared > bound * (1.0 + 1e-9) {
         return true;
     }
-    let exact = |v: f64| Rational::from_f64_exact(v).expect("finite rounded coordinate");
-    let squared = (0..3).fold(Rational::zero(), |sum, i| {
-        let d = &exact(a[i]) - &exact(b[i]);
-        &sum + &(&d * &d)
-    });
+    // The caller has checked finiteness; an unconvertible value still counts as too long.
+    let exact = |v: f64| Rational::from_f64_exact(v);
+    let mut squared = Rational::zero();
+    for i in 0..3 {
+        let (Some(x), Some(y)) = (exact(a[i]), exact(b[i])) else { return true };
+        let d = &x - &y;
+        squared = &squared + &(&d * &d);
+    }
     squared > limit * limit
 }
 
@@ -136,5 +141,15 @@ mod tests {
         assert!(check_segments(Some(&one), &positions, sides()).is_err(), "the hypotenuse is about 1.414");
         assert!(check_segments(Some(&rational("1.5")), &positions, sides()).is_ok());
         assert!(check_segments(None, &positions, sides()).is_ok());
+    }
+
+    #[test]
+    fn positions_beyond_f32_range_are_refused_not_measured() {
+        // Both x values are finite in f64 but round to f32 infinity.
+        let big = 2f64.powi(130);
+        let positions = [[big, 0.0, 0.0], [big, 1.0, 0.0]];
+        let limit = Rational::from_f64_exact(2f64.powi(110)).unwrap();
+        let error = check_segments(Some(&limit), &positions, [(0, 1)].into_iter()).unwrap_err();
+        assert!(matches!(error, KernelError::Unsupported(_)), "{error:?}");
     }
 }
