@@ -1,0 +1,132 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "mirror",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              15,
+              20,
+              0
+            ],
+            "width": 30,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 6000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              15,
+              20,
+              5
+            ],
+            "diameter": 10
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 6785.398163,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "mirror",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 Side of line 2",
+        "keep_original": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13570.796327,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "mirror build"
+    },
+    {
+      "tool": "edit_mirror",
+      "arguments": {
+        "feature": "Mirror1",
+        "keep_original": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 6785.398163,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "mirror edit"
+    },
+    {
+      "tool": "edit_mirror",
+      "arguments": {
+        "feature": "Mirror1",
+        "keep_original": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13570.796327,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "mirror edit back"
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "depth": 14,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14199.114858,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "mirror rebuild after an earlier edit"
+    }
+  ]
+}

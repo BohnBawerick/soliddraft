@@ -1,0 +1,128 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "draft",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 20,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 24000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "draft",
+      "arguments": {
+        "faces": [
+          "Boss-Extrude1 \u00b7 Side of line 2",
+          "Boss-Extrude1 \u00b7 Side of line 4"
+        ],
+        "neutral": "top",
+        "angle": 3,
+        "reverse": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23371.106649,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ],
+      "label": "draft build"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              0,
+              20
+            ],
+            "diameter": 10
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23763.80573,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_draft",
+      "arguments": {
+        "feature": "Draft1",
+        "angle": 5
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23342.835119,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ],
+      "label": "draft edit"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23763.80573,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ],
+  "max_work": 1000000000
+}

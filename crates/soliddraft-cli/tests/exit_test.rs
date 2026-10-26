@@ -1,14 +1,14 @@
 //! The phase 0 exit test, run through the `soliddraft` binary as separate processes:
 //!
-//! Box, cylinder and boolean recipes repeat across processes. Waiting fillets report
-//! their Catallax stages, and an expected failure leaves the preceding body unchanged.
+//! Box, cylinder, boolean and fillet recipes repeat across processes, and an expected
+//! failure leaves the preceding body unchanged.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use soliddraft_recipe::{ReplayReport, StepOutcome};
 
-const EXIT_RECIPES: &[&str] = &["box", "cylinder", "union", "subtract", "failing-fillet"];
+const EXIT_RECIPES: &[&str] = &["box", "cylinder", "union", "subtract", "fillet", "failing-fillet"];
 const RUNS: usize = 3;
 
 fn recipes_dir() -> PathBuf {
@@ -74,9 +74,12 @@ fn a_step_that_should_succeed_but_fails_fails_the_replay() {
 }
 
 #[test]
-fn fillet_recipe_reports_its_catallax_stages() {
-    let out = Command::new(env!("CARGO_BIN_EXE_soliddraft")).arg("replay").arg(recipe("fillet")).output().unwrap();
-    assert_eq!(out.status.code(), Some(1));
-    let error = String::from_utf8_lossy(&out.stderr);
-    assert!(error.contains("Catallax stage 3") && error.contains("Catallax stage 4"), "{error}");
+fn fillet_recipe_rounds_the_top_edges() {
+    let report = &replay(&["fillet"])[0];
+    // Four 2 mm rounds take a little under (1 - pi/4) * 4 mm2 along the 140 mm loop:
+    // the mitred corners take less than the full edge lengths.
+    let removed = 12000.0 - report.result.volume;
+    let bound = (1.0 - std::f64::consts::FRAC_PI_4) * 4.0 * 140.0;
+    assert!(removed > 0.9 * bound && removed < bound, "removed {removed}, bound {bound}");
+    assert!(report.result.valid);
 }

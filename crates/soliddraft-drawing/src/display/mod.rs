@@ -172,6 +172,9 @@ pub struct DisplayList {
     /// The hatched regions, for writers that keep hatches as hatches (DXF). Their lines
     /// are among `items` with [`Role::Hatch`].
     pub hatches: Vec<HatchRecord>,
+    /// Some view's line work came from the kernel's unproved preview. Shown on screen,
+    /// never exported.
+    pub unproved: bool,
 }
 
 /// One dimension as its definition points, in sheet millimetres.
@@ -394,10 +397,12 @@ pub fn layout(drawing: &Drawing, sheet_index: usize, ctx: &Context<'_>) -> Displ
         paper: (ctx.format.paper.width, ctx.format.paper.height),
         dimensions: Vec::new(),
         hatches: Vec::new(),
+        unproved: false,
     };
     let Some(sheet) = drawing.sheets.get(sheet_index) else {
         return list;
     };
+    list.unproved = sheet.views.iter().any(|v| v.geometry.unproved);
     format_items(drawing, sheet, ctx, &mut list.items);
     tables::table_items(drawing, sheet, ctx, &mut list.items);
     for view in &sheet.views {

@@ -73,7 +73,7 @@ fn crash_child() {
     std::fs::write(root.join("journal-path"), session.path().to_str().unwrap()).unwrap();
     let mut doc = Document::new("Crash scenario", Arc::new(Crashing::default()));
     let params = ExtrudeParams { depth: 10.0, ..Default::default() };
-    let feature = doc.apply(Command::AddExtrude { params, via_assistant: false }).unwrap().unwrap();
+    let feature = doc.apply(Command::AddExtrude { params: params.clone(), via_assistant: false }).unwrap().unwrap();
     doc.apply(Command::Rename { id: feature, name: "Plate".into() }).unwrap();
     doc.undo().unwrap();
     doc.redo().unwrap();

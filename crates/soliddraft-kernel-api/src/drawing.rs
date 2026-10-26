@@ -132,6 +132,10 @@ pub struct ViewSpec {
     pub seams: bool,
     /// Accuracy of the curves, in millimetres. Zero lets the backend choose.
     pub tolerance: f64,
+    /// For the screen: the backend may draw from its unproved preview mesh, and marks
+    /// the curves [`ViewCurves::unproved`]. Exported drawings leave it off.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub preview: bool,
 }
 
 /// The standard orientations, for a model with Z up.
@@ -206,7 +210,7 @@ impl ViewSpec {
     /// A view from `direction` with `up` up, hidden seams and smooth edges, and the
     /// backend's default tolerance.
     pub fn new(direction: Vec3, up: Vec3) -> ViewSpec {
-        ViewSpec { direction, up, smooth_edges: false, seams: false, tolerance: 0.0 }
+        ViewSpec { direction, up, smooth_edges: false, seams: false, tolerance: 0.0, preview: false }
     }
 
     /// A standard orientation, with the defaults of [`new`](Self::new).
@@ -256,13 +260,16 @@ pub struct ViewCurves {
     /// Bounds of every curve in sheet coordinates (see [`ViewFrame::project`]):
     /// `[min x, min y, max x, max y]`. All zero when there are no curves.
     pub bbox_2d: [f64; 4],
+    /// Drawn from an unproved preview mesh, for the screen only. Never exported.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unproved: bool,
 }
 
 impl ViewCurves {
     /// Collects curves and computes their sheet bounds in `frame`.
     pub fn new(curves: Vec<ViewCurve>, frame: &ViewFrame) -> ViewCurves {
         let bbox_2d = sheet_bounds(&curves, frame);
-        ViewCurves { curves, bbox_2d }
+        ViewCurves { curves, bbox_2d, unproved: false }
     }
 
     /// Number of visible and hidden curves.

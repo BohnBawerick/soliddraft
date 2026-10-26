@@ -1,0 +1,126 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "countersink",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              30,
+              20,
+              0
+            ],
+            "width": 60,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Boss-Extrude1 \u00b7 End cap",
+        "points": [
+          [
+            15,
+            20,
+            5
+          ],
+          [
+            45,
+            20,
+            5
+          ]
+        ],
+        "diameter": 4,
+        "countersink": {
+          "diameter": 8,
+          "angle": 90
+        }
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11807.315651,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "countersink build"
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole1",
+        "diameter": 5
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11761.238958,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "countersink edit"
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole1",
+        "diameter": 5,
+        "countersink": {
+          "diameter": 9,
+          "angle": 90
+        }
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11724.063445,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "countersink head edit"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11761.238958,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11724.063445,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ]
+}

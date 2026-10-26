@@ -302,5 +302,6 @@ pub fn box_part<'k>(k: &'k BoxKernel, tag: &str, size: Vec3) -> Part<'k> {
             distance("width again", Vec3::X, size.x, true),
         ],
         namer: None,
+        preview: false,
     }
 }

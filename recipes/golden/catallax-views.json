@@ -1,5 +1,5 @@
 {
-  "backend": "catallax 0c9af50c792f228fe8fb1c45a8a34f7cb6fae65b",
+  "backend": "catallax 878bb7fa78d036508564173d7ed425fc13385a37",
   "views": {
     "bracket": {
       "front": {
@@ -18,9 +18,9 @@
         "digest": "aa54fe7ec99cef115e369fe162763424"
       },
       "top": {
-        "visible": 929,
-        "hidden": 941,
-        "digest": "162a6965ac0950349d315fdccfc015d8"
+        "visible": 1163,
+        "hidden": 1175,
+        "digest": "a4da35d049780305215a67a3db20983d"
       }
     }
   }

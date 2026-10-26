@@ -1668,7 +1668,8 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
     });
     let Some(path) = path else { return };
     let path = if path.extension().is_none() { path.with_extension(format.extension()) } else { path };
-    match write_sheet(s, format, &path) {
+    let written = write_sheet(s, PartContext::new(&state.doc).as_ref(), format, &path);
+    match written {
         Ok(()) => {
             s.say(format!("Exported {}", path.display()));
             state.note(format!("Exported {}", path.display()), NoteKind::Ok);
@@ -1681,12 +1682,20 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
 }
 
 /// Writes the drawing as `format` at `path`: the current sheet, or every sheet as a
-/// page of a PDF.
-pub(crate) fn write_sheet(s: &mut DrawingSession, format: export::Format, path: &Path) -> Result<(), String> {
+/// page of a PDF. Views shown from the kernel's unproved preview are drawn again from
+/// the certified mesh of `part`, on a copy, so the file never comes from a preview.
+pub(crate) fn write_sheet(
+    s: &mut DrawingSession,
+    part: Option<&PartContext>,
+    format: export::Format,
+    path: &Path,
+) -> Result<(), String> {
     let stale = s.doc.stale_views();
-    let count = s.doc.drawing.sheets.len();
+    let drawing = certified(&s.doc.drawing, part)?;
+    let drawing = drawing.as_ref().unwrap_or(&s.doc.drawing);
+    let count = drawing.sheets.len();
     let list_of = |i: usize| {
-        let format_file = library::template(s.doc.drawing.sheets[i].template.as_str());
+        let format_file = library::template(drawing.sheets[i].template.as_str());
         let ctx = display::Context {
             format: format_file,
             style: format_file.style_file(),
@@ -1694,7 +1703,7 @@ pub(crate) fn write_sheet(s: &mut DrawingSession, format: export::Format, path: 
             sheet_index: i,
             sheet_count: count,
         };
-        display::layout(&s.doc.drawing, i, &ctx)
+        display::layout(drawing, i, &ctx)
     };
     let bytes = match format {
         export::Format::Pdf => {
@@ -1710,6 +1719,25 @@ pub(crate) fn write_sheet(s: &mut DrawingSession, format: export::Format, path: 
     bytes.map_err(|e| e.to_string()).and_then(|bytes| crate::platform::write_file(path, &bytes))?;
     s.last_export = Some(path.to_path_buf());
     Ok(())
+}
+
+/// A copy of `drawing` with its preview views drawn from the certified mesh, or `None`
+/// when no view is a preview. Only views of the open part's current revision can be
+/// certified; a preview of another revision waits for a Rebuild.
+fn certified(drawing: &Drawing, part: Option<&PartContext>) -> Result<Option<Drawing>, String> {
+    let previews: Vec<&View> = drawing.sheets.iter().flat_map(|s| &s.views).filter(|v| v.geometry.unproved).collect();
+    if previews.is_empty() {
+        return Ok(None);
+    }
+    let unproved = || soliddraft_drawing::DrawingError::Unproved.to_string();
+    let part = part.ok_or_else(unproved)?;
+    if previews.iter().any(|v| v.geometry.source_digest != part.digest.as_str()) {
+        return Err(unproved());
+    }
+    let mut copy = drawing.clone();
+    soliddraft_drawing::apply_with(&mut copy, &Command::UpdateFromModel, &part.certified_part())
+        .map_err(|e| e.to_string())?;
+    Ok(Some(copy))
 }
 
 fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {

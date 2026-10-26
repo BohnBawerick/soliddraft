@@ -634,7 +634,7 @@ fn with_part<R>(
                 name: doc.name.clone(),
                 backend: format!("{} {}", backend.name, backend.version),
             };
-            f(&ctx.part(), &source)
+            f(&ctx.certified_part(), &source)
         }
         Some(kind) => Err(format!("{}: a drawing is made of a part, not a {kind}", path.display())),
         None => {
@@ -1013,7 +1013,9 @@ fn build<'k>(
 ) -> Result<(Part<'k>, String), String> {
     let (report, body) = soliddraft_recipe::build(kernel, recipe).map_err(|e| format!("{}: {e}", path.display()))?;
     let backend = format!("{} {}", report.backend.name, report.backend.version);
-    let part = Part { kernel, body, digest: revision, dimensions: feature_dimensions(recipe), namer: None };
+    // The CLI only writes files, so its views come from the certified mesh.
+    let part =
+        Part { kernel, body, digest: revision, dimensions: feature_dimensions(recipe), namer: None, preview: false };
     Ok((part, backend))
 }
 

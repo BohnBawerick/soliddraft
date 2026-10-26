@@ -408,6 +408,7 @@ mod tests {
             normals: vec![[0.0, 0.0, 1.0]; 4],
             indices: vec![0, 1, 2, 1, 3, 2, 0, 2, 1],
             triangle_faces: vec![FaceId::from_raw(7), FaceId::from_raw(9), FaceId::from_raw(7)],
+            unproved: false,
         };
         let d = display_mesh(&mesh, |f| format!("face {}", f.raw()), Vec::new());
         d.check().unwrap();

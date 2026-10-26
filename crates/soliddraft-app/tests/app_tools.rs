@@ -114,17 +114,51 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
         json!({ "tool": "polygon", "center": { "u": 100, "v": 70 }, "vertex": { "u": 106, "v": 70 }, "sides": 6 });
     s.call("sketch_geometry", json!({ "plane": "top", "operations": [hexagon] }));
     s.call("extrude", json!({ "sketch": "Sketch6", "depth": 5, "flip": false }));
+    // Catallax does not yet draft a body with a hole or a bored boss, so those are suppressed
+    // around the draft, and the draft comes before the fillet.
+    s.call("suppress", json!({ "feature": "Cut-Extrude2", "suppressed": true }));
+    s.call("suppress", json!({ "feature": "Cut-Extrude1", "suppressed": true }));
+    s.call("suppress", json!({ "feature": "Boss-Extrude3", "suppressed": true }));
+    let draft = json!({ "faces": ["Boss-Extrude1 · Side of line 3"], "neutral": "top", "angle": 2, "reverse": false });
+    s.call("draft", draft);
+    s.call("edit_draft", json!({ "feature": "Draft1", "angle": 3 }));
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
+    s.call("suppress", json!({ "feature": "Boss-Extrude3", "suppressed": false }));
+    s.call("suppress", json!({ "feature": "Cut-Extrude1", "suppressed": false }));
+    s.call("suppress", json!({ "feature": "Cut-Extrude2", "suppressed": false }));
     s.call("fillet", json!({ "edges": ["Boss-Extrude2 · Edge 1"], "radius": 2 }));
-    s.call("chamfer", json!({ "edges": ["Boss-Extrude2 · Edge 2"], "distance": 1 }));
+    // A vertical corner at the plate's back: a flat bevel ending on the plate's top and bottom.
+    // A rim would make a cone, which the drawing below is slow to mesh.
+    s.call("chamfer", json!({ "edges": ["Boss-Extrude1 · Edge 10"], "distance": 1 }));
     s.call("edit_fillet", json!({ "feature": "Fillet1", "radius": 3 }));
     s.call("edit_chamfer", json!({ "feature": "Chamfer1", "distance": 2 }));
+    // The other Catallax features, each undone so the part below stays as it was.
+    s.call("hole", json!({ "face": "Boss-Extrude1 · End cap", "points": [[40, 30, 10]], "diameter": 5 }));
+    s.call("edit_hole", json!({ "feature": "Hole1", "diameter": 6 }));
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
+    s.call("linear_pattern", json!({ "direction": [0, 0, 1], "spacing": 100, "count": 2 }));
+    s.call("edit_pattern", json!({ "feature": "LPattern1", "count": 2, "step": 110 }));
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
+    let axis = json!({ "axis_origin": [-10, -10, 0], "axis_direction": [0, 0, 1], "count": 2, "angle": 90 });
+    s.call("circular_pattern", axis);
+    s.call("undo", json!({}));
+    s.call("mirror", json!({ "plane": "Boss-Extrude1 · Side of line 4", "keep_original": true }));
+    s.call("edit_mirror", json!({ "feature": "Mirror1", "keep_original": false }));
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
     s.call("edit_extrude", json!({ "feature": "Boss-Extrude4", "depth": 6, "flip": false }));
     s.call("edit_cut", json!({ "feature": "Cut-Extrude2", "through_all": true, "depth": 1, "flip": false }));
     s.call("suppress", json!({ "feature": "Boss-Extrude4", "suppressed": true }));
     s.call("delete_feature", json!({ "feature": "Boss-Extrude4" }));
     s.call("rename", json!({ "feature": "Cut-Extrude2", "name": "Hole" }));
     s.call("rename_plane", json!({ "plane": "right", "name": "Side" }));
-    s.call("edit_dimension", json!({ "sketch": "Sketch1", "dimension": 1, "value": 121 }));
+    // The boss, not the plate: the plate's rectangle is centred, so a new size moves its edges
+    // off the wall's, and Catallax refuses the fillet along a wall standing in from the plate's
+    // edge (`fillet.unsupported-overflow`).
+    s.call("edit_dimension", json!({ "sketch": "Sketch3", "dimension": 1, "value": 26 }));
     s.call("rollback", json!({ "before": "Hole" }));
     s.call("roll_to_end", json!({}));
     let lines = json!([

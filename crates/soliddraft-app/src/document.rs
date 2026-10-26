@@ -130,13 +130,58 @@ impl SketchPlane {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SketchFeature {
     pub plane: SketchPlane,
     pub sketch: Sketch,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+/// Where an extrude or cut stops.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum EndKind {
+    /// At the depth.
+    #[default]
+    Blind,
+    /// Through the whole part; cuts only.
+    ThroughAll,
+    /// At the first place the sweep crosses the part's boundary.
+    UpToNext,
+    /// At the first hit on a face, once one is picked.
+    UpToFace(Option<FaceRef>),
+}
+
+impl EndKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            EndKind::Blind => "Blind",
+            EndKind::ThroughAll => "Through all",
+            EndKind::UpToNext => "Up to next",
+            EndKind::UpToFace(_) => "Up to face",
+        }
+    }
+
+    fn to_model(&self, depth: f64) -> model::EndCondition {
+        match self {
+            EndKind::Blind => model::EndCondition::Blind { depth },
+            EndKind::ThroughAll => model::EndCondition::ThroughAll,
+            EndKind::UpToNext => model::EndCondition::UpToNext,
+            EndKind::UpToFace(Some(face)) => model::EndCondition::UpToFace { face: face.clone() },
+            // The editor refuses to commit without a face; keep the depth meanwhile.
+            EndKind::UpToFace(None) => model::EndCondition::Blind { depth },
+        }
+    }
+
+    fn from_model(end: &model::EndCondition) -> (EndKind, Option<f64>) {
+        match end {
+            model::EndCondition::Blind { depth } => (EndKind::Blind, Some(*depth)),
+            model::EndCondition::ThroughAll => (EndKind::ThroughAll, None),
+            model::EndCondition::UpToNext => (EndKind::UpToNext, None),
+            model::EndCondition::UpToFace { face } => (EndKind::UpToFace(Some(face.clone())), None),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExtrudeParams {
     /// The sketch to extrude; when `None`, the built-in profile on `plane`.
     pub sketch: Option<FeatureId>,
@@ -144,6 +189,9 @@ pub struct ExtrudeParams {
     pub plane: PlaneKind,
     pub depth: f64,
     pub flip: bool,
+    /// Where it stops; [`EndKind::ThroughAll`] is for cuts.
+    #[serde(default)]
+    pub end: EndKind,
 }
 
 impl Default for ExtrudeParams {
@@ -154,22 +202,41 @@ impl Default for ExtrudeParams {
             plane: PlaneKind::Top,
             depth: 20.0,
             flip: false,
+            end: EndKind::Blind,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CutParams {
     pub sketch: FeatureId,
     pub depth: f64,
     pub through_all: bool,
     /// Cuts go against the sketch normal (into a face) unless flipped.
     pub flip: bool,
+    /// Up to next or up to face; overrides `through_all` and `depth` when set.
+    #[serde(default)]
+    pub up_to: Option<EndKind>,
 }
 
 impl CutParams {
     pub fn new(sketch: FeatureId) -> Self {
-        CutParams { sketch, depth: 10.0, through_all: true, flip: false }
+        CutParams { sketch, depth: 10.0, through_all: true, flip: false, up_to: None }
+    }
+
+    /// Where the cut stops.
+    pub fn end(&self) -> EndKind {
+        match &self.up_to {
+            Some(end) => end.clone(),
+            None if self.through_all => EndKind::ThroughAll,
+            None => EndKind::Blind,
+        }
+    }
+
+    /// Sets where the cut stops.
+    pub fn set_end(&mut self, end: EndKind) {
+        self.through_all = end == EndKind::ThroughAll;
+        self.up_to = matches!(end, EndKind::UpToNext | EndKind::UpToFace(_)).then_some(end);
     }
 }
 
@@ -185,13 +252,99 @@ pub struct ChamferParams {
     pub distance: f64,
 }
 
+/// A hole's parameters as its editor holds them: the face may not be picked yet.
 #[derive(Clone, Debug, PartialEq)]
+pub struct HoleParams {
+    pub face: Option<FaceRef>,
+    /// Centres in the face's sketch frame.
+    pub points: Vec<sketch::P2>,
+    pub diameter: f64,
+    pub depth: soliddraft_kernel_api::HoleDepth,
+    pub tip: soliddraft_kernel_api::HoleTip,
+    pub head: Option<soliddraft_kernel_api::HoleHead>,
+}
+
+impl Default for HoleParams {
+    fn default() -> Self {
+        HoleParams {
+            face: None,
+            points: vec![sketch::P2::ZERO],
+            diameter: 6.6,
+            depth: soliddraft_kernel_api::HoleDepth::Through,
+            tip: soliddraft_kernel_api::HoleTip::Cone { angle_deg: 118.0 },
+            head: None,
+        }
+    }
+}
+
+impl HoleParams {
+    pub fn to_model(&self) -> Result<model::HoleFeature, String> {
+        Ok(model::HoleFeature {
+            face: self.face.clone().ok_or("pick the face the holes start on")?,
+            points: self.points.clone(),
+            diameter: self.diameter,
+            depth: self.depth,
+            tip: self.tip,
+            head: self.head,
+        })
+    }
+}
+
+/// A draft's parameters as its editor holds them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DraftParams {
+    pub faces: Vec<FaceRef>,
+    pub neutral: model::PlaneRef,
+    pub angle: f64,
+    pub reverse: bool,
+    /// The next face click sets the neutral plane instead of adding a face.
+    pub picking_neutral: bool,
+}
+
+impl Default for DraftParams {
+    fn default() -> Self {
+        DraftParams {
+            faces: Vec::new(),
+            neutral: model::PlaneRef::Datum { datum: model::DatumPlane::Top, offset: 0.0 },
+            angle: 3.0,
+            reverse: false,
+            picking_neutral: false,
+        }
+    }
+}
+
+impl DraftParams {
+    pub fn to_model(&self) -> model::DraftFeature {
+        model::DraftFeature {
+            faces: self.faces.clone(),
+            neutral: self.neutral.clone(),
+            angle: self.angle,
+            reverse: self.reverse,
+        }
+    }
+}
+
+/// A plane's label for people.
+pub fn plane_ref_label(plane: &model::PlaneRef) -> String {
+    match plane {
+        model::PlaneRef::Datum { datum, offset } if *offset == 0.0 => datum.label().to_owned(),
+        model::PlaneRef::Datum { datum, offset } => format!("{} + {} mm", datum.label(), fmt_mm(*offset)),
+        model::PlaneRef::Face { face } if face.label.is_empty() => "Face".to_owned(),
+        model::PlaneRef::Face { face } => face.label.clone(),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FeatureKind {
     Sketch(SketchFeature),
     Extrude(ExtrudeParams),
     Cut(CutParams),
     Fillet(FilletParams),
     Chamfer(ChamferParams),
+    Hole(model::HoleFeature),
+    Pattern(model::PatternFeature),
+    Mirror(model::MirrorFeature),
+    Draft(model::DraftFeature),
 }
 
 impl FeatureKind {
@@ -202,6 +355,31 @@ impl FeatureKind {
             FeatureKind::Cut(_) => "Cut-Extrude",
             FeatureKind::Fillet(_) => "Fillet",
             FeatureKind::Chamfer(_) => "Chamfer",
+            FeatureKind::Hole(_) => "Hole",
+            FeatureKind::Pattern(p) => match p.layout {
+                model::PatternSpec::Linear { .. } => "LPattern",
+                model::PatternSpec::Circular { .. } => "CirPattern",
+            },
+            FeatureKind::Mirror(_) => "Mirror",
+            FeatureKind::Draft(_) => "Draft",
+        }
+    }
+
+    /// The kind in lower case, for menu labels: "hole", "linear pattern".
+    pub fn noun(&self) -> &'static str {
+        match self {
+            FeatureKind::Sketch(_) => "sketch",
+            FeatureKind::Extrude(_) => "extrude",
+            FeatureKind::Cut(_) => "cut",
+            FeatureKind::Fillet(_) => "fillet",
+            FeatureKind::Chamfer(_) => "chamfer",
+            FeatureKind::Hole(_) => "hole",
+            FeatureKind::Pattern(p) => match p.layout {
+                model::PatternSpec::Linear { .. } => "linear pattern",
+                model::PatternSpec::Circular { .. } => "circular pattern",
+            },
+            FeatureKind::Mirror(_) => "mirror",
+            FeatureKind::Draft(_) => "draft",
         }
     }
 
@@ -227,17 +405,13 @@ impl FeatureKind {
                     None => model::ProfileSource::Shape { datum: p.plane.to_model(), shape: p.profile.to_model() },
                 },
                 operation: model::ExtrudeOp::Boss,
-                end: model::EndCondition::Blind { depth: p.depth },
+                end: p.end.to_model(p.depth),
                 reverse: p.flip,
             }),
             FeatureKind::Cut(p) => model::FeatureKind::Extrude(model::ExtrudeFeature {
                 profile: model::ProfileSource::Sketch { feature: model_id(p.sketch) },
                 operation: model::ExtrudeOp::Cut,
-                end: if p.through_all {
-                    model::EndCondition::ThroughAll
-                } else {
-                    model::EndCondition::Blind { depth: p.depth }
-                },
+                end: p.end().to_model(p.depth),
                 // The model sweeps along the sketch normal; a cut goes into the face.
                 reverse: !p.flip,
             }),
@@ -247,6 +421,10 @@ impl FeatureKind {
             FeatureKind::Chamfer(p) => {
                 model::FeatureKind::Chamfer(model::BlendFeature { edges: p.edges.clone(), size: p.distance })
             }
+            FeatureKind::Hole(h) => model::FeatureKind::Hole(h.clone()),
+            FeatureKind::Pattern(p) => model::FeatureKind::Pattern(p.clone()),
+            FeatureKind::Mirror(m) => model::FeatureKind::Mirror(m.clone()),
+            FeatureKind::Draft(d) => model::FeatureKind::Draft(d.clone()),
         }
     }
 
@@ -268,25 +446,29 @@ impl FeatureKind {
                 FeatureKind::Sketch(SketchFeature { plane, sketch })
             }
             model::FeatureKind::Extrude(e) => {
-                let (depth, through_all) = match e.end {
-                    model::EndCondition::Blind { depth } => (depth, false),
-                    model::EndCondition::ThroughAll => (10.0, true),
-                };
+                let (end, depth) = EndKind::from_model(&e.end);
+                let depth = depth.unwrap_or(10.0);
                 match (e.operation, &e.profile) {
-                    (model::ExtrudeOp::Cut, profile) => FeatureKind::Cut(CutParams {
-                        sketch: match profile {
-                            model::ProfileSource::Sketch { feature } => app_id(*feature),
-                            model::ProfileSource::Shape { .. } => 0,
-                        },
-                        depth,
-                        through_all,
-                        flip: !e.reverse,
-                    }),
+                    (model::ExtrudeOp::Cut, profile) => {
+                        let mut cut = CutParams {
+                            sketch: match profile {
+                                model::ProfileSource::Sketch { feature } => app_id(*feature),
+                                model::ProfileSource::Shape { .. } => 0,
+                            },
+                            depth,
+                            through_all: false,
+                            flip: !e.reverse,
+                            up_to: None,
+                        };
+                        cut.set_end(end);
+                        FeatureKind::Cut(cut)
+                    }
                     (model::ExtrudeOp::Boss, model::ProfileSource::Sketch { feature }) => {
                         FeatureKind::Extrude(ExtrudeParams {
                             sketch: Some(app_id(*feature)),
                             depth,
                             flip: e.reverse,
+                            end,
                             ..Default::default()
                         })
                     }
@@ -297,6 +479,7 @@ impl FeatureKind {
                             plane: PlaneKind::from_model(*datum),
                             depth,
                             flip: e.reverse,
+                            end,
                         })
                     }
                 }
@@ -307,6 +490,10 @@ impl FeatureKind {
             model::FeatureKind::Chamfer(b) => {
                 FeatureKind::Chamfer(ChamferParams { edges: b.edges.clone(), distance: b.size })
             }
+            model::FeatureKind::Hole(h) => FeatureKind::Hole(h.clone()),
+            model::FeatureKind::Pattern(p) => FeatureKind::Pattern(p.clone()),
+            model::FeatureKind::Mirror(m) => FeatureKind::Mirror(m.clone()),
+            model::FeatureKind::Draft(d) => FeatureKind::Draft(d.clone()),
         }
     }
 }
@@ -407,16 +594,25 @@ impl Feature {
                     _ => format!("{n} entit{}", if n == 1 { "y" } else { "ies" }),
                 }
             }
-            FeatureKind::Extrude(p) => format!("{} mm", fmt_mm(p.depth)),
-            FeatureKind::Cut(p) => {
-                if p.through_all {
-                    "through all".to_owned()
-                } else {
-                    format!("{} mm", fmt_mm(p.depth))
-                }
-            }
+            FeatureKind::Extrude(p) => match p.end {
+                EndKind::Blind => format!("{} mm", fmt_mm(p.depth)),
+                ref end => end.label().to_lowercase(),
+            },
+            FeatureKind::Cut(p) => match p.end() {
+                EndKind::Blind => format!("{} mm", fmt_mm(p.depth)),
+                end => end.label().to_lowercase(),
+            },
             FeatureKind::Fillet(f) => format!("R{}", fmt_mm(f.radius)),
             FeatureKind::Chamfer(c) => format!("{} mm", fmt_mm(c.distance)),
+            FeatureKind::Hole(h) => {
+                format!("{} × Ø{}", h.points.len(), fmt_mm(h.diameter))
+            }
+            FeatureKind::Pattern(p) => match p.layout {
+                model::PatternSpec::Linear { spacing, count, .. } => format!("{count} × {} mm", fmt_mm(spacing)),
+                model::PatternSpec::Circular { count, angle, .. } => format!("{count} × {}°", fmt_mm(angle)),
+            },
+            FeatureKind::Mirror(m) => plane_ref_label(&m.plane),
+            FeatureKind::Draft(d) => format!("{}°", fmt_mm(d.angle)),
         }
     }
 
@@ -550,6 +746,13 @@ pub enum Command {
         id: FeatureId,
         params: ChamferParams,
     },
+    /// Adds a hole, pattern, mirror or draft.
+    AddFeature(FeatureKind),
+    /// Replaces a hole's, pattern's, mirror's or draft's definition.
+    EditFeature {
+        id: FeatureId,
+        kind: FeatureKind,
+    },
     DeleteFeature(FeatureId),
     Rename {
         id: FeatureId,
@@ -592,6 +795,8 @@ impl Command {
             Command::EditFillet { .. } => "Edit fillet".into(),
             Command::AddChamfer { .. } => "Add chamfer".into(),
             Command::EditChamfer { .. } => "Edit chamfer".into(),
+            Command::AddFeature(kind) => format!("Add {}", kind.noun()),
+            Command::EditFeature { kind, .. } => format!("Edit {}", kind.noun()),
             Command::DeleteFeature(_) => "Delete feature".into(),
             Command::Rename { .. } => "Rename".into(),
             Command::RenamePlane { .. } => "Rename plane".into(),
@@ -665,6 +870,8 @@ pub struct Document {
     quality: DisplayQuality,
     /// Marks added features as the assistant's; see [`Document::set_assistant_mark`].
     assistant_mark: bool,
+    /// Names faces and edges but makes no display meshes; see [`Document::scratch`].
+    headless: bool,
 }
 
 fn kv(v: soliddraft_kernel_api::Vec3) -> Vec3 {
@@ -699,6 +906,7 @@ impl Document {
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
             assistant_mark: false,
+            headless: false,
         };
         doc.sync();
         doc.refresh_display();
@@ -728,7 +936,20 @@ impl Document {
             model: self.model.fork(),
             quality: self.quality.fork(self.kernel().clone()),
             assistant_mark: self.assistant_mark,
+            headless: self.headless,
         }
+    }
+
+    /// A copy for a dry run. It names faces and edges as rebuilds go, but makes no
+    /// display mesh until [`Document::show`], so lines that are refused cost none.
+    pub(crate) fn scratch(&self) -> Self {
+        Self { headless: true, ..self.fork() }
+    }
+
+    /// Meshes a scratch document's current result, and every result after it.
+    pub(crate) fn show(&mut self) {
+        self.headless = false;
+        self.refresh_display();
     }
 
     /// Marks a change: unsaved, and one more edit for autosave.
@@ -960,6 +1181,8 @@ impl Document {
             Command::EditFillet { id, params } => vec![edit(id, &FeatureKind::Fillet(params))],
             Command::AddChamfer { params } => vec![add(FeatureKind::Chamfer(params).to_model(), false)],
             Command::EditChamfer { id, params } => vec![edit(id, &FeatureKind::Chamfer(params))],
+            Command::AddFeature(kind) => vec![add(kind.to_model(), false)],
+            Command::EditFeature { id, kind } => vec![edit(id, &kind)],
             Command::DeleteFeature(id) => {
                 let index = self.index_of(id).ok_or("no such feature")?;
                 // Deleting a feature also deletes the sketch it absorbed, and
@@ -1044,6 +1267,19 @@ impl Document {
                     (model::FeatureKind::Fillet(b) | model::FeatureKind::Chamfer(b), EntityRef::Edge(edge)) => {
                         *b.edges.get_mut(index).ok_or("no such reference")? = edge;
                     }
+                    (model::FeatureKind::Hole(h), EntityRef::Face(face)) if index == 0 => h.face = face,
+                    (model::FeatureKind::Mirror(m), EntityRef::Face(face)) if index == 0 => {
+                        m.plane = model::PlaneRef::Face { face };
+                    }
+                    (model::FeatureKind::Draft(d), EntityRef::Face(face)) if index < d.faces.len() => {
+                        d.faces[index] = face;
+                    }
+                    (model::FeatureKind::Draft(d), EntityRef::Face(face)) if index == d.faces.len() => {
+                        d.neutral = model::PlaneRef::Face { face };
+                    }
+                    (model::FeatureKind::Extrude(e), EntityRef::Face(face)) if index == 0 => {
+                        e.end = model::EndCondition::UpToFace { face };
+                    }
                     _ => return Err("the replacement is the wrong kind of entity".into()),
                 }
                 vec![model::Command::EditFeature { id: model_id(id), kind }]
@@ -1119,6 +1355,21 @@ impl Document {
         let model = &self.model;
         self.quality.retain(|b| model.keeps(b));
         self.recent.retain(|s| model.keeps(s.body));
+        if self.headless {
+            // Drop the earlier display, so `show` makes the current one.
+            self.shown = None;
+            self.meshes.clear();
+            self.picks.clear();
+            self.faces.clear();
+            self.edges.clear();
+            if let Some(body) = next
+                && let Ok(topology) = self.kernel().topology(body)
+            {
+                self.name_entities(body, &topology);
+            }
+            self.mesh_version += 1;
+            return;
+        }
         if let Some(body) = self.shown.take()
             && let Some(mesh) = self.meshes.get(&body).cloned()
         {
@@ -1158,7 +1409,7 @@ impl Document {
                 if let Some(mesh) = cached {
                     self.show_mesh(body, &topology, &mesh);
                     self.shown = next;
-                } else if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
+                } else if let Ok(mesh) = self.kernel().preview(body, &self.tess_params) {
                     self.show_mesh(body, &topology, &mesh);
                     self.quality.made(body, mesh);
                     self.shown = next;
@@ -1406,6 +1657,10 @@ impl Document {
     /// Builds the tool of an extrude without applying it: the ghost of the
     /// material it adds. Bodies are released at once; the document is untouched.
     pub fn preview_extrude(&self, params: &ExtrudeParams) -> Result<Preview, String> {
+        if params.end != EndKind::Blind {
+            // An extrusion up to the part's boundary previews only once applied.
+            return Ok(Preview::default());
+        }
         let (profiles, plane) = match params.sketch {
             Some(s) => self.sketch_profiles(s)?,
             None => {
@@ -1423,6 +1678,10 @@ impl Document {
     /// The body after a cut and the material it removes.
     pub fn preview_cut(&self, params: &CutParams, before: Option<BodyId>) -> Result<Preview, String> {
         let base = before.ok_or("nothing to cut yet; extrude a base first")?;
+        if params.up_to.is_some() {
+            // A cut up to the part's boundary previews only once applied.
+            return Ok(Preview::default());
+        }
         let (profiles, plane) = self.sketch_profiles(params.sketch)?;
         let dir = if params.flip { plane.normal } else { -plane.normal };
         let depth = if params.through_all { self.through_all_depth(base) } else { params.depth };
@@ -1496,6 +1755,11 @@ impl Document {
             return None;
         }
         self.model.plane_ref(face).ok()
+    }
+
+    /// A persistent reference to any face of the part, for drafts and end faces.
+    pub fn any_face_ref(&self, face: FaceId) -> Option<FaceRef> {
+        self.model.face_ref(face).ok()
     }
 
     /// The sketch plane on a planar face of the displayed body.
@@ -1593,6 +1857,18 @@ impl Document {
                         details.push(("Edges".to_owned(), p.edges.len().to_string()));
                         details.push(("Distance".to_owned(), format!("{} mm", fmt_mm(p.distance))));
                     }
+                    FeatureKind::Hole(h) => {
+                        details.push(("Face".to_owned(), h.face.label.clone()));
+                        details.push(("Holes".to_owned(), h.points.len().to_string()));
+                        details.push(("Diameter".to_owned(), format!("{} mm", fmt_mm(h.diameter))));
+                        details.push(("Depth".to_owned(), hole_depth_text(&h.depth, &h.tip)));
+                        if let Some(head) = &h.head {
+                            details.push(("Head".to_owned(), hole_head_text(head)));
+                        }
+                    }
+                    FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_) => {
+                        details.push(("Layout".to_owned(), f.summary()));
+                    }
                 }
                 if !f.is_sketch()
                     && let Some(body) = f.body
@@ -1666,6 +1942,30 @@ impl Document {
     }
 }
 
+/// A hole's depth and tip for people: "through", "12 mm, 118° tip".
+pub fn hole_depth_text(depth: &soliddraft_kernel_api::HoleDepth, tip: &soliddraft_kernel_api::HoleTip) -> String {
+    use soliddraft_kernel_api::{HoleDepth, HoleTip};
+    match (depth, tip) {
+        (HoleDepth::Through, _) => "through".to_owned(),
+        (HoleDepth::Blind { depth }, HoleTip::Flat) => format!("{} mm, flat", fmt_mm(*depth)),
+        (HoleDepth::Blind { depth }, HoleTip::Cone { angle_deg }) => {
+            format!("{} mm, {}° tip", fmt_mm(*depth), fmt_mm(*angle_deg))
+        }
+    }
+}
+
+/// A hole's head for people: "counterbore Ø11 × 6.4", "countersink Ø13 × 90°".
+pub fn hole_head_text(head: &soliddraft_kernel_api::HoleHead) -> String {
+    match head {
+        soliddraft_kernel_api::HoleHead::Counterbore { diameter, depth } => {
+            format!("counterbore Ø{} × {}", fmt_mm(*diameter), fmt_mm(*depth))
+        }
+        soliddraft_kernel_api::HoleHead::Countersink { diameter, angle_deg } => {
+            format!("countersink Ø{} × {}°", fmt_mm(*diameter), fmt_mm(*angle_deg))
+        }
+    }
+}
+
 /// The panels' state for a feature after a rebuild.
 fn view_status(
     kind: &model::FeatureKind,
@@ -1699,7 +1999,33 @@ fn view_status(
                             let label = b.edges.get(index as usize).map(|e| e.label.clone()).unwrap_or_default();
                             (index as usize, RefKind::Edge, label)
                         }
-                        (model::ReferenceSlot::SketchPlane, _) => (0, RefKind::Face, String::new()),
+                        (model::ReferenceSlot::Face { index }, model::FeatureKind::Draft(d)) => {
+                            let label = d.faces.get(index as usize).map(|f| f.label.clone()).unwrap_or_default();
+                            (index as usize, RefKind::Face, label)
+                        }
+                        (model::ReferenceSlot::Plane, model::FeatureKind::Draft(d)) => {
+                            (d.faces.len(), RefKind::Face, plane_ref_label(&d.neutral))
+                        }
+                        (model::ReferenceSlot::Plane, model::FeatureKind::Hole(h)) => {
+                            (0, RefKind::Face, h.face.label.clone())
+                        }
+                        (model::ReferenceSlot::Plane, model::FeatureKind::Mirror(m)) => {
+                            (0, RefKind::Face, plane_ref_label(&m.plane))
+                        }
+                        (model::ReferenceSlot::Limit, model::FeatureKind::Extrude(e)) => {
+                            let label = match &e.end {
+                                model::EndCondition::UpToFace { face } => face.label.clone(),
+                                _ => String::new(),
+                            };
+                            (0, RefKind::Face, label)
+                        }
+                        (
+                            model::ReferenceSlot::SketchPlane
+                            | model::ReferenceSlot::Plane
+                            | model::ReferenceSlot::Limit,
+                            _,
+                        ) => (0, RefKind::Face, String::new()),
+                        (model::ReferenceSlot::Face { index }, _) => (index as usize, RefKind::Face, String::new()),
                         (model::ReferenceSlot::Edge { index }, _) => (index as usize, RefKind::Edge, String::new()),
                     };
                     RepairItem { index, kind, label: if label.is_empty() { r.message.clone() } else { label } }
@@ -1717,7 +2043,7 @@ pub(crate) fn preview_mesh(
     params: &TessellationParams,
 ) -> Result<Arc<DisplayMesh>, String> {
     let topology = kernel.topology(body).map_err(|e| e.to_string())?;
-    let mesh = kernel.tessellate(body, params).map_err(|e| e.to_string())?;
+    let mesh = kernel.preview(body, params).map_err(|e| e.to_string())?;
     let edges = edge_polylines(kernel, body, params);
     let mut picks = Vec::new();
     Ok(Arc::new(display_mesh(0, &mesh, &edges, &topology, &HashMap::new(), &mut picks)))
@@ -1726,7 +2052,7 @@ pub(crate) fn preview_mesh(
 /// The body's edges sampled along their curves. A kernel that cannot sample them
 /// leaves the body without edges rather than without faces.
 fn edge_polylines(kernel: &dyn Kernel, body: BodyId, params: &TessellationParams) -> Vec<EdgePolyline> {
-    kernel.tessellate_edges(body, params).unwrap_or_else(|e| {
+    kernel.preview_edges(body, params).unwrap_or_else(|e| {
         log::warn!("edges of body {body:?}: {e}");
         Vec::new()
     })
@@ -1928,7 +2254,7 @@ mod tests {
     }
 
     #[test]
-    fn existing_fillet_waits_for_its_stage_and_keeps_the_body_through_edits_and_reopen() {
+    fn fillet_references_survive_a_thickness_change_reopen_and_report_repair_when_gone() {
         let mut d = doc();
         let base = d
             .apply(Command::AddExtrude {
@@ -1947,38 +2273,39 @@ mod tests {
             .unwrap();
         let flange = d
             .apply(Command::AddExtrude {
-                params: ExtrudeParams { sketch: Some(flange_sketch), depth: 10.0, flip: true, ..Default::default() },
+                params: ExtrudeParams { sketch: Some(flange_sketch), depth: 30.0, flip: true, ..Default::default() },
                 via_assistant: false,
             })
             .unwrap()
             .unwrap();
-        // The inside corner: the edge the merge created on the top face, at y = 10, z = 10.
+        // The flange runs back to the base's edge at y = 30, so the merge leaves one inside
+        // corner: the edge on the top face at y = 0, z = 10.
         let inside = d
             .edges
             .iter()
             .filter(|e| e.feature == flange)
             .min_by(|a, b| {
-                (a.midpoint - Vec3::new(0.0, 10.0, 10.0))
+                (a.midpoint - Vec3::new(0.0, 0.0, 10.0))
                     .length()
-                    .total_cmp(&(b.midpoint - Vec3::new(0.0, 10.0, 10.0)).length())
+                    .total_cmp(&(b.midpoint - Vec3::new(0.0, 0.0, 10.0)).length())
             })
             .unwrap();
         let r = d.edge_ref(inside.id).unwrap();
         assert!(r.label.contains("Boss-Extrude2"), "{}", r.label);
-        let error = d.apply(Command::AddFillet { params: FilletParams { edges: vec![r], radius: 4.0 } }).unwrap_err();
-        assert!(error.contains("Catallax stage 3") && error.contains("Catallax stage 4"), "{error}");
-        let fillet = d.features.last().unwrap().id;
-        let waiting = |d: &Document| {
-            assert!(matches!(&d.feature(fillet).unwrap().status, FeatureStatus::Error(error)
-                if error.contains("Catallax stage 3") && error.contains("Catallax stage 4")));
-            assert_eq!(d.model.body_after(model_id(fillet)), d.model.body_before(model_id(fillet)));
+        let fillet =
+            d.apply(Command::AddFillet { params: FilletParams { edges: vec![r], radius: 4.0 } }).unwrap().unwrap();
+        let built = |d: &Document| {
+            let status = &d.feature(fillet).unwrap().status;
+            assert_eq!(*status, FeatureStatus::Ok, "{status:?}");
+            assert_ne!(d.model.body_after(model_id(fillet)), d.model.body_before(model_id(fillet)));
         };
-        waiting(&d);
+        built(&d);
+        let v_before = d.mass_properties(fillet).unwrap().volume;
         let reopened =
             Document::from_model(model::Document::from_bytes(&d.model.to_bytes().unwrap(), crate::kernel()).unwrap());
-        waiting(&reopened);
-        let v_before = d.mass_properties(fillet).unwrap().volume;
-        // The waiting feature keeps the rebuilt body after a base edit.
+        built(&reopened);
+        assert!((reopened.mass_properties(fillet).unwrap().volume - v_before).abs() < 1e-9 * v_before);
+        // Thicker base: the inside edge moves up; the fillet follows it.
         d.apply(Command::EditExtrude {
             id: base,
             params: ExtrudeParams {
@@ -1988,7 +2315,7 @@ mod tests {
             },
         })
         .unwrap();
-        waiting(&d);
+        built(&d);
         let v_after = d.mass_properties(fillet).unwrap().volume;
         assert!(v_after > v_before);
         // Suppress the flange: the edge is gone and the fillet asks for repair.
@@ -1996,12 +2323,12 @@ mod tests {
         assert!(matches!(d.feature(fillet).unwrap().status, FeatureStatus::NeedsRepair(_)));
         assert!(d.display_body().is_some(), "the body passes through a skipped feature");
         d.apply(Command::Suppress { id: flange, suppressed: false }).unwrap();
-        waiting(&d);
+        built(&d);
         // Rollback hides the fillet without removing it.
         d.apply(Command::Rollback(Some(3))).unwrap();
         assert_eq!(d.feature(fillet).unwrap().status, FeatureStatus::Inactive);
         assert_eq!(d.display_index(), Some(2));
         d.apply(Command::Rollback(None)).unwrap();
-        waiting(&d);
+        built(&d);
     }
 }

@@ -23,6 +23,8 @@ pub enum OpKind {
     Profile,
     /// `extrude`.
     Extrude,
+    /// `extrude_to`.
+    ExtrudeTo,
     /// `revolve`.
     Revolve,
     /// `boolean` with [`BooleanOp::Union`](crate::BooleanOp::Union).
@@ -37,6 +39,14 @@ pub enum OpKind {
     Chamfer,
     /// `shell`.
     Shell,
+    /// `hole`.
+    Hole,
+    /// `pattern`.
+    Pattern,
+    /// `mirror`.
+    Mirror,
+    /// `draft`.
+    Draft,
 }
 
 impl OpKind {
@@ -45,6 +55,7 @@ impl OpKind {
         match self {
             OpKind::Profile => "profile",
             OpKind::Extrude => "extrude",
+            OpKind::ExtrudeTo => "extrude_to",
             OpKind::Revolve => "revolve",
             OpKind::Union => "union",
             OpKind::Subtract => "subtract",
@@ -52,6 +63,45 @@ impl OpKind {
             OpKind::Fillet => "fillet",
             OpKind::Chamfer => "chamfer",
             OpKind::Shell => "shell",
+            OpKind::Hole => "hole",
+            OpKind::Pattern => "pattern",
+            OpKind::Mirror => "mirror",
+            OpKind::Draft => "draft",
+        }
+    }
+}
+
+/// The faces of a hole, from the entry down.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HolePart {
+    /// The cylinder above the placement point, where material lies above it.
+    Entry,
+    /// The wall of a counterbore.
+    CounterboreWall,
+    /// The flat floor of a counterbore.
+    CounterboreFloor,
+    /// The cone of a countersink.
+    Countersink,
+    /// The main wall.
+    Wall,
+    /// The flat floor of a blind hole with a flat tip.
+    Floor,
+    /// The cone of a blind hole with a drill-point tip.
+    Tip,
+}
+
+impl HolePart {
+    /// The part's name for people.
+    pub fn label(self) -> &'static str {
+        match self {
+            HolePart::Entry => "Entry",
+            HolePart::CounterboreWall => "Counterbore wall",
+            HolePart::CounterboreFloor => "Counterbore floor",
+            HolePart::Countersink => "Countersink",
+            HolePart::Wall => "Wall",
+            HolePart::Floor => "Floor",
+            HolePart::Tip => "Tip",
         }
     }
 }
@@ -132,6 +182,20 @@ pub enum FaceRole {
     /// The inner wall of a shell, offset from an input face.
     Offset {
         /// The input face it is offset from.
+        face: FaceId,
+    },
+    /// A face of a drilled hole.
+    Hole {
+        /// The placement, as an index into the operation's placements.
+        placement: u32,
+        /// Which face of the hole.
+        part: HolePart,
+    },
+    /// A face of a copy made by a pattern or a mirror.
+    Copy {
+        /// Which copy: 1 and up for a pattern, 1 for a mirror image.
+        instance: u32,
+        /// The input face it copies.
         face: FaceId,
     },
     /// A face the operation made that fits none of the other roles, such as a patch a

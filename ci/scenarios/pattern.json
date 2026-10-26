@@ -1,0 +1,149 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "pattern",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              20,
+              0,
+              0
+            ],
+            "width": 10,
+            "height": 10
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 1000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "circular_pattern",
+      "arguments": {
+        "axis_origin": [
+          0,
+          0,
+          0
+        ],
+        "axis_direction": [
+          0,
+          0,
+          1
+        ],
+        "count": 4,
+        "angle": 90
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4000,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "circular pattern build"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "CirPattern1 \u00b7 Copy 2 face 2",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              -20,
+              0,
+              10
+            ],
+            "diameter": 4
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch2",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3874.336294,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_pattern",
+      "arguments": {
+        "feature": "CirPattern1",
+        "count": 3,
+        "step": 90
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 2874.336294,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "circular pattern edit"
+    },
+    {
+      "tool": "linear_pattern",
+      "arguments": {
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "spacing": 15,
+        "count": 2
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 5748.672588,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "linear pattern build"
+    },
+    {
+      "tool": "edit_pattern",
+      "arguments": {
+        "feature": "LPattern1",
+        "count": 3,
+        "step": 12
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 8623.008882,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "linear pattern edit"
+    }
+  ]
+}

@@ -14,18 +14,21 @@
 use crate::commands::{self, Agents, CommandSpec};
 use crate::document::EdgeRef;
 use crate::document::{
-    ChamferParams, Command, CutParams, Document, ExtrudeParams, FeatureId, FeatureKind, FeatureStatus, FilletParams,
-    PlaneKind, Preview, Selection, SketchPlane, VertexKey, fmt_mm,
+    ChamferParams, Command, CutParams, Document, EndKind, ExtrudeParams, FeatureId, FeatureKind, FeatureStatus,
+    FilletParams, PlaneKind, Preview, Selection, SketchPlane, VertexKey, fmt_mm, hole_depth_text, hole_head_text,
+    plane_ref_label,
 };
 use crate::sketch::{self, ConstraintKind, EntityKind, P2, PointRef, Sketch};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use soliddraft_assistant::tools::schema::{
-    any_of, array, boolean, constant, integer, non_empty_array, number, object, string,
+    any_of, array, boolean, constant, integer, non_empty_array, number, object, optional, string,
 };
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
-use soliddraft_kernel_api::{FaceId, Plane, SurfaceKind};
+use soliddraft_kernel_api::{FaceId, KernelResult, Plane, SurfaceKind};
+use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip};
+use soliddraft_model::{DatumPlane, PatternSpec, PlaneRef};
 
 /// A world point in a recipe line, in millimetres.
 pub type Point = [f64; 3];
@@ -87,6 +90,12 @@ pub enum Line {
         depth: f64,
         /// Extrude against the sketch normal.
         flip: bool,
+        /// Stop at the first place the sweep crosses the part's boundary; `depth` is ignored.
+        #[serde(default, skip_serializing_if = "is_false")]
+        up_to_next: bool,
+        /// Stop at the first hit on this face; `depth` is ignored.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        up_to_face: Option<String>,
     },
     /// Removes material: cuts a sketch's profiles into the part.
     Cut {
@@ -98,6 +107,71 @@ pub enum Line {
         depth: f64,
         /// Cut along the sketch normal instead of into the face.
         flip: bool,
+        /// Stop at the first place the sweep crosses the part's boundary.
+        #[serde(default, skip_serializing_if = "is_false")]
+        up_to_next: bool,
+        /// Stop at the first hit on this face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        up_to_face: Option<String>,
+    },
+    /// Drills holes into a planar face.
+    Hole {
+        /// The planar face's name.
+        face: String,
+        /// Hole centres: world points on the face.
+        points: Vec<Point>,
+        /// Diameter, mm.
+        diameter: f64,
+        /// Depth, mm; absent drills through.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        depth: Option<f64>,
+        /// Full drill-point angle of a blind hole, degrees; absent leaves a flat floor.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tip_angle: Option<f64>,
+        /// A counterbore at the entry.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        counterbore: Option<Counterbore>,
+        /// A countersink at the entry.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        countersink: Option<Countersink>,
+    },
+    /// Copies the part's body along a direction.
+    LinearPattern {
+        /// Direction, [x, y, z].
+        direction: Point,
+        /// Distance between copies, mm.
+        spacing: f64,
+        /// Copies, including the original.
+        count: u32,
+    },
+    /// Copies the part's body around an axis.
+    CircularPattern {
+        /// A point on the axis.
+        axis_origin: Point,
+        /// The axis direction.
+        axis_direction: Point,
+        /// Copies, including the original.
+        count: u32,
+        /// Angle between copies, degrees.
+        angle: f64,
+    },
+    /// Reflects the part's body in a plane.
+    Mirror {
+        /// `top`, `front`, `right`, or a planar face's name.
+        plane: String,
+        /// Unite the reflection with the original.
+        keep_original: bool,
+    },
+    /// Tilts faces about a neutral plane.
+    Draft {
+        /// Face names.
+        faces: Vec<String>,
+        /// `top`, `front`, `right`, or a planar face's name.
+        neutral: String,
+        /// Draft angle, degrees.
+        angle: f64,
+        /// Pull against the neutral plane's normal.
+        reverse: bool,
     },
     /// Rounds edges.
     Fillet {
@@ -147,6 +221,42 @@ pub enum Line {
         /// New distance, mm.
         distance: f64,
     },
+    /// Changes a hole's diameter and depth.
+    EditHole {
+        /// The feature's name.
+        feature: String,
+        /// New diameter, mm.
+        diameter: f64,
+        /// New depth, mm; absent drills through.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        depth: Option<f64>,
+        /// A new countersink at the entry; absent keeps the hole's head.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        countersink: Option<Countersink>,
+    },
+    /// Changes a pattern's copies and spacing or angle.
+    EditPattern {
+        /// The feature's name.
+        feature: String,
+        /// Copies, including the original.
+        count: u32,
+        /// Spacing in mm for a linear pattern, angle in degrees for a circular one.
+        step: f64,
+    },
+    /// Changes whether a mirror keeps the original.
+    EditMirror {
+        /// The feature's name.
+        feature: String,
+        /// Unite the reflection with the original.
+        keep_original: bool,
+    },
+    /// Changes a draft's angle.
+    EditDraft {
+        /// The feature's name.
+        feature: String,
+        /// New angle, degrees.
+        angle: f64,
+    },
     /// Suppresses or restores a feature.
     Suppress {
         /// The feature's name.
@@ -159,6 +269,28 @@ pub enum Line {
         /// The feature's name.
         feature: String,
     },
+}
+
+/// A counterbore in a hole line.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Counterbore {
+    /// Diameter, mm.
+    pub diameter: f64,
+    /// Depth, mm.
+    pub depth: f64,
+}
+
+/// A countersink in a hole line.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Countersink {
+    /// Diameter at the face, mm.
+    pub diameter: f64,
+    /// Full angle, degrees.
+    pub angle: f64,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn point(what: &str) -> Value {
@@ -248,21 +380,115 @@ pub fn sketch_geometry_params() -> Vec<(&'static str, Value)> {
 
 /// The `extrude` verb's parameters.
 pub fn extrude_params() -> Vec<(&'static str, Value)> {
-    vec![
+    let mut params = vec![
         sketch_param(),
         ("depth", number("Depth, mm, greater than 0")),
         ("flip", boolean("true extrudes against the sketch normal")),
-    ]
+    ];
+    params.extend(up_to_params());
+    params
 }
 
 /// The `cut` verb's parameters.
 pub fn cut_params() -> Vec<(&'static str, Value)> {
-    vec![
+    let mut params = vec![
         sketch_param(),
         ("through_all", boolean("true cuts through the whole part; depth is then ignored")),
         ("depth", number("Depth, mm, greater than 0")),
         ("flip", boolean("true cuts along the sketch normal instead of into the face")),
+    ];
+    params.extend(up_to_params());
+    params
+}
+
+fn up_to_params() -> [(&'static str, Value); 2] {
+    [
+        ("up_to_next", optional(boolean("true stops at the first place the sweep crosses the part's boundary"))),
+        ("up_to_face", optional(string("Stops at the first hit on this face, by name"))),
     ]
+}
+
+/// The `hole` verb's parameters.
+pub fn hole_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("face", string("The planar face the holes start on, such as Boss-Extrude1 · End cap")),
+        ("points", non_empty_array(point("A hole centre"), "Hole centres on the face")),
+        ("diameter", number("Diameter, mm, greater than 0")),
+        ("depth", optional(number("Depth, mm; leave out to drill through"))),
+        ("tip_angle", optional(number("Drill-point angle of a blind hole, degrees, such as 118; leave out for flat"))),
+        ("counterbore", optional(object(&[("diameter", number("Diameter, mm")), ("depth", number("Depth, mm"))]))),
+        ("countersink", optional(countersink_param())),
+    ]
+}
+
+fn countersink_param() -> Value {
+    object(&[("diameter", number("Diameter at the face, mm")), ("angle", number("Full angle, degrees: 82, 90 or 100"))])
+}
+
+/// The `linear_pattern` verb's parameters.
+pub fn linear_pattern_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("direction", array(number("component"), "Direction [x, y, z]")),
+        ("spacing", number("Distance between copies, mm, greater than 0")),
+        ("count", number("Copies including the original, at least 2")),
+    ]
+}
+
+/// The `circular_pattern` verb's parameters.
+pub fn circular_pattern_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("axis_origin", point("A point on the axis")),
+        ("axis_direction", array(number("component"), "Axis direction [x, y, z]")),
+        ("count", number("Copies including the original, at least 2")),
+        ("angle", number("Angle between copies, degrees")),
+    ]
+}
+
+/// The `mirror` verb's parameters.
+pub fn mirror_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("plane", string("`top`, `front`, `right`, or a planar face's name")),
+        ("keep_original", boolean("true unites the reflection with the original")),
+    ]
+}
+
+/// The `draft` verb's parameters.
+pub fn draft_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("faces", non_empty_array(string("A face name"), "The faces to tilt")),
+        ("neutral", string("The neutral plane: `top`, `front`, `right`, or a planar face's name")),
+        ("angle", number("Draft angle, degrees, between -90 and 90")),
+        ("reverse", boolean("true pulls against the neutral plane's normal")),
+    ]
+}
+
+/// The `edit_hole` verb's parameters.
+pub fn edit_hole_params() -> Vec<(&'static str, Value)> {
+    vec![
+        feature_param(),
+        ("diameter", number("Diameter, mm, greater than 0")),
+        ("depth", optional(number("Depth, mm; leave out to drill through"))),
+        ("countersink", optional(countersink_param())),
+    ]
+}
+
+/// The `edit_pattern` verb's parameters.
+pub fn edit_pattern_params() -> Vec<(&'static str, Value)> {
+    vec![
+        feature_param(),
+        ("count", number("Copies including the original, at least 2")),
+        ("step", number("Spacing in mm for a linear pattern, angle in degrees for a circular one")),
+    ]
+}
+
+/// The `edit_mirror` verb's parameters.
+pub fn edit_mirror_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("keep_original", boolean("true unites the reflection with the original"))]
+}
+
+/// The `edit_draft` verb's parameters.
+pub fn edit_draft_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("angle", number("Draft angle, degrees"))]
 }
 
 /// The `fillet` verb's parameters.
@@ -486,6 +712,46 @@ fn sketch_plane(doc: &Document, plane: &str) -> Result<SketchPlane, String> {
     Ok(SketchPlane::Face { face })
 }
 
+/// Any face by name, as a persistent reference.
+fn face_ref_by_name(doc: &Document, name: &str) -> Result<crate::document::FaceRef, String> {
+    let face = face_by_name(doc, name)
+        .ok_or_else(|| format!("no face named `{name}`; `feature` lists each feature's faces"))?;
+    doc.any_face_ref(face).ok_or_else(|| format!("`{name}` cannot be referenced"))
+}
+
+/// A reference plane or a planar face, by name.
+fn plane_ref(doc: &Document, plane: &str) -> Result<PlaneRef, String> {
+    Ok(match sketch_plane(doc, plane)? {
+        SketchPlane::Reference { plane } => PlaneRef::Datum {
+            datum: match plane {
+                PlaneKind::Top => DatumPlane::Top,
+                PlaneKind::Front => DatumPlane::Front,
+                PlaneKind::Right => DatumPlane::Right,
+            },
+            offset: 0.0,
+        },
+        SketchPlane::Face { face } => PlaneRef::Face { face },
+    })
+}
+
+/// The end of an extrude or cut line.
+fn end_of(doc: &Document, up_to_next: bool, up_to_face: &Option<String>) -> Result<Option<EndKind>, String> {
+    match (up_to_next, up_to_face) {
+        (true, Some(_)) => Err("choose up_to_next or up_to_face, not both".into()),
+        (true, None) => Ok(Some(EndKind::UpToNext)),
+        (false, Some(face)) => Ok(Some(EndKind::UpToFace(Some(face_ref_by_name(doc, face)?)))),
+        (false, None) => Ok(None),
+    }
+}
+
+fn vec3_of(p: Point, what: &str) -> Result<soliddraft_kernel_api::Vec3, String> {
+    let v = soliddraft_kernel_api::Vec3::new(p[0], p[1], p[2]);
+    if !v.is_finite() || v.normalized().is_none() {
+        return Err(format!("{what} must be a finite, non-zero vector"));
+    }
+    Ok(v)
+}
+
 /// Projects a world point into the plane's (u, v) frame. Points more than half a
 /// millimetre off the plane are refused: they mean the plane or the point is wrong.
 fn to_plane(plane: &Plane, p: Point, what: &str) -> Result<P2, String> {
@@ -641,23 +907,97 @@ impl Line {
                 run.apply(doc, Command::EditSketch { id, sketch: s })?;
                 run.last_sketch = Some(id);
             }
-            Line::Extrude { sketch, depth, flip } => {
+            Line::Extrude { sketch, depth, flip, up_to_next, up_to_face } => {
+                let end = end_of(doc, *up_to_next, up_to_face)?;
                 let params = ExtrudeParams {
                     sketch: Some(run.sketch(doc, sketch)?),
-                    depth: positive("depth", *depth)?,
+                    depth: if end.is_some() { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? },
                     flip: *flip,
+                    end: end.unwrap_or_default(),
                     ..Default::default()
                 };
                 run.apply(doc, Command::AddExtrude { params, via_assistant: true })?;
             }
-            Line::Cut { sketch, through_all, depth, flip } => {
+            Line::Cut { sketch, through_all, depth, flip, up_to_next, up_to_face } => {
+                let end = end_of(doc, *up_to_next, up_to_face)?;
+                let free = *through_all || end.is_some();
                 let params = CutParams {
                     sketch: run.sketch(doc, sketch)?,
-                    depth: if *through_all { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? },
-                    through_all: *through_all,
+                    depth: if free { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? },
+                    through_all: *through_all && end.is_none(),
                     flip: *flip,
+                    up_to: end,
                 };
                 run.apply(doc, Command::AddCut { params })?;
+            }
+            Line::Hole { face, points, diameter, depth, tip_angle, counterbore, countersink } => {
+                let id = face_by_name(doc, face).ok_or_else(|| format!("no face named `{face}`"))?;
+                let r =
+                    doc.face_ref(id).ok_or_else(|| format!("`{face}` is not planar, so holes cannot start on it"))?;
+                let plane = doc.face_plane(id).ok_or_else(|| format!("`{face}` has no plane"))?;
+                let points = points
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| to_plane(&plane, *p, &format!("hole {}", i + 1)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let head = match (counterbore, countersink) {
+                    (Some(_), Some(_)) => return Err("a hole has a counterbore or a countersink, not both".into()),
+                    (Some(c), None) => Some(HoleHead::Counterbore {
+                        diameter: positive("counterbore diameter", c.diameter)?,
+                        depth: positive("counterbore depth", c.depth)?,
+                    }),
+                    (None, Some(c)) => Some(HoleHead::Countersink {
+                        diameter: positive("countersink diameter", c.diameter)?,
+                        angle_deg: positive("countersink angle", c.angle)?,
+                    }),
+                    (None, None) => None,
+                };
+                let hole = soliddraft_model::HoleFeature {
+                    face: r,
+                    points,
+                    diameter: positive("diameter", *diameter)?,
+                    depth: match depth {
+                        Some(d) => HoleDepth::Blind { depth: positive("depth", *d)? },
+                        None => HoleDepth::Through,
+                    },
+                    tip: match tip_angle {
+                        Some(a) => HoleTip::Cone { angle_deg: positive("tip angle", *a)? },
+                        None => HoleTip::Flat,
+                    },
+                    head,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Hole(hole)))?;
+            }
+            Line::LinearPattern { direction, spacing, count } => {
+                let layout = PatternSpec::Linear {
+                    direction: vec3_of(*direction, "direction")?,
+                    spacing: positive("spacing", *spacing)?,
+                    count: *count,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Pattern(soliddraft_model::PatternFeature { layout })))?;
+            }
+            Line::CircularPattern { axis_origin, axis_direction, count, angle } => {
+                let layout = PatternSpec::Circular {
+                    axis_origin: soliddraft_kernel_api::Vec3::new(axis_origin[0], axis_origin[1], axis_origin[2]),
+                    axis_direction: vec3_of(*axis_direction, "axis direction")?,
+                    count: *count,
+                    angle: *angle,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Pattern(soliddraft_model::PatternFeature { layout })))?;
+            }
+            Line::Mirror { plane, keep_original } => {
+                let mirror =
+                    soliddraft_model::MirrorFeature { plane: plane_ref(doc, plane)?, keep_original: *keep_original };
+                run.apply(doc, Command::AddFeature(FeatureKind::Mirror(mirror)))?;
+            }
+            Line::Draft { faces, neutral, angle, reverse } => {
+                let draft = soliddraft_model::DraftFeature {
+                    faces: faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
+                    neutral: plane_ref(doc, neutral)?,
+                    angle: *angle,
+                    reverse: *reverse,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Draft(draft)))?;
             }
             Line::Fillet { edges, radius } => {
                 let edges = edges.iter().map(|e| edge_ref(doc, e)).collect::<Result<Vec<_>, _>>()?;
@@ -674,7 +1014,7 @@ impl Line {
                 let Some(FeatureKind::Extrude(p)) = doc.feature(id).map(|f| f.kind.clone()) else {
                     return Err(format!("{feature} is not an extrude"));
                 };
-                let params = ExtrudeParams { depth: positive("depth", *depth)?, flip: *flip, ..p };
+                let params = ExtrudeParams { depth: positive("depth", *depth)?, flip: *flip, end: EndKind::Blind, ..p };
                 run.apply(doc, Command::EditExtrude { id, params })?;
             }
             Line::EditCut { feature, through_all, depth, flip } => {
@@ -683,8 +1023,59 @@ impl Line {
                     return Err(format!("{feature} is not a cut"));
                 };
                 let depth = if *through_all { depth.clamp(1.0, MAX_LENGTH_MM) } else { positive("depth", *depth)? };
-                let params = CutParams { through_all: *through_all, depth, flip: *flip, ..p };
+                let params = CutParams { through_all: *through_all, depth, flip: *flip, up_to: None, ..p };
                 run.apply(doc, Command::EditCut { id, params })?;
+            }
+            Line::EditHole { feature, diameter, depth, countersink } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Hole(mut h)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a hole"));
+                };
+                h.diameter = positive("diameter", *diameter)?;
+                h.depth = match depth {
+                    Some(d) => HoleDepth::Blind { depth: positive("depth", *d)? },
+                    None => HoleDepth::Through,
+                };
+                if let Some(c) = countersink {
+                    h.head = Some(HoleHead::Countersink {
+                        diameter: positive("countersink diameter", c.diameter)?,
+                        angle_deg: positive("countersink angle", c.angle)?,
+                    });
+                }
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Hole(h) })?;
+            }
+            Line::EditPattern { feature, count, step } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Pattern(mut p)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a pattern"));
+                };
+                match &mut p.layout {
+                    PatternSpec::Linear { spacing, count: c, .. } => {
+                        *spacing = positive("spacing", *step)?;
+                        *c = *count;
+                    }
+                    PatternSpec::Circular { angle, count: c, .. } => {
+                        *angle = *step;
+                        *c = *count;
+                    }
+                }
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Pattern(p) })?;
+            }
+            Line::EditMirror { feature, keep_original } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Mirror(mut m)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a mirror"));
+                };
+                m.keep_original = *keep_original;
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Mirror(m) })?;
+            }
+            Line::EditDraft { feature, angle } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Draft(mut d)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a draft"));
+                };
+                d.angle = *angle;
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Draft(d) })?;
             }
             Line::EditFillet { feature, radius } => {
                 let id = feature_by_name(doc, feature)?;
@@ -727,6 +1118,15 @@ impl Line {
             Line::EditCut { .. } => "edit_cut",
             Line::EditFillet { .. } => "edit_fillet",
             Line::EditChamfer { .. } => "edit_chamfer",
+            Line::Hole { .. } => "hole",
+            Line::LinearPattern { .. } => "linear_pattern",
+            Line::CircularPattern { .. } => "circular_pattern",
+            Line::Mirror { .. } => "mirror",
+            Line::Draft { .. } => "draft",
+            Line::EditHole { .. } => "edit_hole",
+            Line::EditPattern { .. } => "edit_pattern",
+            Line::EditMirror { .. } => "edit_mirror",
+            Line::EditDraft { .. } => "edit_draft",
             Line::Suppress { .. } => "suppress",
             Line::DeleteFeature { .. } => "delete_feature",
         }
@@ -741,6 +1141,11 @@ impl Line {
                 s.push_str(", flipped");
             }
             s
+        };
+        let up_to = |next: bool, face: &Option<String>, otherwise: String| match (next, face) {
+            (true, _) => "up to next".to_owned(),
+            (_, Some(f)) => format!("up to {f}"),
+            _ => otherwise,
         };
         match self {
             Line::Sketch { plane, shapes } => {
@@ -768,12 +1173,64 @@ impl Line {
             Line::SketchGeometry { plane, operations } => {
                 (format!("Sketch geometry on {plane}"), format!("{} tool operations", operations.len()))
             }
-            Line::Extrude { sketch, depth, flip } => {
-                ("Extrude".into(), format!("{sketch}, {}", end(false, *depth, *flip)))
+            Line::Extrude { sketch, depth, flip, up_to_next, up_to_face } => {
+                ("Extrude".into(), format!("{sketch}, {}", up_to(*up_to_next, up_to_face, end(false, *depth, *flip))))
             }
-            Line::Cut { sketch, through_all, depth, flip } => {
-                ("Cut".into(), format!("{sketch}, {}", end(*through_all, *depth, *flip)))
+            Line::Cut { sketch, through_all, depth, flip, up_to_next, up_to_face } => (
+                "Cut".into(),
+                format!("{sketch}, {}", up_to(*up_to_next, up_to_face, end(*through_all, *depth, *flip))),
+            ),
+            Line::Hole { face, points, diameter, depth, tip_angle, counterbore, countersink } => {
+                let depth = match depth {
+                    Some(d) => {
+                        let tip = tip_angle.map(|a| HoleTip::Cone { angle_deg: a }).unwrap_or(HoleTip::Flat);
+                        hole_depth_text(&HoleDepth::Blind { depth: *d }, &tip)
+                    }
+                    None => "through".into(),
+                };
+                let head = match (counterbore, countersink) {
+                    (Some(c), _) => {
+                        format!(", {}", hole_head_text(&HoleHead::Counterbore { diameter: c.diameter, depth: c.depth }))
+                    }
+                    (_, Some(c)) => format!(
+                        ", {}",
+                        hole_head_text(&HoleHead::Countersink { diameter: c.diameter, angle_deg: c.angle })
+                    ),
+                    _ => String::new(),
+                };
+                ("Hole".into(), format!("{} × Ø{} {depth}{head} on {face}", points.len(), fmt_mm(*diameter)))
             }
+            Line::LinearPattern { direction, spacing, count } => {
+                ("Linear pattern".into(), format!("{count} × {} mm along {}", fmt_mm(*spacing), pt(direction)))
+            }
+            Line::CircularPattern { axis_direction, count, angle, .. } => {
+                ("Circular pattern".into(), format!("{count} × {}° about {}", fmt_mm(*angle), pt(axis_direction)))
+            }
+            Line::Mirror { plane, keep_original } => {
+                ("Mirror".into(), format!("in {plane}{}", if *keep_original { ", keeping the original" } else { "" }))
+            }
+            Line::Draft { faces, neutral, angle, .. } => {
+                ("Draft".into(), format!("{}° on {} about {neutral}", fmt_mm(*angle), faces.join(", ")))
+            }
+            Line::EditHole { feature, diameter, depth, countersink } => (
+                format!("Edit {feature}"),
+                format!(
+                    "Ø{}, {}{}",
+                    fmt_mm(*diameter),
+                    depth.map_or("through".into(), |d| format!("{} mm", fmt_mm(d))),
+                    countersink.map_or(String::new(), |c| format!(
+                        ", {}",
+                        hole_head_text(&HoleHead::Countersink { diameter: c.diameter, angle_deg: c.angle })
+                    ))
+                ),
+            ),
+            Line::EditPattern { feature, count, step } => {
+                (format!("Edit {feature}"), format!("{count} × {}", fmt_mm(*step)))
+            }
+            Line::EditMirror { feature, keep_original } => {
+                (format!("Edit {feature}"), if *keep_original { "keep the original" } else { "reflection only" }.into())
+            }
+            Line::EditDraft { feature, angle } => (format!("Edit {feature}"), format!("{}°", fmt_mm(*angle))),
             Line::Fillet { edges, radius } => {
                 ("Fillet".into(), format!("R{} on {}", fmt_mm(*radius), edges.join(", ")))
             }
@@ -817,9 +1274,10 @@ fn cached_body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassPropert
     doc.kernel().cached_mass_properties(doc.display_body()?)
 }
 
-/// An independent proposal copy sharing the part's immutable bodies and meshes.
+/// An independent proposal copy sharing the part's immutable bodies and meshes. It makes
+/// no new display mesh until the dry run asks for its preview.
 fn scratch_copy(doc: &Document) -> Document {
-    doc.fork()
+    doc.scratch()
 }
 
 fn status_text(doc: &Document, id: FeatureId) -> String {
@@ -849,7 +1307,7 @@ struct DryRun {
     builds: PreparedBuilds,
 }
 
-fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
+fn dry_run(doc: &Document, lines: &[Line], preview: bool) -> Result<DryRun, String> {
     let mut scratch = scratch_copy(doc);
     let before: Vec<(FeatureId, String, FeatureKind, bool, bool)> =
         scratch.features.iter().map(|f| (f.id, f.name.clone(), f.kind.clone(), f.suppressed, broken(f))).collect();
@@ -890,7 +1348,12 @@ fn dry_run(doc: &Document, lines: &[Line]) -> Result<DryRun, String> {
     if let (Some(before), Some(after)) = (volume_before, volume_after) {
         rows.push(("Volume".into(), format!("{} → {} mm³", fmt_mm(before.round()), fmt_mm(after.round()))));
     }
-    let result = scratch.display_body().and_then(|b| scratch.meshes.get(&b).cloned());
+    let result = if preview {
+        scratch.show();
+        scratch.display_body().and_then(|b| scratch.meshes.get(&b).cloned())
+    } else {
+        None
+    };
     Ok(DryRun {
         rows,
         effect: json!({
@@ -1013,18 +1476,20 @@ impl ProposalBook {
             if doc.undo_depth() == *depth && doc.undo_label() == Some(label.as_str()))
     }
 
-    /// Tries `lines` on a scratch copy of `doc` and records a pending proposal.
+    /// Tries `lines` on a scratch copy of `doc` and records a pending proposal. A
+    /// proposal that is applied at once can skip the `preview` mesh of its result.
     pub fn propose(
         &mut self,
         doc: &Document,
         summary: &str,
         lines: Vec<Line>,
         origin: Caller,
+        preview: bool,
     ) -> Result<(String, Value), String> {
         if lines.is_empty() {
             return Err("a proposal needs at least one line".into());
         }
-        let run = dry_run(doc, &lines)?;
+        let run = dry_run(doc, &lines, preview)?;
         self.next += 1;
         let id = format!("P{}", self.next);
         self.proposals.push(Proposal {
@@ -1183,16 +1648,26 @@ pub fn find_entity(doc: &Document, name: &str) -> Option<Selection> {
     doc.vertex_position(key).map(|_| Selection::Vertex(key))
 }
 
-/// The point an entity is measured from.
-fn reference_point(doc: &Document, sel: Selection) -> Option<Vec3> {
-    match sel {
-        Selection::Feature(id) => {
-            doc.mass_properties(id).map(|m| Vec3::new(m.centroid.x as f32, m.centroid.y as f32, m.centroid.z as f32))
+/// The point an entity is measured from. Measuring is an explicit request, so features,
+/// faces and edges use the kernel's proven centre of mass, centroids and midpoints. When
+/// the kernel refuses the proof, so does the measurement: the display's estimates are
+/// never passed off as measured.
+fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>> {
+    let f32s = |v: soliddraft_kernel_api::Vec3| Vec3::new(v.x as f32, v.y as f32, v.z as f32);
+    let measured = || doc.display_body().map(|body| doc.kernel().measured_topology(body)).transpose();
+    Ok(match sel {
+        Selection::Feature(id) => match doc.feature(id).and_then(|f| f.body) {
+            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
+            None => None,
+        },
+        Selection::Face(face) => {
+            measured()?.and_then(|t| t.faces.iter().find(|f| f.id == face).map(|f| f32s(f.centroid)))
         }
-        Selection::Face(face) => doc.named_face(face).map(|x| x.centroid),
-        Selection::Edge(edge) => doc.named_edge(edge).map(|x| x.midpoint),
+        Selection::Edge(edge) => {
+            measured()?.and_then(|t| t.edges.iter().find(|e| e.id == edge).map(|e| f32s(e.midpoint)))
+        }
         Selection::Vertex(key) => doc.vertex_position(key),
-    }
+    })
 }
 
 /// Whether an edge is an outside (convex) edge or an inside corner (concave), from the
@@ -1270,6 +1745,17 @@ fn edge_json(
     v
 }
 
+/// Says when the centroids, midpoints and lengths shown come from the display mesh rather
+/// than the kernel's proofs, which only `measure` asks for.
+fn mark_estimates(v: &mut Value, topology: Option<&soliddraft_kernel_api::Topology>) {
+    if let Some(chord) = topology.and_then(|t| t.display_chord_height) {
+        v["estimates"] = format!(
+            "centroids, midpoints and lengths are estimated from the display mesh, within {chord:.3} mm; measure proves them"
+        )
+        .into();
+    }
+}
+
 fn selection_json(doc: &Document, sel: Selection) -> Value {
     let Some(info) = doc.describe(sel) else { return Value::Null };
     let topology = doc.display_body().and_then(|b| doc.kernel().topology(b).ok());
@@ -1278,6 +1764,9 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
         Selection::Edge(e) => edge_json(doc, e, topology.as_ref()),
         _ => json!({}),
     };
+    if matches!(sel, Selection::Face(_) | Selection::Edge(_)) {
+        mark_estimates(&mut v, topology.as_ref());
+    }
     v["name"] = info.title.into();
     v["kind"] = match sel {
         Selection::Feature(_) => "feature",
@@ -1289,6 +1778,17 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
     v["details"] =
         info.details.into_iter().map(|(k, v)| (k, Value::String(v))).collect::<serde_json::Map<_, _>>().into();
     v
+}
+
+fn end_json(v: &mut Value, end: &EndKind) {
+    match end {
+        EndKind::UpToNext => v["end"] = "up to next".into(),
+        EndKind::UpToFace(face) => {
+            v["end"] = "up to face".into();
+            v["up_to_face"] = face.as_ref().map(|f| f.label.clone()).into();
+        }
+        EndKind::Blind | EndKind::ThroughAll => {}
+    }
 }
 
 fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
@@ -1304,17 +1804,60 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
             "entities": s.sketch.drawn().count(),
             "state": s.sketch.status.label(),
         }),
-        FeatureKind::Extrude(p) => match p.sketch {
-            Some(s) => json!({ "type": "extrude", "sketch": name(s), "depth": p.depth, "flip": p.flip }),
-            None => json!({
-                "type": "extrude", "profile": p.profile.summary(), "plane": doc.model().datum_name(p.plane.to_model()), "depth": p.depth, "flip": p.flip,
-            }),
-        },
-        FeatureKind::Cut(p) => json!({
-            "type": "cut", "sketch": name(p.sketch), "through_all": p.through_all, "depth": p.depth, "flip": p.flip,
-        }),
+        FeatureKind::Extrude(p) => {
+            let mut v = match p.sketch {
+                Some(s) => json!({ "type": "extrude", "sketch": name(s), "depth": p.depth, "flip": p.flip }),
+                None => json!({
+                    "type": "extrude", "profile": p.profile.summary(), "plane": doc.model().datum_name(p.plane.to_model()), "depth": p.depth, "flip": p.flip,
+                }),
+            };
+            end_json(&mut v, &p.end);
+            v
+        }
+        FeatureKind::Cut(p) => {
+            let mut v = json!({
+                "type": "cut", "sketch": name(p.sketch), "through_all": p.through_all, "depth": p.depth, "flip": p.flip,
+            });
+            end_json(&mut v, &p.end());
+            v
+        }
         FeatureKind::Fillet(p) => json!({ "type": "fillet", "edges": labels(&p.edges), "radius": p.radius }),
         FeatureKind::Chamfer(p) => json!({ "type": "chamfer", "edges": labels(&p.edges), "distance": p.distance }),
+        FeatureKind::Hole(h) => {
+            let mut v = json!({
+                "type": "hole", "face": h.face.label, "holes": h.points.len(), "diameter": h.diameter,
+                "depth": match h.depth { HoleDepth::Blind { depth } => json!(depth), HoleDepth::Through => json!("through") },
+            });
+            if let HoleTip::Cone { angle_deg } = h.tip {
+                v["tip_angle"] = angle_deg.into();
+            }
+            match h.head {
+                Some(HoleHead::Counterbore { diameter, depth }) => {
+                    v["counterbore"] = json!({ "diameter": diameter, "depth": depth });
+                }
+                Some(HoleHead::Countersink { diameter, angle_deg }) => {
+                    v["countersink"] = json!({ "diameter": diameter, "angle": angle_deg });
+                }
+                None => {}
+            }
+            v
+        }
+        FeatureKind::Pattern(p) => match p.layout {
+            PatternSpec::Linear { direction, spacing, count } => json!({
+                "type": "linear_pattern", "direction": kvec(direction), "spacing": spacing, "count": count,
+            }),
+            PatternSpec::Circular { axis_origin, axis_direction, count, angle } => json!({
+                "type": "circular_pattern", "axis_origin": kvec(axis_origin), "axis_direction": kvec(axis_direction),
+                "count": count, "angle": angle,
+            }),
+        },
+        FeatureKind::Mirror(m) => {
+            json!({ "type": "mirror", "plane": plane_ref_label(&m.plane), "keep_original": m.keep_original })
+        }
+        FeatureKind::Draft(d) => json!({
+            "type": "draft", "faces": d.faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
+            "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,
+        }),
     }
 }
 
@@ -1363,6 +1906,7 @@ impl CommandTools<'_> {
         v["faces"] = doc.faces.iter().filter(|x| x.feature == id).map(|x| face_json(doc, x.id)).collect();
         v["edges"] =
             doc.edges.iter().filter(|x| x.feature == id).map(|x| edge_json(doc, x.id, topology.as_ref())).collect();
+        mark_estimates(&mut v, topology.as_ref());
         if let FeatureKind::Sketch(s) = &f.kind {
             v["dimensions"] = dimensions(&s.sketch)
                 .enumerate()
@@ -1393,7 +1937,11 @@ impl CommandTools<'_> {
         let doc = &*self.doc;
         let find = |name: &str| find_entity(doc, name).ok_or_else(|| format!("no entity named `{name}`. {NAMES_HELP}"));
         let (sa, sb) = (find(a)?, find(b)?);
-        let point = |name: &str, s| reference_point(doc, s).ok_or_else(|| format!("`{name}` has no reference point"));
+        let point = |name: &str, s| match reference_point(doc, s) {
+            Ok(Some(p)) => Ok(p),
+            Ok(None) => Err(format!("`{name}` has no reference point")),
+            Err(e) => Err(format!("`{name}` could not be measured: {e}")),
+        };
         let (pa, pb) = (point(a, sa)?, point(b, sb)?);
         let d = pb - pa;
         let mut v = json!({
@@ -1414,11 +1962,17 @@ impl CommandTools<'_> {
     fn propose(&mut self, input: &Value, caller: &Caller) -> Result<Value, String> {
         let lines: Vec<Line> =
             serde_json::from_value(input["commands"].clone()).map_err(|e| format!("bad commands: {e}"))?;
-        self.propose_lines(input["summary"].as_str().unwrap_or_default(), lines, caller)
+        self.propose_lines(input["summary"].as_str().unwrap_or_default(), lines, caller, true)
     }
 
-    fn propose_lines(&mut self, summary: &str, lines: Vec<Line>, caller: &Caller) -> Result<Value, String> {
-        let (id, effect) = self.book.propose(self.doc, summary, lines, caller.clone())?;
+    fn propose_lines(
+        &mut self,
+        summary: &str,
+        lines: Vec<Line>,
+        caller: &Caller,
+        preview: bool,
+    ) -> Result<Value, String> {
+        let (id, effect) = self.book.propose(self.doc, summary, lines, caller.clone(), preview)?;
         let auto = match caller {
             Caller::Assistant { .. } => self.book.auto_apply,
             Caller::Mcp { .. } => false,
@@ -1575,7 +2129,8 @@ impl ToolHost for CommandTools<'_> {
                 match serde_json::from_value::<Line>(line) {
                     Ok(line) => {
                         let (k, v) = line.describe();
-                        self.propose_lines(&format!("{k}: {v}"), vec![line], caller).and_then(|r| {
+                        // Applied at once, so no card shows a preview of it.
+                        self.propose_lines(&format!("{k}: {v}"), vec![line], caller, false).and_then(|r| {
                             let id = r["proposal_id"].as_str().unwrap_or_default().to_owned();
                             self.apply(&id, caller).map(|mut a| {
                                 a["effect"] = r["effect"].clone();
@@ -1610,19 +2165,26 @@ pub fn board_bracket() -> Document {
     let steps = [
         vec![
             Line::Sketch { plane: "top".into(), shapes: vec![rect([60.0, 45.0, 0.0], 120.0, 90.0)] },
-            Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: false },
+            Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: false, up_to_next: false, up_to_face: None },
         ],
         vec![
             Line::Sketch { plane: "front".into(), shapes: vec![rect([60.0, 0.0, 30.0], 120.0, 60.0)] },
-            Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: true },
+            Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: true, up_to_next: false, up_to_face: None },
         ],
         vec![
             Line::Sketch { plane: "Boss-Extrude1 · End cap".into(), shapes: vec![circle([85.0, 55.0, 10.0], 24.0)] },
-            Line::Extrude { sketch: "previous".into(), depth: 24.0, flip: false },
+            Line::Extrude { sketch: "previous".into(), depth: 24.0, flip: false, up_to_next: false, up_to_face: None },
         ],
         vec![
             Line::Sketch { plane: "Boss-Extrude3 · End cap".into(), shapes: vec![circle([85.0, 55.0, 34.0], 12.0)] },
-            Line::Cut { sketch: "previous".into(), through_all: true, depth: 1.0, flip: false },
+            Line::Cut {
+                sketch: "previous".into(),
+                through_all: true,
+                depth: 1.0,
+                flip: false,
+                up_to_next: false,
+                up_to_face: None,
+            },
         ],
     ];
     for lines in steps {
@@ -1636,6 +2198,10 @@ pub fn board_bracket() -> Document {
 mod tests {
     use super::*;
     use soliddraft_assistant::tools::{call_checked, check_strict};
+    use soliddraft_kernel_api::{
+        BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, HistoryRecord, MassProperties, Mesh, OpResult, OpTag,
+        Profile, Revolve, TessellationParams, Topology, Validation,
+    };
 
     fn assistant() -> Caller {
         Caller::Assistant { prompt: "add holes".into(), model: soliddraft_assistant::DEFAULT_MODEL.into() }
@@ -1834,8 +2400,107 @@ mod tests {
             &mcp,
         );
         assert!(!out.is_error, "{}", out.content);
-        let preview = tools.book.proposals.last().unwrap().preview.result.as_ref().unwrap();
-        assert!(std::sync::Arc::ptr_eq(preview, &mesh), "a sketch preflight regenerated the solid's display buffers");
-        assert!(std::sync::Arc::ptr_eq(&tools.doc.meshes[&body.unwrap()], &mesh));
+        // A direct verb is applied at once, so its dry run makes no preview.
+        assert!(tools.book.proposals.last().unwrap().preview.result.is_none());
+        assert!(
+            std::sync::Arc::ptr_eq(&tools.doc.meshes[&body.unwrap()], &mesh),
+            "a sketch preflight regenerated the solid's display buffers"
+        );
+    }
+
+    /// Catallax, refusing every proof a measurement asks for.
+    struct RefusesProofs(std::sync::Arc<dyn soliddraft_kernel_api::Kernel>);
+
+    impl soliddraft_kernel_api::Kernel for RefusesProofs {
+        fn backend(&self) -> soliddraft_kernel_api::BackendInfo {
+            self.0.backend()
+        }
+        fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
+            self.0.create_body_from_profile(tag, profile)
+        }
+        fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
+            self.0.extrude(tag, profile, params)
+        }
+        fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
+            self.0.revolve(tag, profile, params)
+        }
+        fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
+            self.0.boolean(tag, op, target, tool)
+        }
+        fn fillet(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], radius: f64) -> KernelResult<OpResult> {
+            self.0.fillet(tag, body, edges, radius)
+        }
+        fn chamfer(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], distance: f64) -> KernelResult<OpResult> {
+            self.0.chamfer(tag, body, edges, distance)
+        }
+        fn shell(&self, tag: &OpTag, body: BodyId, open: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
+            self.0.shell(tag, body, open, thickness)
+        }
+        fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+            self.0.tessellate(body, params)
+        }
+        fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+            self.0.tessellate_edges(body, params)
+        }
+        fn mass_properties(&self, _body: BodyId) -> KernelResult<MassProperties> {
+            Err(Self::refusal("mass_properties"))
+        }
+        fn validate(&self, body: BodyId) -> KernelResult<Validation> {
+            self.0.validate(body)
+        }
+        fn topology(&self, body: BodyId) -> KernelResult<Topology> {
+            self.0.topology(body)
+        }
+        fn measured_topology(&self, _body: BodyId) -> KernelResult<Topology> {
+            Err(Self::refusal("measured_topology"))
+        }
+        fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
+            self.0.history(body)
+        }
+        fn release(&self, body: BodyId) -> KernelResult<()> {
+            self.0.release(body)
+        }
+    }
+
+    impl RefusesProofs {
+        fn refusal(query: &str) -> soliddraft_kernel_api::KernelError {
+            soliddraft_kernel_api::KernelError::QueryFailed {
+                query: query.into(),
+                code: 0,
+                message: "work limit reached".into(),
+            }
+        }
+    }
+
+    #[test]
+    fn mcp_measure_refuses_when_the_kernel_refuses_the_proof() {
+        let kernel = std::sync::Arc::new(RefusesProofs(crate::kernel()));
+        let mut doc = Document::new("Part1", kernel);
+        let mut book = ProposalBook::default();
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
+        let mcp = Caller::Mcp { client: "test".into() };
+        let rectangle = json!({ "shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30 });
+        assert!(!call_checked(&mut tools, "sketch", json!({ "plane": "top", "shapes": [rectangle] }), &mcp).is_error);
+        let out = call_checked(&mut tools, "extrude", json!({ "sketch": "Sketch1", "depth": 10, "flip": false }), &mcp);
+        assert!(!out.is_error, "{}", out.content);
+
+        for (a, b) in [
+            ("Boss-Extrude1 · Start cap", "Boss-Extrude1 · End cap"),
+            ("Boss-Extrude1 · Edge 1", "Boss-Extrude1 · End cap"),
+            ("Boss-Extrude1", "Boss-Extrude1 · End cap"),
+        ] {
+            let m = call_checked(&mut tools, "measure", json!({ "a": a, "b": b }), &mcp);
+            assert!(m.is_error, "{a} to {b} answered without a proof: {}", m.content);
+            assert!(
+                m.content.contains("could not be measured") && m.content.contains("work limit reached"),
+                "{}",
+                m.content
+            );
+        }
+
+        // The descriptions still show the display's estimates, and say so.
+        let feature = call_checked(&mut tools, "feature", json!({ "name": "Boss-Extrude1" }), &mcp);
+        let v: Value = serde_json::from_str(&feature.content).unwrap();
+        assert!(v["estimates"].as_str().is_some_and(|s| s.contains("display mesh")), "{v}");
     }
 }

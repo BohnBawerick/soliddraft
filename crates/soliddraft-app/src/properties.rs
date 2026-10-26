@@ -2,7 +2,8 @@
 //! being created or edited, otherwise the selected entity's properties.
 
 use crate::document::{
-    Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, ProfileKind, Selection, SketchPlane, fmt_mm,
+    Command, EndKind, FeatureId, FeatureKind, FeatureStatus, PlaneKind, ProfileKind, Selection, SketchPlane, fmt_mm,
+    plane_ref_label,
 };
 use crate::drag::Dimension;
 use crate::icons::{self, Icon};
@@ -11,6 +12,8 @@ use crate::sketcher;
 use crate::state::{AppAction, AppState, DragStep, EditorParams, ExitInto, SketchSel, Tool};
 use crate::theme;
 use egui::{Align2, CornerRadius, Rect, Sense, Stroke, pos2, vec2};
+use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip, Vec3};
+use soliddraft_model::{DatumPlane, PatternSpec, PlaneRef};
 
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     if state.sketch.is_some() {
@@ -158,6 +161,113 @@ fn dimension_field(ui: &mut egui::Ui, state: &mut AppState, id: FeatureId, kind:
     }
 }
 
+/// The end condition of an extrude or cut. Through all is offered to cuts only, and
+/// the up-to conditions need a body to stop against.
+fn end_combo(ui: &mut egui::Ui, id: &str, end: &mut EndKind, cut: bool, up_to: bool) {
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new("End").size(12.0)));
+        egui::ComboBox::from_id_salt(id).width(ui.available_width() - 20.0).selected_text(end.label()).show_ui(
+            ui,
+            |ui| {
+                let mut options = vec![EndKind::Blind];
+                if cut {
+                    options.push(EndKind::ThroughAll);
+                }
+                if up_to {
+                    options.push(EndKind::UpToNext);
+                    options.push(EndKind::UpToFace(None));
+                }
+                for option in options {
+                    let same = std::mem::discriminant(&option) == std::mem::discriminant(end);
+                    if ui.selectable_label(same, option.label()).clicked() && !same {
+                        *end = option;
+                    }
+                }
+            },
+        );
+    });
+}
+
+fn pick_prompt(ui: &mut egui::Ui, text: &str) {
+    egui::Frame::new()
+        .fill(theme::FIELD_BG)
+        .stroke(Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.6)))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(text).size(11.5).color(theme::ACCENT));
+        });
+}
+
+fn picked_face(ui: &mut egui::Ui, face: Option<&crate::document::FaceRef>) {
+    match face {
+        Some(f) => {
+            ui.label(egui::RichText::new(&f.label).size(12.0));
+        }
+        None => pick_prompt(ui, "Click the face to stop at"),
+    }
+}
+
+fn coord(ui: &mut egui::Ui, id: &str, label: &str, value: &mut f64) {
+    ui.label(egui::RichText::new(label).size(11.0).color(theme::MUTED));
+    let r = ui.add(egui::DragValue::new(value).speed(0.5).range(-100_000.0..=100_000.0).fixed_decimals(2));
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{id} value")));
+}
+
+fn count_field(ui: &mut egui::Ui, count: &mut u32) {
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new("Copies").size(12.0)));
+        ui.add(egui::DragValue::new(count).range(2..=1000));
+    });
+}
+
+/// An angle with standard choices and a free value.
+fn standard_angle(ui: &mut egui::Ui, id: &str, label: &str, angle: &mut f64, choices: &[(f64, &str)]) {
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0)));
+        let text =
+            choices.iter().find(|(v, _)| v == angle).map_or(format!("{}°", fmt_mm(*angle)), |(_, t)| (*t).into());
+        egui::ComboBox::from_id_salt(id).selected_text(text).show_ui(ui, |ui| {
+            for (value, text) in choices {
+                ui.selectable_value(angle, *value, *text);
+            }
+        });
+        if *angle != 0.0 {
+            ui.add(egui::DragValue::new(angle).speed(0.5).range(1.0..=179.0).suffix("°"));
+        }
+    });
+}
+
+/// One of the world axes as a direction.
+fn axis_combo(ui: &mut egui::Ui, id: &str, label: &str, direction: &mut Vec3) {
+    let axes = [(Vec3::X, "X"), (Vec3::Y, "Y"), (Vec3::Z, "Z"), (-Vec3::X, "−X"), (-Vec3::Y, "−Y"), (-Vec3::Z, "−Z")];
+    ui.horizontal(|ui| {
+        ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0)));
+        let text = axes.iter().find(|(v, _)| v == direction).map_or("Custom", |(_, t)| t);
+        egui::ComboBox::from_id_salt(id).selected_text(text).show_ui(ui, |ui| {
+            for (value, text) in axes {
+                ui.selectable_value(direction, value, text);
+            }
+        });
+    });
+}
+
+/// A reference plane choice; a picked face shows by its label.
+fn plane_combo(ui: &mut egui::Ui, id: &str, plane: &mut PlaneRef) {
+    egui::ComboBox::from_id_salt(id).width(ui.available_width() - 4.0).selected_text(plane_ref_label(plane)).show_ui(
+        ui,
+        |ui| {
+            for datum in [DatumPlane::Top, DatumPlane::Front, DatumPlane::Right] {
+                let chosen = matches!(plane, PlaneRef::Datum { datum: d, .. } if *d == datum);
+                if ui.selectable_label(chosen, datum.label()).clicked() {
+                    *plane = PlaneRef::Datum { datum, offset: 0.0 };
+                }
+            }
+        },
+    );
+}
+
 fn section_gap(ui: &mut egui::Ui) {
     ui.add_space(6.0);
     theme::hline(ui);
@@ -183,6 +293,13 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         Some(EditorParams::Cut(_)) => (state.editor.as_ref().unwrap().title(), Icon::Cut),
         Some(EditorParams::Fillet(_)) => (state.editor.as_ref().unwrap().title(), Icon::Fillet),
         Some(EditorParams::Chamfer(_)) => (state.editor.as_ref().unwrap().title(), Icon::Chamfer),
+        Some(EditorParams::Hole(_)) => (state.editor.as_ref().unwrap().title(), Icon::Hole),
+        Some(EditorParams::Pattern(p)) => (
+            state.editor.as_ref().unwrap().title(),
+            if matches!(p.layout, PatternSpec::Linear { .. }) { Icon::LinearPattern } else { Icon::CircularPattern },
+        ),
+        Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
+        Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
         Some(EditorParams::Repair { .. }) => ("Repair references".to_owned(), Icon::Repair),
         None => return,
@@ -267,14 +384,16 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 }
                 section_gap(ui);
                 theme::section_label(ui, "Direction 1");
-                ui.horizontal(|ui| {
-                    ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new("End").size(12.0)));
-                    field_frame().show(ui, |ui| {
-                        ui.set_width(ui.available_width() - 16.0);
-                        ui.label("Blind");
-                    });
-                });
-                mm_field(ui, "Depth", &mut params.depth);
+                let mut end = params.end.clone();
+                end_combo(ui, "extrude_end", &mut end, false, params.sketch.is_some());
+                params.end = end;
+                match &params.end {
+                    EndKind::Blind => {
+                        mm_field(ui, "Depth", &mut params.depth);
+                    }
+                    EndKind::UpToFace(face) => picked_face(ui, face.as_ref()),
+                    _ => {}
+                }
                 ui.checkbox(&mut params.flip, "Flip direction");
                 if let Some(err) = &editor.error {
                     error_row(ui, err);
@@ -296,18 +415,17 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 });
                 section_gap(ui);
                 theme::section_label(ui, "Direction 1");
-                ui.horizontal(|ui| {
-                    ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new("End").size(12.0)));
-                    egui::ComboBox::from_id_salt("cut_end")
-                        .width(ui.available_width() - 20.0)
-                        .selected_text(if params.through_all { "Through all" } else { "Blind" })
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut params.through_all, true, "Through all");
-                            ui.selectable_value(&mut params.through_all, false, "Blind");
-                        });
-                });
-                if !params.through_all {
-                    mm_field(ui, "Depth", &mut params.depth);
+                let mut end = params.end();
+                end_combo(ui, "cut_end", &mut end, true, true);
+                if end != params.end() {
+                    params.set_end(end);
+                }
+                match params.end() {
+                    EndKind::Blind => {
+                        mm_field(ui, "Depth", &mut params.depth);
+                    }
+                    EndKind::UpToFace(face) => picked_face(ui, face.as_ref()),
+                    _ => {}
                 }
                 ui.checkbox(&mut params.flip, "Flip direction");
                 if let Some(err) = &editor.error {
@@ -365,6 +483,153 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 }
                 ui.add_space(8.0);
                 hint(ui, "Edges stay picked across a rebuild: each one is named by the feature that made it.");
+            }
+            EditorParams::Hole(h) => {
+                theme::section_label(ui, "Placement");
+                match &h.face {
+                    Some(face) => {
+                        ui.label(egui::RichText::new(&face.label).size(12.0));
+                    }
+                    None => pick_prompt(ui, "Click the planar face the holes start on"),
+                }
+                hint(ui, "Centres in the face's sketch frame, mm.");
+                let mut remove = None;
+                for (i, p) in h.points.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(format!("{}", i + 1)).size(12.0).color(theme::MUTED));
+                        coord(ui, &format!("hole_u{i}"), "u", &mut p.u);
+                        coord(ui, &format!("hole_v{i}"), "v", &mut p.v);
+                        if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove.filter(|_| h.points.len() > 1) {
+                    h.points.remove(i);
+                }
+                if ui.button("Add point").clicked() {
+                    let next = h.points.last().copied().unwrap_or_default();
+                    h.points.push(crate::sketch::P2::new(next.u + 10.0, next.v));
+                }
+                section_gap(ui);
+                theme::section_label(ui, "Hole");
+                mm_field(ui, "Diameter", &mut h.diameter);
+                let through = matches!(h.depth, HoleDepth::Through);
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(through, "Through").clicked() {
+                        h.depth = HoleDepth::Through;
+                    }
+                    if ui.selectable_label(!through, "Blind").clicked() && through {
+                        h.depth = HoleDepth::Blind { depth: 10.0 };
+                    }
+                });
+                if let HoleDepth::Blind { depth } = &mut h.depth {
+                    mm_field(ui, "Depth", depth);
+                    let mut angle = match h.tip {
+                        HoleTip::Flat => 0.0,
+                        HoleTip::Cone { angle_deg } => angle_deg,
+                    };
+                    standard_angle(ui, "hole_tip", "Tip", &mut angle, &[(0.0, "Flat"), (118.0, "118°"), (90.0, "90°")]);
+                    h.tip = if angle == 0.0 { HoleTip::Flat } else { HoleTip::Cone { angle_deg: angle } };
+                }
+                section_gap(ui);
+                theme::section_label(ui, "Head");
+                let kind = match h.head {
+                    None => 0,
+                    Some(HoleHead::Counterbore { .. }) => 1,
+                    Some(HoleHead::Countersink { .. }) => 2,
+                };
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(kind == 0, "None").clicked() {
+                        h.head = None;
+                    }
+                    if ui.selectable_label(kind == 1, "Counterbore").clicked() && kind != 1 {
+                        h.head = Some(HoleHead::Counterbore { diameter: h.diameter * 1.8, depth: h.diameter });
+                    }
+                    if ui.selectable_label(kind == 2, "Countersink").clicked() && kind != 2 {
+                        h.head = Some(HoleHead::Countersink { diameter: h.diameter * 2.0, angle_deg: 90.0 });
+                    }
+                });
+                match &mut h.head {
+                    Some(HoleHead::Counterbore { diameter, depth }) => {
+                        mm_field(ui, "Diameter", diameter);
+                        mm_field(ui, "Depth", depth);
+                    }
+                    Some(HoleHead::Countersink { diameter, angle_deg }) => {
+                        mm_field(ui, "Diameter", diameter);
+                        standard_angle(
+                            ui,
+                            "hole_sink",
+                            "Angle",
+                            angle_deg,
+                            &[(82.0, "82°"), (90.0, "90°"), (100.0, "100°"), (120.0, "120°")],
+                        );
+                    }
+                    None => {}
+                }
+                if let Some(err) = &editor.error {
+                    error_row(ui, err);
+                }
+                ui.add_space(8.0);
+                hint(ui, "Standard angles: 118° drill tips; 82°, 90° and 100° countersinks.");
+            }
+            EditorParams::Pattern(p) => {
+                theme::section_label(ui, "Layout");
+                match &mut p.layout {
+                    PatternSpec::Linear { direction, spacing, count } => {
+                        axis_combo(ui, "pattern_dir", "Direction", direction);
+                        mm_field(ui, "Spacing", spacing);
+                        count_field(ui, count);
+                    }
+                    PatternSpec::Circular { axis_direction, count, angle, .. } => {
+                        axis_combo(ui, "pattern_axis", "Axis", axis_direction);
+                        count_field(ui, count);
+                        unit_field(ui, "Angle", angle, "°");
+                    }
+                }
+                if let Some(err) = &editor.error {
+                    error_row(ui, err);
+                }
+                ui.add_space(8.0);
+                hint(ui, "Copies the part's body and unites the copies with it.");
+            }
+            EditorParams::Mirror(m) => {
+                theme::section_label(ui, "Mirror plane");
+                plane_combo(ui, "mirror_plane", &mut m.plane);
+                hint(ui, "Or click a planar face in the viewport.");
+                ui.checkbox(&mut m.keep_original, "Keep the original");
+                if let Some(err) = &editor.error {
+                    error_row(ui, err);
+                }
+            }
+            EditorParams::Draft(d) => {
+                theme::section_label(ui, "Faces to draft");
+                if d.faces.is_empty() {
+                    pick_prompt(ui, "Click faces in the viewport");
+                }
+                let mut remove = None;
+                for (i, f) in d.faces.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&f.label).size(12.0));
+                        if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove {
+                    d.faces.remove(i);
+                }
+                section_gap(ui);
+                theme::section_label(ui, "Neutral plane");
+                plane_combo(ui, "draft_neutral", &mut d.neutral);
+                ui.checkbox(&mut d.picking_neutral, "Next face click sets the neutral plane");
+                unit_field(ui, "Angle", &mut d.angle, "°");
+                ui.checkbox(&mut d.reverse, "Pull against the neutral normal");
+                if let Some(err) = &editor.error {
+                    error_row(ui, err);
+                }
+                ui.add_space(8.0);
+                hint(ui, "Catallax drafts planar faces and cylinders parallel to the pull.");
             }
             EditorParams::PickPlane => {
                 theme::section_label(ui, "Sketch plane");
@@ -774,6 +1039,10 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::Cut(_))) => Icon::Cut,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Fillet(_))) => Icon::Fillet,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Chamfer(_))) => Icon::Chamfer,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Hole(_))) => Icon::Hole,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Pattern(_))) => Icon::LinearPattern,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Mirror(_))) => Icon::Mirror,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Draft(_))) => Icon::Draft,
         (Selection::Feature(_), _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,

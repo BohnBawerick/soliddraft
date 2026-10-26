@@ -178,7 +178,9 @@ fn compute_view_at(
             let (direction, up) = section_axes(&pctx.xf.frame, line, *flip).ok_or(DrawingError::BadView(view.id))?;
             let spec = with_display(ViewSpec::new(direction, up), &view.display);
             let origin = model_line.first().copied().unwrap_or_else(|| pctx.xf.unproject(line[0]));
-            let section = part.kernel.section_view(part.body, &SectionSpec { view: spec, origin })?;
+            let section = part
+                .kernel
+                .section_view(part.body, &SectionSpec { view: ViewSpec { preview: part.preview, ..spec }, origin })?;
             let xf = transform(&section.curves, &spec, scale)?;
             let mut projected = project(index, &section.curves, &xf, part.digest.as_str());
             projected.geometry.hatch = section.regions.iter().map(|r| region_polygon(r, &xf, None)).collect();
@@ -245,6 +247,7 @@ fn compute_view_at(
                 hatch,
                 outline: None,
                 bbox: parent.geometry.bbox,
+                unproved: parent.geometry.unproved,
             };
             let mut projected = Projected { geometry, transform: xf, circles };
             clip_projected(&mut projected, &boundary, true);
@@ -303,11 +306,13 @@ fn broken_out(part: &Part, index: &PartIndex, ctx: &mut ViewContext, b: &BrokenO
         .fold(f64::NEG_INFINITY, f64::max);
     let mut spec = ctx.spec();
     spec.smooth_edges = ctx.projected.geometry.curves.iter().any(|c| c.tangent);
+    spec.preview = part.preview;
     let section = part.kernel.section_view(part.body, &SectionSpec { view: spec, origin: d * (front - b.depth) })?;
     let mut cut = project(index, &section.curves, &ctx.xf, part.digest.as_str());
     clip_projected(&mut ctx.projected, &b.boundary, false);
     clip_projected(&mut cut, &b.boundary, true);
     ctx.projected.geometry.curves.extend(cut.geometry.curves);
+    ctx.projected.geometry.unproved |= cut.geometry.unproved;
     ctx.projected
         .geometry
         .hatch
@@ -629,6 +634,7 @@ fn scale_of<'a>(find: &FindScale<'a>, sheet_scale: f64, view: &View, depth: u8) 
 /// The kernel's curves for a view, with the mesh method when the backend has no exact
 /// hidden-line removal.
 pub fn view_curves(part: &Part, spec: &ViewSpec) -> Result<ViewCurves, DrawingError> {
+    let spec = &ViewSpec { preview: part.preview, ..*spec };
     match part.kernel.view_curves(part.body, spec) {
         Err(KernelError::Unsupported(_)) => Ok(mesh_hlr::view_curves(part.kernel, part.body, spec)?),
         other => Ok(other?),
@@ -739,6 +745,7 @@ pub fn project(index: &PartIndex, curves: &ViewCurves, xf: &ViewTransform, diges
         hatch: Vec::new(),
         outline: None,
         bbox: [lo.u, lo.v, hi.u, hi.v],
+        unproved: curves.unproved,
     };
     Projected { geometry, transform: *xf, circles }
 }

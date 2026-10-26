@@ -55,15 +55,6 @@ fn block(doc: &mut Document) -> (FeatureId, FeatureId) {
     (s, e)
 }
 
-fn assert_waiting(doc: &Document, feature: FeatureId) {
-    assert!(
-        matches!(doc.status(feature), Some(FeatureStatus::Failed(error))
-        if error.contains("Catallax stage 3") && error.contains("Catallax stage 4")),
-        "{:?}",
-        doc.status(feature)
-    );
-}
-
 /// The face of the final body that carries a name's origin.
 fn carrier(doc: &Document, name: &soliddraft_model::NamedFace) -> soliddraft_kernel_api::FaceId {
     let t = doc.kernel().topology(doc.body().unwrap()).unwrap();
@@ -102,8 +93,8 @@ fn undo_and_redo_walk_the_command_stack() {
     let edges = top_edges(&d);
     let f = add(&mut d, FeatureKind::Fillet(BlendFeature { edges, size: 2.0 }));
     let filleted = volume(&d);
-    assert!((filleted - 12000.0).abs() < 1e-6);
-    assert_waiting(&d, f);
+    assert!(filleted < 12000.0);
+    assert!(d.status(f).unwrap().is_ok());
     assert_eq!(d.undo_label(), Some("add Fillet1"));
     d.undo().unwrap();
     assert!(d.feature(f).is_none());
@@ -136,12 +127,11 @@ fn edits_rebuild_only_from_the_first_changed_feature() {
     })
     .unwrap();
     assert_eq!(d.body_after(e), block_body, "editing the fillet keeps the block");
-    assert_eq!(d.body_after(f), fillet_body, "an unsupported fillet passes the same body through");
-    assert_waiting(&d, f);
+    assert_ne!(d.body_after(f), fillet_body);
+    assert!(d.status(f).unwrap().is_ok());
     d.execute(Command::EditFeature { id: e, kind: boss(s, 20.0) }).unwrap();
     assert_ne!(d.body_after(e), block_body, "editing the block rebuilds it");
-    assert_waiting(&d, f);
-    assert_eq!(d.body_after(f), d.body_after(e));
+    assert!(d.status(f).unwrap().is_ok(), "the fillet follows its edges to the taller block");
 }
 
 fn top_edges_of(d: &Document, feature: FeatureId) -> Vec<soliddraft_model::EdgeRef> {
@@ -231,7 +221,7 @@ fn suppress_and_rollback_pass_the_body_through() {
     assert_eq!(d.index_of(s), Some(2));
     assert_eq!(d.active_count(), 3);
     d.execute(Command::RollTo { before: None }).unwrap();
-    assert_waiting(&d, f);
+    assert!(d.status(f).unwrap().is_ok());
     assert!(d.body_after(e).is_some());
 }
 
@@ -521,21 +511,22 @@ fn sketches_on_faces_follow_the_face() {
 }
 
 #[test]
-fn existing_chamfer_waits_for_stage_three_and_keeps_the_body_after_reopen() {
+fn chamfers_build_and_keep_the_body_after_reopen() {
     let mut d = doc();
     let (_, block) = block(&mut d);
     let edges = top_edges(&d);
     let c = add(&mut d, FeatureKind::Chamfer(BlendFeature { edges, size: 1.0 }));
     assert_eq!(d.feature(c).unwrap().name, "Chamfer1");
+    let built = volume(&d);
+    // Four 1 x 1 bevels take half a square millimetre along the 140 mm top loop, less
+    // at the mitred corners.
+    let removed = 12000.0 - built;
+    assert!(removed > 0.9 * 70.0 && removed < 70.0, "removed {removed}");
     let check = |d: &Document| {
-        assert!(
-            matches!(d.status(c), Some(FeatureStatus::Failed(error)) if error.contains("Catallax stage 3")),
-            "{:?}",
-            d.status(c)
-        );
-        assert_eq!(d.body_after(c), d.body_after(block));
-        assert!(d.generated_faces(c).is_empty());
-        assert!((volume(d) - 12000.0).abs() < 1e-6);
+        assert!(d.status(c).unwrap().is_ok(), "{:?}", d.status(c));
+        assert_ne!(d.body_after(c), d.body_after(block));
+        assert!(!d.generated_faces(c).is_empty());
+        assert!((volume(d) - built).abs() < 1e-9 * built);
     };
     check(&d);
     let back = Document::from_bytes(&d.to_bytes().unwrap(), Arc::new(CatallaxKernel::new())).unwrap();

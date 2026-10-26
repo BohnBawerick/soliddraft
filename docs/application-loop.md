@@ -80,7 +80,9 @@ Optional `checks` use JSON pointers into `command.json`, or `/measurement/...` f
 explicit live-body measurement requested after the edit and display have been timed.
 Each check has exactly one of `equals`, `approx`, `minimum` or `contains`. `approx`
 accepts an absolute `tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
-for drawing output or `refusal` with an expected stable kernel code. Every step
+for drawing output, `export` with a list of extensions (`step`, `stl`, `3mf`) for
+`soliddraft export` after the click is timed, or `refusal` with an expected stable kernel code. A `label`
+names the step in the result's `timings`, such as a feature's build or edit. Every step
 with a displayed solid captures the live viewport and SVG, including sketches
 and history changes. Unexpected tool errors fail immediately.
 Volume checks request full-precision results rather than triggering measurement through
@@ -134,7 +136,8 @@ MCP tool call has a numbered directory under `commands/` containing:
   and `view.kernel.json` from the same live body, without reopening saved input.
   Its external wait, phase split and work are in `view.timing.json` and the step's
   `drawing_view` result. A drawing step also writes `drawing.dwdrw`, `drawing.svg`
-  and `drawing.kernel.json`, collected by `soliddraft draw --kernel-log`.
+  and `drawing.kernel.json`, collected by `soliddraft draw --kernel-log`. An export
+  step writes `part.<extension>` and keeps the export report in its check.
 - `measurement.json` and `measurement.kernel.json`, when a check requests
   `/measurement/volume_mm3` or another quantity. The bundle-only `scenario_measure`
   request runs after the complete click interval, so it cannot pre-warm that display.

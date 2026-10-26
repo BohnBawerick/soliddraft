@@ -8,7 +8,9 @@ use soliddraft_app::app_tools::AppTools;
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_kernel_api::counting::{Counting, Work};
 use soliddraft_kernel_catallax::CatallaxKernel;
-use soliddraft_model::{Document, FaceRef, FeatureKind, FeatureStatus, ReferenceSlot, SketchPlane, feature_of_tag};
+use soliddraft_model::{
+    Document, EndCondition, FaceRef, FeatureKind, FeatureStatus, PlaneRef, ReferenceSlot, SketchPlane, feature_of_tag,
+};
 
 pub(crate) struct Evidence<'a> {
     host: AppTools<'a>,
@@ -90,7 +92,8 @@ impl<'a> Evidence<'a> {
             .as_mut()
             .ok_or("call scenario_prepare before capture")?
             .capture(doc, &dir.join("viewport.png"))?;
-        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","live_document":true});
+        // The viewport and drawing views show preview meshes, which claim no bounds.
+        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","mesh":"unproved preview","live_document":true});
         write_json(dir.join("display.json"), &result)?;
         Ok(result)
     }
@@ -100,12 +103,18 @@ impl<'a> Evidence<'a> {
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
         let body = doc.display_body().ok_or("part has no displayed solid")?;
-        let spec =
-            soliddraft_kernel_api::drawing::ViewSpec::standard(soliddraft_kernel_api::drawing::StandardView::Isometric);
+        // The live hidden-line view stands for a drawing view on screen, so it reads the preview.
+        let spec = soliddraft_kernel_api::drawing::ViewSpec {
+            preview: true,
+            ..soliddraft_kernel_api::drawing::ViewSpec::standard(
+                soliddraft_kernel_api::drawing::StandardView::Isometric,
+            )
+        };
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
-        let result = json!({"backend":doc.kernel().backend(),"method":"mesh","live_document":true});
+        let result =
+            json!({"backend":doc.kernel().backend(),"method":"mesh","mesh":"unproved preview","live_document":true});
         write_json(dir.join("view.json"), &result)?;
         Ok(result)
     }
@@ -151,7 +160,15 @@ fn rebuild_report(doc: &Document, work: &[Work]) -> Value {
 /// Reference evidence is collected only for an explicitly requested command bundle,
 /// after the edit. Survival assertions live in the scenario runner, not in rebuild.
 fn references(doc: &soliddraft_model::Document) -> Value {
-    let origin = |r: &FaceRef| format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1);
+    fn origin(r: &FaceRef) -> String {
+        format!("{} {} #{}", r.feature, r.generator, r.ordinal + 1)
+    }
+    fn plane(p: &PlaneRef) -> Option<(ReferenceSlot, String, Vec<&FaceRef>)> {
+        match p {
+            PlaneRef::Face { face } => Some((ReferenceSlot::Plane, origin(face), vec![face])),
+            PlaneRef::Datum { .. } => None,
+        }
+    }
     let mut out = Vec::new();
     for f in doc.features() {
         let refs: Vec<(ReferenceSlot, String, Vec<&FaceRef>)> = match &f.kind {
@@ -170,7 +187,20 @@ fn references(doc: &soliddraft_model::Document) -> Value {
                     (ReferenceSlot::Edge { index: i as u32 }, text, e.faces.iter().collect())
                 })
                 .collect(),
-            FeatureKind::Extrude(_) => Vec::new(),
+            FeatureKind::Extrude(e) => match &e.end {
+                EndCondition::UpToFace { face } => vec![(ReferenceSlot::Limit, origin(face), vec![face])],
+                _ => Vec::new(),
+            },
+            FeatureKind::Hole(h) => vec![(ReferenceSlot::Plane, origin(&h.face), vec![&h.face])],
+            FeatureKind::Mirror(m) => plane(&m.plane).into_iter().collect(),
+            FeatureKind::Draft(d) => d
+                .faces
+                .iter()
+                .enumerate()
+                .map(|(i, face)| (ReferenceSlot::Face { index: i as u32 }, origin(face), vec![face]))
+                .chain(plane(&d.neutral))
+                .collect(),
+            FeatureKind::Pattern(_) => Vec::new(),
         };
         if refs.is_empty() {
             continue;

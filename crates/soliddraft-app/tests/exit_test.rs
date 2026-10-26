@@ -547,14 +547,12 @@ fn bracket_by_hand_saved_reopened_rebuilt_and_repaired() {
         feature_status(&harness, "Cut-Extrude2")
     );
 
-    // Finishing commands stay visible while the kernel operations wait.
-    for (id, stage) in [("fillet", "Catallax stage 3"), ("chamfer", "Catallax stage 3")] {
+    // The finishing commands are on the ribbon and switched on for the part.
+    for id in ["fillet", "chamfer"] {
         let command = soliddraft_app::commands::get(id).unwrap();
         let state = &harness.state().state;
         assert!(!command.ribbon.is_empty());
-        assert!(!command.is_enabled(state));
-        assert!(command.tip(state).contains(stage));
-        assert!(command.action_now(state).is_none());
+        assert!(command.is_enabled(state), "{id}: {}", command.tip(state));
     }
     let v_done = volume(&harness);
 

@@ -103,7 +103,9 @@ fn part_files_keep_their_coarse_and_standard_levels() {
     for level in display::SAVED {
         let (mesh, made_by) = display::read(&bytes, level).unwrap().expect("display data");
         mesh.check().unwrap();
-        assert_eq!(mesh.triangle_count(), report.level(level).triangles, "{level}");
+        // Saved display data is the screen's preview at the level's controls.
+        let preview = doc.kernel().preview(doc.body().unwrap(), &report.level(level).params).unwrap();
+        assert_eq!(mesh.triangle_count(), preview.triangle_count(), "{level}");
         assert!(made_by.ends_with(&doc.geometry_hash().to_string()), "{made_by}");
         assert!(made_by.contains(&format!(" {level} ")), "{made_by}");
         assert!(mesh.faces.iter().all(|f| !f.name.is_empty()), "every face has a persistent name");

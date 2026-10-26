@@ -435,6 +435,10 @@ pub struct ViewGeometry {
     pub outline: Option<Boundary>,
     /// Bounds of the curves: `[min x, min y, max x, max y]`.
     pub bbox: [f64; 4],
+    /// Drawn from the kernel's unproved preview, for the screen. Drawing exports refuse
+    /// it and are made from certified line work instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unproved: bool,
 }
 
 /// One curve of a view.

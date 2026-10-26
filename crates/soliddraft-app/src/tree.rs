@@ -116,6 +116,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 FeatureKind::Cut(_) => Icon::Cut,
                 FeatureKind::Fillet(_) => Icon::Fillet,
                 FeatureKind::Chamfer(_) => Icon::Chamfer,
+                FeatureKind::Hole(_) => Icon::Hole,
+                FeatureKind::Pattern(p) => match p.layout {
+                    soliddraft_model::PatternSpec::Linear { .. } => Icon::LinearPattern,
+                    soliddraft_model::PatternSpec::Circular { .. } => Icon::CircularPattern,
+                },
+                FeatureKind::Mirror(_) => Icon::Mirror,
+                FeatureKind::Draft(_) => Icon::Draft,
             };
             let child = f.kind.sketch().and_then(|s| state.doc.feature(s));
             items.push(RowItem {

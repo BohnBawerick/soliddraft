@@ -44,6 +44,7 @@ fn block(depth: f64) -> Command {
             plane: PlaneKind::Top,
             depth,
             flip: false,
+            end: Default::default(),
         },
         via_assistant: false,
     }

@@ -30,6 +30,7 @@ pub struct PdfInfo {
 
 /// Writes one page per display list.
 pub fn pdf(sheets: &[DisplayList], info: &PdfInfo) -> Result<Vec<u8>, DrawingError> {
+    super::proven(sheets)?;
     // Every glyph the text uses, for the font subset.
     let mut used: BTreeSet<u16> = BTreeSet::new();
     let mut chars: BTreeMap<u16, char> = BTreeMap::new();

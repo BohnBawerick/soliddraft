@@ -378,6 +378,7 @@ fn view_geometry(view: StandardView, scale: f64, lines: fn(&mut Lines)) -> (View
         hatch: Vec::new(),
         outline: None,
         bbox: [min.x, min.y, max.x, max.y],
+        unproved: false,
     };
     (geometry, raw)
 }

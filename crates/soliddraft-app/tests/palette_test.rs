@@ -140,10 +140,10 @@ fn a_disabled_command_says_why_from_the_palette() {
     });
     harness.run_steps(3);
     open(&mut harness);
-    type_text(&mut harness, "chamfer");
+    type_text(&mut harness, "shell");
     harness.key_press(Key::Enter);
     harness.run_steps(3);
     let state = &harness.state().state;
-    assert!(state.editor.is_none(), "no chamfer until Catallax has it");
+    assert!(state.editor.is_none(), "no shell until Catallax has it");
     assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Arrives with Catallax stage 3"));
 }

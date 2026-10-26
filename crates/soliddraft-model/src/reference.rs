@@ -26,7 +26,9 @@ use std::collections::HashMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use soliddraft_kernel_api::{CurveKind, EdgeId, EdgeInfo, FaceId, FaceInfo, Origin, SurfaceKind, Topology, Vec3};
+use soliddraft_kernel_api::{
+    CurveKind, EdgeId, EdgeInfo, FaceId, FaceInfo, HolePart, Origin, SurfaceKind, Topology, Vec3,
+};
 use soliddraft_sketch::EntityId;
 
 use crate::feature::FeatureId;
@@ -49,6 +51,19 @@ pub enum Generator {
         /// Index of the edge in the feature's edge list.
         edge: u32,
     },
+    /// A face of a hole.
+    Hole {
+        /// Index of the hole in the feature's point list.
+        placement: u32,
+        /// Which face of the hole.
+        part: HolePart,
+    },
+    /// A face of a pattern's or mirror's copy. Faces of one copy are ranked by the
+    /// names of the faces they copy.
+    Copy {
+        /// Which copy: 1 and up for a pattern, 1 for a mirror image.
+        instance: u32,
+    },
     /// Any other face a feature made.
     Other,
 }
@@ -60,6 +75,8 @@ impl fmt::Display for Generator {
             Generator::EndCap => f.write_str("End cap"),
             Generator::Side { entity } => write!(f, "Side of {entity}"),
             Generator::Blend { edge } => write!(f, "Blend of edge {}", edge + 1),
+            Generator::Hole { placement, part } => write!(f, "Hole {} {}", placement + 1, part.label().to_lowercase()),
+            Generator::Copy { instance } => write!(f, "Copy {instance} face"),
             Generator::Other => f.write_str("Face"),
         }
     }
@@ -190,6 +207,15 @@ pub enum ReferenceSlot {
         /// Index in the feature's edge list.
         index: u32,
     },
+    /// One of a draft's faces.
+    Face {
+        /// Index in the feature's face list.
+        index: u32,
+    },
+    /// The face a hole starts on, or the face of a mirror's or draft's plane.
+    Plane,
+    /// The face an extrusion goes up to.
+    Limit,
 }
 
 impl fmt::Display for ReferenceSlot {
@@ -197,6 +223,9 @@ impl fmt::Display for ReferenceSlot {
         match self {
             ReferenceSlot::SketchPlane => f.write_str("sketch plane"),
             ReferenceSlot::Edge { index } => write!(f, "edge {}", index + 1),
+            ReferenceSlot::Face { index } => write!(f, "face {}", index + 1),
+            ReferenceSlot::Plane => f.write_str("plane"),
+            ReferenceSlot::Limit => f.write_str("end face"),
         }
     }
 }

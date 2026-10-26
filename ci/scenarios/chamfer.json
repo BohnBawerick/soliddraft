@@ -1,0 +1,186 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "chamfer",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "diameter": 24
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 12,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 5428.672105,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              0,
+              12
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch2",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4071.504079,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "chamfer",
+      "arguments": {
+        "edges": [
+          "Boss-Extrude1 \u00b7 Edge 1",
+          "Boss-Extrude1 \u00b7 Edge 2"
+        ],
+        "distance": 1
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3998.20025,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ],
+      "label": "chamfer build"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              8.5,
+              0,
+              12
+            ],
+            "width": 2,
+            "height": 2
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch3",
+        "through_all": false,
+        "depth": 3,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3986.20025,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_chamfer",
+      "arguments": {
+        "feature": "Chamfer1",
+        "distance": 1.5
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3896.926659,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ],
+      "label": "chamfer edit"
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 15,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4914.802679,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "chamfer follows an earlier edit"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3896.926659,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4914.802679,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ]
+}
