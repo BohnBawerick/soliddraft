@@ -26,7 +26,7 @@ use soliddraft_assistant::tools::schema::{
     any_of, array, boolean, constant, integer, non_empty_array, number, object, optional, string,
 };
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
-use soliddraft_kernel_api::{FaceId, Plane, SurfaceKind};
+use soliddraft_kernel_api::{FaceId, KernelResult, Plane, SurfaceKind};
 use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip};
 use soliddraft_model::{DatumPlane, PatternSpec, PlaneRef};
 
@@ -1648,23 +1648,26 @@ pub fn find_entity(doc: &Document, name: &str) -> Option<Selection> {
     doc.vertex_position(key).map(|_| Selection::Vertex(key))
 }
 
-/// The point an entity is measured from.
-/// A measured entity's point. Measuring is an explicit request, so faces and edges use
-/// the kernel's proven centroids and midpoints, and fall back to the display's estimates
-/// only when the kernel has none.
-fn reference_point(doc: &Document, sel: Selection) -> Option<Vec3> {
+/// The point an entity is measured from. Measuring is an explicit request, so features,
+/// faces and edges use the kernel's proven centre of mass, centroids and midpoints. When
+/// the kernel refuses the proof, so does the measurement: the display's estimates are
+/// never passed off as measured.
+fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>> {
     let f32s = |v: soliddraft_kernel_api::Vec3| Vec3::new(v.x as f32, v.y as f32, v.z as f32);
-    let measured = || doc.display_body().and_then(|body| doc.kernel().measured_topology(body).ok());
-    match sel {
-        Selection::Feature(id) => doc.mass_properties(id).map(|m| f32s(m.centroid)),
-        Selection::Face(face) => measured()
-            .and_then(|t| t.faces.iter().find(|f| f.id == face).map(|f| f32s(f.centroid)))
-            .or_else(|| doc.named_face(face).map(|x| x.centroid)),
-        Selection::Edge(edge) => measured()
-            .and_then(|t| t.edges.iter().find(|e| e.id == edge).map(|e| f32s(e.midpoint)))
-            .or_else(|| doc.named_edge(edge).map(|x| x.midpoint)),
+    let measured = || doc.display_body().map(|body| doc.kernel().measured_topology(body)).transpose();
+    Ok(match sel {
+        Selection::Feature(id) => match doc.feature(id).and_then(|f| f.body) {
+            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
+            None => None,
+        },
+        Selection::Face(face) => {
+            measured()?.and_then(|t| t.faces.iter().find(|f| f.id == face).map(|f| f32s(f.centroid)))
+        }
+        Selection::Edge(edge) => {
+            measured()?.and_then(|t| t.edges.iter().find(|e| e.id == edge).map(|e| f32s(e.midpoint)))
+        }
         Selection::Vertex(key) => doc.vertex_position(key),
-    }
+    })
 }
 
 /// Whether an edge is an outside (convex) edge or an inside corner (concave), from the
@@ -1742,6 +1745,17 @@ fn edge_json(
     v
 }
 
+/// Says when the centroids, midpoints and lengths shown come from the display mesh rather
+/// than the kernel's proofs, which only `measure` asks for.
+fn mark_estimates(v: &mut Value, topology: Option<&soliddraft_kernel_api::Topology>) {
+    if let Some(chord) = topology.and_then(|t| t.display_chord_height) {
+        v["estimates"] = format!(
+            "centroids, midpoints and lengths are estimated from the display mesh, within {chord:.3} mm; measure proves them"
+        )
+        .into();
+    }
+}
+
 fn selection_json(doc: &Document, sel: Selection) -> Value {
     let Some(info) = doc.describe(sel) else { return Value::Null };
     let topology = doc.display_body().and_then(|b| doc.kernel().topology(b).ok());
@@ -1750,6 +1764,9 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
         Selection::Edge(e) => edge_json(doc, e, topology.as_ref()),
         _ => json!({}),
     };
+    if matches!(sel, Selection::Face(_) | Selection::Edge(_)) {
+        mark_estimates(&mut v, topology.as_ref());
+    }
     v["name"] = info.title.into();
     v["kind"] = match sel {
         Selection::Feature(_) => "feature",
@@ -1889,6 +1906,7 @@ impl CommandTools<'_> {
         v["faces"] = doc.faces.iter().filter(|x| x.feature == id).map(|x| face_json(doc, x.id)).collect();
         v["edges"] =
             doc.edges.iter().filter(|x| x.feature == id).map(|x| edge_json(doc, x.id, topology.as_ref())).collect();
+        mark_estimates(&mut v, topology.as_ref());
         if let FeatureKind::Sketch(s) = &f.kind {
             v["dimensions"] = dimensions(&s.sketch)
                 .enumerate()
@@ -1919,7 +1937,11 @@ impl CommandTools<'_> {
         let doc = &*self.doc;
         let find = |name: &str| find_entity(doc, name).ok_or_else(|| format!("no entity named `{name}`. {NAMES_HELP}"));
         let (sa, sb) = (find(a)?, find(b)?);
-        let point = |name: &str, s| reference_point(doc, s).ok_or_else(|| format!("`{name}` has no reference point"));
+        let point = |name: &str, s| match reference_point(doc, s) {
+            Ok(Some(p)) => Ok(p),
+            Ok(None) => Err(format!("`{name}` has no reference point")),
+            Err(e) => Err(format!("`{name}` could not be measured: {e}")),
+        };
         let (pa, pb) = (point(a, sa)?, point(b, sb)?);
         let d = pb - pa;
         let mut v = json!({
@@ -2176,6 +2198,10 @@ pub fn board_bracket() -> Document {
 mod tests {
     use super::*;
     use soliddraft_assistant::tools::{call_checked, check_strict};
+    use soliddraft_kernel_api::{
+        BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, HistoryRecord, MassProperties, Mesh, OpResult, OpTag,
+        Profile, Revolve, TessellationParams, Topology, Validation,
+    };
 
     fn assistant() -> Caller {
         Caller::Assistant { prompt: "add holes".into(), model: soliddraft_assistant::DEFAULT_MODEL.into() }
@@ -2380,5 +2406,101 @@ mod tests {
             std::sync::Arc::ptr_eq(&tools.doc.meshes[&body.unwrap()], &mesh),
             "a sketch preflight regenerated the solid's display buffers"
         );
+    }
+
+    /// Catallax, refusing every proof a measurement asks for.
+    struct RefusesProofs(std::sync::Arc<dyn soliddraft_kernel_api::Kernel>);
+
+    impl soliddraft_kernel_api::Kernel for RefusesProofs {
+        fn backend(&self) -> soliddraft_kernel_api::BackendInfo {
+            self.0.backend()
+        }
+        fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
+            self.0.create_body_from_profile(tag, profile)
+        }
+        fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
+            self.0.extrude(tag, profile, params)
+        }
+        fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
+            self.0.revolve(tag, profile, params)
+        }
+        fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
+            self.0.boolean(tag, op, target, tool)
+        }
+        fn fillet(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], radius: f64) -> KernelResult<OpResult> {
+            self.0.fillet(tag, body, edges, radius)
+        }
+        fn chamfer(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], distance: f64) -> KernelResult<OpResult> {
+            self.0.chamfer(tag, body, edges, distance)
+        }
+        fn shell(&self, tag: &OpTag, body: BodyId, open: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
+            self.0.shell(tag, body, open, thickness)
+        }
+        fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+            self.0.tessellate(body, params)
+        }
+        fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+            self.0.tessellate_edges(body, params)
+        }
+        fn mass_properties(&self, _body: BodyId) -> KernelResult<MassProperties> {
+            Err(Self::refusal("mass_properties"))
+        }
+        fn validate(&self, body: BodyId) -> KernelResult<Validation> {
+            self.0.validate(body)
+        }
+        fn topology(&self, body: BodyId) -> KernelResult<Topology> {
+            self.0.topology(body)
+        }
+        fn measured_topology(&self, _body: BodyId) -> KernelResult<Topology> {
+            Err(Self::refusal("measured_topology"))
+        }
+        fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
+            self.0.history(body)
+        }
+        fn release(&self, body: BodyId) -> KernelResult<()> {
+            self.0.release(body)
+        }
+    }
+
+    impl RefusesProofs {
+        fn refusal(query: &str) -> soliddraft_kernel_api::KernelError {
+            soliddraft_kernel_api::KernelError::QueryFailed {
+                query: query.into(),
+                code: 0,
+                message: "work limit reached".into(),
+            }
+        }
+    }
+
+    #[test]
+    fn mcp_measure_refuses_when_the_kernel_refuses_the_proof() {
+        let kernel = std::sync::Arc::new(RefusesProofs(crate::kernel()));
+        let mut doc = Document::new("Part1", kernel);
+        let mut book = ProposalBook::default();
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Mcp, drawing: None };
+        let mcp = Caller::Mcp { client: "test".into() };
+        let rectangle = json!({ "shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30 });
+        assert!(!call_checked(&mut tools, "sketch", json!({ "plane": "top", "shapes": [rectangle] }), &mcp).is_error);
+        let out = call_checked(&mut tools, "extrude", json!({ "sketch": "Sketch1", "depth": 10, "flip": false }), &mcp);
+        assert!(!out.is_error, "{}", out.content);
+
+        for (a, b) in [
+            ("Boss-Extrude1 · Start cap", "Boss-Extrude1 · End cap"),
+            ("Boss-Extrude1 · Edge 1", "Boss-Extrude1 · End cap"),
+            ("Boss-Extrude1", "Boss-Extrude1 · End cap"),
+        ] {
+            let m = call_checked(&mut tools, "measure", json!({ "a": a, "b": b }), &mcp);
+            assert!(m.is_error, "{a} to {b} answered without a proof: {}", m.content);
+            assert!(
+                m.content.contains("could not be measured") && m.content.contains("work limit reached"),
+                "{}",
+                m.content
+            );
+        }
+
+        // The descriptions still show the display's estimates, and say so.
+        let feature = call_checked(&mut tools, "feature", json!({ "name": "Boss-Extrude1" }), &mcp);
+        let v: Value = serde_json::from_str(&feature.content).unwrap();
+        assert!(v["estimates"].as_str().is_some_and(|s| s.contains("display mesh")), "{v}");
     }
 }
