@@ -296,8 +296,9 @@ impl Document {
         })())
     }
 
-    /// What the part's viewport quality gives its body: each level's deviation in
-    /// millimetres and triangle count. `None` without a body.
+    /// What the part's viewport quality gives its body's certified mesh: each level's
+    /// deviation bound in millimetres and triangle count. The screen shows previews at
+    /// the same controls, which claim no bound. `None` without a body.
     pub fn quality_report(&self) -> Option<KernelResult<Report>> {
         Some(soliddraft_tessellation::report(self.kernel.as_ref(), self.body()?, &self.settings.viewport))
     }

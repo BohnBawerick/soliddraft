@@ -634,7 +634,7 @@ fn with_part<R>(
                 name: doc.name.clone(),
                 backend: format!("{} {}", backend.name, backend.version),
             };
-            f(&ctx.part(), &source)
+            f(&ctx.certified_part(), &source)
         }
         Some(kind) => Err(format!("{}: a drawing is made of a part, not a {kind}", path.display())),
         None => {

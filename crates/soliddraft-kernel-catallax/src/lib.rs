@@ -50,7 +50,8 @@ struct Solid {
     app: IncrementalApplicationBody,
     ids: convert::Ids,
     display: MeshCache<catallax_mesh::Mesh>,
-    previews: MeshCache<PreviewMesh>,
+    /// `None` where Catallax refused to sample a preview, so it is not asked again.
+    previews: MeshCache<Option<PreviewMesh>>,
     topology: OnceLock<KernelResult<Topology>>,
     measured: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
@@ -143,14 +144,15 @@ impl Solid {
 
     /// An unproved mesh for the screen, sampled to the same targets with no claimed
     /// bounds. Catallax keeps it apart from the certified mesh and never exports it.
-    fn preview(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<PreviewMesh>> {
+    /// `None` when Catallax refuses to sample one; the operation log keeps the refusal.
+    fn preview(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<Option<PreviewMesh>>> {
         self.previews.get(display_key(options), || {
             let built = self.app.checkpoint.built();
             let mut decider = Decider::default();
             let span = catallax_numbers::OperationSpan::begin("brep", &query, query, &decider);
             let result = preview_mesh_body(&built.model, built.result, &PreviewOptions::from(options), &mut decider);
             span.finish(&decider, result.as_ref().err(), None);
-            result.map_err(|e| query_error(query, e))
+            Ok(result.ok())
         })
     }
 }
@@ -773,18 +775,25 @@ impl Kernel for CatallaxKernel {
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.observe("preview", || {
             let solid = self.solid(body)?;
-            let mesh = solid.preview(&options(params)?, "preview")?;
+            // Where Catallax cannot sample a preview, the screen shows the certified mesh.
+            let preview = solid.preview(&options(params)?, "preview")?;
+            let Some(mesh) = preview.as_ref() else {
+                return self.tessellate(body, params);
+            };
             if mesh.positions.iter().flatten().any(|v| !(*v as f32).is_finite()) {
                 return Err(gap("preview coordinates beyond f32 display range", "1"));
             }
-            Ok(convert::preview(&mesh, &solid.ids))
+            Ok(convert::preview(mesh, &solid.ids))
         })
     }
 
     fn preview_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
         self.observe("preview_edges", || {
             let solid = self.solid(body)?;
-            let mesh = solid.preview(&options(params)?, "preview_edges")?;
+            let preview = solid.preview(&options(params)?, "preview_edges")?;
+            let Some(mesh) = preview.as_ref() else {
+                return self.tessellate_edges(body, params);
+            };
             Ok(mesh
                 .edges
                 .iter()
@@ -893,6 +902,7 @@ impl Kernel for CatallaxKernel {
             // The display cache holds its own copy, even of the certified mesh.
             solid.display.each(|mesh| bytes += mesh_bytes(mesh));
             solid.previews.each(|m| {
+                let Some(m) = m else { return };
                 bytes += m.positions.len() * 24
                     + m.triangles.len() * 32
                     + m.faces.len() * 64

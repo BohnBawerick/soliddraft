@@ -241,3 +241,18 @@ fn a_late_answer_for_another_quality_does_not_replace_the_cached_levels() {
     assert_eq!(doc.display_quality().shown(), Some(Level::Fine));
     assert_eq!(triangles(&doc), fine, "the fine level shows another quality's mesh");
 }
+
+/// Catallax refuses to preview this L bracket, made by hand in the exit test: the sketch
+/// solver left the flange's edges a hair off the plate's. The viewport shows the
+/// certified mesh instead of nothing.
+#[test]
+fn a_refused_preview_shows_the_certified_mesh() {
+    let bytes = include_bytes!("data/near-coincident-flange.dwprt");
+    let part = soliddraft_model::Document::from_bytes(bytes, soliddraft_app::kernel()).unwrap();
+    let (kernel, body) = (part.kernel(), part.body().unwrap());
+    let params = soliddraft_kernel_api::TessellationParams { chord_height: 0.1, ..Default::default() };
+    let shown = kernel.preview(body, &params).unwrap();
+    assert!(!shown.unproved, "Catallax previews this part now; it no longer exercises the fallback");
+    assert_eq!(shown, kernel.tessellate(body, &params).unwrap());
+    assert_eq!(kernel.preview_edges(body, &params).unwrap(), kernel.tessellate_edges(body, &params).unwrap());
+}
