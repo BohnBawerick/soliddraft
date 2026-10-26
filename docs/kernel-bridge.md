@@ -12,7 +12,7 @@ Extrudes, cuts, booleans and rational-frame revolves use Catallax stage 1. Holes
 
 ## Display and drawings
 
-Catallax supplies shared-edge display meshes with chord bounds, face handles and edge polylines. The adapter reserves part of the chord bound for conversion to float display positions and refuses a request that cannot survive that conversion. It forwards the surface angle, edge length and aspect ratio as Catallax controls. Catallax bounds facet normals rather than the turn along an edge, so a requested curve angle, and any control Catallax could not certify on a face, appears in `Mesh::unavailable_controls`.
+Catallax supplies shared-edge display meshes with chord bounds, face handles and edge polylines. The adapter reserves part of the chord bound for conversion to float display positions and refuses a request that cannot survive that conversion. It forwards the surface angle, edge length and aspect ratio as Catallax controls. A maximum edge length is enforced on the returned float triangle edges and edge polylines, or the request is refused. Catallax bounds facet normals rather than the turn along an edge, so a requested curve angle, and any control Catallax could not certify on a face, appears in `Mesh::unavailable_controls`.
 
 The screen does not use those certified meshes. The viewport and a drag preview call `Kernel::preview`, `preview_levels` and `preview_edges`, which the adapter answers with Catallax's preview mesh. It samples toward the same chord and angle targets, keeps face and edge handles, claims no bound and is marked `Mesh::unproved`. Drawing views on screen ask for it with `ViewSpec::preview`; their curves and stored `ViewGeometry` are then marked unproved. Display normals are averaged from the facets in `f64`.
 

@@ -7,83 +7,51 @@
 
 use catallax_mesh::{Mesh, MeshOptions};
 use catallax_numbers::Rational;
-use soliddraft_kernel_api::{KernelError, KernelResult, TessellationParams};
+use soliddraft_kernel_api::{KernelError, KernelResult};
 
-/// The controls that select one cached display mesh: the native chord bound and the
-/// edge length as requested, before any rounding allowance.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Controls {
-    pub chord: Rational,
-    pub edge: Option<Rational>,
+fn refusal() -> KernelError {
+    KernelError::Unsupported("requested maximum edge length cannot survive f32 display rounding".into())
 }
 
-impl Controls {
-    /// Reads the edge length of a request. Zero disables it, as in the trait.
-    pub fn new(chord: Rational, params: &TessellationParams) -> KernelResult<Self> {
-        let edge = if params.max_edge_length > 0.0 {
-            Some(
-                Rational::parse(&params.max_edge_length.to_string())
-                    .map_err(|e| KernelError::InvalidInput(e.to_string()))?,
-            )
-        } else {
-            None
-        };
-        Ok(Self { chord, edge })
-    }
-
-    /// The request the certified native display mesh answers.
-    pub fn native_default() -> Self {
-        Self { chord: MeshOptions::default().chord_tolerance, edge: None }
-    }
-
-    /// The certified native display mesh answers only a request with no other control.
-    pub fn is_native_default(&self) -> bool {
-        *self == Self::native_default()
-    }
-
-    /// Native options for a body whose coordinates have magnitude at most `extent`.
-    pub fn native_options(&self, extent: f64) -> KernelResult<MeshOptions> {
-        let mut options = MeshOptions { chord_tolerance: self.chord.clone(), ..MeshOptions::default() };
-        if let Some(edge) = &self.edge {
-            let margin = rounding_growth(extent)?;
-            let native = edge - &margin;
-            if native <= Rational::zero() {
-                return Err(KernelError::Unsupported(
-                    "requested maximum edge length cannot survive f32 display rounding".into(),
-                ));
-            }
-            options.max_edge_length = Some(native);
+/// Native options for a body whose coordinates have magnitude at most `extent`. A
+/// requested edge length is reduced by the f32 rounding growth; the cache stays keyed
+/// by the request, so the reduced limit never stands in for another request.
+pub(crate) fn native_options(options: &MeshOptions, extent: f64) -> KernelResult<MeshOptions> {
+    let mut native = options.clone();
+    if let Some(edge) = &options.max_edge_length {
+        let reduced = edge - &rounding_growth(extent)?;
+        if reduced <= Rational::zero() {
+            return Err(refusal());
         }
-        Ok(options)
+        native.max_edge_length = Some(reduced);
     }
+    Ok(native)
+}
 
-    /// Checks the f32 positions of every triangle edge and edge polyline segment.
-    /// The native bound covers binary64 positions only, so this is the final gate.
-    pub fn check(&self, mesh: &Mesh) -> KernelResult<()> {
-        let triangles = mesh.triangles.iter().flat_map(|t| {
-            let [a, b, c] = t.vertices;
-            [(a, b), (b, c), (c, a)]
-        });
-        let polylines = mesh.edges.iter().flat_map(|e| e.vertices.windows(2).map(|w| (w[0], w[1])));
-        self.check_segments(&mesh.positions, triangles.chain(polylines))
-    }
+/// Checks the f32 positions of every triangle edge and edge polyline segment against
+/// the requested limit. The native bound covers binary64 positions only.
+pub(crate) fn check(options: &MeshOptions, mesh: &Mesh) -> KernelResult<()> {
+    let triangles = mesh.triangles.iter().flat_map(|t| {
+        let [a, b, c] = t.vertices;
+        [(a, b), (b, c), (c, a)]
+    });
+    let polylines = mesh.edges.iter().flat_map(|e| e.vertices.windows(2).map(|w| (w[0], w[1])));
+    check_segments(options.max_edge_length.as_ref(), &mesh.positions, triangles.chain(polylines))
+}
 
-    fn check_segments(
-        &self,
-        positions: &[[f64; 3]],
-        segments: impl Iterator<Item = (usize, usize)>,
-    ) -> KernelResult<()> {
-        let Some(limit) = &self.edge else { return Ok(()) };
-        let rounded = |i: usize| positions[i].map(|v| f64::from(v as f32));
-        for (a, b) in segments {
-            if exceeds(rounded(a), rounded(b), limit) {
-                return Err(KernelError::Unsupported(
-                    "requested maximum edge length cannot survive f32 display rounding".into(),
-                ));
-            }
+fn check_segments(
+    limit: Option<&Rational>,
+    positions: &[[f64; 3]],
+    segments: impl Iterator<Item = (usize, usize)>,
+) -> KernelResult<()> {
+    let Some(limit) = limit else { return Ok(()) };
+    let rounded = |i: usize| positions[i].map(|v| f64::from(v as f32));
+    for (a, b) in segments {
+        if exceeds(rounded(a), rounded(b), limit) {
+            return Err(refusal());
         }
-        Ok(())
     }
+    Ok(())
 }
 
 /// An upper bound on how much f32 rounding can lengthen a segment between points of
@@ -122,48 +90,31 @@ mod tests {
         Rational::parse(text).unwrap()
     }
 
-    fn controls(chord: &str, edge: f64) -> Controls {
-        let params = TessellationParams { max_edge_length: edge, ..Default::default() };
-        Controls::new(rational(chord), &params).unwrap()
-    }
-
-    #[test]
-    fn edge_length_separates_cache_identity_at_equal_chord() {
-        let none = controls("0.01", 0.0);
-        let coarse = controls("0.01", 2.0);
-        let fine = controls("0.01", 1.5);
-        assert_ne!(none, coarse);
-        assert_ne!(coarse, fine);
-        assert_eq!(coarse, controls("0.01", 2.0));
-        assert_ne!(coarse, controls("0.02", 2.0));
-    }
-
-    #[test]
-    fn native_default_shortcut_excludes_any_edge_length() {
-        assert!(controls("0.01", 0.0).is_native_default());
-        assert!(!controls("0.01", 5.0).is_native_default());
-        assert!(!controls("0.02", 0.0).is_native_default());
+    fn requested(edge: Option<&str>) -> MeshOptions {
+        MeshOptions { max_edge_length: edge.map(rational), ..MeshOptions::default() }
     }
 
     #[test]
     fn native_limit_is_the_request_less_rounding_growth() {
-        let options = controls("0.01", 2.0).native_options(100.0).unwrap();
-        let native = options.max_edge_length.unwrap();
+        let native = native_options(&requested(Some("2")), 100.0).unwrap().max_edge_length.unwrap();
         assert!(native < rational("2"));
         assert!(rational("1.99") < native);
-        assert_eq!(controls("0.01", 0.0).native_options(100.0).unwrap().max_edge_length, None);
+        assert_eq!(native_options(&requested(None), 100.0).unwrap().max_edge_length, None);
+    }
+
+    #[test]
+    fn other_controls_pass_through_unchanged() {
+        let options = MeshOptions { angular_deviation: Some(rational("0.2")), ..requested(Some("2")) };
+        let native = native_options(&options, 10.0).unwrap();
+        assert_eq!(native.angular_deviation, options.angular_deviation);
+        assert_eq!(native.chord_tolerance, options.chord_tolerance);
     }
 
     #[test]
     fn a_limit_within_rounding_growth_is_refused() {
-        let error = controls("0.01", 1e-5).native_options(1000.0).unwrap_err();
+        let error = native_options(&requested(Some("0.00001")), 1000.0).unwrap_err();
         assert!(matches!(error, KernelError::Unsupported(_)), "{error:?}");
-        assert!(controls("0.01", 1e-5).native_options(1.0).is_ok());
-    }
-
-    #[test]
-    fn requests_that_are_not_positive_numbers_disable_the_control() {
-        assert_eq!(controls("0.01", 0.0).edge, None);
+        assert!(native_options(&requested(Some("0.00001")), 1.0).is_ok());
     }
 
     #[test]
@@ -180,12 +131,10 @@ mod tests {
         // The native length 1 + 1e-9 rounds to exactly 1 in f32.
         let positions = [[0.0, 0.0, 0.0], [1.0 + 1e-9, 0.0, 0.0], [0.0, 1.0, 0.0]];
         let sides = || [(0, 1), (1, 2), (2, 0)].into_iter();
-        let mut c = controls("0.01", 1.0);
-        assert!(c.check_segments(&positions, [(0, 1), (0, 2)].into_iter()).is_ok());
-        assert!(c.check_segments(&positions, sides()).is_err(), "the hypotenuse is about 1.414");
-        c.edge = Some(rational("1.5"));
-        assert!(c.check_segments(&positions, sides()).is_ok());
-        c.edge = None;
-        assert!(c.check_segments(&positions, sides()).is_ok());
+        let one = rational("1");
+        assert!(check_segments(Some(&one), &positions, [(0, 1), (0, 2)].into_iter()).is_ok());
+        assert!(check_segments(Some(&one), &positions, sides()).is_err(), "the hypotenuse is about 1.414");
+        assert!(check_segments(Some(&rational("1.5")), &positions, sides()).is_ok());
+        assert!(check_segments(None, &positions, sides()).is_ok());
     }
 }

@@ -456,7 +456,6 @@ fn longest_edges(mesh: &Mesh, polylines: &[EdgePolyline]) -> (f64, f64) {
 }
 
 #[test]
-#[ignore = "needs the maximum edge length hook in lib.rs"]
 fn maximum_edge_length_bounds_returned_triangles_and_polylines_across_request_orders() {
     let limit = 1.0;
     let chord = TessellationParams { chord_height: 0.02, ..Default::default() };
@@ -502,7 +501,6 @@ fn maximum_edge_length_bounds_returned_triangles_and_polylines_across_request_or
 }
 
 #[test]
-#[ignore = "needs the maximum edge length hook in lib.rs"]
 fn maximum_edge_length_is_refused_when_float_rounding_exceeds_it() {
     let k = CatallaxKernel::new();
     let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
@@ -516,7 +514,6 @@ fn maximum_edge_length_is_refused_when_float_rounding_exceeds_it() {
 }
 
 #[test]
-#[ignore = "needs the maximum edge length hook in lib.rs"]
 fn other_unsupported_controls_stay_labelled_with_an_edge_length() {
     let k = CatallaxKernel::new();
     let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);

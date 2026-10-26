@@ -7,7 +7,6 @@
 mod convert;
 mod diagnostics;
 mod drawing_queries;
-#[allow(dead_code)] // The tessellation hook in this file uses it.
 mod edge_control;
 mod frames;
 mod native;
@@ -137,10 +136,18 @@ impl Solid {
             if default {
                 return Ok(self.app.display.value.clone());
             }
+            // The default mesh spans the body; pad it by both chord bounds so the
+            // rounding allowance for a requested edge length covers every vertex.
+            let pad =
+                MeshOptions::default().chord_tolerance.to_f64_nearest() + options.chord_tolerance.to_f64_nearest();
+            let extent = self.app.display.value.positions.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs())) + pad;
+            let native = edge_control::native_options(options, extent)?;
             let built = self.app.checkpoint.built();
-            Ok(numerical(query, |dec| mesh_body(&built.model, built.result, options, dec))
+            let mesh = numerical(query, |dec| mesh_body(&built.model, built.result, &native, dec))
                 .map_err(|e| query_error(query, e))?
-                .value)
+                .value;
+            edge_control::check(options, &mesh)?;
+            Ok(mesh)
         })
     }
 
