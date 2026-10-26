@@ -439,3 +439,87 @@ fn captured_manual_slot_question_builds_without_changing_its_geometry() {
 fn bracket_step_export_reports_its_proven_deviation() {
     contract::step_export_reports_what_it_wrote(&CatallaxKernel::new());
 }
+
+fn longest_edges(mesh: &Mesh, polylines: &[EdgePolyline]) -> (f64, f64) {
+    let position = |i: u32| mesh.positions[i as usize].map(f64::from);
+    let distance = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>().sqrt();
+    let triangle = mesh
+        .indices
+        .chunks(3)
+        .flat_map(|t| (0..3).map(|i| distance(position(t[i]), position(t[(i + 1) % 3]))))
+        .fold(0.0, f64::max);
+    let polyline = polylines
+        .iter()
+        .flat_map(|e| e.points.windows(2).map(|w| distance(w[0].into(), w[1].into())))
+        .fold(0.0, f64::max);
+    (triangle, polyline)
+}
+
+#[test]
+fn maximum_edge_length_bounds_returned_triangles_and_polylines_across_request_orders() {
+    let limit = 1.0;
+    let chord = TessellationParams { chord_height: 0.02, ..Default::default() };
+    let bounded = TessellationParams { max_edge_length: limit, ..chord };
+    let looser = TessellationParams { max_edge_length: 2.0, ..chord };
+    // Cold and warm requests in every order must agree with a body used for one request.
+    let orders: [&[&TessellationParams]; 3] =
+        [&[&chord, &bounded, &looser, &bounded, &chord], &[&bounded, &chord, &bounded], &[&looser, &bounded, &chord]];
+    let reference = {
+        let k = CatallaxKernel::new();
+        let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+        (
+            k.tessellate(body, &chord).unwrap(),
+            k.tessellate(body, &bounded).unwrap(),
+            k.tessellate_edges(body, &bounded).unwrap(),
+        )
+    };
+    let (plain, expected, expected_edges) = reference;
+    let (plain_longest, _) = longest_edges(&plain, &[]);
+    assert!(plain_longest > limit, "the chord-only mesh must be coarser than the bound");
+    assert!(expected.triangle_count() > plain.triangle_count());
+    for order in orders {
+        let k = CatallaxKernel::new();
+        let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+        for params in order {
+            let mesh = k.tessellate(body, params).unwrap();
+            let edges = k.tessellate_edges(body, params).unwrap();
+            if params.max_edge_length == 0.0 {
+                assert_eq!(mesh, plain);
+                assert!(mesh.unavailable_controls.iter().all(|c| !c.starts_with("max_edge_length")));
+                continue;
+            }
+            let (triangle, polyline) = longest_edges(&mesh, &edges);
+            let bound = params.max_edge_length;
+            assert!(triangle <= bound && polyline <= bound, "{triangle} {polyline} over {bound}");
+            assert!(mesh.unavailable_controls.iter().all(|c| !c.starts_with("max_edge_length")));
+            if **params == bounded {
+                assert_eq!(mesh, expected);
+                assert_eq!(edges, expected_edges);
+            }
+        }
+    }
+}
+
+#[test]
+fn maximum_edge_length_is_refused_when_float_rounding_exceeds_it() {
+    let k = CatallaxKernel::new();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    let params = TessellationParams { max_edge_length: 1e-7, ..Default::default() };
+    assert!(matches!(k.tessellate(body, &params), Err(KernelError::Unsupported(_))));
+    assert!(matches!(k.tessellate_edges(body, &params), Err(KernelError::Unsupported(_))));
+    // The refusal leaves the default mesh and other bounds usable.
+    assert!(k.tessellate(body, &TessellationParams::default()).is_ok());
+    let usable = TessellationParams { max_edge_length: 2.0, ..Default::default() };
+    assert!(k.tessellate(body, &usable).is_ok());
+}
+
+#[test]
+fn other_unsupported_controls_stay_labelled_with_an_edge_length() {
+    let k = CatallaxKernel::new();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    let params = TessellationParams { max_edge_length: 2.0, max_aspect_ratio: 3.0, ..Default::default() };
+    let mesh = k.tessellate(body, &params).unwrap();
+    assert!(mesh.unavailable_controls.iter().any(|c| c.starts_with("max_aspect_ratio")));
+    assert!(mesh.unavailable_controls.iter().any(|c| c.starts_with("curve_angle_deg")));
+    assert!(mesh.unavailable_controls.iter().all(|c| !c.starts_with("max_edge_length")));
+}
