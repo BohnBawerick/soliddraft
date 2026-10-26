@@ -48,8 +48,9 @@ pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> Kernel
     let chord = if spec.tolerance > 0.0 { spec.tolerance } else { 2e-5 * size };
     let params =
         TessellationParams { chord_height: chord, curve_angle_deg: 2.0, surface_angle_deg: 2.0, ..Default::default() };
-    let mesh = kernel.tessellate(body, &params)?;
-    let polylines = kernel.tessellate_edges(body, &params)?;
+    // A drawing view is for the screen and the sheet, so it reads the preview mesh.
+    let mesh = kernel.preview(body, &params)?;
+    let polylines = kernel.preview_edges(body, &params)?;
     let mut lines = Vec::new();
     for edge in &topology.edges {
         let mut faces = edge.faces.clone();

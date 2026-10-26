@@ -285,14 +285,18 @@ fn face_frame_normal_sweeps_use_the_certified_frame_without_changing_other_direc
             .expect("the captured normal sweep must replay");
         k.release(body).unwrap();
     }
-    let error = k
+    // A direction independent of the face frame keeps its exact components. Catallax
+    // builds it since its exact algebraic extrusion directions.
+    let body = k
         .extrude(
             &OpTag::new("independent_direction"),
             sheet,
             &Extrude { distance: 20.0, direction: Some(Vec3::new(2e-19, 1.0, 0.0)) },
         )
-        .unwrap_err();
-    assert!(error.to_string().contains("features.unsupported-algebraic-placement"), "{error}");
+        .unwrap()
+        .body;
+    assert!((k.mass_properties(body).unwrap().volume - 180.0 * std::f64::consts::PI).abs() < 1e-4);
+    k.release(body).unwrap();
     let evidence = k.take_diagnostics().unwrap();
     let question = evidence["questions"].as_array().unwrap().last().unwrap();
     let recipe: catallax_recipe::Recipe = serde_json::from_value(question["problem"].clone()).unwrap();
@@ -351,6 +355,44 @@ fn certified_application_display_serves_matching_requests_and_preserves_finer_me
             .iter()
             .all(|call| call["operation_log"]["operations"].as_array().unwrap().is_empty())
     );
+    k.release(body).unwrap();
+}
+
+#[test]
+fn previews_are_labelled_unproved_and_never_replace_the_certified_mesh() {
+    let k = CatallaxKernel::with_operation_log();
+    let body = contract::cylinder(&k, Vec3::ZERO, 3.0, 5.0);
+    let topology = k.topology(body).unwrap();
+    let params = TessellationParams { chord_height: 0.002, ..Default::default() };
+    k.take_diagnostics().unwrap();
+
+    // The screen's mesh: faces and edges named like the body's, and no certificate.
+    let preview = k.preview(body, &params).unwrap();
+    let edges = k.preview_edges(body, &params).unwrap();
+    assert!(preview.unproved);
+    assert!(preview.triangle_count() > 0);
+    assert_eq!(preview.positions.len(), preview.normals.len());
+    assert!(preview.triangle_faces.iter().all(|f| topology.face(*f).is_some()));
+    assert!(topology.faces.iter().all(|f| preview.triangle_faces.contains(&f.id)), "every face is pickable");
+    assert_eq!(edges.len(), topology.edges.len());
+    let log = k.take_diagnostics().unwrap();
+    let operations: Vec<_> = log["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|call| {
+            call["operation_log"]["operations"].as_array().unwrap().iter().map(|op| op["operation"].clone())
+        })
+        .collect();
+    assert_eq!(operations, ["preview"], "one preview serves the mesh and its edges, with no certified meshing");
+
+    // Exports and proven results still get the certified mesh.
+    let certified = k.tessellate(body, &params).unwrap();
+    assert!(!certified.unproved);
+    assert_eq!(k.preview(body, &params).unwrap(), preview);
+    let log = k.take_diagnostics().unwrap();
+    assert_eq!(log["calls"][0]["operation_log"]["operations"][0]["operation"], "tessellate");
+    assert!(log["calls"][1]["operation_log"]["operations"].as_array().unwrap().is_empty(), "the preview is kept");
     k.release(body).unwrap();
 }
 

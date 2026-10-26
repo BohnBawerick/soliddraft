@@ -260,6 +260,10 @@ pub struct Mesh {
     /// Requested controls this backend cannot guarantee. The mesh still meets its supported controls.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unavailable_controls: Vec<String>,
+    /// True for a preview: sampled for the screen, with no claimed deviation, watertightness
+    /// or quality. A preview is never exported or published as proven.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unproved: bool,
 }
 
 impl Mesh {
@@ -664,7 +668,8 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("draft".into()))
     }
 
-    /// Triangulates a body for display.
+    /// Triangulates a body, within the requested controls the backend can guarantee.
+    /// Exports and proven results use it; the screen uses [`preview`](Self::preview).
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh>;
 
     /// Triangulates a body once per entry of `levels`, in order, as one call. Each mesh
@@ -679,6 +684,27 @@ pub trait Kernel: Send + Sync {
     /// topology order. `params.curve_angle_deg` bounds the turn between samples and
     /// `params.chord_height`, when set, the distance from chord to curve.
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>>;
+
+    /// A display mesh for the screen: the viewport and drawing views. A backend may
+    /// sample it faster than [`tessellate`](Self::tessellate) by claiming no bounds, and
+    /// then marks it [`Mesh::unproved`]. Exports and proven results use `tessellate`.
+    /// The default returns `tessellate`.
+    fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.tessellate(body, params)
+    }
+
+    /// [`preview`](Self::preview) once per entry of `levels`, in order, as one call, the
+    /// way [`tessellate_levels`](Self::tessellate_levels) is for `tessellate`. The
+    /// default calls `preview` per entry.
+    fn preview_levels(&self, body: BodyId, levels: &[TessellationParams]) -> KernelResult<Vec<Mesh>> {
+        levels.iter().map(|p| self.preview(body, p)).collect()
+    }
+
+    /// Edge polylines matching [`preview`](Self::preview), with no claimed bounds. The
+    /// default returns [`tessellate_edges`](Self::tessellate_edges).
+    fn preview_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+        self.tessellate_edges(body, params)
+    }
 
     /// Volume, area, centroid and inertia.
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties>;

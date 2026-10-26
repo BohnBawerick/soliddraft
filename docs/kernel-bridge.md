@@ -14,6 +14,8 @@ Extrudes, cuts, booleans and rational-frame revolves use Catallax stage 1. Holes
 
 Catallax supplies shared-edge display meshes with chord bounds, face handles and edge polylines. The adapter reserves part of the chord bound for conversion to float display positions and refuses a request that cannot survive that conversion. It forwards the surface angle, edge length and aspect ratio as Catallax controls. Catallax bounds facet normals rather than the turn along an edge, so a requested curve angle, and any control Catallax could not certify on a face, appears in `Mesh::unavailable_controls`.
 
+The screen does not use those certified meshes. The viewport, a drag preview and drawing views call `Kernel::preview`, `preview_levels` and `preview_edges`, which the adapter answers with Catallax's preview mesh. It samples toward the same chord and angle targets, keeps face and edge handles, claims no bound and is marked `Mesh::unproved`. Display normals are averaged from the facets in `f64`. Exports, the quality report and anything published as proven keep `tessellate`. A backend without a preview answers the preview calls with `tessellate`.
+
 Topology contains exact definitions and incidence with Catallax's proven measures: face areas, centroids and boxes, edge lengths and half-arc-length points, and the body's box. Mass properties include the proven centroidal inertia.
 
 Drawings use polygon hidden-line removal on the meshes and Catallax booleans for plane sections. Whole lines and untrimmed circles keep their geometry after polygon visibility. Other curves retain polylines until conversion queries arrive. Drawing documents and SVG, PDF and DXF exports keep their formats.

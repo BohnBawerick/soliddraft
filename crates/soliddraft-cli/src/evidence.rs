@@ -92,7 +92,8 @@ impl<'a> Evidence<'a> {
             .as_mut()
             .ok_or("call scenario_prepare before capture")?
             .capture(doc, &dir.join("viewport.png"))?;
-        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","live_document":true});
+        // The viewport and drawing views show preview meshes, which claim no bounds.
+        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","mesh":"unproved preview","live_document":true});
         write_json(dir.join("display.json"), &result)?;
         Ok(result)
     }
@@ -107,7 +108,8 @@ impl<'a> Evidence<'a> {
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
-        let result = json!({"backend":doc.kernel().backend(),"method":"mesh","live_document":true});
+        let result =
+            json!({"backend":doc.kernel().backend(),"method":"mesh","mesh":"unproved preview","live_document":true});
         write_json(dir.join("view.json"), &result)?;
         Ok(result)
     }

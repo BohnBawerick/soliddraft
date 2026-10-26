@@ -18,7 +18,8 @@ BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
 # Calibrated independently from click latency; see docs/application-loop.md.
 DRAWING_VIEW_BUDGET_MS = 1000
 PHASES = ("construction", "edit", "display", "measurement", "refusal")
-DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "view_curves", "section_view"}
+DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "preview", "preview_edges", "view_curves",
+           "section_view"}
 MEASUREMENT = {"mass_properties", "measured_topology", "face_area", "face_centroid", "face_bounding_box",
                "bounding_box", "edge_length", "edge_midpoint", "inertia"}
 TREND_NOISE_MS = 25

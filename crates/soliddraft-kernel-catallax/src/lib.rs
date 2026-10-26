@@ -15,14 +15,14 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use catallax_app::{Error, IncrementalApplicationBody};
-use catallax_mesh::{MeshOptions, mesh_body};
+use catallax_mesh::{MeshOptions, PreviewMesh, PreviewOptions, mesh_body, preview_mesh_body};
 use catallax_numbers::{Decider, Rational};
 use catallax_recipe::StepId;
 use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "5b5477e433f89952e6d4806917fd5f273c835c3f";
+pub const CATALLAX_REVISION: &str = "878bb7fa78d036508564173d7ed425fc13385a37";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -49,7 +49,8 @@ struct Stored {
 struct Solid {
     app: IncrementalApplicationBody,
     ids: convert::Ids,
-    display: Mutex<VecDeque<Arc<CachedMesh>>>,
+    display: MeshCache<catallax_mesh::Mesh>,
+    previews: MeshCache<PreviewMesh>,
     topology: OnceLock<KernelResult<Topology>>,
     measured: OnceLock<KernelResult<Topology>>,
     mass: OnceLock<KernelResult<MassProperties>>,
@@ -67,28 +68,33 @@ fn display_key(options: &MeshOptions) -> DisplayKey {
     )
 }
 
-struct CachedMesh {
+/// One body's meshes of one kind by their controls, the most recently asked last.
+struct MeshCache<T>(Mutex<VecDeque<Arc<CachedMesh<T>>>>);
+
+struct CachedMesh<T> {
     key: DisplayKey,
-    value: Mutex<Option<Arc<catallax_mesh::Mesh>>>,
+    value: Mutex<Option<Arc<T>>>,
 }
 
-impl Solid {
-    fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
-        let key = display_key(options);
+impl<T> MeshCache<T> {
+    fn new(seed: Option<(DisplayKey, T)>) -> Self {
+        let seed = seed.map(|(key, mesh)| Arc::new(CachedMesh { key, value: Mutex::new(Some(Arc::new(mesh))) }));
+        Self(Mutex::new(seed.into_iter().collect()))
+    }
+
+    fn get(&self, key: DisplayKey, make: impl FnOnce() -> KernelResult<T>) -> KernelResult<Arc<T>> {
         let entry = {
-            let mut cached = self
-                .display
-                .lock()
-                .map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
+            let mut cached =
+                self.0.lock().map_err(|_| KernelError::Unavailable("Catallax display cache lock poisoned".into()))?;
             let entry = if let Some(i) = cached.iter().position(|entry| entry.key == key) {
                 cached.remove(i).expect("the cached controls exist")
             } else {
-                // Three viewport levels, the certified mesh and a drawing tolerance coexist.
+                // Three viewport levels, the build's own mesh and a drawing tolerance coexist.
                 const MESHES: usize = 5;
                 if cached.len() == MESHES {
                     cached.pop_front();
                 }
-                Arc::new(CachedMesh { key: key.clone(), value: Mutex::new(None) })
+                Arc::new(CachedMesh { key, value: Mutex::new(None) })
             };
             cached.push_back(entry.clone());
             entry
@@ -100,16 +106,52 @@ impl Solid {
         if let Some(mesh) = value.as_ref() {
             return Ok(mesh.clone());
         }
-        let mesh = Arc::new(if key == display_key(&MeshOptions::default()) {
-            self.app.display.value.clone()
-        } else {
-            let built = self.app.checkpoint.built();
-            numerical(query, |dec| mesh_body(&built.model, built.result, options, dec))
-                .map_err(|e| query_error(query, e))?
-                .value
-        });
+        let mesh = Arc::new(make()?);
         *value = Some(mesh.clone());
         Ok(mesh)
+    }
+
+    /// Visits every finished mesh, skipping any still being made.
+    fn each(&self, mut visit: impl FnMut(&T)) {
+        if let Ok(cached) = self.0.lock() {
+            for entry in cached.iter() {
+                if let Ok(value) = entry.value.try_lock()
+                    && let Some(mesh) = value.as_ref()
+                {
+                    visit(mesh);
+                }
+            }
+        }
+    }
+}
+
+impl Solid {
+    /// The certified mesh for these controls, for exports and proven results.
+    fn display(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<catallax_mesh::Mesh>> {
+        let key = display_key(options);
+        let default = key == display_key(&MeshOptions::default());
+        self.display.get(key, || {
+            if default {
+                return Ok(self.app.display.value.clone());
+            }
+            let built = self.app.checkpoint.built();
+            Ok(numerical(query, |dec| mesh_body(&built.model, built.result, options, dec))
+                .map_err(|e| query_error(query, e))?
+                .value)
+        })
+    }
+
+    /// An unproved mesh for the screen, sampled to the same targets with no claimed
+    /// bounds. Catallax keeps it apart from the certified mesh and never exports it.
+    fn preview(&self, options: &MeshOptions, query: &str) -> KernelResult<Arc<PreviewMesh>> {
+        self.previews.get(display_key(options), || {
+            let built = self.app.checkpoint.built();
+            let mut decider = Decider::default();
+            let span = catallax_numbers::OperationSpan::begin("brep", &query, query, &decider);
+            let result = preview_mesh_body(&built.model, built.result, &PreviewOptions::from(options), &mut decider);
+            span.finish(&decider, result.as_ref().err(), None);
+            result.map_err(|e| query_error(query, e))
+        })
     }
 }
 
@@ -259,10 +301,7 @@ impl CatallaxKernel {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
-        let display = Arc::new(CachedMesh {
-            key: display_key(&MeshOptions::default()),
-            value: Mutex::new(Some(Arc::new(app.display.value.clone()))),
-        });
+        let display = MeshCache::new(Some((display_key(&MeshOptions::default()), app.display.value.clone())));
         state.bodies.insert(
             body,
             Stored {
@@ -272,7 +311,8 @@ impl CatallaxKernel {
                 solid: Some(Arc::new(Solid {
                     app,
                     ids,
-                    display: Mutex::new(VecDeque::from([display])),
+                    display,
+                    previews: MeshCache::new(None),
                     topology: OnceLock::new(),
                     measured: OnceLock::new(),
                     mass: OnceLock::new(),
@@ -730,6 +770,32 @@ impl Kernel for CatallaxKernel {
         })
     }
 
+    fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.observe("preview", || {
+            let solid = self.solid(body)?;
+            let mesh = solid.preview(&options(params)?, "preview")?;
+            if mesh.positions.iter().flatten().any(|v| !(*v as f32).is_finite()) {
+                return Err(gap("preview coordinates beyond f32 display range", "1"));
+            }
+            Ok(convert::preview(&mesh, &solid.ids))
+        })
+    }
+
+    fn preview_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+        self.observe("preview_edges", || {
+            let solid = self.solid(body)?;
+            let mesh = solid.preview(&options(params)?, "preview_edges")?;
+            Ok(mesh
+                .edges
+                .iter()
+                .map(|edge| EdgePolyline {
+                    edge: solid.ids.edges[&edge.edge],
+                    points: edge.vertices.iter().map(|v| mesh.positions[*v].into()).collect(),
+                })
+                .collect())
+        })
+    }
+
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
         self.observe("mass_properties", || {
             let solid = self.solid(body)?;
@@ -802,8 +868,8 @@ impl Kernel for CatallaxKernel {
         self.observe("release", || self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body)))
     }
 
-    /// The recipe text, the history, the certified display mesh and the cached meshes,
-    /// plus a fixed allowance per B-rep face and edge of every body the build kept.
+    /// The recipe text, the history, the certified display mesh, the cached meshes and
+    /// previews, plus a fixed allowance per B-rep face and edge of every body the build kept.
     /// Catallax does not report its model's size, so the allowance is an estimate.
     fn retained_bytes(&self, body: BodyId) -> KernelResult<u64> {
         const FACE: usize = 2048;
@@ -825,15 +891,13 @@ impl Kernel for CatallaxKernel {
                 * (display.faces.len() * FACE + display.edges.len() * EDGE);
             bytes += brep + mesh_bytes(display);
             // The display cache holds its own copy, even of the certified mesh.
-            if let Ok(cached) = solid.display.lock() {
-                for entry in cached.iter() {
-                    if let Ok(value) = entry.value.try_lock()
-                        && let Some(mesh) = value.as_ref()
-                    {
-                        bytes += mesh_bytes(mesh);
-                    }
-                }
-            }
+            solid.display.each(|mesh| bytes += mesh_bytes(mesh));
+            solid.previews.each(|m| {
+                bytes += m.positions.len() * 24
+                    + m.triangles.len() * 32
+                    + m.faces.len() * 64
+                    + m.edges.iter().map(|e| 64 + e.vertices.len() * 8).sum::<usize>()
+            });
         }
         Ok(bytes as u64)
     }

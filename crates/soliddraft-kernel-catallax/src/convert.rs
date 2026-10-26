@@ -439,7 +439,7 @@ pub(super) fn topology(app: &IncrementalApplicationBody, ids: &Ids, proven: bool
 }
 
 pub(super) fn mesh(mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationParams) -> Mesh {
-    let mut out = Mesh::default();
+    let mut out = triangles(&mesh.positions, &mesh.triangles, ids);
     if params.curve_angle_deg > 0.0 {
         out.unavailable_controls.push(
             "curve_angle_deg: Catallax bounds facet normals (surface_angle_deg) and chords, not the turn along an edge"
@@ -454,14 +454,24 @@ pub(super) fn mesh(mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationP
         };
         out.unavailable_controls.push(format!("{name} on {}: {}", ids.faces[&missing.face], missing.reason));
     }
+    out
+}
+
+/// An unproved preview for the screen, with no claimed bound on any control.
+pub(super) fn preview(mesh: &catallax_mesh::PreviewMesh, ids: &Ids) -> Mesh {
+    Mesh { unproved: true, ..triangles(&mesh.positions, &mesh.triangles, ids) }
+}
+
+fn triangles(positions: &[[f64; 3]], triangles: &[catallax_mesh::Triangle], ids: &Ids) -> Mesh {
+    let mut out = Mesh::default();
     // Shading normals are display data, never a proof, so they come from the facets in
     // f64: each face's vertex takes the area-weighted sum of its triangles' normals.
     // Catallax winds every triangle toward its face's outward normal. Vertices are shared
     // within a face and kept apart across faces, so sharp edges stay sharp.
     let mut vertices = BTreeMap::new();
     let mut sums: Vec<Vec3> = Vec::new();
-    for triangle in &mesh.triangles {
-        let points = triangle.vertices.map(|v| Vec3::from(mesh.positions[v]));
+    for triangle in triangles {
+        let points = triangle.vertices.map(|v| Vec3::from(positions[v]));
         let facet = (points[1] - points[0]).cross(points[2] - points[0]);
         for (vertex, point) in triangle.vertices.into_iter().zip(points) {
             let index = *vertices.entry((triangle.face, vertex)).or_insert_with(|| {

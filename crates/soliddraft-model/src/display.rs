@@ -66,12 +66,12 @@ impl Document {
             let diagonal = self.kernel.topology(body)?.bbox.diagonal();
             let all = Levels::new(quality, diagonal);
             let params: Vec<_> = levels.iter().map(|l| *all.params(*l)).collect();
-            let meshes = self.kernel.tessellate_levels(body, &params)?;
+            let meshes = self.kernel.preview_levels(body, &params)?;
             let backend = self.kernel.backend();
             let geometry = self.geometry_hash();
             let mut out = Vec::with_capacity(levels.len());
             for ((level, mesh), p) in levels.iter().zip(meshes).zip(&params) {
-                let edges = self.kernel.tessellate_edges(body, p).unwrap_or_default();
+                let edges = self.kernel.preview_edges(body, p).unwrap_or_default();
                 let polylines = edges
                     .iter()
                     .map(|e| e.points.iter().map(|q| [q.x as f32, q.y as f32, q.z as f32]).collect())

@@ -54,7 +54,7 @@ fn the_worker_answers_off_the_interface_thread() {
     let done = t.wait(WAIT).expect("an answer");
     assert_eq!((done.key, done.generation), ("block", generation));
     let meshes = done.result.unwrap();
-    assert_eq!(meshes, k.tessellate_levels(body, levels.all()).unwrap());
+    assert_eq!(meshes, k.preview_levels(body, levels.all()).unwrap());
     assert_eq!(t.pending(), 0);
     assert!(t.poll().is_empty());
 }
@@ -72,7 +72,7 @@ fn a_new_request_supersedes_the_old_one() {
     let last = t.request(7, body, fine.all());
     let done = t.wait(WAIT).expect("an answer");
     assert_eq!(done.generation, last, "only the latest request is answered");
-    assert_eq!(done.result.unwrap()[0], k.tessellate(body, fine.params(Level::Coarse)).unwrap());
+    assert_eq!(done.result.unwrap()[0], k.preview(body, fine.params(Level::Coarse)).unwrap());
     std::thread::sleep(Duration::from_millis(50));
     assert!(t.poll().is_empty());
 

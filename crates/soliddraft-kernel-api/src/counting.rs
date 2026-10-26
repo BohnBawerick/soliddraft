@@ -136,6 +136,21 @@ impl Kernel for Counting {
         self.inner.tessellate_edges(body, params)
     }
 
+    fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.note(Work::Mesh(body));
+        self.inner.preview(body, params)
+    }
+
+    fn preview_levels(&self, body: BodyId, levels: &[TessellationParams]) -> KernelResult<Vec<Mesh>> {
+        self.note(Work::Mesh(body));
+        self.inner.preview_levels(body, levels)
+    }
+
+    fn preview_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+        self.note(Work::Mesh(body));
+        self.inner.preview_edges(body, params)
+    }
+
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
         self.inner.mass_properties(body)
     }

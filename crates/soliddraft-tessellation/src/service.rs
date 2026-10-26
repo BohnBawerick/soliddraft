@@ -53,7 +53,7 @@ fn is_latest<K: Eq + Hash>(latest: &Latest<K>, key: &K, generation: u64) -> bool
 }
 
 fn answer<K>(kernel: &dyn Kernel, job: Job<K>) -> Done<K> {
-    Done { result: kernel.tessellate_levels(job.body, &job.levels), key: job.key, generation: job.generation }
+    Done { result: kernel.preview_levels(job.body, &job.levels), key: job.key, generation: job.generation }
 }
 
 /// Tessellates bodies on a worker thread.

@@ -1409,7 +1409,7 @@ impl Document {
                 if let Some(mesh) = cached {
                     self.show_mesh(body, &topology, &mesh);
                     self.shown = next;
-                } else if let Ok(mesh) = self.kernel().tessellate(body, &self.tess_params) {
+                } else if let Ok(mesh) = self.kernel().preview(body, &self.tess_params) {
                     self.show_mesh(body, &topology, &mesh);
                     self.quality.made(body, mesh);
                     self.shown = next;
@@ -2043,7 +2043,7 @@ pub(crate) fn preview_mesh(
     params: &TessellationParams,
 ) -> Result<Arc<DisplayMesh>, String> {
     let topology = kernel.topology(body).map_err(|e| e.to_string())?;
-    let mesh = kernel.tessellate(body, params).map_err(|e| e.to_string())?;
+    let mesh = kernel.preview(body, params).map_err(|e| e.to_string())?;
     let edges = edge_polylines(kernel, body, params);
     let mut picks = Vec::new();
     Ok(Arc::new(display_mesh(0, &mesh, &edges, &topology, &HashMap::new(), &mut picks)))
@@ -2052,7 +2052,7 @@ pub(crate) fn preview_mesh(
 /// The body's edges sampled along their curves. A kernel that cannot sample them
 /// leaves the body without edges rather than without faces.
 fn edge_polylines(kernel: &dyn Kernel, body: BodyId, params: &TessellationParams) -> Vec<EdgePolyline> {
-    kernel.tessellate_edges(body, params).unwrap_or_else(|e| {
+    kernel.preview_edges(body, params).unwrap_or_else(|e| {
         log::warn!("edges of body {body:?}: {e}");
         Vec::new()
     })
