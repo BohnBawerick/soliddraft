@@ -275,11 +275,15 @@ jobs:
                   (directory / name).unlink()
               call("scenario_display", {})
               assert (directory / "viewport.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+              assert not (directory / "view.svg").exists()
+              display_log = json.loads((directory / "display.kernel.json").read_text())
+              assert all(call["operation"] != "view_curves" for call in display_log["calls"]), display_log
+              call("scenario_view", {})
               assert "<path " in (directory / "view.svg").read_text()
-              log = json.loads((directory / "display.kernel.json").read_text())
+              view_log = json.loads((directory / "view.kernel.json").read_text())
               assert all(call["operation"] not in {"extrude", "boolean", "create_body_from_profile"}
-                  for call in log["calls"]), log
-              print("Live viewport and SVG captured after deleting every saved input; no reconstruction calls.")
+                  for call in display_log["calls"] + view_log["calls"]), (display_log, view_log)
+              print("Viewport and hidden-line SVG captured separately after deleting every saved input; no reconstruction calls.")
           finally:
               client.close()
               scenarios.write(root / "protocol.json", client.transcript)
@@ -324,7 +328,7 @@ jobs:
                   "Release build on ${{ runner.environment }}/${{ runner.os }}/${{ runner.arch }}; raw click-to-display timing, not a matched-core baseline.", "",
                   "| Scenario | Step | Tool | Wait ms | Budget ms | Result |",
                   "|---|---:|---|---:|---:|---|"]
-          trends = []
+          trends, views = [], []
           for path in sorted(pathlib.Path(sys.argv[1]).glob("*/result.json")):
               report = json.loads(path.read_text())
               for step in report["steps"]:
@@ -332,12 +336,20 @@ jobs:
                   if timing:
                       rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
                           f"{timing['elapsed_ms']:.3f} | {timing['budget_ms']} | {timing['status']} |")
+                  view = step.get("drawing_view")
+                  if view:
+                      views.append(f"| {report['name']} | {step['number']} | {view['elapsed_ms']:.3f} | "
+                          f"{view['budget_ms']} | {'pass' if view['pass'] else 'OVER BUDGET'} |")
               for trend in report.get("trends", []):
                   trends.append(f"| {report['name']} | {trend['tool']} | {trend.get('samples', 0)} | "
                       f"{trend.get('growth_ms', 'unavailable')} | {trend['noise_ms']} | "
                       f"{'pass' if trend['pass'] else 'fail'} |")
               if report.get("error"):
                   rows.extend(["", f"{report['name']}: {report['error']}"])
+          if views:
+              rows.extend(["", "## Drawing-view budgets", "",
+                  "| Scenario | Step | Hidden-line SVG ms | Budget ms | Result |",
+                  "|---|---:|---:|---:|---|", *views])
           if trends:
               rows.extend(["", "## Feature-count latency trends", "",
                   "| Scenario | Tool | Samples | Fitted growth ms | Noise ms | Result |",

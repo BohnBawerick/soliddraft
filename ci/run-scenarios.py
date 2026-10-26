@@ -15,6 +15,8 @@ import time
 
 # Shared with the scenario latency gate. Acceptance limits, not process timeouts.
 BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
+# Calibrated independently from click latency; see docs/application-loop.md.
+DRAWING_VIEW_BUDGET_MS = 1000
 PHASES = ("construction", "edit", "display", "measurement", "refusal")
 DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "view_curves", "section_view"}
 MEASUREMENT = {"mass_properties", "face_area", "face_centroid", "face_bounding_box",
@@ -113,6 +115,13 @@ def timing(tool, segments):
             "elapsed_ms": elapsed, "split_ms": split, "work": work, "segments": sources,
             "background": {"call_ms": background_split, "work": background_work},
             "pass": elapsed <= BUDGET_MS[kind]}
+
+
+def drawing_view_timing(elapsed_ms, kernel):
+    result = timing("view", [{"source": "view.kernel.json", "elapsed_ms": elapsed_ms,
+                             "phase": "display", "kernel": kernel}])
+    return {**result, "check": "drawing-view budget", "class": "drawing-view",
+            "budget_ms": DRAWING_VIEW_BUDGET_MS, "pass": elapsed_ms <= DRAWING_VIEW_BUDGET_MS}
 
 
 def load_known_over_budget(path):
@@ -411,21 +420,7 @@ def run(args):
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
-                checks.append({"check": "SVG contains curves",
-                               "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
-            if step.get("drawing"):
-                drawing = cli(args.soliddraft, ["draw", directory / "part.dwprt", "--template", "iso-a3",
-                    "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--kernel-log", directory / "drawing.kernel.json", "--json"], directory, "drawing", args.timeout)
-                if drawing["pass"]:
-                    rendered = json.loads((directory / "drawing.stdout").read_text())
-                    drawing["backend"] = rendered["backend"]
-                    drawing["pass"] &= rendered["backend"].startswith("catallax ")
-                checks.append(drawing)
-                if drawing["pass"]:
-                    segments.append({"source": "drawing.kernel.json", "elapsed_ms": drawing["elapsed_ms"],
-                                     "phase": "construction", "overhead_phase": "display",
-                                     "kernel": json.loads((directory / "drawing.kernel.json").read_text())})
             entry["waits_ms"] = [{"source": s["source"], "elapsed_ms": s["elapsed_ms"]} for s in segments]
             write(directory / "waits.json", entry["waits_ms"])
             latency = accept_latency(scenario["name"], number, step["tool"], timing(step["tool"], segments), known_latency)
@@ -437,6 +432,37 @@ def run(args):
                 print(f"::warning::{latency['message']}", flush=True)
             elif latency["status"] in {"known-gap-regression", "invalid-known-over-budget"}:
                 print(f"::error::{latency['message']}", flush=True)
+            view_latency = None
+            if (directory / "recipe.json").exists():
+                started = time.perf_counter_ns()
+                viewed = client.request("tools/call", {"name": "scenario_view", "arguments": {}})
+                view_ms = (time.perf_counter_ns() - started) / 1_000_000
+                checks.append({"check": "live hidden-line view", "response": viewed,
+                               "pass": not viewed.get("isError")})
+                view_latency = drawing_view_timing(
+                    view_ms, json.loads((directory / "view.kernel.json").read_text()))
+                entry["drawing_view"] = view_latency
+                checks.append(view_latency)
+                write(directory / "view.timing.json", view_latency)
+                print(json.dumps({"step": number, "tool": "scenario_view", "timing": view_latency}), flush=True)
+                if not view_latency["pass"]:
+                    print(f"::error::Drawing-view step {number} took {view_ms:.3f} ms; "
+                          f"budget is {DRAWING_VIEW_BUDGET_MS} ms", flush=True)
+                if not viewed.get("isError"):
+                    view = json.loads((directory / "view.json").read_text())
+                    checks.append({"check": "live Catallax hidden-line view", "actual": view,
+                                   "pass": view["backend"]["name"] == "catallax" and view["live_document"]
+                                           and view["method"] == "mesh"})
+                checks.append({"check": "SVG contains curves",
+                               "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
+            if step.get("drawing"):
+                drawing = cli(args.soliddraft, ["draw", directory / "part.dwprt", "--template", "iso-a3",
+                    "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--kernel-log", directory / "drawing.kernel.json", "--json"], directory, "drawing", args.timeout)
+                if drawing["pass"]:
+                    rendered = json.loads((directory / "drawing.stdout").read_text())
+                    drawing["backend"] = rendered["backend"]
+                    drawing["pass"] &= rendered["backend"].startswith("catallax ")
+                checks.append(drawing)
             # Volume/area acceptance is an explicit request after the click's display,
             # not automatic work on the normal edit path or a pre-warming step.
             evidence = command
@@ -463,7 +489,7 @@ def run(args):
             if not entry["pass"]:
                 # Retain every candidate input, including rejected scratch builds, for kernel diagnosis.
                 entry["questions"] = [str(p.relative_to(args.out)) for p in directory.glob("question-*.json")]
-                if any(not c["pass"] for c in checks if c is not latency):
+                if any(not c["pass"] for c in checks if c is not latency and c is not view_latency):
                     break
         report["trends"] = trend_checks(scenario.get("trends", []), report["steps"])
         report["pass"] = (len(report["steps"]) == len(scenario["steps"])

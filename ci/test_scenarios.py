@@ -153,6 +153,28 @@ class Latency(unittest.TestCase):
             scenarios.timing("extrude", [self.segment(10, [call])])
 
 
+class DrawingViewBudgets(unittest.TestCase):
+    def test_view_has_its_own_strict_budget_boundary(self):
+        kernel = {"calls": []}
+        self.assertTrue(scenarios.drawing_view_timing(scenarios.DRAWING_VIEW_BUDGET_MS, kernel)["pass"])
+        over = scenarios.drawing_view_timing(scenarios.DRAWING_VIEW_BUDGET_MS + 0.001, kernel)
+        self.assertFalse(over["pass"])
+        self.assertEqual(over["class"], "drawing-view")
+        self.assertEqual(scenarios.BUDGET_MS["feature"], 1000)
+
+    def test_view_keeps_its_numeric_work_without_charging_nested_calls_twice(self):
+        view = scenarios.drawing_view_timing(450, {"calls": [
+            Latency.call("tessellate", 100, nested=True),
+            Latency.call("view_curves", 400, [
+                Latency.operation("mesh", 100, 5), Latency.operation("face_area", 30, 2),
+            ], work={"used": 7}),
+        ]})
+        self.assertEqual(view["split_ms"]["display"], 420)
+        self.assertEqual(view["split_ms"]["measurement"], 30)
+        self.assertEqual(view["work"]["display"], 5)
+        self.assertEqual(view["work"]["measurement"], 2)
+
+
 class KnownBudgets(unittest.TestCase):
     known = {("bracket", 6): {"scenario": "bracket", "step": 6, "tool": "extrude",
                             "last_measured_ms": 2000}}
