@@ -129,17 +129,20 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `view.svg` and `viewport.png`, when a solid exists. The PNG comes from the
   viewport's `ViewportRenderer`, shader and camera, without reopening saved input.
   `viewport.json` records the retained GPU adapter. `display.json` identifies the
-  live document and backend; `display.kernel.json` retains the SVG/display calls.
-  A drawing step also writes `drawing.dwdrw`, `drawing.svg` and `drawing.kernel.json`,
-  collected by `soliddraft draw --kernel-log`.
+  live viewport and backend; `display.kernel.json` retains only its capture calls.
+  The separate bundle-only `scenario_view` request writes `view.svg`, `view.json`
+  and `view.kernel.json` from the same live body, without reopening saved input.
+  Its external wait, phase split and work are in `view.timing.json` and the step's
+  `drawing_view` result. A drawing step also writes `drawing.dwdrw`, `drawing.svg`
+  and `drawing.kernel.json`, collected by `soliddraft draw --kernel-log`.
 - `measurement.json` and `measurement.kernel.json`, when a check requests
   `/measurement/volume_mm3` or another quantity. The bundle-only `scenario_measure`
   request runs after the complete click interval, so it cannot pre-warm that display.
   It neither advances the command sequence nor changes the part. Its own elapsed time,
   work and unchanged 1000 ms ceiling are retained as `measurement` in the step result.
   Any measurement still performed by an edit is charged to that edit, not subtracted.
-- `waits.json` and `timing.json`: external command/display/drawing waits, their
-  disjoint phase split, deterministic work and strict budget verdict.
+- `waits.json` and `timing.json`: external command and viewport waits, their
+  disjoint phase split, deterministic work and unchanged click-budget verdict.
 - `checks.json`: the observed value and pass/fail for each check. A refusal step
   also retains the verifier response, manifest and operation log under `replay/`.
 
@@ -252,12 +255,39 @@ path redaction and unrelated storage, including another retry while still full.
 
 ## Latency and feature-count trends
 
-The runner's monotonic clock measures the command round trip, live viewport/SVG
-capture and any requested drawing. GPU preparation runs once outside the click
-interval. Kernel logs partition that external wait into construction, edit,
-display, measurement and refusal; nested calls are not charged twice. Concurrent
-background calls keep their own time/work record rather than inflating the caller's
-wait. Verifier replay is a survival check outside that interval.
+The runner's monotonic clock measures each click as the command round trip plus
+the live viewport capture. Hidden-line SVG, explicit measurement and requested
+drawing exports run afterward, outside the click interval. SVG and measurement
+have their own checks; drawing export keeps its artifact check and elapsed time.
+GPU preparation runs once outside the click interval. Kernel logs partition the
+external waits into construction, edit, display, measurement and refusal; nested
+calls are not charged twice. Concurrent background calls keep their own time/work
+record rather than inflating the caller's wait. Verifier replay is also outside
+the click interval.
+
+### Independent drawing-view gate
+
+Every step with a solid requests `scenario_display` first and records the click
+before asking `scenario_view` for the hidden-line SVG. A slow SVG cannot consume
+the user's 1,000 ms edit-to-viewport allowance or escape CI: `drawing_view` has an
+independent strict 1,000 ms ceiling, no known-gap exemptions, error annotations
+and its own per-step CI summary table. A drawing-view timing failure fails the
+scenario while later steps still run, retaining the cost distribution.
+
+The initial ceiling is calibrated from the
+[current-main baseline run](https://github.com/BohnBawerick/soliddraft/actions/runs/40229375814)
+at `cfedbd7`: 183 capture-thread `view_curves` samples across ten scenarios,
+with median 0.565 ms, nearest-rank p95 417.182 ms, p99 731.791 ms and maximum
+769.365 ms. The 1,000 ms ceiling leaves about 231 ms above the observed maximum
+for protocol, SVG serialization and run-to-run variation. The new check measures
+that entire external request, not just the kernel call. The click budget and
+existing approved-gap records are unchanged.
+
+Option 3 remains kernel follow-up: faster fine meshing of curved faces inside
+`view_curves`. Measure that improvement, then tighten the drawing-view ceiling;
+this change does not alter geometric proofs or mesh accuracy to make SVG pass.
+
+### Click budgets and trends
 
 The strict command-class limits remain 100 ms for stock primitives, 500 ms for
 booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and

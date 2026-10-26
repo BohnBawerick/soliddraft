@@ -86,18 +86,27 @@ impl<'a> Evidence<'a> {
         }
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
-        let body = doc.display_body().ok_or("part has no displayed solid")?;
         self.renderer
             .as_mut()
             .ok_or("call scenario_prepare before capture")?
             .capture(doc, &dir.join("viewport.png"))?;
+        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","live_document":true});
+        write_json(dir.join("display.json"), &result)?;
+        Ok(result)
+    }
+
+    fn scenario_view(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        let root = self.directory.as_ref().ok_or("scenario view requires --bundle")?;
+        let dir = root.join(format!("{:04}", self.sequence));
+        let doc = &self.host.state.doc;
+        let body = doc.display_body().ok_or("part has no displayed solid")?;
         let spec =
             soliddraft_kernel_api::drawing::ViewSpec::standard(soliddraft_kernel_api::drawing::StandardView::Isometric);
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
         let result = json!({"backend":doc.kernel().backend(),"method":"mesh","live_document":true});
-        write_json(dir.join("display.json"), &result)?;
+        write_json(dir.join("view.json"), &result)?;
         Ok(result)
     }
 
@@ -241,7 +250,8 @@ impl ToolHost for Evidence<'_> {
         if self.directory.is_some() {
             for (name, description) in [
                 ("scenario_prepare", "Prepare the retained offscreen renderer before scenario timing."),
-                ("scenario_display", "Capture the live document's viewport and SVG without reopening a file."),
+                ("scenario_display", "Capture the live document's viewport without reopening a file."),
+                ("scenario_view", "Compute the live body's hidden-line SVG, separately from the click's viewport."),
                 ("scenario_measure", "Explicitly measure the live body after the timed edit and display."),
             ] {
                 tools.push(ToolSpec {
@@ -258,17 +268,23 @@ impl ToolHost for Evidence<'_> {
         if self.failed {
             return ToolOutput::error("bundle write failed; start a new run");
         }
-        if self.directory.is_some() && matches!(name, "scenario_prepare" | "scenario_display" | "scenario_measure") {
+        if self.directory.is_some()
+            && matches!(name, "scenario_prepare" | "scenario_display" | "scenario_view" | "scenario_measure")
+        {
             let capture = (|| {
-                let result = if name == "scenario_measure" {
-                    self.scenario_measure()
-                } else {
-                    self.scenario_capture(name == "scenario_prepare")
+                let result = match name {
+                    "scenario_measure" => self.scenario_measure(),
+                    "scenario_view" => self.scenario_view(),
+                    _ => self.scenario_capture(name == "scenario_prepare"),
                 };
                 if name != "scenario_prepare" {
                     let root = self.directory.as_ref().ok_or("scenario capture requires --bundle")?;
                     let dir = root.join(format!("{:04}", self.sequence));
-                    let stem = if name == "scenario_measure" { "measurement" } else { "display" };
+                    let stem = match name {
+                        "scenario_measure" => "measurement",
+                        "scenario_view" => "view",
+                        _ => "display",
+                    };
                     let diagnostics = self.kernel.as_ref().ok_or("capture kernel missing")?.take_diagnostics()?;
                     write_json(dir.join(format!("{stem}.kernel.json")), &diagnostics)?;
                 }
