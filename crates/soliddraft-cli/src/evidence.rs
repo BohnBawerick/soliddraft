@@ -103,8 +103,13 @@ impl<'a> Evidence<'a> {
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
         let body = doc.display_body().ok_or("part has no displayed solid")?;
-        let spec =
-            soliddraft_kernel_api::drawing::ViewSpec::standard(soliddraft_kernel_api::drawing::StandardView::Isometric);
+        // The live hidden-line view stands for a drawing view on screen, so it reads the preview.
+        let spec = soliddraft_kernel_api::drawing::ViewSpec {
+            preview: true,
+            ..soliddraft_kernel_api::drawing::ViewSpec::standard(
+                soliddraft_kernel_api::drawing::StandardView::Isometric,
+            )
+        };
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;

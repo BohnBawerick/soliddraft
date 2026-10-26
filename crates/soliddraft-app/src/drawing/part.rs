@@ -43,7 +43,8 @@ impl<'a> PartContext<'a> {
         })
     }
 
-    /// The part as `soliddraft-drawing` takes it.
+    /// The part as `soliddraft-drawing` takes it, for line work on the screen: views
+    /// come from the kernel's unproved preview.
     pub fn part(&self) -> Part<'_> {
         Part {
             kernel: self.kernel.as_ref(),
@@ -51,7 +52,13 @@ impl<'a> PartContext<'a> {
             digest: self.digest.clone(),
             dimensions: feature_dimensions(self.doc),
             namer: Some(self),
+            preview: true,
         }
+    }
+
+    /// The part for an exported drawing: views come from the certified mesh.
+    pub fn certified_part(&self) -> Part<'_> {
+        Part { preview: false, ..self.part() }
     }
 
     fn feature_name(&self, id: u64) -> String {

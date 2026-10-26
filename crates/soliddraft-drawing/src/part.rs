@@ -35,6 +35,9 @@ pub struct Part<'k> {
     pub dimensions: Vec<ModelDimension>,
     /// The part document's own names for its entities, when it has them.
     pub namer: Option<&'k dyn Namer>,
+    /// Draw the views from the kernel's unproved preview mesh, for the screen. Line work
+    /// for an export leaves it off.
+    pub preview: bool,
 }
 
 /// What a part document knows about its entities beyond the kernel: persistent names,

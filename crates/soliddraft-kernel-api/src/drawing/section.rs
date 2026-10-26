@@ -203,6 +203,7 @@ fn section_of_cut<K: Kernel + ?Sized>(
     let section = |e: Option<FaceId>| e.map_or(CurveSource::Unknown, CurveSource::Section);
 
     let view = k.view_curves(cut, &spec.view)?;
+    let unproved = view.unproved;
     let curves = view
         .curves
         .into_iter()
@@ -218,7 +219,7 @@ fn section_of_cut<K: Kernel + ?Sized>(
             c
         })
         .collect();
-    let curves = ViewCurves::new(curves, frame);
+    let curves = ViewCurves { unproved, ..ViewCurves::new(curves, frame) };
 
     // Each cap face's loops, each curve tagged through the cap edge it runs along.
     let edge_by_mid: Vec<(EdgeId, Vec3)> =

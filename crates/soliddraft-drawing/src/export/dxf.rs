@@ -36,6 +36,7 @@ const DIMSTYLE: &str = "SOLIDDRAFT";
 
 /// Writes the display list as a DXF R2000 drawing.
 pub fn dxf(list: &DisplayList) -> Result<Vec<u8>, DrawingError> {
+    super::proven(std::slice::from_ref(list))?;
     let mut d = dxf::Drawing::new();
     d.header.version = AcadVersion::R2000;
     d.header.default_drawing_units = Units::Millimeters;

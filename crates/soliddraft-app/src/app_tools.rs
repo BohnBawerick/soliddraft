@@ -492,11 +492,12 @@ impl AppTools<'_> {
 
     fn export_sheet(&mut self, format: SheetFormat, input: &Value) -> Result<Value, String> {
         let path = PathBuf::from(input["path"].as_str().unwrap_or_default());
-        let s = self.session()?;
         if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case(format.extension())) {
             return Err(format!("the path must end in .{}", format.extension()));
         }
-        drawing::write_sheet(s, format, &path)?;
+        let part = drawing::part::PartContext::new(&self.state.doc);
+        let s = self.state.drawing.session.as_mut().ok_or_else(|| NO_DRAWING.to_owned())?;
+        drawing::write_sheet(s, part.as_ref(), format, &path)?;
         Ok(json!({ "exported": path }))
     }
 

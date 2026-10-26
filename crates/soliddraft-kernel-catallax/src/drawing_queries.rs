@@ -28,7 +28,10 @@ pub(super) fn view_curves(k: &CatallaxKernel, body: BodyId, spec: &ViewSpec) -> 
             }
         }
     }
-    Ok(ViewCurves::new(view.curves, &spec.frame().expect("mesh_hlr checked the frame")))
+    Ok(ViewCurves {
+        unproved: view.unproved,
+        ..ViewCurves::new(view.curves, &spec.frame().expect("mesh_hlr checked the frame"))
+    })
 }
 
 pub(super) fn edge_curve(solid: &Solid, body: BodyId, edge: EdgeId) -> KernelResult<Curve3> {

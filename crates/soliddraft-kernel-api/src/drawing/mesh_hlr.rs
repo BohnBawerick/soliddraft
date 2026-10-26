@@ -48,9 +48,12 @@ pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> Kernel
     let chord = if spec.tolerance > 0.0 { spec.tolerance } else { 2e-5 * size };
     let params =
         TessellationParams { chord_height: chord, curve_angle_deg: 2.0, surface_angle_deg: 2.0, ..Default::default() };
-    // A drawing view is for the screen and the sheet, so it reads the preview mesh.
-    let mesh = kernel.preview(body, &params)?;
-    let polylines = kernel.preview_edges(body, &params)?;
+    // A view for the screen may come from the preview mesh; an exported one never does.
+    let (mesh, polylines) = if spec.preview {
+        (kernel.preview(body, &params)?, kernel.preview_edges(body, &params)?)
+    } else {
+        (kernel.tessellate(body, &params)?, kernel.tessellate_edges(body, &params)?)
+    };
     let mut lines = Vec::new();
     for edge in &topology.edges {
         let mut faces = edge.faces.clone();
@@ -77,7 +80,7 @@ pub fn view_curves(kernel: &dyn Kernel, body: BodyId, spec: &ViewSpec) -> Kernel
         lines.push(SourcedPolyline { source, points });
     }
     lines.extend(silhouettes(&mesh, &frame));
-    Ok(hidden_lines(&mesh, &lines, &frame, chord))
+    Ok(ViewCurves { unproved: mesh.unproved, ..hidden_lines(&mesh, &lines, &frame, chord) })
 }
 
 /// The silhouettes of the mesh's curved faces: chains of triangle edges inside one face

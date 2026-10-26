@@ -82,7 +82,8 @@ pub struct DanglingAnnotation {
     pub cause: String,
 }
 
-/// Brings `drawing` up to date with `part`: regenerates out-of-date views,
+/// Brings `drawing` up to date with `part`: regenerates out-of-date views, and preview
+/// views when `part` asks for certified line work,
 /// re-resolves every annotation of every view that is not excluded from updates, and
 /// pins the drawing's model reference at the part's revision. This is the drawing half
 /// of a Rebuild; the caller binds and re-paths the reference (see
@@ -125,7 +126,10 @@ pub fn update_from_model(drawing: &mut Drawing, part: &Part) -> Result<UpdateRep
         let ctx = &contexts[&id];
         follow_parent(drawing, id, &contexts);
         let view = drawing.view_mut(id).expect("listed");
-        if view.geometry.source_digest != part.digest.as_str() {
+        // Certified line work replaces a preview of the same revision, never the reverse.
+        if view.geometry.source_digest != part.digest.as_str()
+            || (view.geometry.unproved && !ctx.projected.geometry.unproved)
+        {
             view.geometry = ctx.projected.geometry.clone();
             report.views_updated += 1;
         }

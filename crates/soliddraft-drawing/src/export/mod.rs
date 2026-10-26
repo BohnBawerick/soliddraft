@@ -61,11 +61,21 @@ impl Format {
 
 /// One sheet's bytes in `format`. `title` goes into the PDF's document properties.
 pub fn bytes(list: &DisplayList, format: Format, title: &str) -> Result<Vec<u8>, DrawingError> {
+    proven(std::slice::from_ref(list))?;
     match format {
         Format::Pdf => pdf(std::slice::from_ref(list), &PdfInfo { title: title.to_owned(), author: String::new() }),
         Format::Dxf => dxf(list),
         Format::Svg => Ok(svg(list).into_bytes()),
     }
+}
+
+/// Refuses line work drawn from an unproved preview: an exported drawing is made from
+/// the certified mesh.
+pub(crate) fn proven(sheets: &[DisplayList]) -> Result<(), DrawingError> {
+    if sheets.iter().any(|list| list.unproved) {
+        return Err(DrawingError::Unproved);
+    }
+    Ok(())
 }
 
 /// Writes one sheet in `format` to `path`, creating its directory.
