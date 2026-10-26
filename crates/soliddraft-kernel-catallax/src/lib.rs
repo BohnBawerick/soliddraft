@@ -711,7 +711,7 @@ impl Kernel for CatallaxKernel {
             }) {
                 return Err(gap("requested chord tolerance cannot survive f32 display rounding", "1"));
             }
-            Ok(convert::mesh(&solid.app.checkpoint.built().model, &mesh, &solid.ids, params))
+            Ok(convert::mesh(&mesh, &solid.ids, params))
         })
     }
 

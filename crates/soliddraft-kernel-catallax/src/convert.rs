@@ -438,7 +438,7 @@ pub(super) fn topology(app: &IncrementalApplicationBody, ids: &Ids, proven: bool
     })
 }
 
-pub(super) fn mesh(model: &Model, mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationParams) -> Mesh {
+pub(super) fn mesh(mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationParams) -> Mesh {
     let mut out = Mesh::default();
     if params.curve_angle_deg > 0.0 {
         out.unavailable_controls.push(
@@ -454,35 +454,32 @@ pub(super) fn mesh(model: &Model, mesh: &catallax_mesh::Mesh, ids: &Ids, params:
         };
         out.unavailable_controls.push(format!("{name} on {}: {}", ids.faces[&missing.face], missing.reason));
     }
+    // Shading normals are display data, never a proof, so they come from the facets in
+    // f64: each face's vertex takes the area-weighted sum of its triangles' normals.
+    // Catallax winds every triangle toward its face's outward normal. Vertices are shared
+    // within a face and kept apart across faces, so sharp edges stay sharp.
     let mut vertices = BTreeMap::new();
+    let mut sums: Vec<Vec3> = Vec::new();
     for triangle in &mesh.triangles {
         let points = triangle.vertices.map(|v| Vec3::from(mesh.positions[v]));
-        let fallback = (points[1] - points[0]).cross(points[2] - points[0]).normalized().unwrap_or(Vec3::Z);
-        let f = model.face(triangle.face);
+        let facet = (points[1] - points[0]).cross(points[2] - points[0]);
         for (vertex, point) in triangle.vertices.into_iter().zip(points) {
-            // Share vertices within each face while keeping sharp-face normals separate.
-            if let Some(index) = vertices.get(&(triangle.face, vertex)) {
-                out.indices.push(*index);
-                continue;
-            }
-            vertices.insert((triangle.face, vertex), out.positions.len() as u32);
-            let real = |v: f64| {
-                catallax_numbers::Real::from_rational(
-                    catallax_numbers::Rational::from_f64_exact(v).expect("finite Catallax mesh coordinate"),
-                )
-            };
-            let p = catallax_shapes::Point3::new(real(point.x), real(point.y), real(point.z));
-            let gradient = model.geom().surface(f.surface).gradient(&p);
-            let n = gradient
-                .as_ref()
-                .and_then(|gradient| vector(gradient).normalized())
-                .map(|n| if f.sense == Sense::Same { n } else { -n })
-                .unwrap_or(fallback);
-            out.indices.push(out.positions.len() as u32);
-            out.positions.push([point.x as f32, point.y as f32, point.z as f32]);
-            out.normals.push([n.x as f32, n.y as f32, n.z as f32]);
+            let index = *vertices.entry((triangle.face, vertex)).or_insert_with(|| {
+                out.positions.push([point.x as f32, point.y as f32, point.z as f32]);
+                sums.push(Vec3::default());
+                out.positions.len() as u32 - 1
+            });
+            sums[index as usize] = sums[index as usize] + facet;
+            out.indices.push(index);
         }
         out.triangle_faces.push(ids.faces[&triangle.face]);
     }
+    out.normals = sums
+        .into_iter()
+        .map(|sum| {
+            let n = sum.normalized().unwrap_or(Vec3::Z);
+            [n.x as f32, n.y as f32, n.z as f32]
+        })
+        .collect();
     out
 }
