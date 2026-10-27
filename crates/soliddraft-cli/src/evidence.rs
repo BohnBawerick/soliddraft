@@ -1,4 +1,9 @@
 //! MCP evidence is captured after execution, including proposals rejected on scratch parts.
+//!
+//! Writing it is not part of what a user waits for, so a command replies first. Its kernel
+//! calls and work are set aside then, and the files are written after the click: on
+//! `scenario_evidence`, before any other request except the timed `scenario_display`, or
+//! when the session ends. The queries the evidence itself makes go to `evidence.kernel.json`.
 
 use std::collections::BTreeSet;
 use std::{path::PathBuf, sync::Arc};
@@ -22,6 +27,18 @@ pub(crate) struct Evidence<'a> {
     max_work: u64,
     failed: bool,
     renderer: Option<crate::screenshot::Renderer>,
+    /// The last command, whose evidence is not written yet.
+    pending: Option<Pending>,
+}
+
+/// What a command's evidence needs from the moment it replied.
+struct Pending {
+    name: String,
+    input: Value,
+    output: ToolOutput,
+    work: Vec<Work>,
+    /// The command's kernel calls, without the evidence's own queries.
+    diagnostics: Value,
 }
 
 impl<'a> Evidence<'a> {
@@ -39,15 +56,42 @@ impl<'a> Evidence<'a> {
         if let Some(w) = &work {
             w.take();
         }
-        Ok(Self { host, kernel, work, directory, sequence: 0, max_work, failed: false, renderer: None })
+        Ok(Self { host, kernel, work, directory, sequence: 0, max_work, failed: false, renderer: None, pending: None })
     }
 
-    fn snapshot(&mut self, name: &str, input: &Value, output: &ToolOutput) -> Result<(), Box<dyn std::error::Error>> {
+    /// Sets the command's kernel calls and work aside and opens its evidence directory,
+    /// so the display capture of the same request can write there.
+    fn command_done(
+        &mut self,
+        name: &str,
+        input: &Value,
+        output: &ToolOutput,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let (Some(root), Some(kernel)) = (&self.directory, &self.kernel) else { return Ok(()) };
         let work = self.work.as_ref().map(|w| w.take()).unwrap_or_default();
         self.sequence += 1;
+        std::fs::create_dir(root.join(format!("{:04}", self.sequence)))?;
+        let diagnostics = kernel.take_diagnostics()?;
+        self.pending =
+            Some(Pending { name: name.to_owned(), input: input.clone(), output: output.clone(), work, diagnostics });
+        Ok(())
+    }
+
+    /// Writes the last command's evidence, if it is not written yet.
+    fn write_pending(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(pending) = self.pending.take() else { return Ok(()) };
+        let result = self.snapshot(pending);
+        // Writing the evidence is not the next command's work.
+        if let Some(w) = &self.work {
+            w.take();
+        }
+        result
+    }
+
+    fn snapshot(&mut self, pending: Pending) -> Result<(), Box<dyn std::error::Error>> {
+        let (Some(root), Some(kernel)) = (&self.directory, &self.kernel) else { return Ok(()) };
+        let Pending { name, input, output, work, diagnostics: command } = pending;
         let dir = root.join(format!("{:04}", self.sequence));
-        std::fs::create_dir(&dir)?;
         let summary = self.host.summary();
         let doc = &self.host.state.doc;
         std::fs::write(dir.join("part.json"), doc.model().part_json())?;
@@ -57,7 +101,9 @@ impl<'a> Evidence<'a> {
             write_json(dir.join("recipe.json"), &kernel.body_recipe(body)?)?;
         }
         let references = references(doc.model());
-        let mut diagnostics = kernel.take_diagnostics()?;
+        // The evidence's own queries ran after the click, so they are not the command's.
+        write_json(dir.join("evidence.kernel.json"), &kernel.take_diagnostics()?)?;
+        let mut diagnostics = command;
         if let Some(questions) = diagnostics["questions"].as_array_mut() {
             for (i, question) in questions.iter_mut().enumerate() {
                 question["max_work"] = json!(self.max_work);
@@ -74,10 +120,6 @@ impl<'a> Evidence<'a> {
                 "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
-        // Saving the bundle's part file is not the next command's work.
-        if let Some(w) = &self.work {
-            w.take();
-        }
         Ok(())
     }
 
@@ -89,6 +131,10 @@ impl<'a> Evidence<'a> {
         }
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
+        if doc.display_body().is_none() {
+            // Nothing to show: the click ended at the command's reply.
+            return Ok(json!({"solid":false,"request":self.sequence,"revision":doc.revision()}));
+        }
         self.renderer
             .as_mut()
             .ok_or("call scenario_prepare before capture")?
@@ -308,6 +354,7 @@ impl ToolHost for Evidence<'_> {
                 ("scenario_display", "Capture the live document's viewport without reopening a file."),
                 ("scenario_view", "Compute the live body's hidden-line SVG, separately from the click's viewport."),
                 ("scenario_measure", "Explicitly measure the live body after the timed edit and display."),
+                ("scenario_evidence", "Write the last command's evidence, after its click is timed."),
             ] {
                 tools.push(ToolSpec {
                     name: name.into(),
@@ -323,6 +370,16 @@ impl ToolHost for Evidence<'_> {
         if self.failed {
             return ToolOutput::error("bundle write failed; start a new run");
         }
+        // The timed display capture comes before the evidence; every other request after it.
+        if name != "scenario_display"
+            && let Err(error) = self.write_pending()
+        {
+            self.failed = true;
+            return ToolOutput::error(format!("bundle write failed: {error}"));
+        }
+        if self.directory.is_some() && name == "scenario_evidence" {
+            return ToolOutput::json(&json!({"request":self.sequence,"written":true}));
+        }
         if self.directory.is_some()
             && matches!(name, "scenario_prepare" | "scenario_display" | "scenario_view" | "scenario_measure")
         {
@@ -332,7 +389,8 @@ impl ToolHost for Evidence<'_> {
                     "scenario_view" => self.scenario_view(),
                     _ => self.scenario_capture(name == "scenario_prepare"),
                 };
-                if name != "scenario_prepare" {
+                let shown = result.as_ref().is_ok_and(|r| r.get("solid") != Some(&json!(false)));
+                if name != "scenario_prepare" && shown {
                     let root = self.directory.as_ref().ok_or("scenario capture requires --bundle")?;
                     let dir = root.join(format!("{:04}", self.sequence));
                     let stem = match name {
@@ -355,11 +413,20 @@ impl ToolHost for Evidence<'_> {
             };
         }
         let result = self.host.call(name, input.clone(), caller);
-        if let Err(error) = self.snapshot(name, &input, &result) {
+        if let Err(error) = self.command_done(name, &input, &result) {
             self.failed = true;
             return ToolOutput::error(format!("bundle write failed after {name}: {error}"));
         }
         result
+    }
+}
+
+impl Drop for Evidence<'_> {
+    /// A client that stops without asking still gets the last command's evidence.
+    fn drop(&mut self) {
+        if let Err(error) = self.write_pending() {
+            eprintln!("mcp: bundle write failed: {error}");
+        }
     }
 }
 

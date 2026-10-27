@@ -466,6 +466,13 @@ class RunnerEndToEnd(unittest.TestCase):
             self.assertFalse(report["pass"])
             self.assertEqual(self.code, 1)
 
+    def test_writing_the_command_evidence_is_not_part_of_the_click(self):
+        report, checks = self.run_step("slow-evidence", strict=True)
+        self.assertLess(report["steps"][0]["intervals"]["preview"]["elapsed_ms"], 1000)
+        self.assertTrue(checks["click ends at a visible selectable edit"]["pass"])
+        self.assertTrue(report["strict_pass"])
+        self.assertEqual(self.code, 0)
+
     def test_strict_release_path_accepts_a_run_that_met_every_budget(self):
         report, _ = self.run_step("ok", strict=True)
         self.assertTrue(report["strict_pass"])

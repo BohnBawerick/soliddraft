@@ -3,7 +3,8 @@
 
 FAKE_MODE picks one misbehaviour: ok, early (display not selectable), stale (display of the
 previous revision), pending, silent (no display reply), stale-measure (measurement of the previous
-revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s), other-revision (the backend reports another Catallax sha)."""
+revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s), slow-evidence
+(writing the command's evidence takes 1.3 s), other-revision (the backend reports another Catallax sha)."""
 
 import json
 import os
@@ -56,6 +57,15 @@ for line in sys.stdin:
         write(directory, "view.kernel.json", {"calls": []})
         (directory / "view.svg").write_text("<svg><path d='M0 0'/></svg>")
         reply(request, {"isError": False})
+    elif name == "scenario_evidence":
+        if mode == "slow-evidence":
+            time.sleep(1.3)
+        write(directory, "command.json", {"summary": {"features": []},
+              "backend": {"name": "catallax", "version": revision_pin},
+              "references": [], "output": "", "request": sequence, "revision": revision})
+        write(directory, "kernel.json", {"calls": []})
+        write(directory, "recipe.json", {})
+        reply(request, {"isError": False})
     elif name == "scenario_measure":
         if mode == "slow-measure":
             time.sleep(4.3)
@@ -71,9 +81,5 @@ for line in sys.stdin:
         revision += 1
         directory = bundle / f"{sequence:04}"
         directory.mkdir()
-        write(directory, "command.json", {"summary": {"features": []},
-              "backend": {"name": "catallax", "version": revision_pin},
-              "references": [], "output": "", "request": sequence, "revision": revision})
-        write(directory, "kernel.json", {"calls": []})
-        write(directory, "recipe.json", {})
+        # Like the real bundle, the command's evidence waits for scenario_evidence.
         reply(request, {"isError": False})
