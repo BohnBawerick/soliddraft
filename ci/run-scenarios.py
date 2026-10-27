@@ -474,6 +474,12 @@ def timings(steps):
              "pass": s["pass"]} for s in steps if "label" in s]
 
 
+def shows_solid(displayed):
+    """Whether the display reply shows a solid. Only a reply that says `solid: false` has none;
+    a failed or successful capture owes this step its display, whatever files exist."""
+    return (displayed.get("structuredContent") or {}).get("solid") is not False
+
+
 def wait(client, entry, name, arguments):
     """One timed MCP call. A timeout or closed pipe leaves the step incomplete, never passed."""
     try:
@@ -525,7 +531,7 @@ def run(args):
             started = time.perf_counter_ns()
             displayed = wait(client, entry, "scenario_display", {})
             display_ms = (time.perf_counter_ns() - started) / 1_000_000
-            solid = displayed.get("isError") or (directory / "display.json").exists()
+            solid = shows_solid(displayed)
             written = wait(client, entry, "scenario_evidence", {})
             if written.get("isError"):
                 raise RuntimeError(f"bundle evidence was not written: {written}")
@@ -575,15 +581,23 @@ def run(args):
                     checks.append(replay)
             if solid:
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
+                lost = [] if displayed.get("isError") else [
+                    name for name in ("display.json", "display.kernel.json") if not (directory / name).exists()]
+                if lost:
+                    checks.append({"check": "display evidence written", "pass": False,
+                                   "reason": f"scenario_display showed a solid but wrote no {' or '.join(lost)}"})
+                # Without its capture calls the display still keeps its whole wait in the click.
+                log = directory / "display.kernel.json"
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
-                                 "kernel": json.loads((directory / "display.kernel.json").read_text())})
+                                 "kernel": json.loads(log.read_text()) if log.exists() else {"calls": []}})
                 display = None
-                if not displayed.get("isError"):
+                if not displayed.get("isError") and "display.json" not in lost:
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
                 # The click ends only when the viewport shows this revision with pickable faces.
-                reason = "display request failed" if display is None else answers(number, command, display, True)
+                reason = ("display request failed" if displayed.get("isError") else "display evidence missing"
+                          if display is None else answers(number, command, display, True))
                 checks.append({"check": "click ends at a visible selectable edit", "reason": reason,
                                "pass": reason is None})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})

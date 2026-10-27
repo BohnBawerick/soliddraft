@@ -409,6 +409,22 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertEqual(interval["ends"], "visible selectable edit")
         self.assertEqual(interval["verdict"], "strict-pass")
 
+    def test_a_display_without_its_evidence_fails_the_step(self):
+        report, checks = self.run_step("lost-display")
+        self.assertFalse(checks["display evidence written"]["pass"])
+        self.assertIn("display.json", checks["display evidence written"]["reason"])
+        self.assertNotEqual(report["steps"][0]["intervals"]["preview"]["ends"], "command reply, no solid to show")
+        self.assertFalse(report["steps"][0]["pass"])
+        self.assertFalse(report["pass"])
+
+    def test_a_display_that_reports_no_solid_ends_the_click_at_the_reply(self):
+        report, checks = self.run_step("no-solid", strict=True)
+        self.assertNotIn("click ends at a visible selectable edit", checks)
+        self.assertNotIn("live hidden-line view", checks)
+        self.assertEqual(report["steps"][0]["intervals"]["preview"]["ends"], "command reply, no solid to show")
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 0)
+
     def test_early_command_reply_cannot_pass(self):
         report, checks = self.run_step("early")
         self.assertFalse(checks["click ends at a visible selectable edit"]["pass"])
