@@ -66,3 +66,12 @@ wrong feature kinds and malformed arguments refuse without changing the part.
 PR44's macOS and Windows workspace failure was the unchanged entry-point contract
 `a_command_without_a_tool_says_why`. The fix supplies actual headless commands;
 it does not exempt Shell from the contract or classify the operation as window-only.
+
+The subsequent Ubuntu Workspace run (40462778792, job 122051030874) failed
+the rendered Shell test's adapter prerequisite: no Vulkan driver was installed.
+The Workspace Linux leg now installs Mesa's software Vulkan adapter and sets its
+runtime directory/backend, as the dedicated interactive job already does. The
+renderer assertion and all geometry/UI expectations remain unchanged. Local
+validation with the Vulkan driver unavailable fails to create a render state;
+with the software adapter available, the full rendered tray path passes. Hosted
+package installation and the complete Workspace run still require CI validation.
