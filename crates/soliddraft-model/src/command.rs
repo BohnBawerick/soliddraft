@@ -731,6 +731,7 @@ impl Document {
                 Ok(self.materials_changed(old, Command::RestoreMaterials { state }, label))
             }
             Command::Batch { label, commands } => {
+                let dirty = self.dirty;
                 let mut done: Vec<Applied> = Vec::new();
                 for c in commands {
                     match self.apply(c) {
@@ -739,6 +740,7 @@ impl Document {
                             for a in done.into_iter().rev() {
                                 self.apply(a.inverse).expect("the inverse of an applied command applies");
                             }
+                            self.dirty = dirty;
                             return Err(e);
                         }
                     }

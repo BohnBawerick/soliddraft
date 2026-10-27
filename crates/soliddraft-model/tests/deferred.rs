@@ -152,3 +152,35 @@ fn pending_save_keeps_the_authored_definition_without_mislabelling_the_previous_
     assert_eq!(volume(&doc), 12000.0, "saving must not adopt an unrequested build");
     assert!(doc.is_dirty());
 }
+
+#[test]
+fn a_refused_batch_restores_the_previous_rebuild_state() {
+    for pending in [false, true] {
+        let kernel = Arc::new(Counting::new(Arc::new(CatallaxKernel::new())));
+        let mut doc = Document::new("Refused batch", kernel.clone());
+        let id = add(&mut doc, 10.0);
+        if pending {
+            doc.execute_deferred(Command::EditFeature { id, kind: block(14.0) }).unwrap();
+        }
+        let before = doc.feature(id).unwrap().kind.clone();
+        let body = doc.body();
+        let history = doc.undo_depth();
+        kernel.take();
+        let refused = Command::Batch {
+            label: "Refused edit".into(),
+            commands: vec![
+                Command::EditFeature { id, kind: block(18.0) },
+                Command::RenameFeature { id: FeatureId(999), name: "Missing".into() },
+            ],
+        };
+        assert!(doc.execute_deferred(refused).is_err());
+        assert_eq!(doc.feature(id).unwrap().kind, before);
+        assert_eq!(doc.body(), body);
+        assert_eq!(doc.undo_depth(), history);
+        assert_eq!(doc.is_dirty(), pending);
+        assert_eq!(kernel.take(), [], "a refused deferred batch ran kernel work");
+        assert_eq!(doc.export(Format::Step).is_err(), pending);
+        doc.rebuild();
+        assert_eq!(volume(&doc), if pending { 16800.0 } else { 12000.0 });
+    }
+}
