@@ -83,6 +83,23 @@ cut, so the run separates recipe length from live geometry size. Volume and cach
 history work are checked throughout. The four sketch/cut/undo/redo series must not
 develop a feature-count latency trend.
 
+`drawing.json` is the drawing scenario: the drawing follows the edited part through the
+same tools the ribbon runs. It builds the bracket up to its slot, saves the part, makes a
+drawing of it (Front, Top, Left and Isometric views, centre marks), cuts Section A-A
+through the boss with `drawing_section`, and imports the part's dimensions with
+`drawing_model_items`. The plate's thickness is then edited from 10 to 12 mm: the open
+drawing follows inside the same command, so the step checks that every view is at the
+part's revision, that the section regenerated, that the plate's thickness dimension now
+reads 12 and is marked changed from 10, and that nothing dangles. Undo and redo move the
+dimension back and forth. The part and the drawing are saved; SVG, PDF and DXF are
+exported and each export reports that all five views were drawn again from the certified
+mesh. The saved drawing is opened again with its section, states and references, and
+rebuilt. Finally automatic update is turned off, the plate is edited again, and an export
+is refused because the views are stale previews and no file is left behind; a Rebuild
+brings the views to the part and the export succeeds. Every drawing tool runs through
+the command bundle, so each step has the part's reference evidence and the drawing's
+view and annotation states in `command.json`.
+
 ## Files and checks
 
 A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step
@@ -92,7 +109,12 @@ explicit live-body measurement requested after the edit and display have been ti
 Each check has exactly one of `equals`, `approx`, `minimum` or `contains`. `approx`
 accepts an absolute `tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
 for drawing output, `export` with a list of extensions (`step`, `stl`, `3mf`) for
-`soliddraft export` after the click is timed, or `refusal` with an expected stable kernel code. A `label`
+`soliddraft export` after the click is timed, or `refusal` with an expected stable kernel code.
+`refused` expects an application refusal instead: the tool must fail with that text, and no
+kernel replay applies. `files` lists the files the step must have written, each present and
+not empty, and `absent` the files a refused output must not have left behind. The tool's
+own JSON answer is parsed into `command.json` as `result`, so a check can read what the
+tool reported, such as an export's view count. A `label`
 names the step in the result's `timings`, such as a feature's build or edit. Every step
 with a displayed solid captures the live viewport and SVG, including sketches
 and history changes. Unexpected tool errors fail immediately.
@@ -115,6 +137,10 @@ MCP tool call has a numbered directory under `commands/` containing:
 - `command.json`: input, output, backend, the current model summary and every
   persistent reference: the feature holding it, its slot, its identity, the Catallax
   origins, carrier counts and whether the built sketch's plane matches those carriers.
+  With a drawing open, the summary's `drawing` says for each view whether its line
+  work is at the pinned revision and whether it is a screen preview, for each
+  annotation its state, value and the model entities it is attached to, and lists the
+  changed and dangling annotations.
   `resolved` is null when that feature was not built. These observations run only after
   execution when `--bundle` was requested; the scenario runner makes the assertions.
   The `rebuild` report's `features_recomputed` lists the features whose kernel
@@ -306,6 +332,8 @@ answer and fails the run; it is never counted as a pass.
 
 Every click carries a `verdict`: `strict-pass` met its budget, `known-gap` was accepted
 only under `ci/known-over-budget.json` and is not a strict pass, `fail` was not accepted.
+An output has no click budget, so its verdict is `output`, neither a strict pass nor a
+known gap.
 The result lists `known_gaps` and sets `strict_pass` only when the run passed with none.
 `pass` keeps its meaning of CI acceptance.
 
@@ -335,6 +363,19 @@ the user's 1,000 ms edit-to-viewport allowance or escape CI: `drawing_view` has 
 independent strict 1,000 ms ceiling, no known-gap exemptions, error annotations
 and its own per-step CI summary table. A drawing-view timing failure fails the
 scenario while later steps still run, retaining the cost distribution.
+
+An open drawing follows the part inside the editing command, so the kernel calls that
+regenerate its views (`view_curves`, `section_view`) are in that click. Each such call
+on the command thread must also keep the same 1,000 ms ceiling (`drawing view calls` in
+the step's checks), on top of the click budget. A section on screen is cut from the
+preview mesh with no boolean, so it costs about what a view costs; the certified section
+an export draws subtracts a half-space through a Catallax boolean, inside the export's
+recorded wait. The drawing exports (`drawing_export_svg`,
+`drawing_export_pdf`, `drawing_export_dxf`) are the `output` class: their wait is the
+caller's wait for the certified file and is recorded in the step's timing and the CI
+summary, not gated, as the CLI export and drawing checks are; an output cannot be listed
+as a known gap. Each export reports how many views it drew again from the certified
+mesh, and a view that is a preview of another revision refuses to export.
 
 The initial ceiling is calibrated from the
 [current-main baseline run](https://github.com/BohnBawerick/soliddraft/actions/runs/40229375814)

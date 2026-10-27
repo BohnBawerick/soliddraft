@@ -187,6 +187,68 @@ class DrawingViewBudgets(unittest.TestCase):
         self.assertEqual(view["work"]["display"], 5)
         self.assertEqual(view["work"]["measurement"], 2)
 
+    def test_each_view_an_edit_regenerates_keeps_the_ceiling(self):
+        limit = scenarios.DRAWING_VIEW_BUDGET_MS
+        calls = [Latency.call("extrude", 300), Latency.call("view_curves", limit),
+                 Latency.call("section_view", 200), Latency.call("view_curves", 50, nested=True),
+                 Latency.call("view_curves", 5000, foreground=False)]
+        result = scenarios.drawing_view_calls({"calls": calls})
+        self.assertTrue(result["pass"])
+        self.assertEqual([v["operation"] for v in result["views"]], ["view_curves", "section_view"])
+        self.assertEqual(result["slowest_ms"], limit)
+        over = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]})
+        self.assertFalse(over["pass"])
+        self.assertEqual(over["class"], "drawing-view")
+        recorded = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]}, gated=False)
+        self.assertTrue(recorded["pass"], "an output's certified views are recorded, not gated")
+        self.assertIsNone(recorded["budget_ms"])
+        self.assertEqual(recorded["slowest_ms"], limit + 0.001)
+        self.assertTrue(scenarios.drawing_view_calls({"calls": []})["pass"], "no view regenerated")
+        with self.assertRaises(ValueError):
+            scenarios.drawing_view_calls({"calls": [Latency.call("view_curves", None)]})
+        call = Latency.call("view_curves", 1)
+        del call["on_capture_thread"]
+        with self.assertRaises(KeyError):
+            scenarios.drawing_view_calls({"calls": [call]})
+
+
+class Outputs(unittest.TestCase):
+    def test_a_drawing_export_records_its_wait_without_a_click_budget(self):
+        for tool in ("drawing_export_svg", "drawing_export_pdf", "drawing_export_dxf"):
+            with self.subTest(tool=tool):
+                self.assertEqual(scenarios.budget(tool), "output")
+                latency = scenarios.timing(tool, [Latency.segment(12_345)])
+                self.assertTrue(latency["pass"])
+                self.assertIsNone(latency["budget_ms"])
+                self.assertEqual(latency["elapsed_ms"], 12_345)
+                verdict = scenarios.accept_latency("drawing", 3, tool, latency, {})
+                self.assertEqual((verdict["pass"], verdict["within_budget"], verdict["status"]), (True, None, "output"))
+                self.assertEqual(verdict["verdict"], "output", "neither a strict pass nor a known gap")
+        self.assertEqual(scenarios.budget("drawing_save"), "feature", "a save keeps the feature click budget")
+        self.assertEqual(scenarios.budget("make_drawing"), "feature")
+
+    def test_an_output_cannot_be_listed_as_a_known_gap(self):
+        latency = scenarios.timing("drawing_export_svg", [Latency.segment(10)])
+        known = {("drawing", 3): {"scenario": "drawing", "step": 3, "tool": "drawing_export_svg",
+                                  "last_measured_ms": 10}}
+        verdict = scenarios.accept_latency("drawing", 3, "drawing_export_svg", latency, known)
+        self.assertFalse(verdict["pass"])
+        self.assertEqual(verdict["status"], "invalid-known-over-budget")
+        self.assertEqual(verdict["verdict"], "fail")
+
+    def test_output_files_must_exist_and_hold_bytes(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            full = pathlib.Path(folder, "sheet.svg")
+            full.write_text("<svg/>")
+            empty = pathlib.Path(folder, "empty.dxf")
+            empty.write_text("")
+            missing = str(pathlib.Path(folder, "missing.pdf"))
+            checks = scenarios.output_files([str(full), str(empty), missing], absent=[missing, str(empty)])
+            self.assertEqual([c["pass"] for c in checks], [True, False, False, True, False])
+            self.assertEqual(checks[0]["bytes"], 6)
+            self.assertIsNone(checks[2]["bytes"])
+
 
 class KnownBudgets(unittest.TestCase):
     known = {("bracket", 6): {"scenario": "bracket", "step": 6, "tool": "extrude",

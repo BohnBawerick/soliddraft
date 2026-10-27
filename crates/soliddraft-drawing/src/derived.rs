@@ -76,8 +76,11 @@ pub fn new_section(
     flip: bool,
     label: Option<String>,
 ) -> Result<(View, ViewContext), DrawingError> {
-    let pctx = context(drawing, part, index, parent)?;
-    let model_line = line.iter().map(|p| pctx.xf.unproject(*p)).collect();
+    // The parent is projected once: for the cutting line's model points and, through
+    // the same memo, for the section's frame.
+    let mut memo = Contexts::new();
+    project::compute_in(drawing, part, index, parent, &mut memo)?;
+    let model_line = line.iter().map(|p| memo[&parent].xf.unproject(*p)).collect();
     let kind = ViewKind::Section {
         parent,
         line: line.to_vec(),
@@ -88,7 +91,7 @@ pub fn new_section(
     };
     let display = ViewDisplay { hidden: HiddenLines::Removed, ..ViewDisplay::ORTHOGRAPHIC };
     let mut view = blank(drawing, kind, display);
-    let ctx = compute(drawing, part, index, &view, sheet)?;
+    let ctx = project::compute_view(drawing, part, index, &view, sheet, &mut memo)?;
     view.geometry = ctx.projected.geometry.clone();
     // The view goes where the eye is (third angle) or where the arrows point (first
     // angle), in line with its parent.

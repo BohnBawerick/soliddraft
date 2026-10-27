@@ -342,8 +342,9 @@ jobs:
               for step in report["steps"]:
                   timing = step.get("timing")
                   if timing:
+                      budget = "none" if timing["budget_ms"] is None else timing["budget_ms"]
                       rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
-                          f"{timing['elapsed_ms']:.3f} | {timing['budget_ms']} | {timing['status']} |")
+                          f"{timing['elapsed_ms']:.3f} | {budget} | {timing['status']} |")
                   view = step.get("drawing_view")
                   if view:
                       views.append(f"| {report['name']} | {step['number']} | {view['elapsed_ms']:.3f} | "

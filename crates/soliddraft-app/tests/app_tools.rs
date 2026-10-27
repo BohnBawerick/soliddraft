@@ -196,6 +196,18 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     let name = |v: &Value| v["name"].as_str().unwrap().to_owned();
     let child = views.iter().find(|v| v["aligned"] == true).map(name).expect("an aligned projected view");
     let first = name(&views[0]);
+    let section = s.call(
+        "drawing_section",
+        json!({ "view": first, "through": [70, 45, 0], "direction": "vertical", "flip": false }),
+    );
+    assert_eq!(section["placed"], "Section A-A", "{section}");
+    let placed = &section["drawing"]["sheets"][0]["views"][views.len()];
+    assert_eq!(placed["kind"], "section", "{placed}");
+    assert_eq!(
+        (placed["parent"].as_str(), placed["preview"].as_bool(), placed["up_to_date"].as_bool()),
+        (Some(first.as_str()), Some(true), Some(true)),
+        "{placed}"
+    );
     s.call("drawing_hidden_lines", json!({ "view": first, "shown": false }));
     s.call("drawing_tangent_edges", json!({ "view": first, "tangent": "visible" }));
     s.call("drawing_crop", json!({ "view": first, "crop": [-30, -30, 30, 30] }));

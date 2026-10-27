@@ -1614,7 +1614,14 @@ fn drawing_registry() -> Vec<CommandSpec> {
         )
         .on(Views, "Derived", Large)
         .key(Scope::Drawing, none, Key::S)
-.app_only(CANVAS),
+.agents(
+            Agents::Mcp,
+            "A cutting line through a model point across the view, horizontal or vertical on the sheet. The section \
+             is placed in line with the view on the side the sheet's projection angle puts it, with the drawing's \
+             next letter. The open part must be the drawing's.",
+            app::section_params,
+        )
+        .undo(Undo::Step),
         drawing_tool!(
             "drawing_detail", "Detail", Icon::Search, "Circle or profile a region of a view and place it magnified",
             DrawingTool::Detail => DrawingTool::Detail
