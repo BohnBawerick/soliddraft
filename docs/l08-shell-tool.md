@@ -19,6 +19,7 @@ path and its proof requirements.
 | --- | --- | --- |
 | Shell command | Disabled with stage-3 message | Enabled when a body exists |
 | Kernel shell dispatch | Unconditional stage-3 refusal | Native shell operation with resolved face origins |
+| Script/MCP command registration | Shell window action had no tool declaration, failing the workspace entry-point contract | `shell` and `edit_shell` expose the existing model operation through checked schemas and the standard command handler |
 | Inner-wall history | `Other` role | `Role::Inner` maps to `FaceRole::Offset` |
 | Planar tray | No application shell tool | Kernel checks and rendered create/edit/save/reopen/select/export path pass |
 | Circular-extrusion shell | Generic stage-3 refusal | Exact `distance.cylinder-domain` refusal retained; unsupported in this slice |
@@ -53,3 +54,15 @@ Local public behavior is scoped to SINGLEPAIR; no qualification run or green
 SINGLEPAIR/FULL SIX claim is made here. Interpretation of the new Shell feature
 schema requires the parent-routed FULL SIX tier. No budgets, tolerances or pins
 were changed.
+
+## Script and MCP commands
+
+`shell` takes `open_faces` (an array of persistent face labels; an empty array
+requests a closed shell) and positive `thickness` in mm. `edit_shell` takes the
+shell `feature` name and positive `thickness`, retaining the openings. Both use
+the normal feature commands and undo history. Missing faces, invalid thickness,
+wrong feature kinds and malformed arguments refuse without changing the part.
+
+PR44's macOS and Windows workspace failure was the unchanged entry-point contract
+`a_command_without_a_tool_says_why`. The fix supplies actual headless commands;
+it does not exempt Shell from the contract or classify the operation as window-only.

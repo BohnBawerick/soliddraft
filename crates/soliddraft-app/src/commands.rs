@@ -1078,6 +1078,7 @@ fn registry() -> Vec<CommandSpec> {
             .when(has_body)
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Shell(_))))
             .hint(|s| (!has_body(s)).then(|| "Shell needs a body".into()))
+            .agents(Agents::Verb, "Selected faces are left open. An empty list makes a closed shell.", tools::shell_params)
             .undo(Undo::Step),
         cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle about a neutral plane")
             .on(Features, "Finish", Small)
@@ -1491,6 +1492,9 @@ fn registry() -> Vec<CommandSpec> {
             tools::edit_mirror_params,
         )
         .undo(Undo::Step),
+        cmd("edit_shell", "Edit shell", Icon::Shell, "Change a shell's wall thickness")
+            .agents(Agents::Verb, "The openings are retained; everything after it rebuilds.", tools::edit_shell_params)
+            .undo(Undo::Step),
         cmd("edit_draft", "Edit draft", Icon::Draft, "Change a draft's angle").agents(
             Agents::Verb,
             "Everything after it rebuilds.",
