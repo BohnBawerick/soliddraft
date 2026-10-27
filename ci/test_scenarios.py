@@ -9,6 +9,7 @@ import os
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("scenarios", pathlib.Path(__file__).with_name("run-scenarios.py"))
 scenarios = importlib.util.module_from_spec(spec)
@@ -296,7 +297,7 @@ FAKE = pathlib.Path(__file__).with_name("fake_mcp_server.py")
 class RunnerEndToEnd(unittest.TestCase):
     """The real run() against a synthetic MCP server, so the click ends where a user sees it."""
 
-    def run_step(self, mode, measure=False, timeout=5):
+    def run_step(self, mode, measure=False, timeout=5, strict=False, known=None):
         step = {"tool": "extrude", "arguments": {}}
         if measure:
             step["checks"] = [{"pointer": "/measurement/volume_mm3", "approx": 1.0}]
@@ -306,16 +307,18 @@ class RunnerEndToEnd(unittest.TestCase):
             scenario.write_text(json.dumps({"format": "soliddraft-scenario/1", "name": "synthetic-gate",
                                             "steps": [step]}))
             args = argparse.Namespace(scenario=scenario, out=root / "run", soliddraft=str(FAKE),
-                                      catallax_verify="unused", timeout=timeout)
+                                      catallax_verify="unused", timeout=timeout, strict=strict)
             os.environ["FAKE_MODE"] = mode
             try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    scenarios.run(args)
+                with contextlib.redirect_stdout(io.StringIO()), \
+                        mock.patch.object(scenarios, "load_known_over_budget", return_value=known or {}):
+                    code = scenarios.run(args)
             finally:
                 del os.environ["FAKE_MODE"]
             report = json.loads((args.out / "result.json").read_text())
         checks = {c["check"]: c for c in (report["steps"][0]["checks"] if report["steps"] else [])
                   if isinstance(c["check"], str)}
+        self.code = code
         return report, checks
 
     def test_a_visible_selectable_edit_ends_the_click(self):
@@ -359,6 +362,37 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertFalse(budget["pass"])
         self.assertFalse(budget["within_gate"])
         self.assertFalse(report["pass"])
+
+    gap = {("synthetic-gate", 1): {"scenario": "synthetic-gate", "step": 1, "tool": "extrude",
+                                   "last_measured_ms": 2000}}
+
+    def test_known_slow_click_is_ci_accepted_but_not_a_strict_pass(self):
+        report, _ = self.run_step("slow-click", known=self.gap)
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 0)
+        self.assertFalse(report["strict_pass"])
+        self.assertEqual(report["steps"][0]["intervals"]["preview"]["verdict"], "known-gap")
+        self.assertEqual([g["step"] for g in report["known_gaps"]], [1])
+
+    def test_strict_release_path_rejects_the_known_gap(self):
+        report, _ = self.run_step("slow-click", known=self.gap, strict=True)
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 1)
+
+    def test_unlisted_slow_click_fails_both_paths(self):
+        for strict in (False, True):
+            report, _ = self.run_step("slow-click", strict=strict)
+            self.assertFalse(report["pass"])
+            self.assertEqual(self.code, 1)
+
+    def test_strict_release_path_accepts_a_run_that_met_every_budget(self):
+        report, _ = self.run_step("ok", strict=True)
+        self.assertTrue(report["strict_pass"])
+        self.assertEqual(self.code, 0)
+
+    def test_early_reply_fails_the_strict_path_too(self):
+        _, _ = self.run_step("early", strict=True)
+        self.assertEqual(self.code, 1)
 
     def test_current_measurement_passes_with_its_interval_recorded(self):
         report, checks = self.run_step("ok", measure=True)
