@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use catallax_app::IncrementalApplicationBody;
 use catallax_recipe::{Origin, Role};
 use catallax_shapes::{CurveKind as CatCurve, Surface, SurfaceKind as CatSurface};
-use catallax_topology::{Model, Sense};
+use catallax_topology::Sense;
 use soliddraft_kernel_api::*;
 
+use crate::identity::{FaceKey, Keys, NamedEdgeKey, VertexKey, same_surface};
 use crate::query_error;
 
 type CatFace = catallax_topology::FaceId;
@@ -18,36 +19,30 @@ pub(super) struct Ids {
     pub faces: BTreeMap<CatFace, FaceId>,
     pub edges: BTreeMap<CatEdge, EdgeId>,
     pub vertices: BTreeMap<CatVertex, VertexId>,
-    face_keys: BTreeMap<FaceId, String>,
-    edge_keys: BTreeMap<EdgeId, String>,
-    vertex_keys: BTreeMap<VertexId, String>,
+    face_keys: BTreeMap<FaceId, FaceKey>,
+    edge_keys: BTreeMap<EdgeId, NamedEdgeKey>,
+    vertex_keys: BTreeMap<VertexId, VertexKey>,
     origins: BTreeMap<FaceId, Vec<Origin>>,
     /// The same origins in the interface's terms, by the caller's operation tags.
     pub face_origins: BTreeMap<FaceId, Vec<soliddraft_kernel_api::Origin>>,
     /// Each Catallax origin with its interface origin, kept for later bodies: a blend's
     /// edge is gone once the fillet has built, but its faces keep the name.
     named: Vec<(Origin, soliddraft_kernel_api::Origin)>,
-    supports: BTreeMap<FaceId, String>,
     edge_names: BTreeMap<EdgeId, String>,
 }
 
-fn assign<I: Copy + Ord>(key: &str, parents: &[&BTreeMap<I, String>], next: &mut u64, wrap: impl Fn(u64) -> I) -> I {
-    if let Some(id) = parents.iter().flat_map(|p| p.iter()).find_map(|(id, value)| (value == key).then_some(*id)) {
+fn assign<I: Copy + Ord, K>(
+    key: &K,
+    same: impl Fn(&K, &K) -> bool,
+    parents: &[&BTreeMap<I, K>],
+    next: &mut u64,
+    wrap: impl Fn(u64) -> I,
+) -> I {
+    if let Some(id) = parents.iter().flat_map(|p| p.iter()).find_map(|(id, value)| same(value, key).then_some(*id)) {
         return id;
     }
     *next += 1;
     wrap(*next)
-}
-
-fn vertex_key(model: &Model, vertex: CatVertex) -> String {
-    format!("{:?}", model.geom().position(model.vertex(vertex).point))
-}
-
-fn edge_key(model: &Model, edge: CatEdge) -> String {
-    let e = model.edge(edge);
-    let mut ends: Vec<_> = [e.start, e.end].into_iter().flatten().map(|v| vertex_key(model, v)).collect();
-    ends.sort();
-    format!("{:?}:{ends:?}", model.geom().curve(e.curve))
 }
 
 impl Ids {
@@ -57,7 +52,7 @@ impl Ids {
         tags: &BTreeMap<String, OpTag>,
         next: &mut u64,
     ) -> Self {
-        let model = &app.checkpoint.built().model;
+        let mut keys = Keys::new(app);
         let mut ids = Self {
             faces: BTreeMap::new(),
             edges: BTreeMap::new(),
@@ -68,26 +63,13 @@ impl Ids {
             origins: BTreeMap::new(),
             face_origins: BTreeMap::new(),
             named: Vec::new(),
-            supports: BTreeMap::new(),
             edge_names: BTreeMap::new(),
         };
         for face in app.names.faces.keys() {
-            let f = model.face(*face);
-            let support = format!("{:?}", model.geom().surface(f.surface));
-            let mut boundary: Vec<_> = f
-                .loops
-                .iter()
-                .flat_map(|l| match model.loop_(*l) {
-                    catallax_topology::Loop::Coedges(cs) => {
-                        cs.iter().map(|c| edge_key(model, model.coedge(*c).edge)).collect()
-                    }
-                    catallax_topology::Loop::Vertex(v) => vec![vertex_key(model, *v)],
-                })
-                .collect();
-            boundary.sort();
             let origins = app.names.faces[face].clone();
-            let key = format!("{support}:{:?}:{boundary:?}:{origins:?}", f.sense);
-            let id = assign(&key, &parents.iter().map(|p| &p.face_keys).collect::<Vec<_>>(), next, FaceId::from_raw);
+            let key = keys.faces.remove(face).expect("every named face has a key");
+            let parent_keys = parents.iter().map(|p| &p.face_keys).collect::<Vec<_>>();
+            let id = assign(&key, FaceKey::same, &parent_keys, next, FaceId::from_raw);
             ids.faces.insert(*face, id);
             ids.face_keys.insert(id, key);
             // An origin whose role the interface cannot express is left out, never guessed.
@@ -111,11 +93,11 @@ impl Ids {
             named.dedup();
             ids.face_origins.insert(id, named);
             ids.origins.insert(id, origins);
-            ids.supports.insert(id, support);
         }
         for (edge, name) in &app.names.edges {
-            let key = format!("{}:{name:?}", edge_key(model, *edge));
-            let id = assign(&key, &parents.iter().map(|p| &p.edge_keys).collect::<Vec<_>>(), next, EdgeId::from_raw);
+            let key = keys.edges.remove(edge).expect("every named edge has a key");
+            let parent_keys = parents.iter().map(|p| &p.edge_keys).collect::<Vec<_>>();
+            let id = assign(&key, NamedEdgeKey::same, &parent_keys, next, EdgeId::from_raw);
             ids.edges.insert(*edge, id);
             ids.edge_keys.insert(id, key);
             if let Some(name) = name {
@@ -123,9 +105,9 @@ impl Ids {
             }
         }
         for vertex in app.names.vertices.keys() {
-            let key = vertex_key(model, *vertex);
-            let id =
-                assign(&key, &parents.iter().map(|p| &p.vertex_keys).collect::<Vec<_>>(), next, VertexId::from_raw);
+            let key = keys.vertices.remove(vertex).expect("every named vertex has a key");
+            let parent_keys = parents.iter().map(|p| &p.vertex_keys).collect::<Vec<_>>();
+            let id = assign(&key, VertexKey::same, &parent_keys, next, VertexId::from_raw);
             ids.vertices.insert(*vertex, id);
             ids.vertex_keys.insert(id, key);
         }
@@ -142,7 +124,10 @@ impl Ids {
             |old, new| {
                 parents.iter().any(|p| {
                     p.origins.get(&old).is_some_and(|os| self.origins[&new].iter().any(|o| os.contains(o)))
-                        && (tilts || p.supports.get(&old) == self.supports.get(&new))
+                        && (tilts
+                            || p.face_keys
+                                .get(&old)
+                                .is_some_and(|k| same_surface(&k.support, &self.face_keys[&new].support)))
                 })
             },
         );
