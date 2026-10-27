@@ -474,6 +474,20 @@ def timings(steps):
              "pass": s["pass"]} for s in steps if "label" in s]
 
 
+def no_solid(request, command, displayed):
+    """Whether the display reply shows no solid, and why a reply that claims none cannot.
+
+    Only a successful reply for this request and command revision may say `solid: false`.
+    Every other reply owes the step its display, whatever files exist."""
+    reply = displayed.get("structuredContent") or {}
+    if reply.get("solid") is not False:
+        return False, None
+    if displayed.get("isError"):
+        return False, "a failed reply cannot report no solid"
+    reason = answers(request, command, reply)
+    return reason is None, reason
+
+
 def wait(client, entry, name, arguments):
     """One timed MCP call. A timeout or closed pipe leaves the step incomplete, never passed."""
     try:
@@ -525,7 +539,6 @@ def run(args):
             started = time.perf_counter_ns()
             displayed = wait(client, entry, "scenario_display", {})
             display_ms = (time.perf_counter_ns() - started) / 1_000_000
-            solid = displayed.get("isError") or (directory / "display.json").exists()
             written = wait(client, entry, "scenario_evidence", {})
             if written.get("isError"):
                 raise RuntimeError(f"bundle evidence was not written: {written}")
@@ -535,6 +548,10 @@ def run(args):
                          "phase": "refusal" if result.get("isError") else command_phase(step["tool"])}]
             entry["feature_count"] = len(command["summary"]["features"])
             checks = entry["checks"]
+            none, reason = no_solid(number, command, displayed)
+            if reason is not None:
+                checks.append({"check": "no-solid reply answers this request", "reason": reason, "pass": False})
+            solid = not none
             expected_error = bool(step.get("refusal") or step.get("refused"))
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == expected_error})
             if command.get("request") != number:
@@ -575,15 +592,23 @@ def run(args):
                     checks.append(replay)
             if solid:
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
+                lost = [] if displayed.get("isError") else [
+                    name for name in ("display.json", "display.kernel.json") if not (directory / name).exists()]
+                if lost:
+                    checks.append({"check": "display evidence written", "pass": False,
+                                   "reason": f"scenario_display wrote no {' or '.join(lost)} for this step's solid"})
+                # Without its capture calls the display still keeps its whole wait in the click.
+                log = directory / "display.kernel.json"
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
-                                 "kernel": json.loads((directory / "display.kernel.json").read_text())})
+                                 "kernel": json.loads(log.read_text()) if log.exists() else {"calls": []}})
                 display = None
-                if not displayed.get("isError"):
+                if not displayed.get("isError") and "display.json" not in lost:
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
                 # The click ends only when the viewport shows this revision with pickable faces.
-                reason = "display request failed" if display is None else answers(number, command, display, True)
+                reason = ("display request failed" if displayed.get("isError") else "display evidence missing"
+                          if display is None else answers(number, command, display, True))
                 checks.append({"check": "click ends at a visible selectable edit", "reason": reason,
                                "pass": reason is None})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})

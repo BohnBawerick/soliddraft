@@ -4,7 +4,9 @@
 FAKE_MODE picks one misbehaviour: ok, early (display not selectable), stale (display of the
 previous revision), pending, silent (no display reply), stale-measure (measurement of the previous
 revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s), slow-evidence
-(writing the command's evidence takes 1.3 s), other-revision (the backend reports another Catallax sha)."""
+(writing the command's evidence takes 1.3 s), other-revision (the backend reports another Catallax sha),
+no-solid (the display reports no solid), lost-display (the display succeeds but writes no evidence),
+stale-no-solid (a no-solid reply for the previous revision), failed-no-solid (a failed reply claiming no solid)."""
 
 import json
 import os
@@ -43,6 +45,13 @@ for line in sys.stdin:
         reply(request, {"isError": False})
     elif name == "scenario_display":
         if mode == "silent":
+            continue
+        if mode in {"no-solid", "stale-no-solid", "failed-no-solid"}:
+            reply(request, {"isError": mode == "failed-no-solid", "structuredContent": {"solid": False,
+                  "request": sequence, "revision": revision - 1 if mode == "stale-no-solid" else revision}})
+            continue
+        if mode == "lost-display":
+            reply(request, {"isError": False, "structuredContent": {"request": sequence, "revision": revision}})
             continue
         shown = revision - 1 if mode == "stale" else revision
         write(directory, "display.json", {"backend": {"name": "catallax"}, "live_document": True,
