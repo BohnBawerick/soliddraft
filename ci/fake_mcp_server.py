@@ -46,7 +46,7 @@ for line in sys.stdin:
         shown = revision - 1 if mode == "stale" else revision
         write(directory, "display.json", {"backend": {"name": "catallax"}, "live_document": True,
               "request": sequence, "revision": shown, "pending": mode == "pending",
-              "selectable_faces": 0 if mode == "early" else 6})
+              "selectable": mode != "early"})
         write(directory, "display.kernel.json", {"calls": []})
         (directory / "viewport.png").write_bytes(b"png")
         reply(request, {"isError": False})

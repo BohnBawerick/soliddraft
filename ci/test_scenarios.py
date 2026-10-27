@@ -233,20 +233,21 @@ class KnownBudgets(unittest.TestCase):
 
 class Replies(unittest.TestCase):
     command = {"request": 3, "revision": 7}
-    good = {"request": 3, "revision": 7, "selectable_faces": 6}
+    good = {"request": 3, "revision": 7, "selectable": True}
 
     def test_a_reply_for_this_request_and_revision_answers(self):
         self.assertIsNone(scenarios.answers(3, self.command, self.good, True))
 
     def test_early_stale_pending_and_unlabelled_replies_never_answer(self):
         cases = {
-            "not selectable": dict(self.good, selectable_faces=0),
+            "not selectable": dict(self.good, selectable=False),
+            "selectable not a bool": dict(self.good, selectable=1),
             "no selection count": {"request": 3, "revision": 7},
             "older revision": dict(self.good, revision=6),
             "older request": dict(self.good, request=2),
             "pending": dict(self.good, pending=True),
-            "no request": {"revision": 7, "selectable_faces": 6},
-            "no revision": {"request": 3, "selectable_faces": 6},
+            "no request": {"revision": 7, "selectable": True},
+            "no revision": {"request": 3, "selectable": True},
             "boolean revision": dict(self.good, revision=True),
         }
         for label, reply in cases.items():

@@ -274,7 +274,7 @@ Each step's `intervals` record what the user waited for, with its own verdict:
 
 - `preview` starts when the command request is sent and ends only at a visible
   selectable edit: the `scenario_display` capture of the same request and document
-  revision, with at least one pickable face. A step with no solid ends at the command
+  revision, with a pickable face. A step with no solid ends at the command
   reply. This is the click and keeps its class budget.
 - `view` is the hidden-line SVG request, with its own 1,000 ms ceiling.
 - `measurement` is the explicit measurement request. It keeps its unchanged 1,000 ms
@@ -283,9 +283,10 @@ Each step's `intervals` record what the user waited for, with its own verdict:
 
 The bundle tags `command.json`, `display.json`, `view.json` and `measurement.json`
 with the `request` number and document `revision` they describe, and `display.json`
-with `selectable_faces`. The runner accepts a reply only if it names this step's request
+with `selectable`, true when some vertex of the displayed mesh carries a face pick id (an early-exit
+check, so the timed capture does no per-face counting). The runner accepts a reply only if it names this step's request
 and the command's revision (check `answers`). A reply with no tags, an older request or
-revision, a pending marker or no pickable faces does not end the interval: the step fails
+revision, a pending marker or no pickable face does not end the interval: the step fails
 as `click ends at a visible selectable edit`, `view answers this request` or `measurement
 answers this request`. A proof for an earlier edit therefore cannot satisfy a newer one,
 and a command reply that returns before the viewport shows the edit cannot pass. A

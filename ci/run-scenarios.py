@@ -176,8 +176,7 @@ def answers(request, command, evidence, selectable=False):
         if got != want:
             return f"stale: answers {key} {got}, not {want}"
     if selectable:
-        faces = evidence.get("selectable_faces")
-        if isinstance(faces, bool) or not isinstance(faces, int) or faces < 1:
+        if evidence.get("selectable") is not True:
             return "the edit is not selectable in the viewport"
     return None
 
