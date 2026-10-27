@@ -1303,10 +1303,13 @@ impl Document {
         }
     }
 
+    /// A feature that shapes the body did not build. A sketch adds no geometry: an
+    /// active feature that uses a sketch which did not build is blocked itself.
     fn has_model_failure(&self) -> bool {
-        self.features
-            .iter()
-            .any(|feature| matches!(feature.status, FeatureStatus::Error(_) | FeatureStatus::NeedsRepair(_)))
+        self.features.iter().any(|feature| {
+            !matches!(feature.kind, FeatureKind::Sketch(_))
+                && matches!(feature.status, FeatureStatus::Error(_) | FeatureStatus::NeedsRepair(_))
+        })
     }
 
     fn current_exact_display(&self) -> bool {

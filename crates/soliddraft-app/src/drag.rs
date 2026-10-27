@@ -522,8 +522,11 @@ fn prepare(queued: Queued, answered: &mpsc::Sender<Answer>) -> Result<Option<Pro
     }
 }
 
+/// A feature that shapes the body did not build. A sketch that did not build blocks
+/// each active feature that uses it, so it is not a failure of the body itself.
 fn model_failure(model: &model::Document) -> Option<String> {
-    model.features().iter().find_map(|feature| match model.status(feature.id) {
+    let mut shaping = model.features().iter().filter(|feature| !matches!(feature.kind, model::FeatureKind::Sketch(_)));
+    shaping.find_map(|feature| match model.status(feature.id) {
         Some(model::FeatureStatus::Failed(message)) => Some(format!("{}: {message}", feature.name)),
         Some(status @ (model::FeatureStatus::RepairNeeded(_) | model::FeatureStatus::Blocked(_))) => {
             Some(format!("{}: {status:?}", feature.name))

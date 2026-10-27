@@ -443,3 +443,32 @@ fn pending_edits_undo_and_redo_ignore_an_older_committed_failure() {
     assert_eq!(volume(&state), 40.0 * 30.0 * 18.0);
     state.export_part(soliddraft_exchange::Format::Step).unwrap();
 }
+
+/// A sketch that needs a repair adds no geometry while every feature that uses it is
+/// suppressed. Its part is the current exact part: its faces can be referenced, and a
+/// later scalar edit is adopted rather than snapped back for the old repair.
+#[test]
+fn a_sketch_needing_repair_with_no_active_user_does_not_fail_the_part() {
+    let mut doc = soliddraft_app::command_tools::board_bracket();
+    let named = |doc: &Document, name: &str| doc.features.iter().find(|f| f.name == name).unwrap().id;
+    for name in ["Cut-Extrude1", "Boss-Extrude3"] {
+        let id = named(&doc, name);
+        doc.apply(Command::Suppress { id, suppressed: true }).unwrap();
+    }
+    let sketch = named(&doc, "Sketch4");
+    assert!(matches!(doc.feature(sketch).unwrap().status, FeatureStatus::NeedsRepair(_)));
+    let mut state = AppState::new(doc);
+    assert!(state.doc.proof_state().current_proved_display());
+    let face = state.doc.faces[0].id;
+    assert!(state.doc.any_face_ref(face).is_some(), "the current part's faces can be referenced");
+
+    let plate = named(&state.doc, "Boss-Extrude1");
+    let before = volume(&state);
+    edit_depth_interactive(&mut state, plate, 12.0);
+    settle(&mut state);
+    assert!(!state.doc.proof_pending());
+    assert!(!state.doc.proof_state().failed, "the old repair is not this edit's failure");
+    assert_eq!(state.doc.displayed_revision(), state.doc.revision());
+    assert!(matches!(state.doc.feature(sketch).unwrap().status, FeatureStatus::NeedsRepair(_)));
+    assert!(volume(&state) > before, "the deeper plate is shown");
+}
