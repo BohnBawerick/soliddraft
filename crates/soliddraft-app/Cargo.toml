@@ -1,6 +1,6 @@
 [package]
 name = "soliddraft-app"
-description = "SolidDraft: the desktop application. Ribbon, feature tree, properties, assistant panel and the wgpu viewport."
+description = "SolidDraft: the desktop application. Ribbon, feature tree, properties, command line, assistant session and the wgpu viewport."
 version.workspace = true
 edition.workspace = true
 rust-version = "1.95"

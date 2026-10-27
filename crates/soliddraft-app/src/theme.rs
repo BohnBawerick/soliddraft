@@ -32,6 +32,41 @@ pub fn axis_color(axis: crate::document::AxisKind) -> Color32 {
     }
 }
 
+// The command line and the assistant session, with the Studio look's light values. The
+// names are the facelift palette's, so its mode-aware accessors take their place.
+/// Tool chips: the brightest surface.
+pub fn chip() -> Color32 {
+    Color32::WHITE
+}
+/// The command line's ground.
+pub fn command_line() -> Color32 {
+    Color32::from_rgb(0xf7, 0xf8, 0xfa)
+}
+/// The command line's prompt, and the chip row's lit chips.
+pub fn command_prompt() -> Color32 {
+    Color32::from_rgb(0x25, 0x63, 0xeb)
+}
+/// The session's dark ground.
+pub fn terminal_bg() -> Color32 {
+    Color32::from_rgb(0x14, 0x18, 0x1f)
+}
+/// The session's text.
+pub fn terminal_ink() -> Color32 {
+    Color32::from_rgb(0xe6, 0xe9, 0xee)
+}
+/// The session's prompt, its own lines and its proposal cards.
+pub fn terminal_accent() -> Color32 {
+    Color32::from_rgb(0x7a, 0xa2, 0xff)
+}
+/// The session's quiet text: notes, tool lines, the header.
+pub fn terminal_muted() -> Color32 {
+    terminal_ink().gamma_multiply(0.6)
+}
+/// The session's separator lines.
+pub fn terminal_line() -> Color32 {
+    terminal_ink().gamma_multiply(0.16)
+}
+
 /// Corner radius used by buttons, fields and cards.
 pub const RADIUS: u8 = 6;
 
@@ -39,6 +74,7 @@ pub const MENU_HEIGHT: f32 = 30.0;
 pub const RIBBON_TABS_HEIGHT: f32 = 26.0;
 pub const RIBBON_BODY_HEIGHT: f32 = 92.0;
 pub const STATUS_HEIGHT: f32 = 24.0;
+pub const COMMAND_LINE_HEIGHT: f32 = 32.0;
 pub const ROW_HEIGHT: f32 = 23.0;
 
 pub const FONT_REGULAR: &str = "Inter";
@@ -63,6 +99,11 @@ pub fn font_medium(size: f32) -> FontId {
 
 pub fn font_semibold(size: f32) -> FontId {
     FontId::new(size, semibold())
+}
+
+/// The command line's and the session's typeface.
+pub fn mono(size: f32) -> FontId {
+    FontId::new(size, FontFamily::Monospace)
 }
 
 pub fn hud_bg() -> Color32 {

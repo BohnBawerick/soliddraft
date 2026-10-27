@@ -1,6 +1,6 @@
 # The assistant
 
-Phase 3 connects the chat panel on the right to a model, and serves the same commands to outside agents over MCP. The assistant changes the part only through the command layer the ribbon uses, so everything it does is an ordinary feature in the tree that the user can undo.
+Phase 3 connects the assistant to a model, and serves the same commands to outside agents over MCP. The assistant changes the part only through the command layer the ribbon uses, so everything it does is an ordinary feature in the tree that the user can undo.
 
 ## Crates
 
@@ -85,7 +85,7 @@ OpenRouter is reached through its Anthropic-compatible endpoint, `POST https://o
 - `thinking: {type: "adaptive", display: "omitted"}`, since OpenRouter asks for summarized thinking unless told otherwise and the app shows none.
 - `provider: {order: ["anthropic"]}`, so requests go to Anthropic's own endpoint first, as OpenRouter advises for Claude clients. No server-side `fallbacks` or beta header: OpenRouter's `fallbacks` field means something else.
 
-Which provider: `SOLIDDRAFT_PROVIDER` (`openrouter` or `anthropic`) first, then the Provider setting (Assistant tab, Settings group), then whichever provider has a key, Anthropic if both do. A provider chosen by name does not fall back to the other one; the chat panel says its key is missing. Which model: `SOLIDDRAFT_MODEL`, then the model set for that provider, then its default: `claude-opus-5-5` on Anthropic and `anthropic/claude-opus-5.5` on OpenRouter, the same model as on Anthropic. A model saved in the settings stays as saved. The assistant settings dialog saves both settings to `settings.json` in the config directory (`~/.config/soliddraft` on Linux) and reconnects; the new conversation starts fresh, and the messages, proposals and MCP endpoint stay.
+Which provider: `SOLIDDRAFT_PROVIDER` (`openrouter` or `anthropic`) first, then the Provider setting (Assistant tab, Settings group), then whichever provider has a key, Anthropic if both do. A provider chosen by name does not fall back to the other one; the assistant session says its key is missing. Which model: `SOLIDDRAFT_MODEL`, then the model set for that provider, then its default: `claude-opus-5-5` on Anthropic and `anthropic/claude-opus-5.5` on OpenRouter, the same model as on Anthropic. A model saved in the settings stays as saved. The assistant settings dialog saves both settings to `settings.json` in the config directory (`~/.config/soliddraft` on Linux) and reconnects; the new conversation starts fresh, and the messages, proposals and MCP endpoint stay.
 
 ## API keys
 
@@ -114,7 +114,7 @@ soliddraft key status
 
 `soliddraft key status` says where each key comes from and which provider and model the assistant uses, without printing a key. `soliddraft key delete openrouter` removes an entry.
 
-A key never appears in logs: its type prints as `<redacted>`, and the request header is marked sensitive. Without a key the app runs, and the chat panel says the assistant is off and how to turn it on with either provider. `--no-assistant` keeps it off even when a key exists.
+A key never appears in logs: its type prints as `<redacted>`, and the request header is marked sensitive. Without a key the app runs, and the assistant session says the assistant is off and how to turn it on with either provider. `--no-assistant` keeps it off even when a key exists.
 
 ## MCP
 

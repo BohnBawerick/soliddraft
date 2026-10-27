@@ -34,7 +34,7 @@ Help fund SolidDraft and Catallax through [GitHub Sponsors](https://github.com/s
 
 ## What it is
 
-A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle.
+A SolidWorks-style desktop CAD app: a feature tree on the left, a ribbon of commands on top, a 3D viewport in the middle, and a command line along the bottom that opens an AI assistant session.
 
 SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. The desktop, browser and command-line application run on Catallax. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
 
@@ -44,7 +44,7 @@ SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and
 
 Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/needs-catallax.md) for the limits of the current application entry.
 
-- The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
+- The desktop app, with its ribbon, feature tree, property panel, command line, assistant session and wgpu viewport.
 - Dragging a selected feature's depth previews the rebuilt part off the interface thread and applies the final value as one undo step.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
 - Extrudes and cuts, blind, through all, up to the next boundary or up to a planar face; booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
@@ -99,7 +99,7 @@ The assistant needs an Anthropic API key, from `ANTHROPIC_API_KEY` or the OS key
 printf %s "$KEY" | cargo run --release -p soliddraft-cli -- key set
 ```
 
-Without a key the app runs and the chat panel says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio, and `soliddraft run` runs the same commands from a shell or a script. See `docs/assistant.md`. Agent scenarios, per-command evidence bundles and windowless viewport captures are described in [the application loop](docs/application-loop.md).
+Without a key the app runs and the assistant session says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio, and `soliddraft run` runs the same commands from a shell or a script. See `docs/assistant.md`. Agent scenarios, per-command evidence bundles and windowless viewport captures are described in [the application loop](docs/application-loop.md).
 
 ## Command line
 
