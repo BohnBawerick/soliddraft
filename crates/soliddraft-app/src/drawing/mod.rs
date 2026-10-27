@@ -32,9 +32,9 @@ use crate::state::{AppState, NoteKind};
 use egui_dock::DockState;
 use soliddraft_document::DocumentId;
 use soliddraft_drawing::{
-    Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Command, ContentHash, DatumRef, DocKind, DocRef,
-    Drawing, DrawingMeta, FoldDirection, GdtCharacteristic, Lay, LinearOrientation, MaterialCondition, Projection,
-    Scale, SetKind, StyleOverrides, SurfaceProcess, View, ViewId,
+    AccuracyCounts, Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Command, ContentHash, DatumRef,
+    DocKind, DocRef, Drawing, DrawingMeta, FoldDirection, GdtCharacteristic, Lay, LinearOrientation, MaterialCondition,
+    Projection, Scale, SetKind, StyleOverrides, SurfaceProcess, View, ViewId,
 };
 use soliddraft_kernel_api::Point2;
 use soliddraft_kernel_api::drawing::StandardView;
@@ -1694,6 +1694,8 @@ pub struct SheetExport {
     pub redrawn: usize,
     /// The part revision the written views show.
     pub revision: ContentHash,
+    /// How many written curves are the model's own curves and how many are mesh polylines.
+    pub accuracy: AccuracyCounts,
 }
 
 /// Writes the drawing as `format` at `path`: the current sheet, or every sheet as a
@@ -1733,11 +1735,15 @@ pub(crate) fn write_sheet(
     };
     bytes.map_err(|e| e.to_string()).and_then(|bytes| crate::platform::write_file(path, &bytes))?;
     s.last_export = Some(path.to_path_buf());
-    let views = match format {
-        export::Format::Pdf => drawing.sheets.iter().map(|sheet| sheet.views.len()).sum(),
-        _ => drawing.sheets.get(s.sheet).map_or(0, |sheet| sheet.views.len()),
+    let written: Vec<&View> = match format {
+        export::Format::Pdf => drawing.sheets.iter().flat_map(|sheet| &sheet.views).collect(),
+        _ => drawing.sheets.get(s.sheet).map_or_else(Vec::new, |sheet| sheet.views.iter().collect()),
     };
-    Ok(SheetExport { views, redrawn, revision: drawing.model.pinned.clone() })
+    let mut accuracy = AccuracyCounts::default();
+    for view in &written {
+        accuracy.add(view.geometry.accuracy());
+    }
+    Ok(SheetExport { views: written.len(), redrawn, revision: drawing.model.pinned.clone(), accuracy })
 }
 
 /// A copy of `drawing` with its preview views drawn from the certified mesh, or `None`

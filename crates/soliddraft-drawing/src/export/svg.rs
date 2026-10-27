@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use kurbo::{BezPath, PathEl};
 
 use super::{LAYERS, baseline, colour, layer};
+use crate::Accuracy;
 use crate::display::{DisplayList, Item};
 use crate::library::Weight;
 use crate::text::FONT_FAMILY;
@@ -52,9 +53,16 @@ pub fn svg(list: &DisplayList) -> String {
                         }
                         _ => String::new(),
                     };
+                    // A view curve says whether its path is the model's curve or a mesh
+                    // polyline, so a reader of the file can tell the two apart.
+                    let accuracy = match p.accuracy {
+                        Some(Accuracy::Exact) => r#" data-accuracy="exact""#,
+                        Some(Accuracy::Polygon) => r#" data-accuracy="polygon""#,
+                        None => "",
+                    };
                     let _ = writeln!(
                         out,
-                        r#"<path d="{}" stroke="{}" stroke-width="{}"{dash}/>"#,
+                        r#"<path d="{}" stroke="{}" stroke-width="{}"{dash}{accuracy}/>"#,
                         data(&p.path, h),
                         hex(colour(p.role)),
                         num(p.width)
@@ -147,5 +155,19 @@ mod tests {
         }
         assert!(s.contains(">Bracket</text>") && s.contains("stroke-dasharray"));
         assert!(s.contains("rotate(-90"), "vertical dimension values are rotated");
+    }
+
+    #[test]
+    fn view_curves_carry_their_accuracy_and_nothing_else_does() {
+        let mut drawing = bracket_a3();
+        drawing.sheets[0].views[0].geometry.curves[0].accuracy = Accuracy::Polygon;
+        let s = svg(&layout_sheet(&drawing, 0));
+        let labelled = s.matches("data-accuracy=").count();
+        let curves: usize = drawing.sheets[0].views.iter().map(|v| v.geometry.curves.len()).sum();
+        assert_eq!(labelled, curves, "one label per view curve");
+        assert_eq!(s.matches(r#"data-accuracy="polygon""#).count(), 1);
+        assert!(s.contains(r#"data-accuracy="exact""#));
+        let dimension_layer = s.split(r#"<g id="DIMENSION""#).nth(1).unwrap().split("</g>").next().unwrap();
+        assert!(!dimension_layer.contains("data-accuracy"), "annotation line work carries no label");
     }
 }

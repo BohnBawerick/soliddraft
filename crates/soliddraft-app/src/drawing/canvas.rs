@@ -1045,6 +1045,7 @@ fn smart_dimension_tool(
                 role: Role::Visible,
                 owner: Owner::Curve(p.view, p.curve),
                 fill: false,
+                accuracy: Some(c.accuracy),
             });
             sheet2.paint(&item, Some(theme::ACCENT), 1.5);
             if let Some(end) = p.end

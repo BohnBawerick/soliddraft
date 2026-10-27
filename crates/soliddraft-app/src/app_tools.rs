@@ -571,6 +571,7 @@ impl AppTools<'_> {
             "views": written.views,
             "redrawn_from_certified_mesh": written.redrawn,
             "revision": written.revision.short(),
+            "accuracy": written.accuracy,
         }))
     }
 
@@ -695,6 +696,7 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                         "up_to_date": v.excluded_from_update || v.geometry.source_digest == pinned,
                         "preview": v.geometry.unproved,
                         "curves": v.geometry.curves.len(),
+                        "accuracy": v.geometry.accuracy(),
                     })
                 })
                 .collect();

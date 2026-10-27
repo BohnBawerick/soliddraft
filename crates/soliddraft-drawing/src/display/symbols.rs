@@ -43,6 +43,7 @@ impl Pen<'_> {
             role: self.role,
             owner: self.owner,
             fill: false,
+            accuracy: None,
         }));
     }
 
@@ -54,6 +55,7 @@ impl Pen<'_> {
             role: self.role,
             owner: self.owner,
             fill: true,
+            accuracy: None,
         }));
     }
 
@@ -389,6 +391,7 @@ pub(super) fn set_items(
                     role,
                     owner,
                     fill: false,
+                    accuracy: None,
                 }));
                 let (pos, angle) = if horizontal {
                     (Point2::new(end.u, end.v + style.text.gap * sgn), 90.0)

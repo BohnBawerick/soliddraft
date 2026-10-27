@@ -52,7 +52,7 @@ Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/
 - Linear and circular patterns and mirrors of the part's body.
 - Analytic planar shells with selected open faces, editable wall thickness and persistent inner-wall names. See [shell coverage and evidence](docs/l08-shell-tool.md).
 - Fillets and equal-distance chamfers between planes and between planes and cylinders, and drafts of planar faces and cylinders parallel to the pull.
-- Drawings use Catallax meshes for polygon hidden-line removal. Plane sections on screen are cut from the same meshes; an exported section subtracts a half-space through a Catallax boolean. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.
+- Drawings use Catallax meshes for polygon hidden-line removal. Plane sections on screen are cut from the same meshes; an exported section subtracts a half-space through a Catallax boolean. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works, and every exported view curve says whether it is the model's exact line or circle or a mesh polyline. Exact silhouettes and some curve conversions remain pending.
 - The assistant, connected to Claude: it reads the part, proposes changes as cards you preview, apply and undo. The same commands are open to outside agents over MCP.
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
 - A WebAssembly build that runs the app and Catallax in one browser module.
