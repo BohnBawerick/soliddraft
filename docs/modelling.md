@@ -70,12 +70,11 @@ reaches past the far side of the body's bounding box.
 A sketch on a face of the part lies on the face's plane with its normal pointing out of
 the material. Its X axis is horizontal when the face is not, and the world X axis
 projected onto the face when it is; its origin is the world origin projected onto the
-face. A boss growing out of such a face, or a cut going into it, starts 0.01 mm behind
-the face (`FACE_OVERLAP`), so the tool overlaps the part instead of touching it along a
-coplanar face; behind the face is material for the boss and air for the cut, so the
-overlap changes nothing. A reversed boss or cut starts on the face.
+face. A boss or cut from such a sketch starts exactly on the face, forwards or
+reversed; the tool is never moved off the face, and the kernel's coplanar Boolean rules
+decide the face the tool and the part share.
 
-A hole's faces are named by the hole's place in the point list and the part of the hole: entry, counterbore wall and floor, countersink, wall, floor or tip. A pattern's or mirror's copy faces are named by the copy number and ranked by the names of the faces they copy, so editing the spacing, the count or an earlier feature keeps them. A drafted face keeps the name of the face it tilts. An extrusion up to a boundary starts on its sketch face rather than behind it, because a start inside the material would stop at the material's exit.
+A hole's faces are named by the hole's place in the point list and the part of the hole: entry, counterbore wall and floor, countersink, wall, floor or tip. A pattern's or mirror's copy faces are named by the copy number and ranked by the names of the faces they copy, so editing the spacing, the count or an earlier feature keeps them. A drafted face keeps the name of the face it tilts. An extrusion up to a boundary starts on its sketch face like every other extrusion.
 
 Mass properties are requested explicitly from Evaluate, Mass props, after selecting
 a solid feature. Editing or displaying the hole does not request this proof. The

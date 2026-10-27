@@ -510,6 +510,39 @@ fn sketches_on_faces_follow_the_face() {
     assert!((volume(&d) - 30000.0 - pin_volume).abs() < 1e-3 * pin_volume);
 }
 
+/// A boss from a face sketch starts exactly on the face: where its profile hangs over the
+/// edge of the face, nothing grows below the face, not even a 0.01 mm skirt. A reversed
+/// boss grows into the part from the face, and below the overhang it adds material down
+/// to its depth.
+#[test]
+fn bosses_from_a_face_start_on_the_face() {
+    let pin = |reverse: bool| {
+        let mut d = doc();
+        block(&mut d);
+        let t = d.kernel().topology(d.body().unwrap()).unwrap();
+        let top = t.faces.iter().find(|f| f.normal == Some(Vec3::Z)).unwrap();
+        let face = d.face_ref(top.id).unwrap();
+        // Centred on the block's y = -15 edge, so exactly half of the circle hangs over.
+        let mut circle = Sketch::new();
+        circle.circle_at(P2::new(5.0, -15.0), 6.0).unwrap();
+        solve(&mut circle, None, true);
+        assert_eq!(circle.status, SolveStatus::FullyDefined);
+        let s = add(&mut d, FeatureKind::Sketch(SketchFeature { plane: SketchPlane::Face { face }, sketch: circle }));
+        let mut extrude = boss(s, 5.0);
+        if let FeatureKind::Extrude(e) = &mut extrude {
+            e.reverse = reverse;
+        }
+        let pin = add(&mut d, extrude);
+        assert!(d.status(pin).unwrap().is_ok());
+        volume(&d)
+    };
+    let cylinder = std::f64::consts::PI * 9.0 * 5.0;
+    let forward = pin(false);
+    assert!((forward - 12000.0 - cylinder).abs() < 1e-6 * forward, "{forward}");
+    let reversed = pin(true);
+    assert!((reversed - 12000.0 - cylinder / 2.0).abs() < 1e-6 * reversed, "{reversed}");
+}
+
 #[test]
 fn chamfers_build_and_keep_the_body_after_reopen() {
     let mut d = doc();

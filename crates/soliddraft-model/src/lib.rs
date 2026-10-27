@@ -34,7 +34,7 @@ pub mod rebuild;
 pub mod reference;
 
 pub use command::{Command, CommandError, Executed};
-pub use document::{BuiltSketch, Document, FACE_OVERLAP, FaceLabel, FeatureStatus, feature_of_tag, plane_on_face};
+pub use document::{BuiltSketch, Document, FaceLabel, FeatureStatus, feature_of_tag, plane_on_face};
 pub use feature::{
     BlendFeature, BuiltinShape, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId,
     FeatureKind, HoleFeature, ImportStepFeature, LatticeFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef,
