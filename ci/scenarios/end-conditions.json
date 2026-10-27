@@ -1,6 +1,7 @@
 {
   "format": "soliddraft-scenario/1",
   "name": "end-conditions",
+  "max_work": 20000000,
   "steps": [
     {
       "tool": "sketch",
@@ -186,6 +187,49 @@
         }
       ],
       "label": "up to face and next follow an earlier edit"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {"pointer": "/measurement/volume_mm3", "approx": 39212.920066, "tolerance": 0.005},
+        {"pointer": "/rebuild/operations", "equals": 0}
+      ],
+      "label": "undo the upstream edit without rebuilding"
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {"pointer": "/measurement/volume_mm3", "approx": 44343.893421, "tolerance": 0.005},
+        {"pointer": "/rebuild/operations", "equals": 0}
+      ],
+      "label": "redo the upstream edit without rebuilding"
+    },
+    {
+      "tool": "rename",
+      "arguments": {"feature": "Boss-Extrude2", "name": "Shelf support"},
+      "checks": [
+        {"pointer": "/rebuild/operations", "equals": 0}
+      ],
+      "label": "rename without rebuilding"
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {"feature": "Shelf support", "depth": 35, "flip": false},
+      "checks": [
+        {"pointer": "/measurement/volume_mm3", "approx": 39212.920066, "tolerance": 0.005},
+        {"pointer": "/rebuild/operations", "equals": 0}
+      ],
+      "label": "restore the upstream value without rebuilding"
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {"pointer": "/measurement/volume_mm3", "approx": 44343.893421, "tolerance": 0.005},
+        {"pointer": "/rebuild/operations", "equals": 0}
+      ]
     }
   ]
 }

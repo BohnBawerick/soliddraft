@@ -650,6 +650,83 @@ mod rebuild {
     }
 
     #[test]
+    fn an_upstream_edit_invalidates_eight_booleans_but_history_reuses_each_revision() {
+        let kernel = counting();
+        let mut doc = Document::new("Eight drilled holes", kernel.clone());
+        let original = FeatureKind::Extrude(ExtrudeFeature {
+            profile: ProfileSource::Shape {
+                datum: DatumPlane::Top,
+                shape: soliddraft_model::BuiltinShape::Rectangle { width: 120.0, height: 50.0 },
+            },
+            operation: ExtrudeOp::Boss,
+            end: blind(10.0),
+            reverse: false,
+        });
+        let base = add(&mut doc, "Plate", original.clone());
+        let mut cuts = BTreeSet::new();
+        for x in [-35.0, -25.0, -15.0, -5.0, 5.0, 15.0, 25.0, 35.0] {
+            let mut sketch = Sketch::new();
+            sketch.circle_at(p(x, 0.0), 6.0).unwrap();
+            let sketch = add(
+                &mut doc,
+                "Hole sketch",
+                sketch_on(SketchPlane::Datum { datum: DatumPlane::Top, offset: 0.0 }, solved(sketch)),
+            );
+            cuts.insert(add(&mut doc, "Hole", extrude(sketch, ExtrudeOp::Cut, EndCondition::ThroughAll, false)));
+        }
+        let top = pick_face(&doc, Vec3::new(0.0, 0.0, 10.0), Vec3::Z);
+        let mut marker = Sketch::new();
+        marker.circle_at(p(0.0, 15.0), 4.0).unwrap();
+        let reference = add(&mut doc, "Top reference", sketch_on(top, solved(marker)));
+        let before = bodies(&doc);
+        kernel.take();
+
+        let mut thicker = original.clone();
+        let FeatureKind::Extrude(plate) = &mut thicker else { unreachable!() };
+        plate.end = blind(14.0);
+        doc.execute(Command::EditFeature { id: base, kind: thicker }).unwrap();
+        let work = kernel.take();
+        assert_eq!(recomputed(&work), (cuts.iter().copied().chain([base]).collect(), 0));
+        assert_eq!(
+            work.iter().filter(|w| matches!(w, Work::Operation(tag) if tag.ends_with(".cut"))).count(),
+            8,
+            "every dependent Boolean must run on the changed plate"
+        );
+        let after = bodies(&doc);
+        for (old, new) in before.iter().zip(&after) {
+            assert_ne!(old, new, "an upstream edit reused a stale body");
+        }
+        assert_eq!(doc.built_sketch(reference).unwrap().plane.origin.z, 14.0);
+        assert_all_ok(&doc);
+        assert_matches_full_replay(&doc, "after invalidating eight Booleans");
+        kernel.take();
+
+        doc.undo().unwrap();
+        assert_eq!(bodies(&doc), before);
+        assert_eq!(doc.built_sketch(reference).unwrap().plane.origin.z, 10.0);
+        doc.redo().unwrap();
+        assert_eq!(bodies(&doc), after);
+        doc.execute(Command::RenameFeature { id: base, name: "Mounting plate".into() }).unwrap();
+        assert_eq!(kernel.take(), [], "history and rename rebuilt geometry");
+        assert_matches_full_replay(&doc, "after redo and rename");
+        kernel.take();
+        doc.execute(Command::EditFeature { id: base, kind: original }).unwrap();
+        assert_eq!(bodies(&doc), before);
+        assert_eq!(kernel.take(), [], "restoring the upstream value rebuilt its suffix");
+
+        let last = *cuts.last().unwrap();
+        let FeatureKind::Extrude(mut invalid) = doc.feature(last).unwrap().kind.clone() else { unreachable!() };
+        invalid.end = blind(-1.0);
+        doc.execute(Command::EditFeature { id: last, kind: FeatureKind::Extrude(invalid) }).unwrap();
+        assert!(matches!(doc.status(last), Some(FeatureStatus::Failed(_))));
+        assert_matches_full_replay(&doc, "with a refused late edit");
+        kernel.take();
+        doc.undo().unwrap();
+        assert_eq!(bodies(&doc), before);
+        assert_eq!(kernel.take(), [], "undo of a refused edit rebuilt geometry");
+    }
+
+    #[test]
     fn the_cache_keeps_to_its_budget() {
         let kernel = counting();
         let mut doc = Document::new("Mount bracket", kernel.clone());
