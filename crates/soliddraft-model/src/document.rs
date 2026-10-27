@@ -6,8 +6,8 @@ use std::sync::Arc;
 use soliddraft_document::DocumentId;
 use soliddraft_kernel_api::{
     BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FaceId, FaceRole, Hole, HolePlacement,
-    ImportOptions, ImportStepRequest, ImportStepResult, Kernel, KernelError, KernelResult, Mirror, OpResult, OpTag,
-    Origin, PatternLayout, Plane, SurfaceKind, Topology, Vec3,
+    ImportOptions, ImportStepRequest, ImportStepResult, Kernel, KernelError, KernelResult, Lattice, Mirror, OpResult,
+    OpTag, Origin, PatternLayout, Plane, SurfaceKind, Topology, Vec3,
 };
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
@@ -16,8 +16,8 @@ use soliddraft_tessellation::{Report, Settings};
 use crate::command::UndoEntry;
 use crate::feature::{
     BlendFeature, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind,
-    HoleFeature, ImportStepFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource,
-    RevolveFeature, SketchFeature, SketchPlane,
+    HoleFeature, ImportStepFeature, LatticeFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef,
+    ProfileSource, RevolveFeature, SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
 use crate::rebuild::BuildCache;
@@ -746,6 +746,7 @@ impl Document {
             FeatureKind::Draft(d) => self.build_draft(f, d, current),
             FeatureKind::Shell(s) => self.build_shell(f, s, current),
             FeatureKind::ImportStep(i) => self.build_import(f, i, current),
+            FeatureKind::Lattice(l) => self.build_lattice(f, l, current),
         };
         cache.insert(key, built, &self.kernel)
     }
@@ -1299,6 +1300,13 @@ impl Document {
              self-intersection. It is not marked validated."
                 .to_string()
         })
+    }
+
+    fn build_lattice(&self, f: &Feature, l: &LatticeFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to lattice") };
+        let params = Lattice { accuracy_mm: l.accuracy_mm, min_detail_mm: l.min_detail_mm };
+        let result = self.kernel.lattice(&OpTag::new(format!("{}.lattice", f.id)), body, &params);
+        self.finish(result, current, |_| Vec::new())
     }
 
     fn build_import(&self, f: &Feature, i: &ImportStepFeature, current: Option<BodyId>) -> Built {

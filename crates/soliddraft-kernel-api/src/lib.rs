@@ -208,6 +208,15 @@ pub struct Draft {
     pub angle_deg: f64,
 }
 
+/// Parameters of the final lattice stage. Export relaxes only these two numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Lattice {
+    /// Accuracy the lattice is proven to, in millimetres.
+    pub accuracy_mm: f64,
+    /// The smallest detail the lattice keeps, in millimetres.
+    pub min_detail_mm: f64,
+}
+
 /// Where an extrusion stops when it is not a fixed distance.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -672,6 +681,13 @@ pub trait Kernel: Send + Sync {
     fn draft(&self, tag: &OpTag, body: BodyId, faces: &[FaceId], params: &Draft) -> KernelResult<OpResult> {
         let _ = (tag, body, faces, params);
         Err(KernelError::Unsupported("draft".into()))
+    }
+
+    /// Turns a finished solid into its lattice. The result must be closed,
+    /// non-self-intersecting and connected, or the call fails.
+    fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
+        let _ = (tag, body, params);
+        Err(KernelError::Unsupported("lattice: the pinned Catallax revision has no lattice entry point yet".into()))
     }
 
     /// Triangulates a body, within the requested controls the backend can guarantee.

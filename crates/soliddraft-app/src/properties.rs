@@ -1096,6 +1096,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::Draft(_))) => Icon::Draft,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Shell(_))) => Icon::Shell,
         (Selection::Feature(_), Some(crate::document::FeatureKind::ImportStep(_))) => Icon::Import,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Lattice(_))) => Icon::LinearPattern,
         (Selection::Feature(_), _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,
