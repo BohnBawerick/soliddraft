@@ -1,6 +1,7 @@
 {
   "format": "soliddraft-scenario/1",
   "name": "drill-point",
+  "max_work": 20000000,
   "steps": [
     {
       "tool": "sketch",
