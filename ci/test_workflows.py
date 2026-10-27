@@ -83,6 +83,16 @@ class Concurrency(unittest.TestCase):
             self.assertNotEqual(fork, render(group, ref=MAIN, run_id="300"), path.name)
             self.assertNotEqual(fork, render(group, ref=MAIN, run_id="301"), path.name)
 
+    def test_release_branch_runs_keep_independent_evidence(self):
+        for path in WORKFLOWS:
+            group, cancel, _ = settings(path)
+            run = dict(ref="refs/heads/release/0.1.0", run_id="350")
+            self.assertNotEqual(render(group, **run), render(group, **dict(run, run_id="351")), path.name)
+            self.assertEqual(render(cancel, **run), "false", path.name)
+            fork = dict(ref="refs/pull/10/merge", head_ref="release/0.1.0", run_id="350")
+            self.assertNotEqual(render(group, **run), render(group, **fork), path.name)
+            self.assertEqual(render(cancel, **fork), "true", path.name)
+
     def test_tag_releases_cannot_cancel_or_replace_one_another(self):
         path = pathlib.Path(__file__).resolve().parent.parent / ".github/workflows/release.yml"
         group, cancel, _ = settings(path)

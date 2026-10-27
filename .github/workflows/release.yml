@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && github.run_id || github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
+  group: release-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && github.run_id || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') && !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -43,10 +43,9 @@ jobs:
           version=$(python3 packaging/release.py version)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            [[ "$GITHUB_REF_NAME" == "v$version" ]]
-            git merge-base --is-ancestor HEAD origin/main
-            # A release never substitutes packaging success for the main application checks.
-            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hosted.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+            branch=$(python3 packaging/release.py check-source "$GITHUB_REF_NAME")
+            # Packages never substitute for exact-commit application checks on the release branch.
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hosted.yml/runs?head_sha=$GITHUB_SHA&event=push&branch=$branch" \
               --jq '.workflow_runs | any(.conclusion == "success")' | grep -x true
           fi
 

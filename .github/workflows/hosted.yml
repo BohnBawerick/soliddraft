@@ -2,7 +2,7 @@ name: Hosted CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,13 +21,11 @@ env:
 permissions:
   contents: read
 
-# A new push to a branch cancels that branch's older runs; a pull request's runs are
-# grouped by its head branch. A run on main is never cancelled: its group is its own run
-# id, so no later push shares it, and GitHub's replacement of a waiting run in a shared
-# group cannot drop a main result either.
+# Superseded feature runs cancel. Main and release branch runs retain their exact-commit
+# evidence even while development continues on main.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.run_id || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
 # Linux jobs run on the self-hosted runners while the repository variable USE_LOCAL_RUNNERS is
 # 'true', and on ubuntu-latest otherwise. Pull requests from forks always stay hosted. Windows and
