@@ -148,9 +148,9 @@ impl BuildCache {
         built
     }
 
-    /// Imports exact builds from a fork. Sketch versions are local to each cache, so
-    /// dependencies are translated before a key is compared or inserted.
-    pub(crate) fn import(&mut self, source: &BuildCache) {
+    /// Imports exact builds from a fork and returns its version translation. Sketch
+    /// versions are local to each cache, so dependencies are translated before reuse.
+    pub(crate) fn import(&mut self, source: &BuildCache) -> HashMap<u64, u64> {
         let mut entries: Vec<_> = source.entries.iter().collect();
         entries.sort_unstable_by_key(|(_, entry)| entry.built.version);
         let mut versions = HashMap::new();
@@ -183,6 +183,7 @@ impl BuildCache {
             self.retained += entry.bytes;
             self.entries.insert(key, entry);
         }
+        versions
     }
 
     /// Drops the least recently used builds outside `live` until the cache fits its

@@ -217,9 +217,9 @@ impl Document {
     }
 
     /// True when saving writes display data: the settings ask for it, the save does not
-    /// leave it out and there is a body.
+    /// leave it out and the body's rebuild matches the current definitions.
     fn saves_display_data(&self, extras: &Extras<'_>) -> bool {
-        self.settings.save_display_data && !extras.no_display_data && self.body().is_some()
+        self.settings.save_display_data && !extras.no_display_data && !self.is_dirty() && self.body().is_some()
     }
 
     /// The part file's bytes. With display data on, the part is tessellated at its

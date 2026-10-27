@@ -183,6 +183,10 @@ impl Kernel for Counting {
         self.inner.retained_bytes(body)
     }
 
+    fn export_step(&self, body: BodyId, options: &crate::StepOptions) -> KernelResult<crate::StepExport> {
+        self.inner.export_step(body, options)
+    }
+
     fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
         self.inner.view_curves(body, spec)
     }

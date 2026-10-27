@@ -177,6 +177,16 @@ impl Document {
                 .execute(serde_json::from_value(parse("command")?).map_err(|e| e.to_string())?)
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
+            "execute_deferred" => self
+                .execute_deferred(serde_json::from_value(parse("command")?).map_err(|e| e.to_string())?)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "undo_deferred" => self.undo_deferred().map(|_| ()).map_err(|e| e.to_string()),
+            "redo_deferred" => self.redo_deferred().map(|_| ()).map_err(|e| e.to_string()),
+            "rebuild" => {
+                self.rebuild();
+                Ok(())
+            }
             "undo" => self.undo().map(|_| ()).map_err(|e| e.to_string()),
             "redo" => self.redo().map(|_| ()).map_err(|e| e.to_string()),
             "rollback" => {
@@ -307,6 +317,9 @@ impl Document {
     /// with a feature that did not build is refused, so no file shows a body the part does
     /// not have; suppressed and rolled-back features are fine.
     pub fn export(&self, format: soliddraft_exchange::Format) -> Result<soliddraft_exchange::Export, String> {
+        if self.is_dirty() {
+            return Err("the current part has not been rebuilt; wait for its rebuild before exporting".into());
+        }
         if let Some(f) = self.features.iter().find(|f| {
             matches!(
                 self.status(f.id),
@@ -597,6 +610,45 @@ impl Document {
         }
     }
 
+    /// Adopts a completed fork of the current definitions without evaluating them again.
+    /// The caller must also reject completions for an obsolete application revision.
+    /// History, identity and authored settings stay on this document. Imported bodies
+    /// become live before trimming, so a small budget cannot evict them during adoption.
+    pub fn rebuild_reusing(&mut self, source: &Document) -> Result<(), String> {
+        if self.id != source.id || !Arc::ptr_eq(&self.kernel, &source.kernel) {
+            return Err("the completed build belongs to another document or kernel".into());
+        }
+        if source.is_dirty() {
+            return Err("the completed build still has unbuilt definitions".into());
+        }
+        let definition = crate::exact::bytes(&(&self.features, self.rollback));
+        if definition.is_none() || definition != crate::exact::bytes(&(&source.features, source.rollback)) {
+            return Err("the completed build does not match the current feature definitions".into());
+        }
+        let versions = self.cache.import(&source.cache);
+        if source.built.iter().any(|built| built.version != 0 && !versions.contains_key(&built.version)) {
+            self.cache.trim(&self.built);
+            return Err("the completed build does not share this document's retained inputs".into());
+        }
+        let journal = self.journal_command(|| serde_json::json!({"op":"rebuild"}));
+        journal.finish({
+            self.built = source
+                .built
+                .iter()
+                .map(|built| {
+                    let mut built = built.clone();
+                    if built.version != 0 {
+                        built.version = versions[&built.version];
+                    }
+                    built
+                })
+                .collect();
+            self.dirty = self.built.len();
+            self.cache.trim(&self.built);
+            Ok(())
+        })
+    }
+
     /// True while the document keeps `body`: a feature build it holds made it. A body
     /// no document keeps is released and does not come back.
     pub fn keeps(&self, body: BodyId) -> bool {
@@ -615,9 +667,22 @@ impl Document {
         self.cache.trim(&self.built);
     }
 
+    /// True when the current definitions have not been rebuilt.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty < self.features.len() || self.built.len() != self.features.len()
+    }
+
     /// Rebuilds from the first stale feature to the end of the tree, reusing every
     /// feature build whose exact inputs the cache holds.
-    pub(crate) fn rebuild(&mut self) {
+    pub fn rebuild(&mut self) {
+        let journal = self.journal_command(|| serde_json::json!({"op":"rebuild"}));
+        let _ = journal.finish({
+            self.rebuild_inner();
+            Ok::<_, String>(())
+        });
+    }
+
+    fn rebuild_inner(&mut self) {
         let start = self.dirty.min(self.built.len());
         self.built.truncate(start);
         let active = self.active_count();

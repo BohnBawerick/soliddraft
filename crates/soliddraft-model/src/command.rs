@@ -254,11 +254,21 @@ impl Document {
     pub fn execute(&mut self, command: Command) -> Result<Executed, CommandError> {
         let journal = self.journal_command(|| serde_json::json!({"op":"execute", "command":command}));
         journal.finish((|| {
+            let executed = self.execute_deferred(command)?;
+            self.rebuild();
+            Ok(executed)
+        })())
+    }
+
+    /// Records a command and invalidates its suffix without building it.
+    /// Call [`Self::rebuild`] or adopt a completed fork before exporting.
+    pub fn execute_deferred(&mut self, command: Command) -> Result<Executed, CommandError> {
+        let journal = self.journal_command(|| serde_json::json!({"op":"execute_deferred", "command":command}));
+        journal.finish((|| {
             let applied = self.apply(command)?;
             self.log.push(applied.label.clone());
             self.undo.push(UndoEntry { label: applied.label.clone(), undo: applied.inverse, redo: applied.redo });
             self.redo.clear();
-            self.rebuild();
             Ok(Executed { created: applied.created, label: applied.label })
         })())
     }
@@ -266,6 +276,16 @@ impl Document {
     /// Reverts the last command. Returns its label.
     pub fn undo(&mut self) -> Result<String, CommandError> {
         let journal = self.journal_command(|| serde_json::json!({"op":"undo"}));
+        journal.finish((|| {
+            let label = self.undo_deferred()?;
+            self.rebuild();
+            Ok(label)
+        })())
+    }
+
+    /// Reverts the last command and invalidates its suffix without building it.
+    pub fn undo_deferred(&mut self) -> Result<String, CommandError> {
+        let journal = self.journal_command(|| serde_json::json!({"op":"undo_deferred"}));
         journal.finish((|| {
             let entry = self.undo.pop().ok_or(CommandError::Empty("undo"))?;
             if let Err(e) = self.apply(entry.undo.clone()) {
@@ -275,7 +295,6 @@ impl Document {
             self.log.push(format!("undo {}", entry.label));
             let label = entry.label.clone();
             self.redo.push(entry);
-            self.rebuild();
             Ok(label)
         })())
     }
@@ -283,6 +302,16 @@ impl Document {
     /// Repeats the last undone command. Returns its label.
     pub fn redo(&mut self) -> Result<String, CommandError> {
         let journal = self.journal_command(|| serde_json::json!({"op":"redo"}));
+        journal.finish((|| {
+            let label = self.redo_deferred()?;
+            self.rebuild();
+            Ok(label)
+        })())
+    }
+
+    /// Repeats the last undone command and invalidates its suffix without building it.
+    pub fn redo_deferred(&mut self) -> Result<String, CommandError> {
+        let journal = self.journal_command(|| serde_json::json!({"op":"redo_deferred"}));
         journal.finish((|| {
             let entry = self.redo.pop().ok_or(CommandError::Empty("redo"))?;
             if let Err(e) = self.apply(entry.redo.clone()) {
@@ -292,7 +321,6 @@ impl Document {
             self.log.push(format!("redo {}", entry.label));
             let label = entry.label.clone();
             self.undo.push(entry);
-            self.rebuild();
             Ok(label)
         })())
     }
@@ -703,6 +731,7 @@ impl Document {
                 Ok(self.materials_changed(old, Command::RestoreMaterials { state }, label))
             }
             Command::Batch { label, commands } => {
+                let dirty = self.dirty;
                 let mut done: Vec<Applied> = Vec::new();
                 for c in commands {
                     match self.apply(c) {
@@ -711,6 +740,7 @@ impl Document {
                             for a in done.into_iter().rev() {
                                 self.apply(a.inverse).expect("the inverse of an applied command applies");
                             }
+                            self.dirty = dirty;
                             return Err(e);
                         }
                     }

@@ -123,6 +123,23 @@ the actual commands, and a body is released when the last cache holding it lets 
 The application's proposal copy also shares the current display buffers and cached
 LOD meshes, so a sketch-only dry run does not convert or pack the solid's mesh again.
 
+Asynchronous consumers use `execute_deferred`, `undo_deferred` and `redo_deferred`
+to change definitions through that same command stack without running the kernel.
+`is_dirty()` identifies definitions that have not been rebuilt; body and status getters
+still describe the preceding rebuild. A worker rebuilds a fork of the pending document.
+After rejecting an obsolete application revision, the caller passes its completed fork
+to `rebuild_reusing`. Adoption requires the same document and kernel, a completed
+source, and bit-exact feature and rollback definitions. It translates the fork's local
+build versions and makes those builds live before trimming the cache. No geometry is
+evaluated again, even with a zero-byte reuse budget. History, identity, materials and
+settings stay on the receiving document.
+
+Export refuses dirty definitions rather than emitting their preceding body. Saving
+authored definitions is still possible, but omits display caches while dirty so an old
+mesh cannot acquire the pending definition's geometry hash. Deferred transitions and
+explicit `rebuild` operations have distinct journal intents; replay preserves the
+unbuilt interval and its export refusal.
+
 Tests count the work, not the rebuild. `soliddraft_kernel_api::counting::Counting`,
 behind the `counting` feature, wraps a backend and writes down every operation's tag
 and every tessellation. The bracket exit test edits the last feature and checks that only it
