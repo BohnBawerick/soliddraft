@@ -231,6 +231,17 @@ repeated ids or a feature that reads one below it. Saving writes next to the tar
 renames over it. Part files from before the manifest (`.dwpart`, `recipe.json` with
 `soliddraft-part/1`) still open, with an id derived from their content.
 
+Application file, byte-upload/recovery and MCP loaders can seed the new document's
+existing build cache from the current model. Reuse requires the same document id and
+kernel instance, preserves the source's retention budget, and still runs the ordinary
+rebuild checks against the incoming definitions. Authored input is journaled before
+kernel work; imported builds become live before trimming, so a zero-byte retention
+budget does not discard the current tree during handoff. The new cache shares ownership
+of retained bodies, not the source's history or built statuses. Changed inputs invalidate
+their dependent builds; names and refusals are resolved by the new rebuild.
+`Document::from_bytes` and `Document::open` remain cold constructors for fresh replay.
+
+
 ## Exit test
 
 `crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the command layer, saves and reopens it, edits its base thickness and checks undo, redo and reference repair. Its saved inside fillet builds through Catallax's elementary fillet strips. Supported downstream features keep building.

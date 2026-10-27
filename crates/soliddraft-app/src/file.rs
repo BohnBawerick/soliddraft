@@ -63,8 +63,15 @@ pub fn write_document(path: &Path, bytes: &[u8]) -> Result<Option<String>, Strin
 
 /// Opens a part file and rebuilds it. A part with a broken feature still opens;
 /// the tree shows what failed.
-pub fn open(path: &Path, kernel: Arc<dyn Kernel>) -> Result<Document, String> {
-    let model = soliddraft_model::Document::open(path, kernel).map_err(|e| format!("{}: {e}", path.display()))?;
+pub fn open(
+    path: &Path,
+    kernel: Arc<dyn Kernel>,
+    source: Option<&soliddraft_model::Document>,
+) -> Result<Document, String> {
+    let model = std::fs::read(path)
+        .map_err(soliddraft_model::FileError::from)
+        .and_then(|bytes| soliddraft_model::Document::from_bytes_with_input(&bytes, kernel, source, |_| {}))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut doc = Document::from_model(model);
     doc.name = part_name(path);
     doc.path = Some(path.to_path_buf());
@@ -75,8 +82,14 @@ pub fn open(path: &Path, kernel: Arc<dyn Kernel>) -> Result<Document, String> {
 
 /// Opens a part from the bytes of a file called `name`, such as one uploaded to the
 /// browser, and rebuilds it.
-pub fn open_bytes(name: &str, bytes: &[u8], kernel: Arc<dyn Kernel>) -> Result<Document, String> {
-    let model = soliddraft_model::Document::from_bytes(bytes, kernel).map_err(|e| format!("{name}: {e}"))?;
+pub fn open_bytes(
+    name: &str,
+    bytes: &[u8],
+    kernel: Arc<dyn Kernel>,
+    source: Option<&soliddraft_model::Document>,
+) -> Result<Document, String> {
+    let model = soliddraft_model::Document::from_bytes_with_input(bytes, kernel, source, |_| {})
+        .map_err(|e| format!("{name}: {e}"))?;
     let mut doc = Document::from_model(model);
     doc.name = part_name(Path::new(name));
     doc.dirty = false;
@@ -203,7 +216,7 @@ mod tests {
         let path = dir.join(format!("bracket.{EXTENSION}"));
         save(&mut doc, &path).unwrap();
         assert!(!doc.dirty);
-        let back = open(&path, kernel.clone()).unwrap();
+        let back = open(&path, kernel.clone(), None).unwrap();
         assert_eq!(back.name, "bracket");
         assert_eq!(back.model().id(), doc.model().id(), "the part keeps its id");
         assert_eq!(back.features.len(), 1);
@@ -214,7 +227,7 @@ mod tests {
         // A part opened from a .dwpart is saved as .dwprt with the same id.
         let old = dir.join("old.dwpart");
         std::fs::copy(&path, &old).unwrap();
-        let mut reopened = open(&old, kernel).unwrap();
+        let mut reopened = open(&old, kernel, None).unwrap();
         save(&mut reopened, &old).unwrap();
         assert_eq!(reopened.path.as_deref(), Some(dir.join("old.dwprt").as_path()));
         assert_eq!(soliddraft_model::file::FORMAT, "soliddraft-part/2");

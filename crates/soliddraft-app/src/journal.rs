@@ -59,7 +59,11 @@ fn file_input(kind: &str, path: &Path) -> Option<Result<Value, String>> {
 
 /// Opens authored state through the same model loader, capturing it before rebuild.
 /// Replay supplies the recorded file input and never reads an original user path.
-pub fn open_part(path: &Path, kernel: Arc<dyn Kernel>) -> Result<Document, String> {
+pub fn open_part(
+    path: &Path,
+    kernel: Arc<dyn Kernel>,
+    source: Option<&soliddraft_model::Document>,
+) -> Result<Document, String> {
     let model = match file_input("read_part", path) {
         Some(input) => soliddraft_model::Document::from_journal_state(
             &input.map_err(|e| format!("{}: {e}", path.display()))?,
@@ -68,7 +72,7 @@ pub fn open_part(path: &Path, kernel: Arc<dyn Kernel>) -> Result<Document, Strin
         None => {
             let mut captured = false;
             let decoded = std::fs::read(path).map_err(|e| e.to_string()).and_then(|bytes| {
-                soliddraft_model::Document::from_bytes_with_input(&bytes, kernel, |doc| {
+                soliddraft_model::Document::from_bytes_with_input(&bytes, kernel, source, |doc| {
                     captured = true;
                     journal::input(|| {
                         json!({"kind":"read_part","path":path,

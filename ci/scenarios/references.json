@@ -1,6 +1,7 @@
 {
   "format": "soliddraft-scenario/1",
   "name": "references",
+  "max_work": 20000000,
   "steps": [
     {
       "tool": "sketch",
@@ -398,6 +399,10 @@
         "path": "{bundle}/survival.dwprt"
       },
       "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
         {
           "pointer": "/summary/planes/0",
           "equals": "Mounting plane"

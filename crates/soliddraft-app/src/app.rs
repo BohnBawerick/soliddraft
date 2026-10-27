@@ -367,7 +367,12 @@ impl SolidDraftApp {
                 }
                 Err(e) => self.state.note(format!("cannot restore {}: {e}", record.name), NoteKind::Error),
             },
-            _ => match file::open_bytes(&record.name, &bytes, self.state.doc.kernel().clone()) {
+            _ => match file::open_bytes(
+                &record.name,
+                &bytes,
+                self.state.doc.kernel().clone(),
+                Some(self.state.doc.model()),
+            ) {
                 Ok(mut doc) => {
                     doc.name = record.name.clone();
                     doc.path = record.path.clone();
@@ -1359,7 +1364,7 @@ impl SolidDraftApp {
                         self.state.note("Assemblies arrive in a later phase", NoteKind::Error);
                     }
                     _ => {
-                        let opened = file::open(&path, self.state.doc.kernel().clone());
+                        let opened = file::open(&path, self.state.doc.kernel().clone(), Some(self.state.doc.model()));
                         self.opened(opened);
                     }
                 }
@@ -1896,7 +1901,7 @@ impl eframe::App for SolidDraftApp {
         self.state.service_mcp();
         // In the browser an opened file arrives as an upload, frames after the request.
         if let Some((name, bytes)) = crate::platform::take_upload() {
-            let opened = file::open_bytes(&name, &bytes, self.state.doc.kernel().clone());
+            let opened = file::open_bytes(&name, &bytes, self.state.doc.kernel().clone(), Some(self.state.doc.model()));
             self.opened(opened);
         }
 

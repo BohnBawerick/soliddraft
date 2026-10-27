@@ -95,7 +95,7 @@ fn a_crash_leaves_copies_that_the_next_start_restores() {
     let offer = next.offers.iter().find(|c| c.record.kind == DocKind::Part).unwrap().clone();
     assert_eq!(offer.record.name, "Bracket");
     let (record, bytes) = next.restore(&offer.file).unwrap();
-    let back = file::open_bytes(&record.name, &bytes, soliddraft_app::kernel()).unwrap();
+    let back = file::open_bytes(&record.name, &bytes, soliddraft_app::kernel(), None).unwrap();
     assert_eq!(back.model().id(), doc.model().id());
     assert_eq!(back.model().semantic_hash(), doc.model().semantic_hash());
     assert_eq!(back.features.len(), 1);
@@ -193,7 +193,7 @@ fn queued_recovery_keeps_the_part_and_drawing_at_the_enqueued_revision() {
     let mut recovered = Recovery::start(&root, policy).unwrap();
     let part_copy = recovered.offers.iter().find(|c| c.record.kind == DocKind::Part).unwrap().clone();
     let (_, bytes) = recovered.restore(&part_copy.file).unwrap();
-    let back = file::open_bytes("Bracket", &bytes, soliddraft_app::kernel()).unwrap();
+    let back = file::open_bytes("Bracket", &bytes, soliddraft_app::kernel(), None).unwrap();
     assert_eq!(back.model().semantic_hash(), part_revision);
     assert_ne!(back.model().semantic_hash(), doc.model().semantic_hash());
     let drawing_copy = recovered.offers.iter().find(|c| c.record.kind == DocKind::Drawing).unwrap().clone();
@@ -249,7 +249,7 @@ fn saves_keep_backups_and_part_files_carry_thumbnails() {
     assert_eq!(std::fs::read(dir.join("bracket.dwprt.1.bak")).unwrap(), first, "the previous version");
     assert_eq!(soliddraft_document::thumbnail(&path).unwrap().as_deref(), Some(png.as_slice()));
     assert_eq!(soliddraft_document::thumbnail(&dir.join("bracket.dwprt.1.bak")).unwrap(), None);
-    let back = file::open(&path, soliddraft_app::kernel()).unwrap();
+    let back = file::open(&path, soliddraft_app::kernel(), None).unwrap();
     assert_eq!(back.features.len(), 2, "a part with a thumbnail opens");
     let _ = std::fs::remove_dir_all(dir);
 }
