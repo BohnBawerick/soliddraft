@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 use soliddraft_document::DocKind;
-use soliddraft_exchange::{Export, Format};
+use soliddraft_exchange::{Export, Format, Report};
 use soliddraft_kernel_api::Kernel;
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::Document;
@@ -27,6 +27,7 @@ extension of each --out file picks its format:
 Meshes use the part's export tolerance (`soliddraft quality --export`); a recipe
 uses the default, 0.01 mm. Each report gives what was written and how far it may
 lie from the exact part. A part with a feature that did not build is refused.
+STEP output over its requested tolerance is refused before any file is written.
 
   --out   a file to write; repeat it for several formats
   --json  print one JSON export report per file
@@ -103,8 +104,24 @@ fn export(a: &Args) -> Result<(), String> {
                 .map_err(|e| at(e.to_string()))?
         }
     };
-    // Every export succeeded before any file is written, so a refusal leaves no files.
-    for ((path, format), out) in a.outputs.iter().zip(&exports) {
+    publish(a, &exports)
+}
+
+fn publish(a: &Args, exports: &[Export]) -> Result<(), String> {
+    // A successful kernel call can still report a bound over the requested tolerance.
+    // Validate the whole batch before creating or replacing any destination.
+    for ((path, _), out) in a.outputs.iter().zip(exports) {
+        if let Report::Step(report) = &out.report
+            && !report.within_tolerance
+        {
+            return Err(format!(
+                "{}: STEP export refused: proven deviation {} mm exceeds the requested tolerance",
+                path.display(),
+                report.max_deviation
+            ));
+        }
+    }
+    for ((path, format), out) in a.outputs.iter().zip(exports) {
         write(path, out)?;
         report(path, *format, out, a.json);
     }
@@ -140,5 +157,53 @@ mod tests {
         assert!(parse(&args("bracket.json")).unwrap_err().contains("--out"));
         assert!(parse(&args("--out a.step")).unwrap_err().contains("no part"));
         assert!(parse(&args("a.json b.json --out a.step")).unwrap_err().contains("one part"));
+    }
+
+    #[test]
+    fn over_tolerance_step_leaves_every_destination_untouched() {
+        let dir = std::env::temp_dir().join(format!("soliddraft-export-refusal-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = dir.join("first.step");
+        let second = dir.join("second.step");
+        let a = Args {
+            input: "unused.json".into(),
+            outputs: vec![(first.clone(), Format::Step), (second.clone(), Format::Step)],
+            json: true,
+        };
+        let step = |within_tolerance| Export {
+            bytes: b"must not be published".to_vec(),
+            report: Report::Step(soliddraft_kernel_api::StepReport {
+                max_deviation: if within_tolerance { "0" } else { "0.001" }.into(),
+                max_deviation_mm: if within_tolerance { 0.0 } else { 0.001 },
+                within_tolerance,
+                solids: 1,
+                faces: 6,
+                edges: 12,
+                vertices: 8,
+                fitted_curves: 0,
+                added_vertices: 0,
+                added_edges: 0,
+                warnings: Vec::new(),
+            }),
+        };
+        let exports = [step(true), step(false)];
+        let error = publish(&a, &exports).unwrap_err();
+        assert!(error.contains("second.step"));
+        assert!(error.contains("exceeds the requested tolerance"));
+        assert!(!first.exists());
+        assert!(!second.exists());
+
+        std::fs::write(&first, b"existing first").unwrap();
+        std::fs::write(&second, b"existing second").unwrap();
+        assert!(publish(&a, &exports).is_err());
+        assert_eq!(std::fs::read(&first).unwrap(), b"existing first");
+        assert_eq!(std::fs::read(&second).unwrap(), b"existing second");
+
+        // A fully accepted batch still publishes the exact bytes it was given.
+        let accepted = [step(true), step(true)];
+        publish(&a, &accepted).unwrap();
+        assert_eq!(std::fs::read(&first).unwrap(), accepted[0].bytes);
+        assert_eq!(std::fs::read(&second).unwrap(), accepted[1].bytes);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
