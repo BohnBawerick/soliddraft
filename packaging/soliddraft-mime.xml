@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.soliddraft.part">
+    <comment>SolidDraft part</comment>
+    <glob pattern="*.dwprt"/>
+  </mime-type>
+  <mime-type type="application/vnd.soliddraft.drawing">
+    <comment>SolidDraft drawing</comment>
+    <glob pattern="*.dwdrw"/>
+  </mime-type>
+</mime-info>
