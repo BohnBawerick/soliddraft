@@ -609,6 +609,12 @@ def run(args):
                       "strict_pass": report.get("strict_pass", False),
                       "known_gaps": len(report.get("known_gaps", [])), "error": report.get("error"),
                       "timings": report.get("timings", [])}))
+    if getattr(args, "strict", False):
+        # The release path accepts no recorded gap: only a run that met every budget exits zero.
+        for gap in report.get("known_gaps", []):
+            print(f"::error::Release path: step {gap['step']} ({gap['tool']}) took {gap['elapsed_ms']:.3f} ms "
+                  f"against a {gap['budget_ms']} ms budget; a known gap is not a strict pass", flush=True)
+        return 0 if report["strict_pass"] else 1
     return 0 if report["pass"] else 1
 
 
@@ -618,6 +624,8 @@ def main():
     parser.add_argument("--out", type=pathlib.Path, required=True, help="new bundle directory, never overwritten")
     parser.add_argument("--soliddraft", required=True, help="built soliddraft executable")
     parser.add_argument("--catallax-verify", required=True, help="verifier built from the pinned Catallax revision")
+    parser.add_argument("--strict", action="store_true",
+                        help="release-path verdict: exit nonzero unless every budget was met, known gaps included")
     parser.add_argument("--timeout", type=int, default=300, help="seconds per MCP request or CLI command")
     args = parser.parse_args()
     args.out = args.out.resolve()

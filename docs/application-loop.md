@@ -297,6 +297,11 @@ only under `ci/known-over-budget.json` and is not a strict pass, `fail` was not 
 The result lists `known_gaps` and sets `strict_pass` only when the run passed with none.
 `pass` keeps its meaning of CI acceptance.
 
+`--strict` selects the release-path verdict. The exit status is zero only when `strict_pass`
+is true, so an approved known gap exits one and is printed as an error. Without the flag the
+exit status keeps its meaning of CI acceptance, where a listed gap is a warning. The hosted
+workflow runs without `--strict`; a release gate runs the same scenarios with it.
+
 ### Independent drawing-view gate
 
 Every step with a solid requests `scenario_display` first and records the click

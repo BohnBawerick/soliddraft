@@ -3,7 +3,7 @@
 
 FAKE_MODE picks one misbehaviour: ok, early (display not selectable), stale (display of the
 previous revision), pending, silent (no display reply), stale-measure (measurement of the previous
-revision), slow-measure (measurement takes 4.3 s)."""
+revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s)."""
 
 import json
 import os
@@ -62,6 +62,8 @@ for line in sys.stdin:
         write(directory, "measurement.kernel.json", {"calls": []})
         reply(request, {"isError": False})
     else:
+        if mode == "slow-click":
+            time.sleep(1.3)
         sequence += 1
         revision += 1
         directory = bundle / f"{sequence:04}"
