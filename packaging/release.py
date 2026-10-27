@@ -28,6 +28,15 @@ def version():
     return value
 
 
+def check_source(tag):
+    branch = f"release/{version()}"
+    if tag != f"v{version()}":
+        raise ValueError("Release tag must match the workspace version")
+    subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", f"origin/{branch}"],
+                   cwd=ROOT, check=True)
+    return branch
+
+
 def prefix(platform):
     architecture = {"linux": "linux-x86_64", "windows": "windows-x64", "macos": "macos-universal", "web": "web"}
     return f"soliddraft-{version()}-{architecture[platform]}"
@@ -184,6 +193,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("version")
+    commands.add_parser("check-source").add_argument("tag")
     commands.add_parser("previous").add_argument("releases", type=Path)
     for name in ("configure", "collect"):
         commands.add_parser(name).add_argument("platform", choices=TARGETS)
@@ -195,6 +205,8 @@ def main():
     args = parser.parse_args()
     if args.command == "version":
         print(version())
+    elif args.command == "check-source":
+        print(check_source(args.tag))
     elif args.command == "previous":
         print(previous_release(args.releases))
     elif args.command == "configure":
