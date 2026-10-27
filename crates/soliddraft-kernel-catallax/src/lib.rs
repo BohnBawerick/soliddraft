@@ -394,7 +394,7 @@ fn build(
         catallax_app::soliddraft::convert(&legacy.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
     // Start in the end-condition format so adding a limited sweep does not discard
     // an otherwise identical target checkpoint merely to upgrade its recipe version.
-    converted.recipe.format = catallax_recipe::FORMAT_V4.into();
+    catallax_recipe::FORMAT_V4.clone_into(&mut converted.recipe.format);
     let sources = input["steps"].as_array().expect("generated recipe steps");
     let mut planes = BTreeMap::new();
     for source in sources {
