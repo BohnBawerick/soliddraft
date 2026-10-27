@@ -97,6 +97,10 @@ pub enum Line {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         up_to_face: Option<String>,
     },
+    /// Revolves a meridian sketch around a model-space axis.
+    Revolve { sketch: String, axis_origin: [f64; 3], axis_direction: [f64; 3], angle_deg: f64 },
+    /// Changes a revolution angle without changing its sketch or axis.
+    EditRevolve { feature: String, angle_deg: f64 },
     /// Removes material: cuts a sketch's profiles into the part.
     Cut {
         /// The sketch's name, or `previous`.
@@ -387,6 +391,22 @@ pub fn extrude_params() -> Vec<(&'static str, Value)> {
     ];
     params.extend(up_to_params());
     params
+}
+
+/// The `revolve` verb's parameters.
+pub fn revolve_params() -> Vec<(&'static str, Value)> {
+    let vector = |description: &str| json!({"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3,"description":description});
+    vec![
+        sketch_param(),
+        ("axis_origin", vector("Point on the axis in model millimetres")),
+        ("axis_direction", vector("Nonzero model-space axis direction")),
+        ("angle_deg", number("Angle in degrees, greater than 0 and at most 360")),
+    ]
+}
+
+/// The `edit_revolve` verb's parameters.
+pub fn edit_revolve_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("angle_deg", number("Angle in degrees, greater than 0 and at most 360"))]
 }
 
 /// The `cut` verb's parameters.
@@ -918,6 +938,29 @@ impl Line {
                 };
                 run.apply(doc, Command::AddExtrude { params, via_assistant: true })?;
             }
+            Line::Revolve { sketch, axis_origin, axis_direction, angle_deg } => {
+                if axis_direction.iter().any(|v| !v.is_finite()) || axis_direction.iter().all(|v| *v == 0.0) {
+                    return Err("axis direction must be finite and nonzero".into());
+                }
+                if axis_origin.iter().any(|v| !v.is_finite() || v.abs() > MAX_LENGTH_MM) {
+                    return Err(format!("axis origin must lie within {MAX_LENGTH_MM} mm on each axis"));
+                }
+                let r = soliddraft_model::RevolveFeature {
+                    sketch: soliddraft_model::FeatureId(run.sketch(doc, sketch)? as u32),
+                    axis_origin: *axis_origin,
+                    axis_direction: *axis_direction,
+                    angle_deg: *angle_deg,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Revolve(r)))?;
+            }
+            Line::EditRevolve { feature, angle_deg } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Revolve(mut r)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a revolve"));
+                };
+                r.angle_deg = *angle_deg;
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Revolve(r) })?;
+            }
             Line::Cut { sketch, through_all, depth, flip, up_to_next, up_to_face } => {
                 let end = end_of(doc, *up_to_next, up_to_face)?;
                 let free = *through_all || end.is_some();
@@ -1111,6 +1154,8 @@ impl Line {
             Line::Sketch { .. } => "sketch",
             Line::SketchGeometry { .. } => "sketch_geometry",
             Line::Extrude { .. } => "extrude",
+            Line::Revolve { .. } => "revolve",
+            Line::EditRevolve { .. } => "edit_revolve",
             Line::Cut { .. } => "cut",
             Line::Fillet { .. } => "fillet",
             Line::Chamfer { .. } => "chamfer",
@@ -1173,6 +1218,8 @@ impl Line {
             Line::SketchGeometry { plane, operations } => {
                 (format!("Sketch geometry on {plane}"), format!("{} tool operations", operations.len()))
             }
+            Line::Revolve { sketch, angle_deg, .. } => ("Revolve".into(), format!("{sketch}, {}°", fmt_mm(*angle_deg))),
+            Line::EditRevolve { feature, angle_deg } => (format!("Edit {feature}"), format!("{}°", fmt_mm(*angle_deg))),
             Line::Extrude { sketch, depth, flip, up_to_next, up_to_face } => {
                 ("Extrude".into(), format!("{sketch}, {}", up_to(*up_to_next, up_to_face, end(false, *depth, *flip))))
             }
@@ -1820,6 +1867,9 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
             });
             end_json(&mut v, &p.end());
             v
+        }
+        FeatureKind::Revolve(r) => {
+            json!({"type":"revolve","sketch":name(r.sketch.0 as u64),"axis_origin":r.axis_origin,"axis_direction":r.axis_direction,"angle_deg":r.angle_deg})
         }
         FeatureKind::Fillet(p) => json!({ "type": "fillet", "edges": labels(&p.edges), "radius": p.radius }),
         FeatureKind::Chamfer(p) => json!({ "type": "chamfer", "edges": labels(&p.edges), "distance": p.distance }),

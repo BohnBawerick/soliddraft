@@ -338,6 +338,7 @@ pub fn plane_ref_label(plane: &model::PlaneRef) -> String {
 pub enum FeatureKind {
     Sketch(SketchFeature),
     Extrude(ExtrudeParams),
+    Revolve(model::RevolveFeature),
     Cut(CutParams),
     Fillet(FilletParams),
     Chamfer(ChamferParams),
@@ -352,6 +353,7 @@ impl FeatureKind {
         match self {
             FeatureKind::Sketch(_) => "Sketch",
             FeatureKind::Extrude(_) => "Boss-Extrude",
+            FeatureKind::Revolve(_) => "Revolve",
             FeatureKind::Cut(_) => "Cut-Extrude",
             FeatureKind::Fillet(_) => "Fillet",
             FeatureKind::Chamfer(_) => "Chamfer",
@@ -370,6 +372,7 @@ impl FeatureKind {
         match self {
             FeatureKind::Sketch(_) => "sketch",
             FeatureKind::Extrude(_) => "extrude",
+            FeatureKind::Revolve(_) => "revolve",
             FeatureKind::Cut(_) => "cut",
             FeatureKind::Fillet(_) => "fillet",
             FeatureKind::Chamfer(_) => "chamfer",
@@ -387,6 +390,7 @@ impl FeatureKind {
     pub fn sketch(&self) -> Option<FeatureId> {
         match self {
             FeatureKind::Extrude(p) => p.sketch,
+            FeatureKind::Revolve(r) => Some(app_id(r.sketch)),
             FeatureKind::Cut(p) => Some(p.sketch),
             _ => None,
         }
@@ -421,6 +425,7 @@ impl FeatureKind {
             FeatureKind::Chamfer(p) => {
                 model::FeatureKind::Chamfer(model::BlendFeature { edges: p.edges.clone(), size: p.distance })
             }
+            FeatureKind::Revolve(r) => model::FeatureKind::Revolve(r.clone()),
             FeatureKind::Hole(h) => model::FeatureKind::Hole(h.clone()),
             FeatureKind::Pattern(p) => model::FeatureKind::Pattern(p.clone()),
             FeatureKind::Mirror(m) => model::FeatureKind::Mirror(m.clone()),
@@ -445,6 +450,7 @@ impl FeatureKind {
                 }
                 FeatureKind::Sketch(SketchFeature { plane, sketch })
             }
+            model::FeatureKind::Revolve(r) => FeatureKind::Revolve(r.clone()),
             model::FeatureKind::Extrude(e) => {
                 let (end, depth) = EndKind::from_model(&e.end);
                 let depth = depth.unwrap_or(10.0);
@@ -602,6 +608,7 @@ impl Feature {
                 EndKind::Blind => format!("{} mm", fmt_mm(p.depth)),
                 end => end.label().to_lowercase(),
             },
+            FeatureKind::Revolve(r) => format!("{}°", fmt_mm(r.angle_deg)),
             FeatureKind::Fillet(f) => format!("R{}", fmt_mm(f.radius)),
             FeatureKind::Chamfer(c) => format!("{} mm", fmt_mm(c.distance)),
             FeatureKind::Hole(h) => {
@@ -1654,8 +1661,48 @@ impl Document {
         self.kernel().topology(body).map(|t| t.bbox.diagonal() * 2.0 + 10.0).unwrap_or(1000.0)
     }
 
-    /// Builds the tool of an extrude without applying it: the ghost of the
-    /// material it adds. Bodies are released at once; the document is untouched.
+    /// Builds the revolution tool for the editor without changing the document.
+    /// Temporary bodies are released on both success and refusal.
+    pub fn preview_revolve(&self, params: &model::RevolveFeature) -> Result<Preview, String> {
+        let (profiles, _) = self.sketch_profiles(app_id(params.sketch))?;
+        let k = self.kernel();
+        let mut made = Vec::new();
+        let result = (|| -> Result<Arc<DisplayMesh>, String> {
+            let mut body = None;
+            for profile in profiles {
+                let sheet =
+                    k.create_body_from_profile(&OpTag::new("preview-profile"), &profile).map_err(|e| e.to_string())?;
+                made.push(sheet.body);
+                let tool = k
+                    .revolve(
+                        &OpTag::new("preview-revolve"),
+                        sheet.body,
+                        &soliddraft_kernel_api::Revolve {
+                            axis_origin: params.axis_origin.into(),
+                            axis_direction: params.axis_direction.into(),
+                            angle_deg: params.angle_deg,
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+                made.push(tool.body);
+                body = Some(match body {
+                    None => tool.body,
+                    Some(previous) => {
+                        let joined = k
+                            .boolean(&OpTag::new("preview-union"), BooleanOp::Union, previous, tool.body)
+                            .map_err(|e| e.to_string())?;
+                        made.push(joined.body);
+                        joined.body
+                    }
+                });
+            }
+            self.mesh_of(body.ok_or("revolve needs a closed sketch region")?)
+        })();
+        self.release_all(&made);
+        Ok(Preview { result: None, tool: Some(result?), removes: false })
+    }
+
+    /// Builds the extrusion tool without changing the document.
     pub fn preview_extrude(&self, params: &ExtrudeParams) -> Result<Preview, String> {
         if params.end != EndKind::Blind {
             // An extrusion up to the part's boundary previews only once applied.
@@ -1841,6 +1888,13 @@ impl Document {
                         };
                         details.push(("Profile".to_owned(), profile));
                         details.push(("Depth".to_owned(), f.summary()));
+                    }
+                    FeatureKind::Revolve(r) => {
+                        details.push((
+                            "Profile".to_owned(),
+                            self.feature(app_id(r.sketch)).map(|f| f.name.clone()).unwrap_or("missing sketch".into()),
+                        ));
+                        details.push(("Angle".to_owned(), f.summary()));
                     }
                     FeatureKind::Cut(p) => {
                         details.push((

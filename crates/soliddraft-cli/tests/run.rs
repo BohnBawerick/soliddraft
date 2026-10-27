@@ -78,7 +78,7 @@ fn a_script_is_refused_what_it_cannot_run() {
         assert!(err.contains(says), "{args:?}: {err}");
     };
     refused(&["run", "view_front"], 2, "view_front runs only in the app: It moves the viewport camera");
-    refused(&["run", "revolve"], 2, "revolve cannot run yet");
+    refused(&["run", "revolve"], 1, "does not match the `revolve` schema");
     refused(&["run", "no_such_command"], 2, "no command `no_such_command`");
     refused(&["run", "extrude", "{not json"], 2, "the arguments are not JSON");
     refused(&["run", "extrude", r#"{"sketch": "Sketch9", "depth": 1, "flip": false}"#], 1, "no feature named");

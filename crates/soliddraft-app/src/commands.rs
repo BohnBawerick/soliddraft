@@ -1004,7 +1004,16 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Verb, "Every profile of the sketch extrudes along its normal.", tools::extrude_params)
 .undo(Undo::Step),
         cmd("revolve", "Revolve", Icon::Revolve, "Add material: revolve a sketch about an axis")
-            .on(Features, "Boss", Large),
+            .on(Features, "Boss", Large)
+            .on(Sketch, "Use", Large)
+            .run(|s| if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Revolve)) } else { AppAction::StartRevolve })
+            .when(|s| s.in_sketch() || s.selected_sketch().is_some())
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Revolve(_))))
+            .agents(Agents::Verb, "Revolve a closed meridian sketch about a model-space axis.", tools::revolve_params)
+            .undo(Undo::Step),
+        cmd("edit_revolve", "Edit revolve", Icon::Revolve, "Change a revolution angle")
+            .agents(Agents::Verb, "Preserves the sketch and axis.", tools::edit_revolve_params)
+            .undo(Undo::Step),
         cmd("sweep", "Sweep", Icon::Sweep, "Add material: sweep a profile along a path").on(Features, "Boss", Small),
         cmd("loft", "Loft", Icon::Loft, "Add material: loft between profiles").on(Features, "Boss", Small),
         // Cut.
@@ -1385,7 +1394,7 @@ fn registry() -> Vec<CommandSpec> {
                 }
             })
             .when(|s| s.selected_feature().is_some())
-.app_only("It opens the feature's PropertyManager; agents and scripts change a feature with edit_extrude, edit_cut, edit_fillet, edit_chamfer and edit_dimension"),
+.app_only("It opens the feature's PropertyManager; agents and scripts change a feature with edit_extrude, edit_revolve, edit_cut, edit_fillet, edit_chamfer and edit_dimension"),
         cmd("rename", "Rename", Icon::Props, "Rename the selected feature")
             .key(Scope::Part, none, Key::F2)
             .run(|_| AppAction::RenameSelected)
