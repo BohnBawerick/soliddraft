@@ -41,8 +41,8 @@ pub fn delete_blocker(drawing: &Drawing, sheet: usize) -> Option<String> {
 
 pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push: &mut impl FnMut(DrawingAction)) {
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, CornerRadius::ZERO, theme::PANEL);
-    painter.hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::LINE));
+    painter.rect_filled(rect, CornerRadius::ZERO, theme::panel());
+    painter.hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::line()));
     let count = s.doc.drawing.sheets.len();
     let names: Vec<String> = s.doc.drawing.sheets.iter().map(|sh| sh.name.clone()).collect();
     let mut x = rect.left() + 8.0;
@@ -50,7 +50,7 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
     let mut rename_cancel = false;
     for (i, name) in names.iter().enumerate() {
         let editing = s.sheet_rename.as_ref().is_some_and(|(j, _)| *j == i);
-        let galley = painter.layout_no_wrap(name.clone(), theme::font_medium(11.5), theme::INK);
+        let galley = painter.layout_no_wrap(name.clone(), theme::font_medium(11.5), theme::ink());
         let w = galley.size().x.max(48.0) + 22.0;
         let r = Rect::from_min_size(pos2(x, rect.top() + 3.0), vec2(w, rect.height() - 6.0));
         x += w + 2.0;
@@ -61,13 +61,13 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
             painter.rect(
                 r,
                 CornerRadius { nw: 0, ne: 0, sw: 6, se: 6 },
-                theme::BG,
-                Stroke::new(1.0, theme::LINE),
+                theme::chrome(),
+                Stroke::new(1.0, theme::line()),
                 StrokeKind::Inside,
             );
-            painter.hline((r.left() + 1.0)..=(r.right() - 1.0), rect.top() + 0.5, Stroke::new(1.0, theme::BG));
+            painter.hline((r.left() + 1.0)..=(r.right() - 1.0), rect.top() + 0.5, Stroke::new(1.0, theme::chrome()));
         } else if resp.hovered() {
-            painter.rect_filled(r, CornerRadius { nw: 0, ne: 0, sw: 6, se: 6 }, theme::HOVER);
+            painter.rect_filled(r, CornerRadius { nw: 0, ne: 0, sw: 6, se: 6 }, theme::hover());
         }
         if editing {
             let mut text = s.sheet_rename.as_ref().map(|(_, t)| t.clone()).unwrap_or_default();
@@ -98,7 +98,7 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
             }
             continue;
         }
-        painter.galley(r.center() - galley.size() / 2.0, galley, if on { theme::INK } else { theme::MUTED });
+        painter.galley(r.center() - galley.size() / 2.0, galley, if on { theme::ink() } else { theme::muted() });
         if resp.double_clicked() {
             s.sheet_rename = Some((i, name.clone()));
         } else if resp.clicked() {
@@ -144,9 +144,9 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
     let resp = ui.interact(r, ui.id().with("sheet_add"), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add sheet"));
     if resp.hovered() {
-        painter.rect_filled(r, CornerRadius::same(5), theme::HOVER);
+        painter.rect_filled(r, CornerRadius::same(5), theme::hover());
     }
-    painter.text(r.center(), Align2::CENTER_CENTER, "+", theme::font_medium(14.0), theme::MUTED);
+    painter.text(r.center(), Align2::CENTER_CENTER, "+", theme::font_medium(14.0), theme::muted());
     if resp.on_hover_text("Add a sheet after the last one").clicked() {
         push(DrawingAction::AddSheet);
     }
@@ -155,6 +155,6 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
         Align2::RIGHT_CENTER,
         format!("Sheet {} of {count} · double-click a tab to rename", s.sheet + 1),
         theme::font(10.5),
-        theme::MUTED,
+        theme::muted(),
     );
 }

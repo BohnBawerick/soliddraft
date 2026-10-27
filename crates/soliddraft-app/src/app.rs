@@ -79,9 +79,9 @@ fn strip(ui: &mut egui::Ui, side: Side, title: &str) -> bool {
     let resp = resp.on_hover_text(format!("{label} ({})", side.shortcut()));
     let painter = ui.painter();
     if resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::ZERO, theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::ZERO, theme::hover());
     }
-    let color = if resp.hovered() { theme::INK } else { theme::MUTED };
+    let color = if resp.hovered() { theme::ink() } else { theme::muted() };
     let icon_rect = Rect::from_center_size(pos2(rect.center().x, rect.top() + 16.0), vec2(14.0, 14.0));
     icons::paint(painter, Icon::ChevronRight, icon_rect, color);
     let galley = painter.layout_no_wrap(title.to_owned(), theme::font_medium(12.0), color);
@@ -257,7 +257,7 @@ pub struct SolidDraftApp {
 
 impl SolidDraftApp {
     pub fn new(cc: &eframe::CreationContext<'_>, doc: Document, automation: Automation) -> Self {
-        theme::install(&cc.egui_ctx);
+        theme::install(&cc.egui_ctx, theme::Mode::default());
         if let Some(rs) = cc.wgpu_render_state.as_ref() {
             let tier = Tier::of(rs.adapter.get_info().backend);
             let renderer = ViewportRenderer::new(&rs.device, &rs.queue, rs.target_format, tier);
@@ -451,18 +451,18 @@ impl SolidDraftApp {
             ui.spacing_mut().item_spacing.x = 2.0;
             let (brand, _) = ui.allocate_exact_size(vec2(96.0, theme::MENU_HEIGHT), Sense::hover());
             let sq = Rect::from_center_size(pos2(brand.left() + 14.0, brand.center().y), vec2(15.0, 15.0));
-            ui.painter().rect_filled(sq, CornerRadius::same(4), theme::ACCENT);
+            ui.painter().rect_filled(sq, CornerRadius::same(4), theme::accent());
             ui.painter().rect_filled(
                 Rect::from_min_max(sq.min + vec2(5.0, 5.0), sq.max),
                 CornerRadius { nw: 0, ne: 0, sw: 0, se: 4 },
-                theme::ACCENT.lerp_to_gamma(egui::Color32::from_rgb(0x49, 0xb3, 0xff), 0.7),
+                theme::accent().lerp_to_gamma(egui::Color32::from_rgb(0x49, 0xb3, 0xff), 0.7),
             );
             ui.painter().text(
                 pos2(brand.left() + 27.0, brand.center().y),
                 Align2::LEFT_CENTER,
                 "SolidDraft",
                 theme::font_semibold(13.0),
-                theme::INK,
+                theme::ink(),
             );
             ui.add_space(6.0);
 
@@ -611,15 +611,15 @@ impl SolidDraftApp {
             // Command search.
             let search_w = 270.0_f32.min(ui.available_width() - 180.0).max(120.0);
             let frame = egui::Frame::new()
-                .fill(theme::PANEL)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::panel())
+                .stroke(Stroke::new(1.0, theme::line()))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(egui::Margin::symmetric(6, 1));
             let inner = frame.show(ui, |ui| {
                 ui.set_width(search_w);
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
-                    icons::paint(ui.painter(), Icon::Search, r, theme::MUTED);
+                    icons::paint(ui.painter(), Icon::Search, r, theme::muted());
                     ui.add(
                         egui::TextEdit::singleline(&mut st.search)
                             .hint_text("Search commands and features")
@@ -641,7 +641,7 @@ impl SolidDraftApp {
                     None => format!("{}.{}", st.doc.name, file::EXTENSION),
                 };
                 let text = if st.doc.dirty { format!("{name} •") } else { name };
-                ui.label(egui::RichText::new(text).size(12.0).color(theme::MUTED)).on_hover_text(
+                ui.label(egui::RichText::new(text).size(12.0).color(theme::muted())).on_hover_text(
                     st.doc.path.as_ref().map(|p| p.display().to_string()).unwrap_or("Not saved yet".into()),
                 );
             });
@@ -664,30 +664,30 @@ impl SolidDraftApp {
             let errors = st.doc.error_count();
             let repairs = st.doc.repair_count();
             if errors == 0 && repairs == 0 {
-                ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::OK));
+                ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::ok()));
             } else if errors > 0 {
                 ui.label(
                     egui::RichText::new(format!("{errors} rebuild error{}", if errors == 1 { "" } else { "s" }))
                         .family(theme::semibold())
                         .size(11.5)
-                        .color(theme::ERROR),
+                        .color(theme::error()),
                 );
             } else {
                 ui.label(
                     egui::RichText::new(format!("{repairs} feature{} to repair", if repairs == 1 { "" } else { "s" }))
                         .family(theme::semibold())
                         .size(11.5)
-                        .color(theme::WARN),
+                        .color(theme::warn()),
                 );
             }
             let n = st.doc.features.len();
             ui.label(
                 egui::RichText::new(format!("{n} feature{}", if n == 1 { "" } else { "s" }))
                     .size(11.5)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             ui.label(
-                egui::RichText::new(format!("{} triangles", st.doc.triangle_count())).size(11.5).color(theme::MUTED),
+                egui::RichText::new(format!("{} triangles", st.doc.triangle_count())).size(11.5).color(theme::muted()),
             );
             let mode = match (&st.sketch, &st.editor) {
                 (Some(s), _) => {
@@ -697,14 +697,14 @@ impl SolidDraftApp {
                 (None, Some(e)) => format!("Editing {}", e.title()),
                 _ => "Editing part".to_owned(),
             };
-            ui.label(egui::RichText::new(mode).size(11.5).color(theme::MUTED));
+            ui.label(egui::RichText::new(mode).size(11.5).color(theme::muted()));
             if let Some(note) = &st.note
                 && note.at.elapsed() < Duration::from_secs(6)
             {
                 let color = match note.kind {
-                    NoteKind::Info => theme::MUTED,
-                    NoteKind::Ok => theme::OK,
-                    NoteKind::Error => theme::ERROR,
+                    NoteKind::Info => theme::muted(),
+                    NoteKind::Ok => theme::ok(),
+                    NoteKind::Error => theme::error(),
                 };
                 ui.label(egui::RichText::new(&note.text).size(11.5).color(color));
             }
@@ -715,8 +715,8 @@ impl SolidDraftApp {
                     (None, Some(p)) => format!("x {:.1}   y {:.1}   z {:.1} mm", p.x, p.y, p.z),
                     _ => "mm".to_owned(),
                 };
-                ui.label(egui::RichText::new(coords).size(11.5).color(theme::MUTED));
-                ui.label(egui::RichText::new(format!("{:.1} ms", st.frame_ms)).size(11.5).color(theme::MUTED))
+                ui.label(egui::RichText::new(coords).size(11.5).color(theme::muted()));
+                ui.label(egui::RichText::new(format!("{:.1} ms", st.frame_ms)).size(11.5).color(theme::muted()))
                     .on_hover_text("Frame time, smoothed");
             });
         });
@@ -1587,7 +1587,7 @@ impl SolidDraftApp {
     /// hidden. Dragging the edge past the minimum hides it; clicking the strip,
     /// dragging it outward or double-clicking the edge shows it again.
     fn side_panel(&mut self, root: &mut egui::Ui, side: Side, window_width: f32) {
-        let frame = egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::ZERO);
+        let frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         let make = |id: egui::Id| match side {
             Side::Tree => egui::Panel::left(id),
         };
@@ -1645,7 +1645,7 @@ impl SolidDraftApp {
                             env!("CARGO_PKG_VERSION"),
                             st.doc.backend_name()
                         ))
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                     );
                 },
             );
@@ -1693,7 +1693,7 @@ impl SolidDraftApp {
                                 Some((KeySource::Keychain(_), masked)) => format!("{masked} in the OS keychain"),
                                 None => "No key".into(),
                             };
-                            ui.label(egui::RichText::new(text).color(theme::MUTED));
+                            ui.label(egui::RichText::new(text).color(theme::muted()));
                             if ui
                                 .add_enabled(row.in_keychain, egui::Button::new("Delete"))
                                 .on_hover_text("Remove the key from the OS keychain")
@@ -1731,7 +1731,7 @@ impl SolidDraftApp {
                         if soliddraft_assistant::environment::var(var).is_some_and(|v| !v.trim().is_empty()) {
                             ui.label(
                                 egui::RichText::new(format!("{var} or its legacy alias overrides this setting."))
-                                    .color(theme::MUTED),
+                                    .color(theme::muted()),
                             );
                         }
                     }
@@ -1868,7 +1868,7 @@ fn shortcuts_grid(ui: &mut egui::Ui) {
             if rows.is_empty() {
                 continue;
             }
-            ui.label(egui::RichText::new(scope.label()).family(theme::semibold()).color(theme::MUTED));
+            ui.label(egui::RichText::new(scope.label()).family(theme::semibold()).color(theme::muted()));
             ui.end_row();
             for (keys, doc) in rows {
                 ui.label(egui::RichText::new(keys).family(theme::semibold()));
@@ -1876,7 +1876,7 @@ fn shortcuts_grid(ui: &mut egui::Ui) {
                 ui.end_row();
             }
         }
-        ui.label(egui::RichText::new("Mouse").family(theme::semibold()).color(theme::MUTED));
+        ui.label(egui::RichText::new("Mouse").family(theme::semibold()).color(theme::muted()));
         ui.end_row();
         for (k, v) in [
             ("Left drag", "Orbit (outside a sketch)"),
@@ -1920,7 +1920,7 @@ fn search_popup(ui: &mut egui::Ui, st: &mut AppState, anchor: &egui::Response) {
     egui::Popup::from_response(anchor).id(egui::Id::new("search_popup")).open(true).show(|ui| {
         ui.set_min_width(anchor.rect.width());
         if entries.is_empty() {
-            ui.label(egui::RichText::new("No matching command").color(theme::MUTED));
+            ui.label(egui::RichText::new("No matching command").color(theme::muted()));
         }
         for (i, (name, keys, enabled, _)) in entries.iter().enumerate() {
             let r =
@@ -2029,7 +2029,7 @@ impl eframe::App for SolidDraftApp {
             .and_then(|sel| self.state.doc.describe(sel));
         self.state.hover_point = self.state.viewport.hover_point;
 
-        let panel_frame = egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::ZERO);
+        let panel_frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         egui::Panel::top("menu")
             .exact_size(theme::MENU_HEIGHT)
             .frame(panel_frame)
@@ -2048,7 +2048,7 @@ impl eframe::App for SolidDraftApp {
         crate::command_line::panel(root, &mut self.state);
         let window_width = root.available_width();
         self.side_panel(root, Side::Tree, window_width);
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(root, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::chrome())).show(root, |ui| {
             let mut panels = Panels { state: &mut self.state };
             show_dock(ui, &mut self.dock, egui::Id::new("center_dock"), &mut panels);
         });

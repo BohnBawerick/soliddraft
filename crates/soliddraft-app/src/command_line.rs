@@ -469,18 +469,18 @@ pub fn panel(root: &mut egui::Ui, state: &mut AppState) {
 /// typing happens above.
 fn bar(ui: &mut egui::Ui, state: &mut AppState, session_open: bool) {
     let rect = ui.max_rect();
-    ui.painter().hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::line()));
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         ui.add_space(8.0);
         chips(ui, state);
         ui.add_space(6.0);
         let x = ui.cursor().left();
-        ui.painter().vline(x, rect.y_range().shrink(7.0), Stroke::new(1.0, theme::LINE));
+        ui.painter().vline(x, rect.y_range().shrink(7.0), Stroke::new(1.0, theme::line()));
         ui.add_space(10.0);
         if session_open {
             let text = format!("Typing goes to the session above · Esc or {} closes it", CLOSE_WORDS[0]);
-            ui.label(egui::RichText::new(text).font(theme::mono(11.5)).color(theme::MUTED));
+            ui.label(egui::RichText::new(text).font(theme::mono(11.5)).color(theme::muted()));
         } else {
             ui.label(egui::RichText::new("Command:").font(theme::mono(12.5)).color(theme::command_prompt()));
             prompt(ui, state, false);
@@ -520,7 +520,7 @@ fn prompt(ui: &mut egui::Ui, state: &mut AppState, session: bool) {
         )
     } else {
         let hint = format!("Type a command, Tab completes · {AI_COMMAND} opens the assistant");
-        (theme::INK, egui::RichText::new(hint).color(theme::MUTED))
+        (theme::ink(), egui::RichText::new(hint).color(theme::muted()))
     };
     let cl = &mut state.command_line;
     let edit = egui::TextEdit::singleline(&mut cl.input)
@@ -587,7 +587,7 @@ fn completion_list(ui: &egui::Ui, cl: &mut CommandLine, field: &egui::Response) 
                     }
                 }
                 if c.names.len() > 14 {
-                    ui.label(egui::RichText::new(format!("{} more", c.names.len() - 14)).color(theme::MUTED));
+                    ui.label(egui::RichText::new(format!("{} more", c.names.len() - 14)).color(theme::muted()));
                 }
             });
         });
@@ -655,16 +655,16 @@ fn chips(ui: &mut egui::Ui, state: &mut AppState) {
         if let Some(p) = ui.ctx().pointer_interact_pos() {
             let label = commands::get(d.id).map_or(d.id, |c| c.label);
             let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, ui.id().with("chip_ghost")));
-            let galley = painter.layout_no_wrap(label.to_owned(), theme::font_medium(11.5), theme::SELECTION_INK);
+            let galley = painter.layout_no_wrap(label.to_owned(), theme::font_medium(11.5), theme::selection_ink());
             let r = Rect::from_min_size(p + vec2(12.0, 6.0), galley.size() + vec2(16.0, 8.0));
             painter.rect(
                 r,
                 CornerRadius::same(99),
-                theme::SELECTION_BG,
+                theme::selection_bg(),
                 Stroke::new(1.0, theme::command_prompt()),
                 StrokeKind::Inside,
             );
-            painter.galley(r.center() - galley.size() / 2.0, galley, theme::SELECTION_INK);
+            painter.galley(r.center() - galley.size() / 2.0, galley, theme::selection_ink());
         }
     }
     let bar = &mut state.command_line.settings;
@@ -687,17 +687,17 @@ fn chip(ui: &mut egui::Ui, state: &AppState, command: &'static CommandSpec, lift
     let label = command.label_in(state);
     let enabled = command.is_enabled(state);
     let active = (command.active)(state);
-    let galley = ui.painter().layout_no_wrap(label.clone(), theme::font_medium(11.5), theme::INK);
+    let galley = ui.painter().layout_no_wrap(label.clone(), theme::font_medium(11.5), theme::ink());
     let size = vec2(galley.size().x + 36.0, 22.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let name = format!("{label} on the command bar");
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, active, name.clone()));
     let (fill, stroke, ink) = if active {
-        (theme::SELECTION_BG, theme::command_prompt(), theme::SELECTION_INK)
+        (theme::selection_bg(), theme::command_prompt(), theme::selection_ink())
     } else if resp.hovered() && enabled {
-        (theme::HOVER, theme::LINE, theme::INK)
+        (theme::hover(), theme::line(), theme::ink())
     } else {
-        (theme::chip(), theme::LINE, if enabled { theme::INK } else { theme::MUTED.gamma_multiply(0.7) })
+        (theme::chip(), theme::line(), if enabled { theme::ink() } else { theme::muted().gamma_multiply(0.7) })
     };
     let fill = if lifted { fill.gamma_multiply(0.4) } else { fill };
     let painter = ui.painter();
@@ -713,10 +713,10 @@ fn chip(ui: &mut egui::Ui, state: &AppState, command: &'static CommandSpec, lift
 fn add_button(ui: &mut egui::Ui, state: &mut AppState) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add a tool to the bar"));
-    let bg = if resp.hovered() { theme::HOVER } else { theme::PANEL };
-    ui.painter().rect(rect, CornerRadius::same(99), bg, Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+    let bg = if resp.hovered() { theme::hover() } else { theme::panel() };
+    ui.painter().rect(rect, CornerRadius::same(99), bg, Stroke::new(1.0, theme::line()), StrokeKind::Inside);
     let c = rect.center();
-    let s = Stroke::new(1.4, theme::MUTED);
+    let s = Stroke::new(1.4, theme::muted());
     ui.painter().hline((c.x - 4.5)..=(c.x + 4.5), c.y, s);
     ui.painter().vline(c.x, (c.y - 4.5)..=(c.y + 4.5), s);
     let resp = resp.on_hover_text("Add a tool to the bar, or drag a ribbon button here");
@@ -896,7 +896,7 @@ fn tool_line(ui: &mut egui::Ui, t: &ToolActivity) {
         ToolState::Running(0) => (format!("  └ {} …", t.name), theme::terminal_muted()),
         ToolState::Running(bytes) => (format!("  └ {} … {bytes} bytes", t.name), theme::terminal_muted()),
         ToolState::Done(s) => (format!("  └ {} · {s}", t.name), theme::terminal_muted()),
-        ToolState::Failed(e) => (format!("  └ {} failed: {e}", t.name), theme::ERROR),
+        ToolState::Failed(e) => (format!("  └ {} failed: {e}", t.name), theme::error()),
     };
     text(ui, &said, color);
 }

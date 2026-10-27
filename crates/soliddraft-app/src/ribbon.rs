@@ -56,10 +56,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     }
     // Tab strip.
     let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::PANEL);
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::panel());
     let mut x = strip.left() + 10.0;
     for tab in RibbonTab::ALL {
-        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
         let w = galley.size().x + 24.0;
         let r = Rect::from_min_size(pos2(x, strip.top() + 4.0), vec2(w, strip.height() - 4.0));
         x += w + 2.0;
@@ -77,28 +77,28 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             ui.painter().rect(
                 r,
                 CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
-                theme::BG,
-                Stroke::new(1.0, theme::LINE),
+                theme::chrome(),
+                Stroke::new(1.0, theme::line()),
                 StrokeKind::Inside,
             );
-            ui.painter().hline(r.x_range().shrink(1.0), r.bottom() - 0.5, Stroke::new(1.5, theme::BG));
+            ui.painter().hline(r.x_range().shrink(1.0), r.bottom() - 0.5, Stroke::new(1.5, theme::chrome()));
         } else if resp.hovered() {
-            ui.painter().rect_filled(r, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, theme::HOVER);
+            ui.painter().rect_filled(r, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, theme::hover());
         }
-        let color = if on { theme::INK } else { theme::MUTED };
+        let color = if on { theme::ink() } else { theme::muted() };
         ui.painter().galley(r.center() - galley.size() / 2.0, galley, color);
         if resp.clicked() {
             state.ribbon_tab = tab;
         }
     }
-    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     // Redraw the active tab's bottom edge so it merges into the body.
     let mut x = strip.left() + 10.0;
     for tab in RibbonTab::ALL {
-        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
         let w = galley.size().x + 24.0;
         if state.ribbon_tab == tab {
-            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::BG));
+            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::chrome()));
         }
         x += w + 2.0;
     }
@@ -109,9 +109,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
 /// The assembly's ribbon: its one tab, in the part ribbon's grammar.
 fn show_assembly(ui: &mut egui::Ui, state: &mut AppState) {
     let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::PANEL);
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::panel());
     let tab = commands::Tab::Assembly;
-    let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+    let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
     let r = Rect::from_min_size(
         pos2(strip.left() + 10.0, strip.top() + 4.0),
         vec2(galley.size().x + 24.0, strip.height() - 4.0),
@@ -119,21 +119,21 @@ fn show_assembly(ui: &mut egui::Ui, state: &mut AppState) {
     ui.painter().rect(
         r,
         CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
-        theme::BG,
-        Stroke::new(1.0, theme::LINE),
+        theme::chrome(),
+        Stroke::new(1.0, theme::line()),
         StrokeKind::Inside,
     );
-    ui.painter().galley(r.center() - galley.size() / 2.0, galley, theme::INK);
-    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
-    ui.painter().hline((r.left() + 1.0)..=(r.right() - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::BG));
+    ui.painter().galley(r.center() - galley.size() / 2.0, galley, theme::ink());
+    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::line()));
+    ui.painter().hline((r.left() + 1.0)..=(r.right() - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::chrome()));
     body(ui, state, tab);
 }
 
 /// A tab's panels of buttons.
 fn body(ui: &mut egui::Ui, state: &mut AppState, tab: commands::Tab) {
     let (body, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_BODY_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::BG);
-    ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::chrome());
+    ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let groups = groups(state, tab);
     let mut x = body.left() + 8.0;
     let top = body.top() + 6.0;
@@ -158,7 +158,7 @@ fn body(ui: &mut egui::Ui, state: &mut AppState, tab: commands::Tab) {
                     let g = ui.painter().layout_no_wrap(
                         group.items[i + count].command.label.to_owned(),
                         theme::font(11.0),
-                        theme::INK,
+                        theme::ink(),
                     );
                     widest = widest.max(g.size().x);
                     count += 1;
@@ -182,9 +182,9 @@ fn body(ui: &mut egui::Ui, state: &mut AppState, tab: commands::Tab) {
             Align2::CENTER_CENTER,
             group.label,
             theme::font(10.5),
-            theme::MUTED,
+            theme::muted(),
         );
-        ui.painter().vline(x, (body.top() + 8.0)..=(body.bottom() - 8.0), Stroke::new(1.0, theme::LINE));
+        ui.painter().vline(x, (body.top() + 8.0)..=(body.bottom() - 8.0), Stroke::new(1.0, theme::line()));
         x += 8.0;
     }
     if let Some(c) = pending {
@@ -205,16 +205,16 @@ fn draw_item(ui: &mut egui::Ui, item: &Item, rect: Rect, key: (usize, usize)) ->
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, item.active, label));
     let painter = ui.painter();
     if item.active {
-        painter.rect_filled(rect, CornerRadius::same(7), theme::SELECTION_BG);
+        painter.rect_filled(rect, CornerRadius::same(7), theme::selection_bg());
     } else if enabled && resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::same(7), theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::same(7), theme::hover());
     }
     let color = if !enabled {
-        theme::MUTED.gamma_multiply(0.55)
+        theme::muted().gamma_multiply(0.55)
     } else if item.active {
-        theme::SELECTION_INK
+        theme::selection_ink()
     } else {
-        theme::INK
+        theme::ink()
     };
     match item.size {
         Size::Large => {

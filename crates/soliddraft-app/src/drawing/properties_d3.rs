@@ -21,7 +21,7 @@ use soliddraft_drawing::{
 /// A labelled row: the label in the left column, the widget filling the rest.
 fn labelled(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
-        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::MUTED)));
+        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::muted())));
         add(ui);
     });
 }
@@ -415,7 +415,7 @@ pub fn gdt_editor(ui: &mut egui::Ui, g: &mut GdtDraft, salt: &str) -> bool {
                         egui::Label::new(
                             egui::RichText::new(["Primary", "Secondary", "Tertiary"][i.min(2)])
                                 .size(12.0)
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                         ),
                     );
                     let r = ui.add(egui::TextEdit::singleline(&mut d.letter).desired_width(36.0).char_limit(4));
@@ -987,7 +987,7 @@ pub fn revisions_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut 
             Some((_, t)) if !t.revisions.is_empty() => {
                 egui::Grid::new("revision_rows").striped(true).spacing([8.0, 3.0]).show(ui, |ui| {
                     for h in ["Rev", "Description", "Date", "Approved", "Zone"] {
-                        ui.label(egui::RichText::new(h).size(10.5).color(theme::MUTED));
+                        ui.label(egui::RichText::new(h).size(10.5).color(theme::muted()));
                     }
                     ui.end_row();
                     for r in &t.revisions {
@@ -998,7 +998,7 @@ pub fn revisions_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut 
                         ui.label(
                             egui::RichText::new(if r.zone.is_empty() { "from symbols" } else { &r.zone })
                                 .size(11.0)
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                         );
                         ui.end_row();
                     }

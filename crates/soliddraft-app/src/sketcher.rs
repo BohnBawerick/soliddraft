@@ -707,13 +707,13 @@ fn entity_color(s: &SketchSession, e: &Entity) -> Color32 {
     };
     let in_conflict = s.sketch.constraints_of(e.id).any(|c| conflicting.contains(&c.id));
     if in_conflict {
-        theme::ERROR
+        theme::error()
     } else if e.construction {
-        theme::MUTED
+        theme::muted()
     } else if s.sketch.free.contains(&e.id) {
-        theme::ACCENT
+        theme::accent()
     } else {
-        theme::INK
+        theme::ink()
     }
 }
 
@@ -731,7 +731,7 @@ fn paint_plane(painter: &egui::Painter, frame: &Frame<'_>, doc: &Document, sketc
         painter.add(egui::Shape::convex_polygon(
             pts.clone(),
             Color32::from_rgba_unmultiplied(0x1f, 0x5f, 0xd0, 10),
-            Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.35)),
+            Stroke::new(1.0, theme::accent().gamma_multiply(0.35)),
         ));
     }
     // Axes of the sketch frame through the origin.
@@ -740,8 +740,8 @@ fn paint_plane(painter: &egui::Painter, frame: &Frame<'_>, doc: &Document, sketc
             painter.line_segment([p, q], Stroke::new(1.0, color));
         }
     };
-    axis(P2::new(-half, 0.0), P2::new(half, 0.0), theme::LINE.gamma_multiply(1.3));
-    axis(P2::new(0.0, -half), P2::new(0.0, half), theme::LINE.gamma_multiply(1.3));
+    axis(P2::new(-half, 0.0), P2::new(half, 0.0), theme::line().gamma_multiply(1.3));
+    axis(P2::new(0.0, -half), P2::new(0.0, half), theme::line().gamma_multiply(1.3));
 }
 
 fn paint_regions(painter: &egui::Painter, frame: &Frame<'_>, sketch: &Sketch) {
@@ -786,13 +786,13 @@ fn paint_entities(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession)
         if is_sel || is_hover {
             let halo = Stroke::new(
                 if is_sel { 6.0 } else { 5.0 },
-                theme::SELECTION_BG.gamma_multiply(if is_sel { 1.0 } else { 0.7 }),
+                theme::selection_bg().gamma_multiply(if is_sel { 1.0 } else { 0.7 }),
             );
             if pts.len() >= 2 {
                 painter.add(egui::Shape::line(pts.clone(), halo));
             }
         }
-        let stroke = Stroke::new(if e.construction { 1.0 } else { 1.8 }, if is_sel { theme::ACCENT } else { color });
+        let stroke = Stroke::new(if e.construction { 1.0 } else { 1.8 }, if is_sel { theme::accent() } else { color });
         if e.is_point() {
             continue;
         }
@@ -815,15 +815,15 @@ fn paint_entities(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession)
             let is_hover = s.hover == Some(SketchSel::Point(r));
             let joined = s.sketch.constraints.iter().any(|c| c.points().contains(&r));
             if e.id == crate::sketch::ORIGIN {
-                painter.line_segment([sp + vec2(-6.0, 0.0), sp + vec2(6.0, 0.0)], Stroke::new(1.2, theme::MUTED));
-                painter.line_segment([sp + vec2(0.0, -6.0), sp + vec2(0.0, 6.0)], Stroke::new(1.2, theme::MUTED));
-                painter.circle_stroke(sp, 3.0, Stroke::new(1.2, theme::MUTED));
+                painter.line_segment([sp + vec2(-6.0, 0.0), sp + vec2(6.0, 0.0)], Stroke::new(1.2, theme::muted()));
+                painter.line_segment([sp + vec2(0.0, -6.0), sp + vec2(0.0, 6.0)], Stroke::new(1.2, theme::muted()));
+                painter.circle_stroke(sp, 3.0, Stroke::new(1.2, theme::muted()));
                 continue;
             }
             if is_sel || is_hover {
-                painter.circle_filled(sp, 7.0, theme::SELECTION_BG);
+                painter.circle_filled(sp, 7.0, theme::selection_bg());
             }
-            let fill = if is_sel { theme::ACCENT } else { color };
+            let fill = if is_sel { theme::accent() } else { color };
             if is_center {
                 painter.line_segment([sp + vec2(-4.0, 0.0), sp + vec2(4.0, 0.0)], Stroke::new(1.2, fill));
                 painter.line_segment([sp + vec2(0.0, -4.0), sp + vec2(0.0, 4.0)], Stroke::new(1.2, fill));
@@ -833,7 +833,7 @@ fn paint_entities(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession)
                 painter.rect(
                     Rect::from_center_size(sp, vec2(5.0, 5.0)),
                     CornerRadius::ZERO,
-                    theme::PANEL,
+                    theme::panel(),
                     Stroke::new(1.2, fill),
                     StrokeKind::Middle,
                 );
@@ -900,19 +900,19 @@ fn paint_glyphs(painter: &egui::Painter, s: &SketchSession, glyphs: &[(Constrain
         let hover = s.hover == Some(SketchSel::Constraint(*id));
         let bad = conflicting.contains(id);
         let (bg, fg) = if sel {
-            (theme::ACCENT, Color32::WHITE)
+            (theme::accent(), Color32::WHITE)
         } else if bad {
-            (theme::ERROR, Color32::WHITE)
+            (theme::error(), Color32::WHITE)
         } else if hover {
-            (theme::SELECTION_BG, theme::SELECTION_INK)
+            (theme::selection_bg(), theme::selection_ink())
         } else {
-            (theme::hud_bg(), theme::MUTED)
+            (theme::hud_bg(), theme::muted())
         };
         painter.rect(
             *r,
             CornerRadius::same(3),
             bg,
-            Stroke::new(1.0, if sel || bad { bg } else { theme::LINE }),
+            Stroke::new(1.0, if sel || bad { bg } else { theme::line() }),
             StrokeKind::Inside,
         );
         let g = r.shrink(3.0);
@@ -987,7 +987,7 @@ fn label_rects(frame: &Frame<'_>, sketch: &Sketch, ui: &egui::Ui) -> Vec<(Constr
         .filter_map(|c| {
             let sp = frame.screen(c.label()?)?;
             let text = dim_text(c);
-            let galley = ui.painter().layout_no_wrap(text, theme::font_medium(11.5), theme::INK);
+            let galley = ui.painter().layout_no_wrap(text, theme::font_medium(11.5), theme::ink());
             Some((c.id, Rect::from_center_size(sp, galley.size() + vec2(12.0, 6.0))))
         })
         .collect()
@@ -1012,24 +1012,31 @@ fn paint_dimensions(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSessio
         let hover = s.hover == Some(SketchSel::Constraint(c.id));
         let bad = conflicting.contains(&c.id);
         let color = if bad {
-            theme::ERROR
+            theme::error()
         } else if sel {
-            theme::ACCENT
+            theme::accent()
         } else {
-            theme::MUTED.gamma_multiply(1.15)
+            theme::muted().gamma_multiply(1.15)
         };
         let Some(label) = c.label() else { continue };
         let Some(lp) = frame.screen(label) else { continue };
         paint_dimension_lines(painter, frame, &s.sketch, c, label, lp, color);
         let bg = if sel {
-            theme::SELECTION_BG
+            theme::selection_bg()
         } else if hover {
-            theme::HOVER
+            theme::hover()
         } else {
             theme::hud_bg()
         };
-        let ink = if bad { theme::ERROR } else { theme::INK };
-        value_pill(painter, lp, dim_text(c), ink, bg, Stroke::new(1.0, if sel { theme::ACCENT } else { theme::LINE }));
+        let ink = if bad { theme::error() } else { theme::ink() };
+        value_pill(
+            painter,
+            lp,
+            dim_text(c),
+            ink,
+            bg,
+            Stroke::new(1.0, if sel { theme::accent() } else { theme::line() }),
+        );
     }
 }
 
@@ -1192,16 +1199,17 @@ pub fn paint_closed_dimensions(
         let Some(label) = c.label() else { continue };
         let Some(lp) = frame.screen(label) else { continue };
         let text = dim_text(c);
-        let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::INK).size() + vec2(12.0, 6.0);
+        let size =
+            painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::ink()).size() + vec2(12.0, 6.0);
         let at = clear_spot(lp, size, &taken);
         let hover = pointer.is_some_and(|p| Rect::from_center_size(at, size).contains(p));
-        let color = if hover { theme::ACCENT } else { theme::INK.gamma_multiply(0.7) };
+        let color = if hover { theme::accent() } else { theme::ink().gamma_multiply(0.7) };
         paint_dimension_lines(painter, &frame, sketch, c, label, lp, color);
         if at != lp {
             painter.line_segment([lp, at], Stroke::new(1.0, color));
         }
-        let (bg, stroke) = if hover { (theme::HOVER, theme::ACCENT) } else { (theme::hud_bg(), theme::LINE) };
-        let r = value_pill(painter, at, text, theme::INK, bg, Stroke::new(1.0, stroke));
+        let (bg, stroke) = if hover { (theme::hover(), theme::accent()) } else { (theme::hud_bg(), theme::line()) };
+        let r = value_pill(painter, at, text, theme::ink(), bg, Stroke::new(1.0, stroke));
         taken.push(r);
         shown.push((c.id, r));
     }
@@ -1229,7 +1237,7 @@ fn clear_spot(at: Pos2, size: egui::Vec2, taken: &[Rect]) -> Pos2 {
 
 fn paint_rubber_band(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession, snapped: Option<P2>) {
     let Some(p) = snapped else { return };
-    let st = Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.8));
+    let st = Stroke::new(1.5, theme::accent().gamma_multiply(0.8));
     let seg = |a: P2, b: P2| {
         if let (Some(sa), Some(sb)) = (frame.screen(a), frame.screen(b)) {
             painter.line_segment([sa, sb], st);
@@ -1305,7 +1313,7 @@ fn paint_snaps(
     if hover.is_none() {
         return;
     }
-    let accent = theme::ACCENT;
+    let accent = theme::accent();
     // Inference lines back to the previous point.
     if let Some((prev, _)) = s.pending.last()
         && let Some(sprev) = frame.screen(*prev)
@@ -1357,7 +1365,7 @@ fn paint_snaps(
     }
     // Coordinates by the cursor.
     let text = format!("{}, {}", fmt_value((p.u * 100.0).round() / 100.0), fmt_value((p.v * 100.0).round() / 100.0));
-    painter.text(sp + vec2(12.0, -10.0), Align2::LEFT_BOTTOM, text, theme::font(10.5), theme::MUTED);
+    painter.text(sp + vec2(12.0, -10.0), Align2::LEFT_BOTTOM, text, theme::font(10.5), theme::muted());
 }
 
 /// The popup where a dimension value is typed.
@@ -1376,14 +1384,14 @@ fn dim_editor(ui: &mut egui::Ui, s: &mut SketchSession, frame: &Frame<'_>, actio
         .fixed_pos(anchor + vec2(14.0, 12.0))
         .show(ui.ctx(), |ui| {
             egui::Frame::new()
-                .fill(theme::PANEL)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::panel())
+                .stroke(Stroke::new(1.0, theme::line()))
                 .corner_radius(CornerRadius::same(7))
                 .shadow(ui.style().visuals.popup_shadow)
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(c.name()).size(11.0).color(theme::MUTED));
+                        ui.label(egui::RichText::new(c.name()).size(11.0).color(theme::muted()));
                         let mut text = edit.text.clone();
                         let resp = ui.add(
                             egui::TextEdit::singleline(&mut text).desired_width(64.0).font(theme::font_medium(12.5)),
@@ -1398,7 +1406,7 @@ fn dim_editor(ui: &mut egui::Ui, s: &mut SketchSession, frame: &Frame<'_>, actio
                             egui::RichText::new(if is_angle { "°" } else { "mm" })
                                 .size(11.0)
                                 .italics()
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                         );
                         if let Some(e) = s.dim_edit.as_mut() {
                             e.text = text;
@@ -1445,13 +1453,13 @@ fn dim_editor(ui: &mut egui::Ui, s: &mut SketchSession, frame: &Frame<'_>, actio
 fn paint_status(ui: &mut egui::Ui, s: &mut SketchSession, rect: Rect) {
     let painter = ui.painter().with_clip_rect(rect);
     let (status_color, status) = match &s.sketch.status {
-        SolveStatus::Empty => (theme::MUTED, "Empty sketch".to_owned()),
-        SolveStatus::UnderDefined => (theme::ACCENT, "Under defined".to_owned()),
-        SolveStatus::FullyDefined => (theme::OK, "Fully defined".to_owned()),
+        SolveStatus::Empty => (theme::muted(), "Empty sketch".to_owned()),
+        SolveStatus::UnderDefined => (theme::accent(), "Under defined".to_owned()),
+        SolveStatus::FullyDefined => (theme::ok(), "Fully defined".to_owned()),
         SolveStatus::OverDefined { conflicting } => {
-            (theme::ERROR, format!("Over defined · {} conflicting", conflicting.len()))
+            (theme::error(), format!("Over defined · {} conflicting", conflicting.len()))
         }
-        SolveStatus::Failed(_) => (theme::ERROR, "Solver failed".to_owned()),
+        SolveStatus::Failed(_) => (theme::error(), "Solver failed".to_owned()),
     };
     let hint = match (s.tool, s.pending.len()) {
         (Tool::Select, _) => "Click to select, drag to move, double-click a dimension to edit",
@@ -1479,13 +1487,13 @@ fn paint_status(ui: &mut egui::Ui, s: &mut SketchSession, rect: Rect) {
     let message = s.message.as_ref().filter(|(_, at)| at.elapsed().as_secs_f32() < 4.0).map(|(m, _)| m.clone());
     let line2 = message.unwrap_or_else(|| hint.to_owned());
     let g1 = painter.layout_no_wrap(status.clone(), theme::font_semibold(11.5), status_color);
-    let g2 = painter.layout_no_wrap(line2, theme::font(11.0), theme::MUTED);
+    let g2 = painter.layout_no_wrap(line2, theme::font(11.0), theme::muted());
     let w = g1.size().x.max(g2.size().x) + 20.0;
     let r = Rect::from_min_size(pos2(rect.left() + 12.0, rect.top() + 12.0), vec2(w, 40.0));
-    painter.rect(r, CornerRadius::same(8), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+    painter.rect(r, CornerRadius::same(8), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
     painter.circle_filled(pos2(r.left() + 10.0, r.top() + 13.0), 3.5, status_color);
     painter.galley(pos2(r.left() + 18.0, r.top() + 6.0), g1, status_color);
-    painter.galley(pos2(r.left() + 10.0, r.top() + 22.0), g2, theme::MUTED);
+    painter.galley(pos2(r.left() + 10.0, r.top() + 22.0), g2, theme::muted());
 }
 
 /// Draws a sketch that is not open, in a quiet colour, for selected sketches.

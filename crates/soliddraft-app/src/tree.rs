@@ -36,16 +36,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
     let errors = state.doc.error_count();
     let repairs = state.doc.repair_count();
     let (status, color) = if errors == 0 && repairs == 0 {
-        ("Rebuilt · OK".to_owned(), theme::OK)
+        ("Rebuilt · OK".to_owned(), theme::ok())
     } else if errors > 0 {
-        (format!("{errors} error{}", if errors == 1 { "" } else { "s" }), theme::ERROR)
+        (format!("{errors} error{}", if errors == 1 { "" } else { "s" }), theme::error())
     } else {
-        (format!("{repairs} to repair"), theme::WARN)
+        (format!("{repairs} to repair"), theme::warn())
     };
     ui.painter().text(
         pos2(head.right() - 12.0, head.center().y),
@@ -54,7 +54,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         theme::font_medium(11.0),
         color,
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
 
     let mut actions = Vec::new();
     egui::ScrollArea::vertical().id_salt("tree").auto_shrink([false, false]).show(ui, |ui| {
@@ -212,11 +212,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if items.is_empty() {
             ui.add_space(14.0);
             ui.vertical_centered(|ui| {
-                ui.label(egui::RichText::new("No features yet").family(theme::medium()).color(theme::MUTED));
+                ui.label(egui::RichText::new("No features yet").family(theme::medium()).color(theme::muted()));
                 ui.label(
                     egui::RichText::new("Sketch on a plane, or press E to extrude a built-in profile.")
                         .size(11.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
             });
         }
@@ -282,7 +282,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         pos2(rect.left() + 32.0 + item.indent as f32 * 20.0, rect.center().y),
                         vec2(15.0, 15.0),
                     ),
-                    theme::INK,
+                    theme::ink(),
                 );
                 if ui.input(|i| i.key_pressed(egui::Key::Enter))
                     || (edit.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape)))
@@ -388,7 +388,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 }
                 ui.separator();
                 if ui
-                    .add(egui::Button::new(egui::RichText::new("Delete").color(theme::ERROR)).shortcut_text("Del"))
+                    .add(egui::Button::new(egui::RichText::new("Delete").color(theme::error())).shortcut_text("Del"))
                     .clicked()
                 {
                     actions.push(AppAction::Command(Command::DeleteFeature(id)));
@@ -415,16 +415,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 let painter =
                     ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tree_drag")));
                 let name = state.doc.feature(d).map(|f| f.name.clone()).unwrap_or_default();
-                let galley = painter.layout_no_wrap(name, theme::font_medium(12.0), theme::INK);
+                let galley = painter.layout_no_wrap(name, theme::font_medium(12.0), theme::ink());
                 let r = Rect::from_min_size(p + vec2(12.0, -10.0), galley.size() + vec2(16.0, 8.0));
                 painter.rect(
                     r,
                     CornerRadius::same(6),
-                    theme::PANEL,
-                    Stroke::new(1.0, theme::ACCENT),
+                    theme::panel(),
+                    Stroke::new(1.0, theme::accent()),
                     StrokeKind::Inside,
                 );
-                painter.galley(r.min + vec2(8.0, 4.0), galley, theme::INK);
+                painter.galley(r.min + vec2(8.0, 4.0), galley, theme::ink());
             }
             if pointer_released {
                 state.drag_feature = None;
@@ -437,7 +437,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             if let Some(p) = pointer_pos {
                 let painter = ui.painter();
                 let y = p.y.clamp(ui.min_rect().top(), ui.min_rect().bottom());
-                painter.hline(ui.min_rect().x_range().shrink(10.0), y, Stroke::new(2.0, theme::ACCENT));
+                painter.hline(ui.min_rect().x_range().shrink(10.0), y, Stroke::new(2.0, theme::accent()));
             }
             if pointer_released {
                 state.drag_rollback = false;
@@ -472,11 +472,11 @@ fn rollback_bar(
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, "Rollback bar"));
     let active = at < count;
     let color = if resp.hovered() || resp.dragged() {
-        theme::ACCENT
+        theme::accent()
     } else if active {
-        theme::WARN
+        theme::warn()
     } else {
-        theme::LINE.gamma_multiply(1.3)
+        theme::line().gamma_multiply(1.3)
     };
     let y = rect.center().y;
     ui.painter().hline(
@@ -573,20 +573,20 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let painter = ui.painter();
     let inner = Rect::from_min_max(pos2(rect.left() + 4.0, rect.top()), pos2(rect.right() - 4.0, rect.bottom()));
     if spec.selected {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::SELECTION_BG);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::selection_bg());
     } else if resp.hovered() {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::HOVER);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::hover());
     }
     if spec.drop_above {
-        painter.hline(inner.x_range(), inner.top() + 0.5, Stroke::new(2.0, theme::ACCENT));
+        painter.hline(inner.x_range(), inner.top() + 0.5, Stroke::new(2.0, theme::accent()));
     }
     let x0 = rect.left() + 10.0 + spec.indent as f32 * 20.0;
     let ink = if spec.selected {
-        theme::SELECTION_INK
+        theme::selection_ink()
     } else if spec.dim {
-        theme::MUTED
+        theme::muted()
     } else {
-        theme::INK
+        theme::ink()
     };
     if let Some(open) = spec.chevron {
         let icon = if open { Icon::ChevronDown } else { Icon::ChevronRight };
@@ -594,13 +594,13 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             icon,
             Rect::from_center_size(pos2(x0 + 4.0, rect.center().y), vec2(11.0, 11.0)),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     let icon_color = if spec.error.is_some() {
-        theme::ERROR
+        theme::error()
     } else if spec.warn.is_some() {
-        theme::WARN
+        theme::warn()
     } else {
         spec.icon_color.unwrap_or(ink)
     };
@@ -618,7 +618,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             Icon::Suppress,
             Rect::from_center_size(pos2(after + 6.0, rect.center().y), vec2(12.0, 12.0)),
-            theme::MUTED,
+            theme::muted(),
         );
         after += 16.0;
     }
@@ -627,7 +627,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             Icon::Spark,
             Rect::from_center_size(pos2(after + 6.0, rect.center().y), vec2(11.0, 11.0)),
-            theme::ACCENT,
+            theme::accent(),
         );
     }
     if !spec.sub.is_empty() {
@@ -636,11 +636,11 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             Align2::RIGHT_CENTER,
             spec.sub,
             theme::font(11.0),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     if let Some(err) = spec.error {
-        painter.circle_filled(pos2(x0 + 29.0, rect.top() + 6.0), 3.0, theme::ERROR);
+        painter.circle_filled(pos2(x0 + 29.0, rect.top() + 6.0), 3.0, theme::error());
         return resp.on_hover_text(egui::RichText::new(err).color(Color32::WHITE));
     }
     if let Some(w) = spec.warn {
@@ -648,7 +648,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             Icon::Warning,
             Rect::from_center_size(pos2(x0 + 30.0, rect.top() + 6.5), vec2(9.0, 9.0)),
-            theme::WARN,
+            theme::warn(),
         );
         return resp.on_hover_text(egui::RichText::new(w).color(Color32::WHITE));
     }

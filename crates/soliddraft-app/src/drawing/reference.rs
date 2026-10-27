@@ -126,9 +126,9 @@ impl DrawingSession {
     /// The one-line marker for the tree header and the status bar, with its colour.
     pub fn marker(&self) -> Option<(String, Color32)> {
         match self.link_state() {
-            LinkState::Missing => Some(("Part not found".to_owned(), theme::ERROR)),
-            LinkState::Newer { .. } => Some(("Newer version available".to_owned(), theme::WARN)),
-            _ if self.doc.is_stale() => Some(("Newer version available".to_owned(), theme::WARN)),
+            LinkState::Missing => Some(("Part not found".to_owned(), theme::error())),
+            LinkState::Newer { .. } => Some(("Newer version available".to_owned(), theme::warn())),
+            _ if self.doc.is_stale() => Some(("Newer version available".to_owned(), theme::warn())),
             _ => None,
         }
     }
@@ -276,14 +276,14 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
             // What is wrong, in the drawing's words.
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-                let colour = if dialog.replace { theme::ACCENT } else { theme::ERROR };
+                let colour = if dialog.replace { theme::accent() } else { theme::error() };
                 icons::paint(ui.painter(), if dialog.replace { Icon::Open } else { Icon::Warning }, r, colour);
                 let head = if dialog.replace {
                     format!("{drawing_name} shows {part_name} ({model_path})")
                 } else {
                     format!("{drawing_name} references a part at {model_path}")
                 };
-                ui.label(egui::RichText::new(head).family(theme::semibold()).size(12.5).color(theme::INK));
+                ui.label(egui::RichText::new(head).family(theme::semibold()).size(12.5).color(theme::ink()));
             });
             ui.add_space(2.0);
             if dialog.replace {
@@ -293,10 +293,10 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                          part at the next Rebuild; dimensions that find no edge there are listed for repair.",
                     )
                     .size(11.5)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
                 );
             } else if let Some(m) = &missing {
-                ui.label(egui::RichText::new(problem_words(m)).size(11.5).color(theme::INK));
+                ui.label(egui::RichText::new(problem_words(m)).size(11.5).color(theme::ink()));
                 let searched = match &drawing_dir {
                     Some(d) => format!(
                         "Not found by id in {} or the search folders. The drawing keeps showing rev {pinned}.",
@@ -306,7 +306,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                         format!("The drawing is not saved, so there is no folder to search. It keeps rev {pinned}.")
                     }
                 };
-                ui.label(egui::RichText::new(searched).size(11.0).color(theme::MUTED));
+                ui.label(egui::RichText::new(searched).size(11.0).color(theme::muted()));
             }
             ui.add_space(8.0);
 
@@ -332,7 +332,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                         "Add the folder it moved to under Referenced documents in File locations, or pick the file.",
                     )
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
                 );
             }
             ui.add_space(8.0);
@@ -367,7 +367,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
             }
             if let Some(e) = &dialog.error {
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(e).size(11.5).color(theme::ERROR));
+                ui.label(egui::RichText::new(e).size(11.5).color(theme::error()));
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -408,22 +408,22 @@ fn candidate_card(
         None => c.path.display().to_string(),
     };
     let bar_colour = if same_id {
-        theme::OK
+        theme::ok()
     } else if c.same_name {
-        theme::WARN
+        theme::warn()
     } else {
-        theme::LINE
+        theme::line()
     };
     let card = egui::Frame::new()
-        .fill(theme::PANEL)
-        .stroke(Stroke::new(1.0, theme::LINE))
+        .fill(theme::panel())
+        .stroke(Stroke::new(1.0, theme::line()))
         .corner_radius(CornerRadius::same(7))
         .inner_margin(egui::Margin::symmetric(9, 6))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(&name).family(theme::semibold()).size(12.5).color(theme::INK));
+                ui.label(egui::RichText::new(&name).family(theme::semibold()).size(12.5).color(theme::ink()));
                 let tag = if same_id {
                     "same part"
                 } else if c.same_name {
@@ -431,11 +431,11 @@ fn candidate_card(
                 } else {
                     "different part"
                 };
-                ui.label(egui::RichText::new(format!("· {tag}")).size(11.5).color(theme::MUTED));
+                ui.label(egui::RichText::new(format!("· {tag}")).size(11.5).color(theme::muted()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let use_it =
                         egui::Button::new(egui::RichText::new("Use this part").color(Color32::WHITE).size(11.5))
-                            .fill(theme::ACCENT);
+                            .fill(theme::accent());
                     if ui.add(use_it).clicked() {
                         actions.push(DrawingAction::RepairModel { path: c.path.clone(), replace: !same_id });
                     }
@@ -444,7 +444,7 @@ fn candidate_card(
             ui.label(
                 egui::RichText::new(format!("{shown} · rev {}", c.identity.revision.short()))
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
         })
         .response
@@ -463,21 +463,21 @@ pub fn bar(ui: &mut egui::Ui, s: &DrawingSession, rect: Rect, push: &mut impl Fn
         LinkState::Missing => (
             format!("{part} not found"),
             format!("Not at {}, not found by id. The sheet shows rev {pinned}.", s.doc.drawing.model.path),
-            theme::ERROR,
+            theme::error(),
             DrawingAction::ShowRepair { replace: false },
             "Repair…",
         ),
         LinkState::Newer { now } => (
             format!("Newer version of {part} available"),
             format!("The sheet shows rev {pinned}; the part is at rev {} ({}).", now.short(), s.found_words()),
-            theme::WARN,
+            theme::warn(),
             DrawingAction::Rebuild,
             "Rebuild",
         ),
         _ if s.doc.is_stale() => (
             format!("Newer version of {part} available"),
             format!("The sheet shows rev {pinned}; the open part moved on."),
-            theme::WARN,
+            theme::warn(),
             DrawingAction::Rebuild,
             "Rebuild",
         ),
@@ -485,8 +485,11 @@ pub fn bar(ui: &mut egui::Ui, s: &DrawingSession, rect: Rect, push: &mut impl Fn
     };
     let width = (rect.width() - 40.0).min(820.0);
     let area = Rect::from_min_size(egui::pos2(rect.center().x - width / 2.0, rect.top() + 38.0), vec2(width, 44.0));
-    let bg =
-        if colour == theme::ERROR { Color32::from_rgb(0xfd, 0xee, 0xe8) } else { Color32::from_rgb(0xfd, 0xf6, 0xe3) };
+    let bg = if colour == theme::error() {
+        Color32::from_rgb(0xfd, 0xee, 0xe8)
+    } else {
+        Color32::from_rgb(0xfd, 0xf6, 0xe3)
+    };
     ui.scope_builder(
         egui::UiBuilder::new().max_rect(area).layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
@@ -504,9 +507,9 @@ pub fn bar(ui: &mut egui::Ui, s: &DrawingSession, rect: Rect, push: &mut impl Fn
             ui.vertical(|ui| {
                 ui.set_max_width(area.width() - 150.0);
                 ui.add_space(5.0);
-                let head = egui::RichText::new(head).family(theme::semibold()).size(12.0).color(theme::INK);
+                let head = egui::RichText::new(head).family(theme::semibold()).size(12.0).color(theme::ink());
                 ui.add(egui::Label::new(head).truncate());
-                ui.add(egui::Label::new(egui::RichText::new(detail).size(11.5).color(theme::INK)).truncate());
+                ui.add(egui::Label::new(egui::RichText::new(detail).size(11.5).color(theme::ink())).truncate());
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
@@ -532,10 +535,13 @@ pub fn panel(ui: &mut egui::Ui, s: &DrawingSession, part_open: bool, actions: &m
     let model = &s.doc.drawing.model;
     let value_row = |ui: &mut egui::Ui, label: &str, value: &str| {
         ui.horizontal(|ui| {
-            ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::MUTED)));
+            ui.add_sized(
+                vec2(68.0, 22.0),
+                egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::muted())),
+            );
             egui::Frame::new()
-                .fill(theme::FIELD_BG)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::field_bg())
+                .stroke(Stroke::new(1.0, theme::line()))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(egui::Margin::symmetric(8, 3))
                 .show(ui, |ui| {
@@ -547,11 +553,11 @@ pub fn panel(ui: &mut egui::Ui, s: &DrawingSession, part_open: bool, actions: &m
     egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
         let state = s.link_state();
         let (status, colour) = match &state {
-            LinkState::Unknown => ("Not resolved yet".to_owned(), theme::MUTED),
-            LinkState::Current => ("Up to date".to_owned(), theme::OK),
-            LinkState::Newer { now } => (format!("Newer version available · rev {}", now.short()), theme::WARN),
-            LinkState::Unverified => ("Not a SolidDraft document; no revision to compare".to_owned(), theme::MUTED),
-            LinkState::Missing => ("Not found".to_owned(), theme::ERROR),
+            LinkState::Unknown => ("Not resolved yet".to_owned(), theme::muted()),
+            LinkState::Current => ("Up to date".to_owned(), theme::ok()),
+            LinkState::Newer { now } => (format!("Newer version available · rev {}", now.short()), theme::warn()),
+            LinkState::Unverified => ("Not a SolidDraft document; no revision to compare".to_owned(), theme::muted()),
+            LinkState::Missing => ("Not found".to_owned(), theme::error()),
         };
         ui.label(egui::RichText::new(status).family(theme::semibold()).size(12.5).color(colour));
         ui.add_space(6.0);
@@ -577,7 +583,7 @@ pub fn panel(ui: &mut egui::Ui, s: &DrawingSession, part_open: bool, actions: &m
             ui.label(
                 egui::RichText::new(format!("The file moved; the drawing stores {p} when it is next saved."))
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
         }
         ui.add_space(8.0);
@@ -586,13 +592,15 @@ pub fn panel(ui: &mut egui::Ui, s: &DrawingSession, part_open: bool, actions: &m
         ui.horizontal_wrapped(|ui| {
             let newer = matches!(state, LinkState::Newer { .. }) || s.doc.is_stale();
             if newer {
-                let rebuild = egui::Button::new(egui::RichText::new("Rebuild").color(Color32::WHITE)).fill(theme::WARN);
+                let rebuild =
+                    egui::Button::new(egui::RichText::new("Rebuild").color(Color32::WHITE)).fill(theme::warn());
                 if ui.add(rebuild).on_hover_text("Bring the views to the current revision (Ctrl+B)").clicked() {
                     actions.push(DrawingAction::Rebuild);
                 }
             }
             if state == LinkState::Missing {
-                let repair = egui::Button::new(egui::RichText::new("Repair…").color(Color32::WHITE)).fill(theme::ERROR);
+                let repair =
+                    egui::Button::new(egui::RichText::new("Repair…").color(Color32::WHITE)).fill(theme::error());
                 if ui.add(repair).clicked() {
                     actions.push(DrawingAction::ShowRepair { replace: false });
                 }
