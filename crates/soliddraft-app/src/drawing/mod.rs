@@ -32,9 +32,9 @@ use crate::state::{AppState, NoteKind};
 use egui_dock::DockState;
 use soliddraft_document::DocumentId;
 use soliddraft_drawing::{
-    Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Command, DatumRef, DocKind, DocRef, Drawing,
-    DrawingMeta, FoldDirection, GdtCharacteristic, Lay, LinearOrientation, MaterialCondition, Projection, Scale,
-    SetKind, StyleOverrides, SurfaceProcess, View, ViewId,
+    Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Command, ContentHash, DatumRef, DocKind, DocRef,
+    Drawing, DrawingMeta, FoldDirection, GdtCharacteristic, Lay, LinearOrientation, MaterialCondition, Projection,
+    Scale, SetKind, StyleOverrides, SurfaceProcess, View, ViewId,
 };
 use soliddraft_kernel_api::Point2;
 use soliddraft_kernel_api::drawing::StandardView;
@@ -1670,8 +1670,12 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
     let path = if path.extension().is_none() { path.with_extension(format.extension()) } else { path };
     let written = write_sheet(s, PartContext::new(&state.doc).as_ref(), format, &path);
     match written {
-        Ok(()) => {
-            s.say(format!("Exported {}", path.display()));
+        Ok(w) => {
+            let redrawn = match w.redrawn {
+                0 => String::new(),
+                n => format!(" · {n} view{} drawn from the certified mesh", if n == 1 { "" } else { "s" }),
+            };
+            s.say(format!("Exported {}{redrawn}", path.display()));
             state.note(format!("Exported {}", path.display()), NoteKind::Ok);
         }
         Err(e) => {
@@ -1679,6 +1683,17 @@ fn export_sheet(state: &mut AppState, format: export::Format, path: Option<PathB
             state.note(e, NoteKind::Error);
         }
     }
+}
+
+/// What an export wrote, for the status line and the agent tools.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SheetExport {
+    /// Views on the sheets written.
+    pub views: usize,
+    /// Views that were screen previews and were drawn again from the certified mesh.
+    pub redrawn: usize,
+    /// The part revision the written views show.
+    pub revision: ContentHash,
 }
 
 /// Writes the drawing as `format` at `path`: the current sheet, or every sheet as a
@@ -1689,9 +1704,9 @@ pub(crate) fn write_sheet(
     part: Option<&PartContext>,
     format: export::Format,
     path: &Path,
-) -> Result<(), String> {
+) -> Result<SheetExport, String> {
     let stale = s.doc.stale_views();
-    let drawing = certified(&s.doc.drawing, part)?;
+    let (drawing, redrawn) = certified(&s.doc.drawing, part)?;
     let drawing = drawing.as_ref().unwrap_or(&s.doc.drawing);
     let count = drawing.sheets.len();
     let list_of = |i: usize| {
@@ -1718,16 +1733,21 @@ pub(crate) fn write_sheet(
     };
     bytes.map_err(|e| e.to_string()).and_then(|bytes| crate::platform::write_file(path, &bytes))?;
     s.last_export = Some(path.to_path_buf());
-    Ok(())
+    let views = match format {
+        export::Format::Pdf => drawing.sheets.iter().map(|sheet| sheet.views.len()).sum(),
+        _ => drawing.sheets.get(s.sheet).map_or(0, |sheet| sheet.views.len()),
+    };
+    Ok(SheetExport { views, redrawn, revision: drawing.model.pinned.clone() })
 }
 
 /// A copy of `drawing` with its preview views drawn from the certified mesh, or `None`
-/// when no view is a preview. Only views of the open part's current revision can be
-/// certified; a preview of another revision waits for a Rebuild.
-fn certified(drawing: &Drawing, part: Option<&PartContext>) -> Result<Option<Drawing>, String> {
+/// when no view is a preview, with the number of views drawn again. Only views of the
+/// open part's current revision can be certified; a preview of another revision waits
+/// for a Rebuild.
+fn certified(drawing: &Drawing, part: Option<&PartContext>) -> Result<(Option<Drawing>, usize), String> {
     let previews: Vec<&View> = drawing.sheets.iter().flat_map(|s| &s.views).filter(|v| v.geometry.unproved).collect();
     if previews.is_empty() {
-        return Ok(None);
+        return Ok((None, 0));
     }
     let unproved = || soliddraft_drawing::DrawingError::Unproved.to_string();
     let part = part.ok_or_else(unproved)?;
@@ -1737,7 +1757,7 @@ fn certified(drawing: &Drawing, part: Option<&PartContext>) -> Result<Option<Dra
     let mut copy = drawing.clone();
     soliddraft_drawing::apply_with(&mut copy, &Command::UpdateFromModel, &part.certified_part())
         .map_err(|e| e.to_string())?;
-    Ok(Some(copy))
+    Ok((Some(copy), previews.len()))
 }
 
 fn save_drawing(state: &mut AppState, path: Option<PathBuf>) {
