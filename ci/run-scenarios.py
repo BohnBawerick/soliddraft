@@ -17,6 +17,8 @@ import time
 BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
 # Calibrated independently from click latency; see docs/application-loop.md.
 DRAWING_VIEW_BUDGET_MS = 1000
+# A requested measurement keeps its 1,000 ms click-class budget; no wait above this gate is accepted.
+MEASUREMENT_GATE_MS = 2000
 PHASES = ("construction", "edit", "display", "measurement", "refusal")
 DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "preview", "preview_edges", "view_curves",
            "section_view"}
@@ -125,6 +127,43 @@ def drawing_view_timing(elapsed_ms, kernel):
             "budget_ms": DRAWING_VIEW_BUDGET_MS, "pass": elapsed_ms <= DRAWING_VIEW_BUDGET_MS}
 
 
+def measurement_timing(elapsed_ms, kernel):
+    """The explicit measurement request, judged against its own budget and the 2,000 ms gate."""
+    result = timing("measure", [{"source": "measurement.kernel.json", "elapsed_ms": elapsed_ms,
+                                "phase": "measurement", "kernel": kernel}])
+    return {**result, "check": "requested measurement budget", "gate_ms": MEASUREMENT_GATE_MS,
+            "within_gate": elapsed_ms <= MEASUREMENT_GATE_MS, "pass": result["pass"] and elapsed_ms <= MEASUREMENT_GATE_MS}
+
+
+def verdict(result):
+    """strict-pass met its budget; known-gap was accepted over budget; fail was not accepted."""
+    if not result["pass"]:
+        return "fail"
+    return "strict-pass" if result.get("within_budget", True) else "known-gap"
+
+
+def answers(request, command, evidence, selectable=False):
+    """Why this reply cannot answer the request, or None when it does.
+
+    A reply that carries no request and revision, or the wrong ones, is an early or stale
+    answer and never ends an interval. An answer still pending or not selectable does not either."""
+    if not isinstance(evidence, dict):
+        return "no reply"
+    if evidence.get("pending"):
+        return "reply is still pending"
+    for key, want in (("request", request), ("revision", command.get("revision"))):
+        got = evidence.get(key)
+        if isinstance(got, bool) or not isinstance(got, int) or isinstance(want, bool) or not isinstance(want, int):
+            return f"reply does not say which {key} it answers"
+        if got != want:
+            return f"stale: answers {key} {got}, not {want}"
+    if selectable:
+        faces = evidence.get("selectable_faces")
+        if isinstance(faces, bool) or not isinstance(faces, int) or faces < 1:
+            return "the edit is not selectable in the viewport"
+    return None
+
+
 def load_known_over_budget(path):
     policy = json.loads(path.read_text())
     if policy["format"] != "soliddraft-known-over-budget/1":
@@ -147,6 +186,7 @@ def accept_latency(scenario, number, tool, latency, known):
               "status": "pass" if latency["pass"] else "over-budget"}
     approved = known.get((scenario, number))
     if approved is None:
+        result["verdict"] = verdict(result)
         return result
     result["known_over_budget"] = approved
     label = f"{scenario} step {number} ({tool})"
@@ -169,6 +209,7 @@ def accept_latency(scenario, number, tool, latency, known):
                              f"recorded {approved['last_measured_ms']:.3f} ms, "
                              f"20% regression limit {result['regression_limit_ms']:.3f} ms; "
                              f"budget remains {latency['budget_ms']} ms")
+    result["verdict"] = verdict(result)
     return result
 
 
@@ -357,13 +398,23 @@ def timings(steps):
              "pass": s["pass"]} for s in steps if "label" in s]
 
 
+def wait(client, entry, name, arguments):
+    """One timed MCP call. A timeout or closed pipe leaves the step incomplete, never passed."""
+    try:
+        return client.request("tools/call", {"name": name, "arguments": arguments})
+    except RuntimeError as error:
+        entry["incomplete"] = {"request": name, "reason": str(error)}
+        raise
+
+
 def run(args):
     scenario = json.loads(args.scenario.read_text())
     if scenario["format"] != "soliddraft-scenario/1" or not scenario.get("steps"):
         raise ValueError("expected soliddraft-scenario/1 with steps")
     args.out.mkdir(parents=True, exist_ok=False)
     write(args.out / "scenario.json", scenario)
-    report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False}
+    report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False,
+              "strict_pass": False}
     client = None
     try:
         known_latency = load_known_over_budget(pathlib.Path(__file__).with_name("known-over-budget.json"))
@@ -385,7 +436,7 @@ def run(args):
             report["steps"].append(entry)
             arguments = substitute(step.get("arguments", {}), args.out)
             started = time.perf_counter_ns()
-            result = client.request("tools/call", {"name": step["tool"], "arguments": arguments})
+            result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000
             directory = args.out / "commands" / f"{number:04}"
             command = json.loads((directory / "command.json").read_text())
@@ -395,6 +446,9 @@ def run(args):
             entry["feature_count"] = len(command["summary"]["features"])
             checks = entry["checks"]
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == bool(step.get("refusal"))})
+            if command.get("request") != number:
+                checks.append({"check": "command evidence is this request", "actual": command.get("request"),
+                               "pass": False})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
@@ -420,20 +474,31 @@ def run(args):
                         raise RuntimeError(f"renderer preparation failed: {response}")
                     prepared = True
                 started = time.perf_counter_ns()
-                displayed = client.request("tools/call", {"name": "scenario_display", "arguments": {}})
+                displayed = wait(client, entry, "scenario_display", {})
                 display_ms = (time.perf_counter_ns() - started) / 1_000_000
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
                                  "kernel": json.loads((directory / "display.kernel.json").read_text())})
+                display = None
                 if not displayed.get("isError"):
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
+                # The click ends only when the viewport shows this revision with pickable faces.
+                reason = "display request failed" if display is None else answers(number, command, display, True)
+                checks.append({"check": "click ends at a visible selectable edit", "reason": reason,
+                               "pass": reason is None})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
             entry["waits_ms"] = [{"source": s["source"], "elapsed_ms": s["elapsed_ms"]} for s in segments]
             write(directory / "waits.json", entry["waits_ms"])
             latency = accept_latency(scenario["name"], number, step["tool"], timing(step["tool"], segments), known_latency)
             entry["timing"] = latency
+            entry["intervals"] = {"preview": {
+                "starts": "command request sent",
+                "ends": "visible selectable edit" if (directory / "recipe.json").exists()
+                        else "command reply, no solid to show",
+                "elapsed_ms": latency["elapsed_ms"], "budget_ms": latency["budget_ms"],
+                "verdict": latency["verdict"]}}
             checks.append(latency)
             write(directory / "timing.json", latency)
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
@@ -444,7 +509,7 @@ def run(args):
             view_latency = None
             if (directory / "recipe.json").exists():
                 started = time.perf_counter_ns()
-                viewed = client.request("tools/call", {"name": "scenario_view", "arguments": {}})
+                viewed = wait(client, entry, "scenario_view", {})
                 view_ms = (time.perf_counter_ns() - started) / 1_000_000
                 checks.append({"check": "live hidden-line view", "response": viewed,
                                "pass": not viewed.get("isError")})
@@ -457,8 +522,12 @@ def run(args):
                 if not view_latency["pass"]:
                     print(f"::error::Drawing-view step {number} took {view_ms:.3f} ms; "
                           f"budget is {DRAWING_VIEW_BUDGET_MS} ms", flush=True)
+                entry["intervals"]["view"] = {"elapsed_ms": view_ms, "budget_ms": DRAWING_VIEW_BUDGET_MS,
+                                              "verdict": verdict(view_latency)}
                 if not viewed.get("isError"):
                     view = json.loads((directory / "view.json").read_text())
+                    reason = answers(number, command, view)
+                    checks.append({"check": "view answers this request", "reason": reason, "pass": reason is None})
                     checks.append({"check": "live Catallax hidden-line view", "actual": view,
                                    "pass": view["backend"]["name"] == "catallax" and view["live_document"]
                                            and view["method"] == "mesh"})
@@ -477,25 +546,34 @@ def run(args):
             evidence = command
             if any(spec["pointer"].startswith("/measurement/") for spec in step.get("checks", [])):
                 started = time.perf_counter_ns()
-                measured = client.request("tools/call", {"name": "scenario_measure", "arguments": {}})
+                measured = wait(client, entry, "scenario_measure", {})
                 measured_ms = (time.perf_counter_ns() - started) / 1_000_000
                 checks.append({"check": "requested measurement", "pass": not measured.get("isError"),
                                "response": measured})
                 measurement = None
-                measure_timing = timing("measure", [{
-                    "source": "measurement.kernel.json", "elapsed_ms": measured_ms, "phase": "measurement",
-                    "kernel": json.loads((directory / "measurement.kernel.json").read_text())}])
-                measure_timing["check"] = "requested measurement budget"
+                measure_timing = measurement_timing(
+                    measured_ms, json.loads((directory / "measurement.kernel.json").read_text()))
+                measure_timing["verdict"] = verdict(measure_timing)
                 entry["measurement"] = measure_timing
+                entry["intervals"]["measurement"] = {
+                    "elapsed_ms": measured_ms, "budget_ms": measure_timing["budget_ms"],
+                    "gate_ms": MEASUREMENT_GATE_MS, "verdict": measure_timing["verdict"]}
                 checks.append(measure_timing)
                 if not measured.get("isError"):
                     measurement = json.loads((directory / "measurement.json").read_text())
+                    # A proof for an older request or revision cannot stand in for this one.
+                    reason = answers(number, command, measurement)
+                    checks.append({"check": "measurement answers this request", "reason": reason,
+                                   "pass": reason is None})
+                    if reason is not None:
+                        measurement = None
                 evidence = {**command, "measurement": measurement}
             checks.extend(check(evidence, spec) for spec in step.get("checks", []))
             # Exports run after the click is timed, as a user's separate request would.
             for extension in step.get("export", []):
                 exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
                     "--out", directory / f"part.{extension}"], directory, f"export-{extension}", args.timeout)
+                entry["intervals"].setdefault("export", {})[extension] = {"elapsed_ms": exported["elapsed_ms"]}
                 if exported["pass"]:
                     exported["report"] = json.loads((directory / f"export-{extension}.stdout").read_text())["report"]
                 checks.append(exported)
@@ -511,6 +589,11 @@ def run(args):
         report["pass"] = (len(report["steps"]) == len(scenario["steps"])
             and all(s["pass"] for s in report["steps"]) and all(t["pass"] for t in report["trends"]))
         report["timings"] = timings(report["steps"])
+        report["known_gaps"] = [
+            {"step": s["number"], "tool": s["tool"], "elapsed_ms": s["timing"]["elapsed_ms"],
+             "budget_ms": s["timing"]["budget_ms"]} for s in report["steps"]
+            if s.get("timing", {}).get("verdict") == "known-gap"]
+        report["strict_pass"] = report["pass"] and not report["known_gaps"]
     except Exception as error:
         report["error"] = str(error)
     finally:
@@ -522,7 +605,9 @@ def run(args):
             report["pass"] = False
         write(args.out / "protocol.json", client.transcript if client else [])
         write(args.out / "result.json", report)
-    print(json.dumps({"bundle": str(args.out), "pass": report["pass"], "error": report.get("error"),
+    print(json.dumps({"bundle": str(args.out), "pass": report["pass"],
+                      "strict_pass": report.get("strict_pass", False),
+                      "known_gaps": len(report.get("known_gaps", [])), "error": report.get("error"),
                       "timings": report.get("timings", [])}))
     return 0 if report["pass"] else 1
 

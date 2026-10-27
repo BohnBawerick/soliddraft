@@ -70,6 +70,7 @@ impl<'a> Evidence<'a> {
             &json!({
                 "tool":name,"arguments":input,"is_error":output.is_error,"output":output.content,
                 "backend":doc.kernel().backend(),"summary":summary,"references":references,
+                "request":self.sequence,"revision":doc.revision(),
                 "rebuild":rebuild_report(doc.model(), &work),
             }),
         )?;
@@ -93,7 +94,11 @@ impl<'a> Evidence<'a> {
             .ok_or("call scenario_prepare before capture")?
             .capture(doc, &dir.join("viewport.png"))?;
         // The viewport and drawing views show preview meshes, which claim no bounds.
-        let result = json!({"backend":doc.kernel().backend(),"method":"viewport","mesh":"unproved preview","live_document":true});
+        // The request and revision let the runner tell this capture from an older one.
+        let result = json!({
+            "backend":doc.kernel().backend(),"method":"viewport","mesh":"unproved preview","live_document":true,
+            "request":self.sequence,"revision":doc.revision(),"selectable_faces":selectable_faces(doc),
+        });
         write_json(dir.join("display.json"), &result)?;
         Ok(result)
     }
@@ -113,8 +118,10 @@ impl<'a> Evidence<'a> {
         let curves = doc.kernel().view_curves(body, &spec)?;
         let frame = spec.frame().ok_or("invalid scenario view frame")?;
         std::fs::write(dir.join("view.svg"), crate::view::svg(&curves, &[], &frame))?;
-        let result =
-            json!({"backend":doc.kernel().backend(),"method":"mesh","mesh":"unproved preview","live_document":true});
+        let result = json!({
+            "backend":doc.kernel().backend(),"method":"mesh","mesh":"unproved preview","live_document":true,
+            "request":self.sequence,"revision":doc.revision(),
+        });
         write_json(dir.join("view.json"), &result)?;
         Ok(result)
     }
@@ -126,6 +133,7 @@ impl<'a> Evidence<'a> {
         let mass = doc.display_body().map(|body| doc.kernel().mass_properties(body)).transpose()?;
         let result = json!({
             "backend":doc.kernel().backend(), "live_document":true,
+            "request":self.sequence, "revision":doc.revision(),
             "volume_mm3":mass.map(|m| m.volume),
             "area_mm2":mass.map(|m| m.area),
             "centre_of_mass":mass.map(|m| [m.centroid.x,m.centroid.y,m.centroid.z]),
@@ -133,6 +141,12 @@ impl<'a> Evidence<'a> {
         write_json(dir.join("measurement.json"), &result)?;
         Ok(result)
     }
+}
+
+/// The faces of the displayed body a click can pick, from the pick ids of its display mesh.
+fn selectable_faces(doc: &soliddraft_app::document::Document) -> usize {
+    let Some(mesh) = doc.display_body().and_then(|body| doc.meshes.get(&body)) else { return 0 };
+    mesh.face_picks.iter().filter(|pick| **pick != 0).collect::<BTreeSet<_>>().len()
 }
 
 /// What a command rebuilt: the features whose kernel operations ran, in tree order
