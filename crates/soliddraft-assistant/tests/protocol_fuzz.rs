@@ -456,6 +456,32 @@ fn http_refuses_an_oversized_header_line_instead_of_buffering_it() {
 }
 
 #[test]
+fn http_answers_431_to_a_client_that_keeps_sending_past_the_limit() {
+    // The refusal must reach the client even while more of the request is in flight:
+    // closing on unread bytes resets the connection, and Windows then drops the answer.
+    let mut stream = TcpStream::connect(server()).expect("connect");
+    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    let mut sender = stream.try_clone().unwrap();
+    let sending = std::thread::spawn(move || {
+        let _ = sender.write_all(b"POST /mcp HTTP/1.1\r\nX-Padding: ");
+        for _ in 0..64 {
+            if sender.write_all(&[b'a'; 64 * 1024]).is_err() {
+                return false;
+            }
+        }
+        let _ = sender.shutdown(Shutdown::Write);
+        true
+    });
+    let mut reply = Vec::new();
+    let ended = stream.read_to_end(&mut reply);
+    let reply = String::from_utf8_lossy(&reply);
+    assert_eq!(status(&reply), Some(431), "{:?}", &reply[..reply.len().min(200)]);
+    ended.expect("the server closes cleanly instead of resetting the connection");
+    assert!(sending.join().unwrap(), "the server reads the rest of the request before it closes");
+    assert_alive();
+}
+
+#[test]
 fn http_refuses_an_oversized_request_line() {
     let reply = exchange(format!("GET /{} HTTP/1.1\r\n\r\n", "a".repeat(2 * 1024 * 1024)).as_bytes());
     assert_eq!(status(&reply), Some(431), "{:?}", &reply[..reply.len().min(200)]);
