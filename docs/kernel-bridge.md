@@ -20,7 +20,7 @@ Exports, the quality report and anything published as proven keep `tessellate`. 
 
 Topology contains exact definitions and incidence with Catallax's proven measures: face areas, centroids and boxes, edge lengths and half-arc-length points, and the body's box. Mass properties include the proven centroidal inertia.
 
-Drawings use polygon hidden-line removal on the meshes and Catallax booleans for plane sections. Whole lines and untrimmed circles keep their geometry after polygon visibility. Other curves retain polylines until conversion queries arrive. Drawing documents and SVG, PDF and DXF exports keep their formats.
+Drawings use polygon hidden-line removal on the meshes. A section view for the screen (`ViewSpec::preview`) is cut from the preview mesh with no boolean (`drawing::section::by_mesh_slice`): the crossings chain into the hatch regions and the cut faces hide what lies behind them. A certified section, as exports and `soliddraft draw` make, subtracts a half-space through a Catallax boolean (`by_half_space`). Whole lines and untrimmed circles keep their geometry after polygon visibility. Other curves retain polylines until conversion queries arrive. Drawing documents and SVG, PDF and DXF exports keep their formats.
 
 ## Export
 

@@ -33,7 +33,7 @@ const REFINE_STEPS: u32 = 16;
 /// surface runs a long way before it leaves, so a few chord heights would mark visible
 /// points hidden there. Real hiding depth grows fast away from a silhouette, so the
 /// margin moves the change between visible and hidden very little.
-const DEPTH_TOL_CHORDS: f64 = 30.0;
+pub(crate) const DEPTH_TOL_CHORDS: f64 = 30.0;
 
 /// Approximate view curves of `body`, from a fine tessellation and edge polylines.
 /// Sheet bodies are refused, as on the exact backends.
@@ -124,8 +124,9 @@ pub fn silhouettes(mesh: &Mesh, frame: &ViewFrame) -> Vec<SourcedPolyline> {
     out
 }
 
-/// Joins segments that share vertices into chains of vertex indices.
-fn chains(segs: Vec<(u32, u32)>) -> Vec<Vec<u32>> {
+/// Joins segments that share vertices into chains of vertex indices. A closed loop comes
+/// back to its first vertex, so its chain starts and ends on it.
+pub(crate) fn chains(segs: Vec<(u32, u32)>) -> Vec<Vec<u32>> {
     let mut next: HashMap<u32, Vec<u32>> = HashMap::new();
     for &(a, b) in &segs {
         next.entry(a).or_default().push(b);
@@ -161,7 +162,7 @@ fn chains(segs: Vec<(u32, u32)>) -> Vec<Vec<u32>> {
     out
 }
 
-fn vec3(p: [f32; 3]) -> Vec3 {
+pub(crate) fn vec3(p: [f32; 3]) -> Vec3 {
     Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]))
 }
 
@@ -266,11 +267,23 @@ impl Occluders {
 /// accuracy of the mesh and polylines, in millimetres: covering triangles must be more
 /// than a few times that in front of a point to hide it.
 pub fn hidden_lines(mesh: &Mesh, lines: &[SourcedPolyline], frame: &ViewFrame, tol: f64) -> ViewCurves {
+    hidden_lines_with(mesh, lines, frame, tol, &|_| false)
+}
+
+/// [`hidden_lines`] with another occluder: `also_hides` says whether something that is
+/// not in the mesh, such as a section's cut faces, hides a point.
+pub fn hidden_lines_with(
+    mesh: &Mesh,
+    lines: &[SourcedPolyline],
+    frame: &ViewFrame,
+    tol: f64,
+    also_hides: &dyn Fn(Vec3) -> bool,
+) -> ViewCurves {
     let occluders = Occluders::new(mesh, frame, tol);
     let size = occluders.cell * occluders.nx as f64;
     let step = (size / 400.0).max(tol);
     let mut curves = Vec::new();
-    let hides = |p: Vec3| occluders.hides(frame, p);
+    let hides = |p: Vec3| occluders.hides(frame, p) || also_hides(p);
     for line in lines {
         let Some(&first) = line.points.first() else { continue };
         // The current stretch and its visibility, which is that of the last sample.

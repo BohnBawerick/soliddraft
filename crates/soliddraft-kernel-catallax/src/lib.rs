@@ -921,6 +921,20 @@ impl Kernel for CatallaxKernel {
     fn view_curves(&self, body: BodyId, spec: &drawing::ViewSpec) -> KernelResult<drawing::ViewCurves> {
         self.observe("view_curves", || drawing_queries::view_curves(self, body, spec))
     }
+    /// A section for the screen is cut from the preview mesh, with no boolean; a
+    /// certified one subtracts a half-space, as every backend's default does. Either is
+    /// observed as one drawing query: its mesh or scratch boolean and the cut body's
+    /// view are nested in this call's log and work scope, so a drawing's section costs
+    /// what it costs on the display side.
+    fn section_view(&self, body: BodyId, spec: &drawing::SectionSpec) -> KernelResult<drawing::SectionView> {
+        self.observe("section_view", || {
+            if spec.view.preview {
+                drawing::section::by_mesh_slice(self, body, spec)
+            } else {
+                drawing::section::by_half_space(self, body, spec)
+            }
+        })
+    }
     fn silhouette_curves(&self, _: BodyId, _: Vec3) -> KernelResult<Vec<drawing::ViewCurve>> {
         self.observe("silhouette_curves", || Err(gap("exact silhouettes", "1, drawing queries (roadmap section 7)")))
     }
