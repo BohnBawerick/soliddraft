@@ -106,6 +106,36 @@ impl PlaneKind {
     }
 }
 
+/// The three origin axes. They are fixed, so no part file stores them and every part
+/// has them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AxisKind {
+    X,
+    Y,
+    Z,
+}
+
+impl AxisKind {
+    pub const ALL: [AxisKind; 3] = [AxisKind::X, AxisKind::Y, AxisKind::Z];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            AxisKind::X => "X axis",
+            AxisKind::Y => "Y axis",
+            AxisKind::Z => "Z axis",
+        }
+    }
+
+    /// The positive direction.
+    pub fn direction(self) -> Vec3 {
+        match self {
+            AxisKind::X => Vec3::X,
+            AxisKind::Y => Vec3::Y,
+            AxisKind::Z => Vec3::Z,
+        }
+    }
+}
+
 /// Where a sketch lies: a reference plane or a planar face of the body so far.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SketchPlane {
