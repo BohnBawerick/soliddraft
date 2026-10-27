@@ -490,7 +490,7 @@ fn mcp(args: &[String]) -> ExitCode {
     let counting = evidence_kernel.clone().map(|k| Arc::new(Counting::new(k)));
     let kernel: Arc<dyn Kernel> = counting.clone().map(|k| k as Arc<dyn Kernel>).unwrap_or_else(soliddraft_app::kernel);
     let doc = match open {
-        Some(path) => match soliddraft_app::file::open(&path, kernel.clone()) {
+        Some(path) => match soliddraft_app::file::open(&path, kernel.clone(), None) {
             Ok(doc) => doc,
             Err(e) => {
                 eprintln!("mcp: cannot open {}: {e}", path.display());

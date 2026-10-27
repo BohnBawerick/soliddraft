@@ -675,4 +675,147 @@ mod rebuild {
         assert_eq!(bodies(&doc)[..built.len() - 1], built[..built.len() - 1]);
         assert_matches_full_replay(&doc, "after rebuilding a released build");
     }
+
+    fn plate(doc: &mut Document, width: f64, height: f64) -> (FeatureId, FeatureId) {
+        let mut profile = Sketch::new();
+        profile.rectangle(p(0.0, 0.0), width, height).unwrap();
+        let sketch = add(
+            doc,
+            "Plate profile",
+            sketch_on(SketchPlane::Datum { datum: DatumPlane::Top, offset: 0.0 }, solved(profile)),
+        );
+        let body = add(doc, "Plate", extrude(sketch, ExtrudeOp::Boss, blind(10.0), false));
+        (sketch, body)
+    }
+
+    #[test]
+    fn warm_reopen_keeps_live_bodies_and_budget_after_the_source_drops() {
+        let kernel = counting();
+        let mut source = Document::new("Reopen", kernel.clone());
+        let (profile, base) = plate(&mut source, 40.0, 30.0);
+        source.set_rebuild_budget(0);
+        for depth in [14.0, 10.0] {
+            source
+                .execute(Command::EditFeature {
+                    id: base,
+                    kind: extrude(profile, ExtrudeOp::Boss, blind(depth), false),
+                })
+                .unwrap();
+        }
+        let plane = pick_face(&source, Vec3::new(0.0, 0.0, 10.0), Vec3::Z);
+        let mut marker = Sketch::new();
+        marker.circle_at(p(0.0, 0.0), 4.0).unwrap();
+        add(&mut source, "Face marker", sketch_on(plane, solved(marker)));
+        let expected = bodies(&source);
+        let usage = source.rebuild_cache_usage();
+        let bytes = source.to_bytes().unwrap();
+        kernel.take();
+
+        let reopened = Document::from_bytes_with_input(&bytes, kernel.clone(), Some(&source), |_| {}).unwrap();
+        assert_eq!(kernel.take(), [], "reopening the current definition rebuilt geometry");
+        assert_eq!(bodies(&reopened), expected);
+        assert_eq!(
+            reopened.rebuild_cache_usage(),
+            usage,
+            "reuse must not raise the retention budget or double-charge bodies"
+        );
+        drop(source);
+        assert!((reopened.kernel().mass_properties(reopened.body().unwrap()).unwrap().volume - 12000.0).abs() < 1e-6);
+        assert_matches_full_replay(&reopened, "after dropping the reopen source");
+    }
+
+    #[test]
+    fn warm_reopen_invalidates_eight_cuts_and_preserves_fresh_replay_refusals() {
+        let kernel = counting();
+        let mut source = Document::new("Perforated plate", kernel.clone());
+        let (profile, base) = plate(&mut source, 120.0, 50.0);
+        let mut cuts = Vec::new();
+        for i in 0..8 {
+            let mut circle = Sketch::new();
+            circle.circle_at(p(-49.0 + 14.0 * i as f64, 0.0), 4.0).unwrap();
+            let sketch = add(
+                &mut source,
+                &format!("Hole profile {i}"),
+                sketch_on(SketchPlane::Datum { datum: DatumPlane::Top, offset: 20.0 }, solved(circle)),
+            );
+            cuts.push(add(&mut source, &format!("Hole {i}"), cut(sketch, blind(20.0))));
+        }
+        let plane = pick_face(&source, Vec3::new(0.0, 15.0, 10.0), Vec3::Z);
+        let mut marker = Sketch::new();
+        marker.circle_at(p(0.0, 15.0), 2.0).unwrap();
+        let reference = add(&mut source, "Face marker", sketch_on(plane, solved(marker)));
+        let original = bodies(&source);
+        let mut edited = source.fork();
+        edited
+            .execute(Command::EditFeature { id: base, kind: extrude(profile, ExtrudeOp::Boss, blind(14.0), false) })
+            .unwrap();
+        edited.execute(Command::RenameFeature { id: base, name: "Edited plate".into() }).unwrap();
+        let bytes = edited.to_bytes().unwrap();
+        drop(edited);
+        kernel.take();
+
+        let mut reopened = Document::from_bytes_with_input(&bytes, kernel.clone(), Some(&source), |_| {}).unwrap();
+        assert_eq!(recomputed(&kernel.take()).0, std::iter::once(base).chain(cuts.iter().copied()).collect());
+        for feature in std::iter::once(base).chain(cuts.iter().copied()) {
+            assert_ne!(reopened.body_after(feature), source.body_after(feature), "{feature} reused an invalid body");
+            assert!(reopened.status(feature).unwrap().is_ok());
+        }
+        assert_eq!(reopened.feature(base).unwrap().name, "Edited plate");
+        assert!((reopened.built_sketch(reference).unwrap().plane.origin.z - 14.0).abs() < 1e-9);
+        assert_matches_full_replay(&reopened, "after reopening changed inputs above eight cuts");
+
+        kernel.take();
+        reopened
+            .execute(Command::EditFeature { id: base, kind: extrude(profile, ExtrudeOp::Boss, blind(10.0), false) })
+            .unwrap();
+        assert_eq!(kernel.take(), [], "restoring the file's previous input rebuilt its retained bodies");
+        assert_eq!(bodies(&reopened), original);
+        assert!((reopened.built_sketch(reference).unwrap().plane.origin.z - 10.0).abs() < 1e-9);
+
+        let last = *cuts.last().unwrap();
+        let FeatureKind::Extrude(mut invalid) = source.feature(last).unwrap().kind.clone() else { panic!() };
+        invalid.end = blind(-1.0);
+        let mut refused = source.fork();
+        refused.execute(Command::EditFeature { id: last, kind: FeatureKind::Extrude(invalid) }).unwrap();
+        let bytes = refused.to_bytes().unwrap();
+        drop(refused);
+        kernel.take();
+        let refused = Document::from_bytes_with_input(&bytes, kernel.clone(), Some(&source), |_| {}).unwrap();
+        assert_eq!(kernel.take(), [], "a refused cut recomputed the valid prefix");
+        assert!(matches!(refused.status(last), Some(FeatureStatus::Failed { .. })));
+        assert_eq!(refused.body(), source.body_after(cuts[6]), "the old eighth cut leaked past the refusal");
+        assert_matches_full_replay(&refused, "after reopening a refused late cut");
+    }
+
+    #[test]
+    fn warm_reopen_rejects_foreign_document_and_kernel_caches() {
+        let kernel = counting();
+        let mut source = Document::new("Source", kernel.clone());
+        let (_, base) = plate(&mut source, 40.0, 30.0);
+        source.set_rebuild_budget(0);
+        let mut foreign = Document::new("Foreign", kernel.clone());
+        let (_, foreign_base) = plate(&mut foreign, 40.0, 30.0);
+        let bytes = foreign.to_bytes().unwrap();
+        kernel.take();
+        let reopened = Document::from_bytes_with_input(&bytes, kernel.clone(), Some(&source), |_| {}).unwrap();
+        assert_eq!(
+            recomputed(&kernel.take()).0,
+            [foreign_base].into(),
+            "a different document reused the source namespace"
+        );
+        assert_eq!(reopened.id(), foreign.id());
+        assert_ne!(reopened.body(), source.body());
+        assert_matches_full_replay(&reopened, "after rejecting a foreign document cache");
+
+        let foreign_kernel = counting();
+        let bytes = source.to_bytes().unwrap();
+        let reopened = Document::from_bytes_with_input(&bytes, foreign_kernel.clone(), Some(&source), |_| {}).unwrap();
+        assert_eq!(
+            recomputed(&foreign_kernel.take()).0,
+            [base].into(),
+            "a different kernel reused foreign body handles"
+        );
+        assert_eq!(reopened.id(), source.id());
+        assert_matches_full_replay(&reopened, "after rejecting a foreign kernel cache");
+    }
 }

@@ -2110,7 +2110,7 @@ impl ToolHost for CommandTools<'_> {
             })(),
             "open" if mcp => (|| {
                 let path = part_path(&input)?;
-                let mut doc = crate::journal::open_part(&path, self.doc.kernel().clone())?;
+                let mut doc = crate::journal::open_part(&path, self.doc.kernel().clone(), Some(self.doc.model()))?;
                 doc.path = Some(path.clone());
                 *self.doc = doc;
                 Ok(json!({ "opened": path }))

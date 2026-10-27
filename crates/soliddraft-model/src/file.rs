@@ -260,20 +260,26 @@ impl Document {
     /// Reads a part from a file's bytes and rebuilds it on `kernel`. A file from before
     /// the envelope gets the id derived from its content.
     pub fn from_bytes(bytes: &[u8], kernel: Arc<dyn Kernel>) -> Result<Document, FileError> {
-        let mut doc = Self::from_bytes_unbuilt(bytes, kernel)?;
-        doc.rebuild();
-        Ok(doc)
+        Self::from_bytes_with_input(bytes, kernel, None, |_| {})
     }
 
     /// Loads through the ordinary parser and rebuild loop, exposing authored input
     /// once before kernel work so a crash journal does not need the source file.
+    /// A matching document on the same kernel may supply retained builds. Its cache
+    /// budget is preserved; exact input keys decide reuse, and trimming waits until
+    /// the rebuilt tree is live. `None` always starts with a cold cache.
     pub fn from_bytes_with_input(
         bytes: &[u8],
         kernel: Arc<dyn Kernel>,
+        source: Option<&Document>,
         input: impl FnOnce(&Document),
     ) -> Result<Document, FileError> {
         let mut doc = Self::from_bytes_unbuilt(bytes, kernel)?;
         input(&doc);
+        if let Some(source) = source.filter(|source| source.id == doc.id && Arc::ptr_eq(&source.kernel, &doc.kernel)) {
+            doc.cache.set_budget(source.cache.budget());
+            doc.cache.import(&source.cache);
+        }
         doc.rebuild();
         Ok(doc)
     }

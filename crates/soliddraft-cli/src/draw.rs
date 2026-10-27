@@ -625,7 +625,7 @@ fn with_part<R>(
     });
     let result = (|| match DocKind::of_path(path) {
         Some(DocKind::Part) => {
-            let doc = soliddraft_app::file::open(path, kernel.clone())?;
+            let doc = soliddraft_app::file::open(path, kernel.clone(), None)?;
             let ctx = PartContext::new(&doc).ok_or_else(|| format!("{}: the part has no body", path.display()))?;
             let backend = doc.kernel().backend();
             let source = Source {

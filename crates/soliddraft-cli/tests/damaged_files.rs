@@ -406,7 +406,9 @@ fn assert_libraries_refuse(kind: DocKind, path: &Path, bytes: &[u8], case: &Case
             check("Document::from_bytes", part_refusal(&e), e.to_string());
             let e = Document::open(path, kernel()).err().unwrap_or_else(|| panic!("{} opened", case.label));
             check("Document::open", part_refusal(&e), e.to_string());
-            let e = soliddraft_app::file::open(path, kernel()).err().unwrap_or_else(|| panic!("{} opened", case.label));
+            let e = soliddraft_app::file::open(path, kernel(), None)
+                .err()
+                .unwrap_or_else(|| panic!("{} opened", case.label));
             assert!(e.contains(&path.display().to_string()), "{}: the app's message names the file: {e}", case.label);
         }
         DocKind::Drawing => {
