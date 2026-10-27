@@ -1,0 +1,10 @@
+[Unit]
+Description=Deploy the newest SolidDraft web release
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.config/soliddraft-web/deploy.env
+ExecStart=%h/.local/share/soliddraft-web/deploy.sh --latest-release
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle

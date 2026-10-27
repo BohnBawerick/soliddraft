@@ -6,10 +6,11 @@ services:
   web:
     image: soliddraft-web:${SOLIDDRAFT_WEB_TAG:-latest}
     build:
-      context: ../..
+      context: ${SOLIDDRAFT_WEB_CONTEXT:-../..}
       dockerfile: deploy/web/Dockerfile
       args:
         SOLIDDRAFT_COMMIT: ${SOLIDDRAFT_COMMIT:-}
+        BUILD_JOBS: ${CARGO_BUILD_JOBS:-4}
     # The Docker daemon is a system service, so the container comes back after a reboot
     # without anyone logging in.
     restart: unless-stopped
