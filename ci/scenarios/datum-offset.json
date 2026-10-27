@@ -1,0 +1,116 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "datum-offset",
+  "max_work": 20000000,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "front",
+        "offset": -6,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              30,
+              6,
+              18
+            ],
+            "width": 14,
+            "height": 6
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 7,
+        "flip": false
+      },
+      "label": "offset datum extrusion",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 588,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 6,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/datum-offset.dwprt"
+      }
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/datum-offset.dwprt"
+      }
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 8,
+        "flip": false
+      },
+      "label": "reopened offset extrusion edit",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 672,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 6,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "edit_dimension",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "value": 16
+      },
+      "label": "reopened offset sketch edit",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 768,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 6,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ]
+}

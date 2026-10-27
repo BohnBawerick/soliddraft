@@ -109,14 +109,24 @@ impl PlaneKind {
 /// Where a sketch lies: a reference plane or a planar face of the body so far.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SketchPlane {
-    Reference { plane: PlaneKind },
-    Face { face: FaceRef },
+    Reference {
+        plane: PlaneKind,
+        /// Signed distance along the datum normal, in millimetres.
+        #[serde(default)]
+        offset: f64,
+    },
+    Face {
+        face: FaceRef,
+    },
 }
 
 impl SketchPlane {
     pub fn label(&self) -> String {
         match self {
-            SketchPlane::Reference { plane } => plane.label().to_owned(),
+            SketchPlane::Reference { plane, offset } if *offset == 0.0 => plane.label().to_owned(),
+            SketchPlane::Reference { plane, offset } => {
+                format!("{} (offset {} mm)", plane.label(), fmt_mm(*offset))
+            }
             SketchPlane::Face { face } if face.label.is_empty() => "Face".to_owned(),
             SketchPlane::Face { face } => face.label.clone(),
         }
@@ -124,7 +134,9 @@ impl SketchPlane {
 
     fn to_model(&self) -> model::SketchPlane {
         match self {
-            SketchPlane::Reference { plane } => model::SketchPlane::Datum { datum: plane.to_model(), offset: 0.0 },
+            SketchPlane::Reference { plane, offset } => {
+                model::SketchPlane::Datum { datum: plane.to_model(), offset: *offset }
+            }
             SketchPlane::Face { face } => model::SketchPlane::Face { face: face.clone() },
         }
     }
@@ -432,8 +444,8 @@ impl FeatureKind {
         match kind {
             model::FeatureKind::Sketch(s) => {
                 let plane = match &s.plane {
-                    model::SketchPlane::Datum { datum, .. } => {
-                        SketchPlane::Reference { plane: PlaneKind::from_model(*datum) }
+                    model::SketchPlane::Datum { datum, offset } => {
+                        SketchPlane::Reference { plane: PlaneKind::from_model(*datum), offset: *offset }
                     }
                     model::SketchPlane::Face { face } => SketchPlane::Face { face: face.clone() },
                 };
@@ -2267,8 +2279,10 @@ mod tests {
             })
             .unwrap()
             .unwrap();
-        let flange_sketch =
-            d.apply(Command::AddSketch { plane: SketchPlane::Reference { plane: PlaneKind::Front } }).unwrap().unwrap();
+        let flange_sketch = d
+            .apply(Command::AddSketch { plane: SketchPlane::Reference { plane: PlaneKind::Front, offset: 0.0 } })
+            .unwrap()
+            .unwrap();
         d.apply(Command::EditSketch { id: flange_sketch, sketch: rect_sketch(100.0, 40.0, P2::new(-50.0, 0.0)) })
             .unwrap();
         let flange = d

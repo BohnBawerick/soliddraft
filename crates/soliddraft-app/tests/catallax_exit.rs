@@ -266,7 +266,10 @@ fn polygon_controls_commit_undo_redo_and_extrude_on_catallax() {
         .with_render_every_step(true)
         .wgpu()
         .build_eframe(|cc| SolidDraftApp::new(cc, soliddraft_app::new_document(), Automation::default()));
-    harness.state_mut().state.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: PlaneKind::Top }));
+    harness
+        .state_mut()
+        .state
+        .push(AppAction::StartSketchOn(SketchPlane::Reference { plane: PlaneKind::Top, offset: 0.0 }));
     harness.run_steps(5);
     harness.get_by_label("Polygon and modify").scroll_to_me();
     harness.run_steps(3);

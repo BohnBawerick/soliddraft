@@ -188,8 +188,10 @@ fn datum_sketch_edits_keep_the_solid_mesh_picks_and_gpu_upload() {
     let pick = doc.pick_of_face(selected);
     doc.selection = Some(Selection::Face(selected));
     let upload = doc.mesh_version;
-    let sketch =
-        doc.apply(Command::AddSketch { plane: SketchPlane::Reference { plane: PlaneKind::Top } }).unwrap().unwrap();
+    let sketch = doc
+        .apply(Command::AddSketch { plane: SketchPlane::Reference { plane: PlaneKind::Top, offset: 0.0 } })
+        .unwrap()
+        .unwrap();
     let unchanged = |doc: &Document| {
         assert_eq!(doc.display_body(), Some(body));
         assert!(Arc::ptr_eq(&doc.meshes[&body], &mesh), "a sketch replaced the solid's display mesh");

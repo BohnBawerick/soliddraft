@@ -643,7 +643,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                         )
                         .clicked()
                     {
-                        actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: p }));
+                        actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: p, offset: 0.0 }));
                     }
                 }
             }

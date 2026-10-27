@@ -72,6 +72,9 @@ pub enum Line {
     Sketch {
         /// `top`, `front`, `right`, or a planar face's name.
         plane: String,
+        /// Signed datum offset along its normal, mm; omitted means zero. Faces require zero.
+        #[serde(default)]
+        offset: f64,
         /// The shapes.
         shapes: Vec<Shape>,
     },
@@ -79,6 +82,9 @@ pub enum Line {
     SketchGeometry {
         /// Reference plane or planar face name.
         plane: String,
+        /// Signed datum offset along its normal, mm; omitted means zero. Faces require zero.
+        #[serde(default)]
+        offset: f64,
         /// Operations in order; entity ids start at 1 and are never reused.
         operations: Vec<sketch::tools::Operation>,
     },
@@ -360,6 +366,7 @@ pub fn sketch_params() -> Vec<(&'static str, Value)> {
                  face's name, such as Boss-Extrude1 · End cap (its u and v are listed by `feature`)",
             ),
         ),
+        ("offset", optional(number("Signed datum offset along its normal, mm; default 0. Not supported on faces"))),
         ("shapes", non_empty_array(shape_schema(), "The closed shapes")),
     ]
 }
@@ -368,6 +375,7 @@ pub fn sketch_params() -> Vec<(&'static str, Value)> {
 pub fn sketch_geometry_params() -> Vec<(&'static str, Value)> {
     vec![
         ("plane", string("top, front, right, or a planar face name")),
+        ("offset", optional(number("Signed datum offset along its normal, mm; default 0. Not supported on faces"))),
         (
             "operations",
             non_empty_array(
@@ -701,13 +709,19 @@ fn datum_by_name(doc: &Document, name: &str) -> Option<PlaneKind> {
     })
 }
 
-fn sketch_plane(doc: &Document, plane: &str) -> Result<SketchPlane, String> {
+fn sketch_plane(doc: &Document, plane: &str, offset: f64) -> Result<SketchPlane, String> {
+    if !offset.is_finite() || offset.abs() > MAX_LENGTH_MM {
+        return Err(format!("datum offset must be finite and within {MAX_LENGTH_MM} mm of zero"));
+    }
     if let Some(plane) = datum_by_name(doc, plane) {
-        return Ok(SketchPlane::Reference { plane });
+        return Ok(SketchPlane::Reference { plane, offset });
     }
     let face = face_by_name(doc, plane).ok_or_else(|| {
         format!("`{plane}` is neither top, front, right nor a face name; `feature` lists each feature's faces")
     })?;
+    if offset != 0.0 {
+        return Err("datum offset is supported only on reference planes, not on faces".into());
+    }
     let face = doc.face_ref(face).ok_or_else(|| format!("`{plane}` is not planar, so it cannot carry a sketch"))?;
     Ok(SketchPlane::Face { face })
 }
@@ -721,14 +735,14 @@ fn face_ref_by_name(doc: &Document, name: &str) -> Result<crate::document::FaceR
 
 /// A reference plane or a planar face, by name.
 fn plane_ref(doc: &Document, plane: &str) -> Result<PlaneRef, String> {
-    Ok(match sketch_plane(doc, plane)? {
-        SketchPlane::Reference { plane } => PlaneRef::Datum {
+    Ok(match sketch_plane(doc, plane, 0.0)? {
+        SketchPlane::Reference { plane, offset } => PlaneRef::Datum {
             datum: match plane {
                 PlaneKind::Top => DatumPlane::Top,
                 PlaneKind::Front => DatumPlane::Front,
                 PlaneKind::Right => DatumPlane::Right,
             },
-            offset: 0.0,
+            offset,
         },
         SketchPlane::Face { face } => PlaneRef::Face { face },
     })
@@ -879,11 +893,11 @@ impl Line {
     /// Runs the line on `doc` through the command layer.
     fn run(&self, doc: &mut Document, run: &mut Run) -> Result<(), String> {
         match self {
-            Line::Sketch { plane, shapes } => {
+            Line::Sketch { plane, offset, shapes } => {
                 if shapes.is_empty() {
                     return Err("a sketch needs at least one shape".into());
                 }
-                let at = sketch_plane(doc, plane)?;
+                let at = sketch_plane(doc, plane, *offset)?;
                 let id = run.apply(doc, Command::AddSketch { plane: at })?.ok_or("the sketch was not created")?;
                 let plane = doc.feature(id).and_then(|f| f.plane).ok_or("the sketch plane did not resolve")?;
                 let mut s = Sketch::new();
@@ -894,11 +908,11 @@ impl Line {
                 run.apply(doc, Command::EditSketch { id, sketch: s })?;
                 run.last_sketch = Some(id);
             }
-            Line::SketchGeometry { plane, operations } => {
+            Line::SketchGeometry { plane, offset, operations } => {
                 if operations.is_empty() {
                     return Err("a sketch needs at least one geometry operation".into());
                 }
-                let at = sketch_plane(doc, plane)?;
+                let at = sketch_plane(doc, plane, *offset)?;
                 let id = run.apply(doc, Command::AddSketch { plane: at })?.ok_or("the sketch was not created")?;
                 let mut s = Sketch::new();
                 for (i, operation) in operations.iter().enumerate() {
@@ -1148,7 +1162,7 @@ impl Line {
             _ => otherwise,
         };
         match self {
-            Line::Sketch { plane, shapes } => {
+            Line::Sketch { plane, offset, shapes } => {
                 let list: Vec<String> = shapes
                     .iter()
                     .map(|s| match s {
@@ -1168,10 +1182,20 @@ impl Line {
                         }
                     })
                     .collect();
-                (format!("Sketch on {plane}"), list.join("; "))
+                let title = if *offset == 0.0 {
+                    format!("Sketch on {plane}")
+                } else {
+                    format!("Sketch on {plane}, offset {} mm", fmt_mm(*offset))
+                };
+                (title, list.join("; "))
             }
-            Line::SketchGeometry { plane, operations } => {
-                (format!("Sketch geometry on {plane}"), format!("{} tool operations", operations.len()))
+            Line::SketchGeometry { plane, offset, operations } => {
+                let title = if *offset == 0.0 {
+                    format!("Sketch geometry on {plane}")
+                } else {
+                    format!("Sketch geometry on {plane}, offset {} mm", fmt_mm(*offset))
+                };
+                (title, format!("{} tool operations", operations.len()))
             }
             Line::Extrude { sketch, depth, flip, up_to_next, up_to_face } => {
                 ("Extrude".into(), format!("{sketch}, {}", up_to(*up_to_next, up_to_face, end(false, *depth, *flip))))
@@ -1798,8 +1822,12 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
         FeatureKind::Sketch(s) => json!({
             "type": "sketch",
             "plane": match &s.plane {
-                SketchPlane::Reference { plane } => doc.model().datum_name(plane.to_model()).to_owned(),
+                SketchPlane::Reference { plane, .. } => doc.model().datum_name(plane.to_model()).to_owned(),
                 other => other.label(),
+            },
+            "offset": match &s.plane {
+                SketchPlane::Reference { offset, .. } => Some(*offset),
+                SketchPlane::Face { .. } => None,
             },
             "entities": s.sketch.drawn().count(),
             "state": s.sketch.status.label(),
@@ -2164,19 +2192,27 @@ pub fn board_bracket() -> Document {
     let circle = |center: Point, diameter: f64| Shape::Circle { center, diameter };
     let steps = [
         vec![
-            Line::Sketch { plane: "top".into(), shapes: vec![rect([60.0, 45.0, 0.0], 120.0, 90.0)] },
+            Line::Sketch { plane: "top".into(), offset: 0.0, shapes: vec![rect([60.0, 45.0, 0.0], 120.0, 90.0)] },
             Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: false, up_to_next: false, up_to_face: None },
         ],
         vec![
-            Line::Sketch { plane: "front".into(), shapes: vec![rect([60.0, 0.0, 30.0], 120.0, 60.0)] },
+            Line::Sketch { plane: "front".into(), offset: 0.0, shapes: vec![rect([60.0, 0.0, 30.0], 120.0, 60.0)] },
             Line::Extrude { sketch: "previous".into(), depth: 10.0, flip: true, up_to_next: false, up_to_face: None },
         ],
         vec![
-            Line::Sketch { plane: "Boss-Extrude1 · End cap".into(), shapes: vec![circle([85.0, 55.0, 10.0], 24.0)] },
+            Line::Sketch {
+                plane: "Boss-Extrude1 · End cap".into(),
+                offset: 0.0,
+                shapes: vec![circle([85.0, 55.0, 10.0], 24.0)],
+            },
             Line::Extrude { sketch: "previous".into(), depth: 24.0, flip: false, up_to_next: false, up_to_face: None },
         ],
         vec![
-            Line::Sketch { plane: "Boss-Extrude3 · End cap".into(), shapes: vec![circle([85.0, 55.0, 34.0], 12.0)] },
+            Line::Sketch {
+                plane: "Boss-Extrude3 · End cap".into(),
+                offset: 0.0,
+                shapes: vec![circle([85.0, 55.0, 34.0], 12.0)],
+            },
             Line::Cut {
                 sketch: "previous".into(),
                 through_all: true,

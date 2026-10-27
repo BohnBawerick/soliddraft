@@ -138,7 +138,8 @@ fn bracket_document() -> Document {
     );
     doc.name = "Bracket".into();
     let sketch_on = |doc: &mut Document, plane: PlaneKind, sketch: Sketch| -> u64 {
-        let id = doc.apply(Command::AddSketch { plane: SketchPlane::Reference { plane } }).unwrap().unwrap();
+        let id =
+            doc.apply(Command::AddSketch { plane: SketchPlane::Reference { plane, offset: 0.0 } }).unwrap().unwrap();
         doc.apply(Command::EditSketch { id, sketch }).unwrap();
         id
     };
