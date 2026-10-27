@@ -9,7 +9,7 @@ pub mod offscreen;
 pub mod pick;
 pub mod render;
 
-use crate::document::{DisplayMesh, Document, Selection};
+use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
@@ -187,6 +187,7 @@ impl ViewportState {
             events.actions = crate::sketcher::run(ui, session, doc, &self.camera, rect, &response);
             ui.ctx().request_repaint();
         }
+        self.paint_origin_axes(&painter, doc, rect);
         self.paint_highlights(&painter, doc, selection, rect);
         self.paint_triad(&painter, rect);
         self.paint_hud(ui, rect, &mut events);
@@ -351,15 +352,47 @@ impl ViewportState {
         }
     }
 
+    /// The origin axes through the part origin, reaching past the body on both sides.
+    /// The positive half is solid and labelled; the negative half is fainter.
+    fn paint_origin_axes(&self, painter: &egui::Painter, doc: &Document, rect: Rect) {
+        let reach = match doc.bounds() {
+            Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
+            None => self.camera.distance * 0.25,
+        };
+        let Some(o) = self.camera.project(Vec3::ZERO, rect) else { return };
+        // Labels stay inside the view, so an axis that runs off the edge is still named.
+        let inside = rect.shrink(10.0);
+        for axis in AxisKind::ALL {
+            let color = theme::axis_color(axis);
+            let dir = axis.direction();
+            if let Some(tail) = self.camera.project(-dir * reach, rect) {
+                painter.line_segment([tail, o], Stroke::new(1.0, color.gamma_multiply(0.45)));
+            }
+            let Some(tip) = self.camera.project(dir * reach, rect) else { continue };
+            painter.line_segment([o, tip], Stroke::new(1.5, color.gamma_multiply(0.85)));
+            // An axis seen end-on projects to a point: no line to label.
+            let along = tip - o;
+            if along.length() > 12.0 && inside.contains(o) {
+                let end = tip + along.normalized() * 8.0;
+                let t = last_inside(o, end, inside);
+                // At the edge the label moves beside the line instead of covering it.
+                let beside = if t < 1.0 { along.normalized().rot90() * 9.0 } else { vec2(0.0, 0.0) };
+                painter.text(
+                    o + (end - o) * t + beside,
+                    Align2::CENTER_CENTER,
+                    &axis.label()[..1],
+                    theme::font_semibold(10.0),
+                    color,
+                );
+            }
+        }
+    }
+
     /// Small axis triad in the lower-left corner, rotation only.
     fn paint_triad(&self, painter: &egui::Painter, rect: Rect) {
         let origin = pos2(rect.left() + 34.0, rect.bottom() - 46.0);
         let view = self.camera.view();
-        let axes = [
-            (Vec3::X, Color32::from_rgb(0xd6, 0x45, 0x45), "X"),
-            (Vec3::Y, Color32::from_rgb(0x2e, 0x9e, 0x5b), "Y"),
-            (Vec3::Z, Color32::from_rgb(0x1f, 0x5f, 0xd0), "Z"),
-        ];
+        let axes = [(Vec3::X, theme::AXIS_X, "X"), (Vec3::Y, theme::AXIS_Y, "Y"), (Vec3::Z, theme::AXIS_Z, "Z")];
         let mut items: Vec<(f32, Pos2, Color32, &str)> = axes
             .iter()
             .map(|(a, c, l)| {
@@ -614,4 +647,19 @@ fn decode_pick(sample: &PickSample, cx: u32, cy: u32) -> Option<Picked> {
         return Picked::decode(v);
     }
     sample.at(cx, cy).and_then(Picked::decode)
+}
+
+/// How far along the segment from `a`, which is inside `rect`, to `b` it stays inside,
+/// from 0 to 1.
+fn last_inside(a: Pos2, b: Pos2, rect: Rect) -> f32 {
+    let d = b - a;
+    let mut t: f32 = 1.0;
+    for (start, delta, lo, hi) in [(a.x, d.x, rect.left(), rect.right()), (a.y, d.y, rect.top(), rect.bottom())] {
+        if delta > 0.0 {
+            t = t.min((hi - start) / delta);
+        } else if delta < 0.0 {
+            t = t.min((lo - start) / delta);
+        }
+    }
+    t.max(0.0)
 }

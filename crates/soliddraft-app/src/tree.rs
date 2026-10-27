@@ -3,7 +3,9 @@
 //! double-click edits, F2 or a slow second click renames, drag reorders,
 //! right-click offers the rest.
 
-use crate::document::{Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane, fmt_mm};
+use crate::document::{
+    AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane, fmt_mm,
+};
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, EditorParams, Rename};
 use crate::theme;
@@ -59,16 +61,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         ui.add_space(4.0);
         let selected_feature = state.selected_feature();
         let picking_plane = matches!(state.editor.as_ref().map(|e| &e.params), Some(EditorParams::PickPlane));
+        let picking_axis = matches!(
+            state.editor.as_ref().map(|e| &e.params),
+            Some(EditorParams::Revolve(_) | EditorParams::Pattern(_))
+        );
 
         // Origin group.
-        let open = state.origin_open || picking_plane;
+        let open = state.origin_open || picking_plane || picking_axis;
         if row(
             ui,
             RowSpec {
                 indent: 0,
                 chevron: Some(open),
                 icon: Icon::Origin,
-                name: "Origin and planes",
+                name: "Origin, planes and axes",
                 ..RowSpec::plain()
             },
         )
@@ -97,6 +103,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 });
                 if (picking_plane && r.clicked()) || r.double_clicked() {
                     actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane, offset: 0.0 }));
+                }
+            }
+            for axis in AxisKind::ALL {
+                let r = row(
+                    ui,
+                    RowSpec {
+                        indent: 1,
+                        icon: Icon::Axis,
+                        icon_color: Some(theme::axis_color(axis)),
+                        name: axis.label(),
+                        dim: !picking_axis,
+                        ..RowSpec::plain()
+                    },
+                );
+                if picking_axis
+                    && r.on_hover_text("Click to use this axis").clicked()
+                    && let Some(editor) = state.editor.as_mut()
+                {
+                    use_axis(&mut editor.params, axis);
                 }
             }
             row(ui, RowSpec { indent: 1, icon: Icon::Point, name: "Origin", dim: true, ..RowSpec::plain() });
@@ -257,6 +282,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         indent: item.indent,
                         chevron: item.chevron,
                         icon: item.icon,
+                        icon_color: None,
                         name: &item.name,
                         sub: &item.sub,
                         selected: selected_feature == Some(item.id),
@@ -468,6 +494,8 @@ pub(crate) struct RowSpec<'a> {
     pub(crate) indent: u8,
     pub(crate) chevron: Option<bool>,
     pub(crate) icon: Icon,
+    /// Paints the icon in this colour instead of the row's ink.
+    pub(crate) icon_color: Option<Color32>,
     pub(crate) name: &'a str,
     pub(crate) sub: &'a str,
     pub(crate) selected: bool,
@@ -485,6 +513,7 @@ impl RowSpec<'static> {
             indent: 0,
             chevron: None,
             icon: Icon::Point,
+            icon_color: None,
             name: "",
             sub: "",
             selected: false,
@@ -495,6 +524,26 @@ impl RowSpec<'static> {
             suppressed: false,
             drop_above: false,
         }
+    }
+}
+
+/// Points the open revolve or pattern along an origin axis, through the origin.
+fn use_axis(params: &mut EditorParams, axis: AxisKind) {
+    let d = axis.direction();
+    let dir = soliddraft_kernel_api::Vec3::new(d.x.into(), d.y.into(), d.z.into());
+    match params {
+        EditorParams::Revolve(r) => {
+            r.axis_origin = [0.0; 3];
+            r.axis_direction = [dir.x, dir.y, dir.z];
+        }
+        EditorParams::Pattern(p) => match &mut p.layout {
+            soliddraft_model::PatternSpec::Linear { direction, .. } => *direction = dir,
+            soliddraft_model::PatternSpec::Circular { axis_origin, axis_direction, .. } => {
+                *axis_origin = soliddraft_kernel_api::Vec3::ZERO;
+                *axis_direction = dir;
+            }
+        },
+        _ => {}
     }
 }
 
@@ -536,7 +585,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     } else if spec.warn.is_some() {
         theme::WARN
     } else {
-        ink
+        spec.icon_color.unwrap_or(ink)
     };
     icons::paint(
         painter,

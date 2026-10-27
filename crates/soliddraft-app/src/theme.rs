@@ -19,6 +19,18 @@ pub const OK: Color32 = Color32::from_rgb(0x2e, 0x9e, 0x5b);
 pub const WARN: Color32 = Color32::from_rgb(0xc7, 0x7d, 0x12);
 pub const ERROR: Color32 = Color32::from_rgb(0xc8, 0x3a, 0x3a);
 pub const FIELD_BG: Color32 = Color32::from_rgb(0xfb, 0xfc, 0xfe);
+/// The origin axes, in the viewport, the triad and the feature tree.
+pub const AXIS_X: Color32 = Color32::from_rgb(0xd6, 0x45, 0x45);
+pub const AXIS_Y: Color32 = Color32::from_rgb(0x2e, 0x9e, 0x5b);
+pub const AXIS_Z: Color32 = Color32::from_rgb(0x1f, 0x5f, 0xd0);
+
+pub fn axis_color(axis: crate::document::AxisKind) -> Color32 {
+    match axis {
+        crate::document::AxisKind::X => AXIS_X,
+        crate::document::AxisKind::Y => AXIS_Y,
+        crate::document::AxisKind::Z => AXIS_Z,
+    }
+}
 
 /// Corner radius used by buttons, fields and cards.
 pub const RADIUS: u8 = 6;
