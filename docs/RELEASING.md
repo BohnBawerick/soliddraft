@@ -24,6 +24,8 @@ Linux packages build on Ubuntu 22.04. The portable tar needs the host's graphics
 
 Winit loads XKB libraries at runtime rather than linking them into the executable. `packaging/Packager.json` explicitly includes those libraries and the XCB XKB dependency in the AppImage, and declares desktop/graphics runtime dependencies for Debian. Keep these declarations aligned with the packaged startup smoke, not just the binary's `ldd` output.
 
+Linux desktop entries declare `application/vnd.soliddraft.part` for `.dwprt` and `application/vnd.soliddraft.drawing` for `.dwdrw`. Both the Debian package and AppImage include `packaging/soliddraft-mime.xml` under `usr/share/mime/packages/soliddraft.xml`. Debian requires `shared-mime-info` and `desktop-file-utils` for MIME and desktop-database registration. The reserved `.dwasm` extension has no association. Portable archives and an unintegrated AppImage do not install system file associations; verify double-click opening using the installed desktop package.
+
 The SBOM comes from Syft through `anchore/sbom-action`. It inventories the checked-out source, locked dependencies and staged packages; it is not a claim that every workspace dependency is linked into every executable. The tag workflow creates GitHub build-provenance attestations for every downloadable file, including the notes, SBOM and checksum manifest. Dry runs do not publish attestations.
 
 Verify a download with `sha256sum -c SHA256SUMS` after downloading the complete set, or check its individual entry. Verify provenance with:

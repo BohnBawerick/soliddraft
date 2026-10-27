@@ -14,18 +14,20 @@
   "icons": ["icon.png"],
   "resources": ["../LICENSE", "../NOTICE"],
   "fileAssociations": [
-    {"extensions": ["dwprt"], "name": "SolidDraft part", "role": "editor"},
-    {"extensions": ["dwdrw"], "name": "SolidDraft drawing", "role": "editor"}
+    {"extensions": ["dwprt"], "name": "SolidDraft part", "role": "editor", "mimeType": "application/vnd.soliddraft.part"},
+    {"extensions": ["dwdrw"], "name": "SolidDraft drawing", "role": "editor", "mimeType": "application/vnd.soliddraft.drawing"}
   ],
   "appimage": {
+    "files": {"soliddraft-mime.xml": "usr/share/mime/packages/soliddraft.xml"},
     "libs": ["libxkbcommon.so*", "libxkbcommon-x11.so*", "libxcb-xkb.so*"]
   },
   "deb": {
+    "files": {"soliddraft-mime.xml": "usr/share/mime/packages/soliddraft.xml"},
     "depends": [
       "libc6 (>= 2.35)", "libgcc-s1", "libxkbcommon0", "libxkbcommon-x11-0",
       "libx11-6", "libxcursor1", "libxi6", "libxrandr2", "libxcb1",
       "libwayland-client0", "libwayland-cursor0", "libwayland-egl1",
-      "libegl1", "libgl1", "libvulkan1"
+      "libegl1", "libgl1", "libvulkan1", "shared-mime-info", "desktop-file-utils"
     ]
   },
   "macos": {"minimumSystemVersion": "11.0"},

@@ -95,7 +95,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libssl-dev libdbus-1-dev libfuse2 patchelf \
-            libegl1-mesa libgl1-mesa-dri mesa-vulkan-drivers xvfb
+            libegl1-mesa libgl1-mesa-dri mesa-vulkan-drivers xvfb desktop-file-utils shared-mime-info libglib2.0-bin
       - name: Build desktop
         if: runner.os != 'macOS'
         env:
@@ -142,6 +142,11 @@ jobs:
           python3 packaging/release.py configure "$PLATFORM"
           cargo packager --config packaging/Packager.generated.json --formats "$FORMATS"
           python3 packaging/release.py collect "$PLATFORM"
+      - name: Check packaged Linux part and drawing associations
+        if: runner.os == 'Linux'
+        run: |
+          dpkg-deb --extract dist/*-linux-x86_64.deb "$RUNNER_TEMP/deb-associations"
+          python3 packaging/smoke-linux-associations.py "$RUNNER_TEMP/deb-associations"
       - name: Start packaged AppImage without a display
         if: runner.os == 'Linux'
         env:
