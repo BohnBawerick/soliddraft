@@ -16,6 +16,7 @@ use crate::ids::{AnnotationId, SHEET, ViewId};
 use crate::library::{Align, StyleFile, TemplateFile, Weight};
 use crate::measure::{CurveShape, display_text, shape_of};
 use crate::project::{effective_scale, view_bounds, view_label};
+use crate::view::Accuracy;
 
 mod symbols;
 mod tables;
@@ -96,6 +97,9 @@ pub struct PathItem {
     pub owner: Owner,
     /// True to fill the path instead of stroking it.
     pub fill: bool,
+    /// For a view's curve, how faithfully its path follows the model; the exporters
+    /// that can carry it label the path with it.
+    pub accuracy: Option<Accuracy>,
 }
 
 /// Which line of a text's box its position is on.
@@ -422,7 +426,15 @@ fn format_items(drawing: &Drawing, sheet: &Sheet, ctx: &Context<'_>, items: &mut
     let [l, b, r, t] = f.frame();
     let band = f.zones.band;
     let push_path = |items: &mut Vec<Item>, path: BezPath, width: f64, role: Role| {
-        items.push(Item::Path(PathItem { path, width, dash: None, role, owner: Owner::Sheet, fill: false }));
+        items.push(Item::Path(PathItem {
+            path,
+            width,
+            dash: None,
+            role,
+            owner: Owner::Sheet,
+            fill: false,
+            accuracy: None,
+        }));
     };
     // Outer frame, and the inner zone line, which stops at the title block in the
     // bottom-right corner.
@@ -578,6 +590,7 @@ fn projection_symbol(projection: Projection, centre: Point2, width: f64, items: 
         role: Role::Thin,
         owner: Owner::Sheet,
         fill: false,
+        accuracy: None,
     }));
     let k = Point2::new(centre.u + circle_dx, centre.v);
     for r in [h * 0.5, h * 0.3] {
@@ -588,6 +601,7 @@ fn projection_symbol(projection: Projection, centre: Point2, width: f64, items: 
             role: Role::Thin,
             owner: Owner::Sheet,
             fill: false,
+            accuracy: None,
         }));
     }
     let ext = h * 0.75;
@@ -603,6 +617,7 @@ fn projection_symbol(projection: Projection, centre: Point2, width: f64, items: 
             role: Role::Thin,
             owner: Owner::Sheet,
             fill: false,
+            accuracy: None,
         }));
     }
 }
@@ -627,7 +642,15 @@ fn view_items(drawing: &Drawing, sheet: &Sheet, view: &View, ctx: &Context<'_>, 
         };
         let mut path = c.path.clone();
         path.apply_affine(shift);
-        items.push(Item::Path(PathItem { path, width, dash, role, owner: Owner::Curve(view.id, i), fill: false }));
+        items.push(Item::Path(PathItem {
+            path,
+            width,
+            dash,
+            role,
+            owner: Owner::Curve(view.id, i),
+            fill: false,
+            accuracy: Some(c.accuracy),
+        }));
     }
     views::boundary_items(view, ctx, items);
     let [x0, y0, x1, y1] = view_bounds(view);
@@ -676,6 +699,7 @@ fn view_items(drawing: &Drawing, sheet: &Sheet, view: &View, ctx: &Context<'_>, 
             role: Role::Stale,
             owner: Owner::View(view.id),
             fill: false,
+            accuracy: None,
         }));
         let mut hatch = BezPath::new();
         let step = 6.0;
@@ -697,6 +721,7 @@ fn view_items(drawing: &Drawing, sheet: &Sheet, view: &View, ctx: &Context<'_>, 
             role: Role::Stale,
             owner: Owner::View(view.id),
             fill: false,
+            accuracy: None,
         }));
     }
 }
@@ -733,7 +758,15 @@ fn arrow(tip: Point2, dir: Vec2, style: &StyleFile, role: Role, owner: Owner) ->
     let n = Vec2::new(-d.y, d.x);
     let base = add(tip, d * -len);
     let path = polyline(&[tip, add(base, n * half), add(base, n * -half), tip]);
-    Item::Path(PathItem { path, width: if def.filled { 0.0 } else { 0.18 }, dash: None, role, owner, fill: def.filled })
+    Item::Path(PathItem {
+        path,
+        width: if def.filled { 0.0 } else { 0.18 },
+        dash: None,
+        role,
+        owner,
+        fill: def.filled,
+        accuracy: None,
+    })
 }
 
 /// A path as polylines within `tolerance`, in the path's own units: what a painter
@@ -782,7 +815,7 @@ fn annotation_items(sheet: &Sheet, a: &Annotation, ctx: &Context<'_>, list: &mut
     let th = style.text.height;
     let mut text_at: Option<(Point2, f64, String, Align, VAlign)> = None;
     let push = |items: &mut Vec<Item>, path: BezPath, dash: Option<Vec<f64>>, r: Role| {
-        items.push(Item::Path(PathItem { path, width, dash, role: r, owner, fill: false }));
+        items.push(Item::Path(PathItem { path, width, dash, role: r, owner, fill: false, accuracy: None }));
     };
     match &a.body {
         AnnotationKind::Dimension(d) => {
@@ -920,6 +953,7 @@ fn annotation_items(sheet: &Sheet, a: &Annotation, ctx: &Context<'_>, list: &mut
                 role: Role::Centre,
                 owner,
                 fill: false,
+                accuracy: None,
             }));
             if far > s + cm.gap + 1.0 {
                 let mut arms = BezPath::new();
@@ -934,6 +968,7 @@ fn annotation_items(sheet: &Sheet, a: &Annotation, ctx: &Context<'_>, list: &mut
                     role: Role::Centre,
                     owner,
                     fill: false,
+                    accuracy: None,
                 }));
             }
         }
@@ -974,6 +1009,7 @@ fn annotation_items(sheet: &Sheet, a: &Annotation, ctx: &Context<'_>, list: &mut
                 role: Role::Changed,
                 owner,
                 fill: true,
+                accuracy: None,
             }));
         }
         items.push(Item::Text(TextItem {
@@ -1023,7 +1059,7 @@ pub(crate) fn linear(
     width: f64,
 ) -> ((Point2, f64, VAlign), DimensionGeometry) {
     let push = |items: &mut Vec<Item>, path: BezPath| {
-        items.push(Item::Path(PathItem { path, width, dash: None, role, owner, fill: false }));
+        items.push(Item::Path(PathItem { path, width, dash: None, role, owner, fill: false, accuracy: None }));
     };
     let (dir, normal, t) = match orientation {
         LinearOrientation::Horizontal => (Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0), place.v - p1.v),

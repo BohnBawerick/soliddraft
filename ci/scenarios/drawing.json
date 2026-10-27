@@ -344,6 +344,14 @@
         {
           "pointer": "/summary/drawing/part",
           "equals": "current"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/accuracy/polygon",
+          "minimum": 1
         }
       ]
     },
@@ -550,6 +558,14 @@
         {
           "pointer": "/result/redrawn_from_certified_mesh",
           "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
         }
       ],
       "files": [
@@ -570,6 +586,14 @@
         {
           "pointer": "/result/redrawn_from_certified_mesh",
           "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
         }
       ],
       "files": [
@@ -590,6 +614,14 @@
         {
           "pointer": "/result/redrawn_from_certified_mesh",
           "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
         }
       ],
       "files": [
@@ -760,6 +792,14 @@
         {
           "pointer": "/result/redrawn_from_certified_mesh",
           "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
         }
       ],
       "files": [

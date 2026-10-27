@@ -102,7 +102,7 @@ fn revision_items(sheet: &Sheet, table: &Table, owner: Owner, ctx: &Context<'_>,
     let (w, h) = revision_table_size(table.revisions.len());
     let (x0, top) = (table.position.u, table.position.v);
     let mut path = |p: kurbo::BezPath, width: f64, role: Role| {
-        items.push(Item::Path(PathItem { path: p, width, dash: None, role, owner, fill: false }));
+        items.push(Item::Path(PathItem { path: p, width, dash: None, role, owner, fill: false, accuracy: None }));
     };
     path(rect(x0, top - h, x0 + w, top), lines.border, Role::Border);
     for r in 1..(table.revisions.len() + 2) {

@@ -138,9 +138,11 @@ MCP tool call has a numbered directory under `commands/` containing:
   persistent reference: the feature holding it, its slot, its identity, the Catallax
   origins, carrier counts and whether the built sketch's plane matches those carriers.
   With a drawing open, the summary's `drawing` says for each view whether its line
-  work is at the pinned revision and whether it is a screen preview, for each
-  annotation its state, value and the model entities it is attached to, and lists the
-  changed and dangling annotations.
+  work is at the pinned revision and whether it is a screen preview, how many of its
+  curves are the model's exact lines and circles and how many are mesh polylines
+  (`accuracy`), for each annotation its state, value and the model entities it is
+  attached to, and lists the changed and dangling annotations. A drawing export's
+  result reports the same counts for the curves it wrote.
   `resolved` is null when that feature was not built. These observations run only after
   execution when `--bundle` was requested; the scenario runner makes the assertions.
   The `rebuild` report's `features_recomputed` lists the features whose kernel

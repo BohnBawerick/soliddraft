@@ -457,6 +457,48 @@ pub struct Curve2 {
     /// says.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tangent: bool,
+    /// How faithfully the path follows the model. Files written before the label
+    /// read as polygon, the weaker claim.
+    #[serde(default)]
+    pub accuracy: Accuracy,
+}
+
+/// How faithfully a curve's path follows the model.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Accuracy {
+    /// The model's own curve: a whole line or an untrimmed circle the kernel kept after
+    /// polygon visibility, or an arc. Its endpoints and shape are exact.
+    Exact,
+    /// A polyline from the display mesh, at its chord tolerance: a silhouette, an edge
+    /// split by visibility, a section crossing or a curve the kernel has not converted.
+    #[default]
+    Polygon,
+}
+
+/// How many curves of a view carry each accuracy label.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccuracyCounts {
+    /// Curves whose path is the model's own curve.
+    pub exact: usize,
+    /// Curves whose path is a mesh polyline.
+    pub polygon: usize,
+}
+
+impl AccuracyCounts {
+    /// Adds another view's counts.
+    pub fn add(&mut self, other: AccuracyCounts) {
+        self.exact += other.exact;
+        self.polygon += other.polygon;
+    }
+}
+
+impl ViewGeometry {
+    /// How many of the view's curves are exact and how many are mesh polylines.
+    pub fn accuracy(&self) -> AccuracyCounts {
+        let exact = self.curves.iter().filter(|c| c.accuracy == Accuracy::Exact).count();
+        AccuracyCounts { exact, polygon: self.curves.len() - exact }
+    }
 }
 
 /// What a curve of a view shows.

@@ -18,10 +18,10 @@ use soliddraft_kernel_api::drawing::{StandardView, ViewFrame, ViewSpec};
 use soliddraft_kernel_api::{Point2, Vec3};
 
 use crate::{
-    AlignAxis, Alignment, Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Attach, ContentHash,
-    Curve2, CurveKind, Dimension, DimensionKind, DocKind, DocRef, Drawing, DrawingMeta, EntityKind, EntityRef,
-    FoldDirection, HiddenLines, LinearOrientation, Orientation, Scale, StyleOverrides, Template, View, ViewDisplay,
-    ViewGeometry, ViewId, ViewKind, ViewScale,
+    Accuracy, AlignAxis, Alignment, Anchor, Annotation, AnnotationId, AnnotationKind, AnnotationState, Attach,
+    ContentHash, Curve2, CurveKind, Dimension, DimensionKind, DocKind, DocRef, Drawing, DrawingMeta, EntityKind,
+    EntityRef, FoldDirection, HiddenLines, LinearOrientation, Orientation, Scale, StyleOverrides, Template, View,
+    ViewDisplay, ViewGeometry, ViewId, ViewKind, ViewScale,
 };
 
 /// The part revision the fixture's views were "made" from.
@@ -416,7 +416,7 @@ struct Lines {
 
 impl Lines {
     fn push(&mut self, path: BezPath, source: EntityRef, visible: bool, kind: CurveKind) {
-        self.curves.push(Curve2 { path, source, visible, kind, tangent: false });
+        self.curves.push(Curve2 { path, source, visible, kind, tangent: false, accuracy: Accuracy::Exact });
     }
 
     fn segment(&self, a: Vec3, b: Vec3) -> BezPath {
