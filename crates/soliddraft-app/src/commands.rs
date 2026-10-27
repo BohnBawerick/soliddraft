@@ -1379,6 +1379,14 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::SetPreset(Preset::Realistic))
             .lit(|s| s.viewport.preset == Preset::Realistic)
 .app_only(LOOK),
+        cmd("theme_light", "Light theme", Icon::Display, "Light chrome and panels; saved in the settings")
+            .run(|_| AppAction::SetTheme(crate::theme::Mode::Light))
+            .lit(|_| crate::theme::mode() == crate::theme::Mode::Light)
+.app_only(LOOK),
+        cmd("theme_dark", "Dark theme", Icon::Display, "Dark chrome and panels; saved in the settings")
+            .run(|_| AppAction::SetTheme(crate::theme::Mode::Dark))
+            .lit(|_| crate::theme::mode() == crate::theme::Mode::Dark)
+.app_only(LOOK),
         cmd("orthographic", "Orthographic", Icon::OnPlane, "Toggle perspective and orthographic projection")
             .on(View, "Projection", Large)
             .run(|_| AppAction::ToggleProjection)

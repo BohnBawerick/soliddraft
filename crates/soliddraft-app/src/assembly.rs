@@ -583,11 +583,11 @@ pub fn viewport(ui: &mut egui::Ui, state: &mut AppState) {
             "Insert component, or drop part files here, to place parts"
         };
         let painter = ui.painter().with_clip_rect(rect);
-        let galley = painter.layout_no_wrap(text.to_owned(), theme::font_medium(13.0), theme::MUTED);
+        let galley = painter.layout_no_wrap(text.to_owned(), theme::font_medium(13.0), theme::muted());
         let r = Rect::from_center_size(rect.center(), galley.size() + vec2(28.0, 14.0));
         painter.rect_filled(r, egui::CornerRadius::same(99), theme::hud_bg());
-        painter.rect_stroke(r, egui::CornerRadius::same(99), Stroke::new(1.0, theme::LINE), egui::StrokeKind::Inside);
-        painter.galley(r.center() - galley.size() / 2.0, galley, theme::MUTED);
+        painter.rect_stroke(r, egui::CornerRadius::same(99), Stroke::new(1.0, theme::line()), egui::StrokeKind::Inside);
+        painter.galley(r.center() - galley.size() / 2.0, galley, theme::muted());
     }
 }
 
@@ -601,17 +601,17 @@ pub fn tree(ui: &mut egui::Ui, state: &mut AppState) {
         Align2::LEFT_CENTER,
         s.title(),
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
     let counts = s.doc.table().counts();
     let (status, color) = if s.doc.is_loading() {
-        ("Loading…".to_owned(), theme::MUTED)
+        ("Loading…".to_owned(), theme::muted())
     } else {
         let failed = s.doc.store().counts()[5];
         if failed > 0 {
-            (format!("{failed} not loaded"), theme::ERROR)
+            (format!("{failed} not loaded"), theme::error())
         } else {
-            (format!("{} part{}", counts.parts, plural(counts.parts)), theme::OK)
+            (format!("{} part{}", counts.parts, plural(counts.parts)), theme::ok())
         }
     };
     ui.painter().text(
@@ -621,7 +621,7 @@ pub fn tree(ui: &mut egui::Ui, state: &mut AppState) {
         theme::font_medium(11.0),
         color,
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let mut actions = Vec::new();
     egui::ScrollArea::vertical().id_salt("assembly_tree").auto_shrink([false, false]).show(ui, |ui| {
         ui.add_space(4.0);
@@ -707,16 +707,16 @@ pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
         ui.painter(),
         if s.selected_row().is_some() { Icon::Extrude } else { Icon::Tree },
         Rect::from_center_size(pos2(head.left() + 20.0, head.center().y), vec2(16.0, 16.0)),
-        theme::INK,
+        theme::ink(),
     );
     ui.painter().text(
         pos2(head.left() + 34.0, head.center().y),
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let mut actions = Vec::new();
     egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
         let Some(draft) = s.draft.as_mut() else {
@@ -729,14 +729,14 @@ pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
                 None => "Not saved yet".to_owned(),
             });
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Select a component to place it.").color(theme::MUTED));
+            ui.label(egui::RichText::new("Select a component to place it.").color(theme::muted()));
             return;
         };
         theme::section_label(ui, "Placement");
         ui.label(
             egui::RichText::new("Relative to the assembly that holds it. Each change is one undo step.")
                 .size(11.0)
-                .color(theme::MUTED),
+                .color(theme::muted()),
         );
         ui.add_space(4.0);
         // A change applies once the field lets go: a drag ends or typing leaves it.
@@ -767,15 +767,15 @@ pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
 /// The status bar while the assembly is active.
 pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
     let Some(s) = state.assembly.session.as_ref() else { return };
-    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::MUTED);
+    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::muted());
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 18.0;
         ui.add_space(4.0);
         let counts = s.doc.table().counts();
         if s.doc.is_loading() {
-            ui.label(egui::RichText::new("Loading parts…").family(theme::semibold()).size(11.5).color(theme::MUTED));
+            ui.label(egui::RichText::new("Loading parts…").family(theme::semibold()).size(11.5).color(theme::muted()));
         } else {
-            ui.label(egui::RichText::new("Assembly").family(theme::semibold()).size(11.5).color(theme::OK));
+            ui.label(egui::RichText::new("Assembly").family(theme::semibold()).size(11.5).color(theme::ok()));
         }
         let n = s.components().len();
         ui.label(muted(format!("{n} component{}", plural(n))));
@@ -785,9 +785,9 @@ pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
             && note.at.elapsed() < Duration::from_secs(6)
         {
             let color = match note.kind {
-                NoteKind::Info => theme::MUTED,
-                NoteKind::Ok => theme::OK,
-                NoteKind::Error => theme::ERROR,
+                NoteKind::Info => theme::muted(),
+                NoteKind::Ok => theme::ok(),
+                NoteKind::Error => theme::error(),
             };
             ui.label(egui::RichText::new(&note.text).size(11.5).color(color));
         }

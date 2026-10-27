@@ -93,7 +93,7 @@ pub fn show(ctx: &egui::Context, state: &mut AppState) {
                 }
                 let results = palette.results(state);
                 if results.is_empty() && !palette.query.trim().is_empty() {
-                    ui.label(egui::RichText::new("No matching command").color(theme::MUTED));
+                    ui.label(egui::RichText::new("No matching command").color(theme::muted()));
                 }
                 for (i, m) in results.iter().enumerate() {
                     let c = m.command;

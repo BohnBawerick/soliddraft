@@ -40,7 +40,7 @@ fn gv(v: soliddraft_kernel_api::Vec3) -> Vec3 {
 }
 
 fn line_color(hover: bool) -> Color32 {
-    if hover { theme::ACCENT } else { theme::INK.gamma_multiply(0.7) }
+    if hover { theme::accent() } else { theme::ink().gamma_multiply(0.7) }
 }
 
 /// Paints every dimension of the body at the rollback bar and returns where each one is.
@@ -210,10 +210,10 @@ fn body_centre(doc: &Document) -> Option<Vec3> {
 
 /// A value pill that may be hovered, with its rectangle.
 fn pill(painter: &egui::Painter, at: Pos2, text: String, pointer: Option<Pos2>) -> (Rect, bool) {
-    let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::INK).size();
+    let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::ink()).size();
     let hover = pointer.is_some_and(|p| Rect::from_center_size(at, size + vec2(12.0, 6.0)).contains(p));
-    let (bg, stroke) = if hover { (theme::HOVER, theme::ACCENT) } else { (theme::hud_bg(), theme::LINE) };
-    (value_pill(painter, at, text, theme::INK, bg, Stroke::new(1.0, stroke)), hover)
+    let (bg, stroke) = if hover { (theme::hover(), theme::accent()) } else { (theme::hud_bg(), theme::line()) };
+    (value_pill(painter, at, text, theme::ink(), bg, Stroke::new(1.0, stroke)), hover)
 }
 
 /// Values beside a point on the feature, joined to it by a leader.
@@ -267,7 +267,7 @@ fn paint_depth(
     let [b, t, bo, to] = [base, top, base + out, top + out].map(|p| camera.project(p, rect));
     let (b, t, bo, to) = (b?, t?, bo?, to?);
     let text = fmt_mm(depth.abs());
-    let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::INK).size();
+    let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::ink()).size();
     let along = (to - bo).normalized();
     let reach = along.x.abs() * size.x / 2.0 + along.y.abs() * size.y / 2.0 + 14.0;
     let mid = bo + (to - bo) / 2.0;

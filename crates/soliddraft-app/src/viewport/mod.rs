@@ -189,7 +189,7 @@ impl ViewportState {
 
         let painter = ui.painter().with_clip_rect(rect);
         if let Some((plane, sk)) = passive_sketch {
-            crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::MUTED.gamma_multiply(0.9));
+            crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::muted().gamma_multiply(0.9));
         }
         if let Some(session) = sketch {
             events.actions = crate::sketcher::run(ui, session, doc, &self.camera, rect, &response);
@@ -291,6 +291,7 @@ impl ViewportState {
             pixels_per_point: ppp,
             display: self.display,
             preset: self.preset,
+            backdrop: theme::viewport_backdrop(),
             hover_id: 0,
             selected_id: 0,
             selected_feature: 0,
@@ -365,20 +366,20 @@ impl ViewportState {
             _ => None,
         };
         if let Some(p) = selected_edge {
-            draw_edge(p, Stroke::new(2.5, theme::ACCENT));
+            draw_edge(p, Stroke::new(2.5, theme::accent()));
         }
         if let Some(pos) = selected_vertex {
-            draw_vertex(pos, 5.0, theme::ACCENT);
+            draw_vertex(pos, 5.0, theme::accent());
         }
         match self.hover {
             Some(Picked::Edge(p)) if selected_edge != Some(p) => {
-                draw_edge(p, Stroke::new(2.0, theme::ACCENT.gamma_multiply(0.7)))
+                draw_edge(p, Stroke::new(2.0, theme::accent().gamma_multiply(0.7)))
             }
             Some(Picked::Vertex(p)) => {
                 if let Some(pos) = pick::vertex_position(doc, p)
                     && selected_vertex != Some(pos)
                 {
-                    draw_vertex(pos, 4.5, theme::ACCENT.gamma_multiply(0.7));
+                    draw_vertex(pos, 4.5, theme::accent().gamma_multiply(0.7));
                 }
             }
             _ => {}
@@ -425,7 +426,7 @@ impl ViewportState {
     fn paint_triad(&self, painter: &egui::Painter, rect: Rect) {
         let origin = pos2(rect.left() + 34.0, rect.bottom() - 46.0);
         let view = self.camera.view();
-        let axes = [(Vec3::X, theme::AXIS_X, "X"), (Vec3::Y, theme::AXIS_Y, "Y"), (Vec3::Z, theme::AXIS_Z, "Z")];
+        let axes = [(Vec3::X, theme::axis_x(), "X"), (Vec3::Y, theme::axis_y(), "Y"), (Vec3::Z, theme::axis_z(), "Z")];
         let mut items: Vec<(f32, Pos2, Color32, &str)> = axes
             .iter()
             .map(|(a, c, l)| {
@@ -461,7 +462,7 @@ impl ViewportState {
             hud,
             CornerRadius::same(9),
             theme::hud_bg(),
-            Stroke::new(1.0, theme::LINE),
+            Stroke::new(1.0, theme::line()),
             StrokeKind::Inside,
         );
         let mut x = hud.left() + 5.0;
@@ -471,7 +472,7 @@ impl ViewportState {
             x += w;
             match item {
                 HudItem::Sep => {
-                    ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0, theme::LINE));
+                    ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0, theme::line()));
                     continue;
                 }
                 HudItem::Icon(icon, tip) | HudItem::IconText(icon, tip) => {
@@ -539,19 +540,15 @@ impl ViewportState {
                 hovered = Some(*sv);
             }
             let shade = 0.82 + 0.18 * facing.clamp(0.0, 1.0);
-            let base = if is_hover {
-                theme::SELECTION_BG
-            } else {
-                Color32::from_rgb((248.0 * shade) as u8, (249.0 * shade) as u8, (251.0 * shade) as u8)
-            };
+            let base = if is_hover { theme::selection_bg() } else { theme::chip().gamma_multiply(shade) };
             painter.add(egui::Shape::convex_polygon(
                 poly.clone(),
                 base,
-                Stroke::new(1.0, theme::LINE.gamma_multiply(1.2)),
+                Stroke::new(1.0, theme::line().gamma_multiply(1.2)),
             ));
             let c = poly.iter().fold(Vec2::ZERO, |a, p| a + p.to_vec2()) / 4.0;
             let alpha = (facing.clamp(0.0, 1.0) * 1.6).min(1.0);
-            let col = if is_hover { theme::SELECTION_INK } else { theme::MUTED.gamma_multiply(alpha) };
+            let col = if is_hover { theme::selection_ink() } else { theme::muted().gamma_multiply(alpha) };
             let font = theme::font_semibold(6.5 + 1.5 * facing.clamp(0.0, 1.0));
             painter.text(c.to_pos2(), Align2::CENTER_CENTER, label, font, col);
         }
@@ -569,27 +566,27 @@ impl ViewportState {
         let text =
             format!("mm · {} · {} · {} · {}", self.camera.view_name, self.display.label(), self.preset.label(), proj);
         let painter = ui.painter();
-        let galley = painter.layout_no_wrap(text, theme::font(11.0), theme::MUTED);
+        let galley = painter.layout_no_wrap(text, theme::font(11.0), theme::muted());
         let size = galley.size() + vec2(18.0, 7.0);
         let r = Rect::from_min_size(pos2(rect.left() + 82.0, rect.bottom() - 12.0 - size.y), size);
-        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
-        painter.galley(r.center() - galley.size() / 2.0, galley, theme::MUTED);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
+        painter.galley(r.center() - galley.size() / 2.0, galley, theme::muted());
 
         let (label, color) = match hover_label {
-            Some(l) => (l.to_owned(), theme::INK),
-            None => ("Hover a face, edge or vertex".to_owned(), theme::MUTED),
+            Some(l) => (l.to_owned(), theme::ink()),
+            None => ("Hover a face, edge or vertex".to_owned(), theme::muted()),
         };
         let galley = painter.layout_no_wrap(label, theme::font(11.0), color);
         let size = galley.size() + vec2(18.0, 7.0);
         let r = Rect::from_min_size(pos2(rect.right() - 14.0 - size.x, rect.bottom() - 12.0 - size.y), size);
-        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
         painter.galley(r.center() - galley.size() / 2.0, galley, color);
     }
 }
 
 /// Says over the top of the viewport that the body shown is a preview, not the part.
 fn paint_preview_label(ui: &egui::Ui, rect: Rect, label: &str, failed: bool) {
-    let color = if failed { theme::ERROR } else { theme::ACCENT };
+    let color = if failed { theme::error() } else { theme::accent() };
     let painter = ui.painter();
     let galley = painter.layout_no_wrap(label.to_owned(), theme::font(11.5), color);
     let size = galley.size() + vec2(18.0, 7.0);
@@ -628,9 +625,9 @@ fn hud_button(
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
     let painter = ui.painter();
     if enabled && resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::same(6), theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::same(6), theme::hover());
     }
-    let color = if enabled { theme::INK } else { theme::MUTED.gamma_multiply(0.5) };
+    let color = if enabled { theme::ink() } else { theme::muted().gamma_multiply(0.5) };
     draw(painter, color);
     resp.on_hover_text(tip)
 }

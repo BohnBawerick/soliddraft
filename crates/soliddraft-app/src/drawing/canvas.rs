@@ -21,21 +21,21 @@ use soliddraft_drawing::{
 };
 use soliddraft_kernel_api::Point2;
 
-/// Colours of the sheet.
-const CANVAS_BG: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xee);
+/// Colours of the sheet. The paper stays white in both modes; the canvas around it
+/// comes from the theme.
 const PAPER: Color32 = Color32::WHITE;
 const CHANGED_FILL: Color32 = Color32::from_rgb(0xff, 0xf1, 0xc2);
 const HIT_PX: f32 = 6.0;
 
 fn role_colour(role: Role) -> Color32 {
     match role {
-        Role::Hidden => theme::INK.gamma_multiply(0.75),
-        Role::Phantom => theme::INK.gamma_multiply(0.6),
-        Role::Label => theme::MUTED,
-        Role::Error => theme::ERROR,
+        Role::Hidden => theme::ink().gamma_multiply(0.75),
+        Role::Phantom => theme::ink().gamma_multiply(0.6),
+        Role::Label => theme::muted(),
+        Role::Error => theme::error(),
         Role::Changed => CHANGED_FILL,
-        Role::Stale => theme::WARN,
-        _ => theme::INK,
+        Role::Stale => theme::warn(),
+        _ => theme::ink(),
     }
 }
 
@@ -305,7 +305,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let doc = &state.doc;
     let Some(s) = state.drawing.session.as_mut() else {
         ui.centered_and_justified(|ui| {
-            ui.label(egui::RichText::new("No drawing open").color(theme::MUTED));
+            ui.label(egui::RichText::new("No drawing open").color(theme::muted()));
         });
         return;
     };
@@ -360,7 +360,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let sheet2 = Sheet2 { painter: &painter, cam: s.camera, rect };
 
     // Paper.
-    painter.rect_filled(rect, CornerRadius::ZERO, CANVAS_BG);
+    painter.rect_filled(rect, CornerRadius::ZERO, theme::canvas_bg());
     let p0 = sheet2.s(Point2::new(0.0, paper.1));
     let p1 = sheet2.s(Point2::new(paper.0, 0.0));
     let paper_rect = Rect::from_min_max(p0, p1);
@@ -368,7 +368,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     painter.rect_filled(paper_rect, CornerRadius::ZERO, PAPER);
     if s.show_grid {
         let step = 10.0;
-        let stroke = Stroke::new(0.5, theme::LINE.gamma_multiply(0.8));
+        let stroke = Stroke::new(0.5, theme::line().gamma_multiply(0.8));
         let mut x = 0.0;
         while x <= paper.0 {
             let a = sheet2.s(Point2::new(x, 0.0));
@@ -409,9 +409,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     for item in &list.items {
         let o = item.owner();
         let (colour, extra) = if hovered_owner(o) {
-            (Some(theme::ACCENT), 1.0)
+            (Some(theme::accent()), 1.0)
         } else if selected_owner(o) && !matches!(o, Owner::Curve(..)) {
-            (Some(theme::ACCENT), 0.5)
+            (Some(theme::accent()), 0.5)
         } else {
             (None, 0.0)
         };
@@ -428,7 +428,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         let a = sheet2.s(Point2::new(x0 - m, y1 + m));
         let b = sheet2.s(Point2::new(x1 + m, y0 - m));
         let r = Rect::from_min_max(a, b);
-        let stroke = Stroke::new(1.0, theme::ACCENT);
+        let stroke = Stroke::new(1.0, theme::accent());
         let corners = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
         painter.extend(egui::Shape::dashed_line(&corners, stroke, 6.0, 4.0));
     }
@@ -572,7 +572,7 @@ pub(super) fn ghost_view(
     let ghost = layout::layout(&d, sheet_index, &ctx);
     let mine = |o: Owner| matches!(o, Owner::Curve(v, _) | Owner::View(v) if v == view.id);
     for item in ghost.items.iter().filter(|i| mine(i.owner())) {
-        sheet2.paint(item, Some(theme::ACCENT.gamma_multiply(0.85)), 0.0);
+        sheet2.paint(item, Some(theme::accent().gamma_multiply(0.85)), 0.0);
     }
 }
 
@@ -588,7 +588,7 @@ pub(super) fn ghost_annotation(
     let ctx = layout::Context { stale: &[], ..*lctx };
     let ghost = layout::layout(&d, s.sheet, &ctx);
     for item in ghost.items.iter().filter(|i| i.owner() == Owner::Annotation(annotation.id)) {
-        sheet2.paint(item, Some(theme::ACCENT), 0.0);
+        sheet2.paint(item, Some(theme::accent()), 0.0);
     }
 }
 
@@ -632,11 +632,11 @@ fn hover_label(s: &DrawingSession, owner: Owner) -> Option<String> {
 }
 
 fn pill(painter: &egui::Painter, at: Pos2, text: &str, anchor: Align2) -> Rect {
-    let galley = painter.layout_no_wrap(text.to_owned(), theme::font(11.0), theme::INK);
+    let galley = painter.layout_no_wrap(text.to_owned(), theme::font(11.0), theme::ink());
     let size = galley.size() + vec2(18.0, 10.0);
     let r = anchor.anchor_size(at, size);
-    painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
-    painter.galley(r.center() - galley.size() / 2.0, galley, theme::INK);
+    painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
+    painter.galley(r.center() - galley.size() / 2.0, galley, theme::ink());
     r
 }
 
@@ -793,7 +793,7 @@ fn guides(
     let painter = resp.ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, resp.id.with("guides")));
     let sheet2 = Sheet2 { painter: &painter, cam: s.camera, rect: s.canvas_rect };
     let [px0, py0, px1, py1] = view_bounds(parent);
-    let stroke = Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.8));
+    let stroke = Stroke::new(1.0, theme::accent().gamma_multiply(0.8));
     let lines: Vec<(Point2, Point2)> = match al.axis {
         AlignAxis::Horizontal => {
             let (a, b) =
@@ -913,7 +913,7 @@ fn place_tool(
         layout::layout(&d, sheet_i, &ctx)
     };
     for item in ghost_list.items.iter().filter(|i| matches!(i.owner(), Owner::Curve(v, _) if v == pending.view.id)) {
-        sheet2.paint(item, Some(theme::ACCENT.gamma_multiply(0.85)), 0.0);
+        sheet2.paint(item, Some(theme::accent().gamma_multiply(0.85)), 0.0);
     }
     // Direction dots around the parent and the alignment guides.
     if let PlaceKind::Projected { parent } = &kind
@@ -935,14 +935,14 @@ fn place_tool(
             let at = sheet2.s(Point2::new(cx + dx * rx, cy + dy * ry));
             let active = pending.direction == Some(d);
             if active {
-                sheet2.painter.circle_filled(at, 4.5, theme::ACCENT);
+                sheet2.painter.circle_filled(at, 4.5, theme::accent());
             } else {
-                sheet2.painter.circle(at, 3.5, theme::PANEL, Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.7)));
+                sheet2.painter.circle(at, 3.5, theme::panel(), Stroke::new(1.0, theme::accent().gamma_multiply(0.7)));
             }
         }
         if let (true, Some(al)) = (pending.aligned, pending.view.alignment) {
             let painter = sheet2.painter;
-            let stroke = Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.8));
+            let stroke = Stroke::new(1.0, theme::accent().gamma_multiply(0.8));
             let child = pending.view.position;
             let lines: Vec<(Point2, Point2)> = match al.axis {
                 AlignAxis::Horizontal => {
@@ -1010,14 +1010,14 @@ fn place_tool(
 }
 
 fn hover_card(painter: &egui::Painter, at: Pos2, line1: &str, line2: &str) {
-    let g1 = painter.layout_no_wrap(line1.to_owned(), theme::font_medium(12.0), theme::INK);
-    let g2 = painter.layout_no_wrap(line2.to_owned(), theme::font(11.0), theme::MUTED);
+    let g1 = painter.layout_no_wrap(line1.to_owned(), theme::font_medium(12.0), theme::ink());
+    let g2 = painter.layout_no_wrap(line2.to_owned(), theme::font(11.0), theme::muted());
     let w = g1.size().x.max(g2.size().x) + 20.0;
     let h = g1.size().y + g2.size().y + 16.0;
     let r = Rect::from_min_size(at, vec2(w, h));
-    painter.rect(r, CornerRadius::same(7), theme::PANEL, Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
-    painter.galley(r.left_top() + vec2(10.0, 7.0), g1, theme::INK);
-    painter.galley(r.left_top() + vec2(10.0, 9.0 + g2.size().y), g2, theme::MUTED);
+    painter.rect(r, CornerRadius::same(7), theme::panel(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
+    painter.galley(r.left_top() + vec2(10.0, 7.0), g1, theme::ink());
+    painter.galley(r.left_top() + vec2(10.0, 9.0 + g2.size().y), g2, theme::muted());
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1047,14 +1047,14 @@ fn smart_dimension_tool(
                 fill: false,
                 accuracy: Some(c.accuracy),
             });
-            sheet2.paint(&item, Some(theme::ACCENT), 1.5);
+            sheet2.paint(&item, Some(theme::accent()), 1.5);
             if let Some(end) = p.end
                 && let Some(c) = v.geometry.curves.get(p.curve)
             {
                 let shape = shape_of(&c.path);
                 let q = if end == Attach::Start { shape.start() } else { shape.end() };
                 let at = sheet2.s(Point2::new(q.u + v.position.u, q.v + v.position.v));
-                sheet2.painter.circle_filled(at, 4.0, theme::ACCENT);
+                sheet2.painter.circle_filled(at, 4.0, theme::accent());
             }
         }
     }
@@ -1072,7 +1072,7 @@ fn smart_dimension_tool(
             _ => None,
         });
         for item in ghost.items.iter().filter(|i| Some(i.owner()) == id.map(Owner::Annotation)) {
-            sheet2.paint(item, Some(theme::ACCENT), 0.0);
+            sheet2.paint(item, Some(theme::accent()), 0.0);
         }
     }
     if !clicked {
@@ -1360,9 +1360,8 @@ fn banner(
     let detail = parts.join(" · ");
     let width = (rect.width() - 40.0).min(820.0);
     let area = Rect::from_min_size(pos2(rect.center().x - width / 2.0, rect.top() + 38.0), vec2(width, 44.0));
-    let bg =
-        if r.dangling.is_empty() { Color32::from_rgb(0xfd, 0xf6, 0xe3) } else { Color32::from_rgb(0xfd, 0xee, 0xe8) };
-    let stroke = if r.dangling.is_empty() { theme::WARN } else { theme::ERROR };
+    let bg = if r.dangling.is_empty() { theme::warn_soft() } else { theme::error_soft() };
+    let stroke = if r.dangling.is_empty() { theme::warn() } else { theme::error() };
     ui.scope_builder(
         egui::UiBuilder::new().max_rect(area).layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
@@ -1379,8 +1378,8 @@ fn banner(
             ui.add_space(30.0);
             ui.vertical(|ui| {
                 ui.add_space(5.0);
-                ui.label(egui::RichText::new(head).family(theme::semibold()).size(12.0).color(theme::INK));
-                ui.label(egui::RichText::new(detail).size(11.5).color(theme::INK));
+                ui.label(egui::RichText::new(head).family(theme::semibold()).size(12.0).color(theme::ink()));
+                ui.label(egui::RichText::new(detail).size(11.5).color(theme::ink()));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
@@ -1394,7 +1393,8 @@ fn banner(
                 if ui.button("Undo update").on_hover_text("One undo step: the views and references go back").clicked() {
                     push(DrawingAction::UndoUpdate);
                 }
-                let review = egui::Button::new(egui::RichText::new("Review").color(Color32::WHITE)).fill(theme::ACCENT);
+                let review =
+                    egui::Button::new(egui::RichText::new("Review").color(theme::on_accent())).fill(theme::accent());
                 if ui.add(review).on_hover_text("Open the Needs attention list").clicked() {
                     push(DrawingAction::Review);
                 }
@@ -1421,8 +1421,8 @@ fn palette(
         ui.ctx(),
         |ui| {
             egui::Frame::new()
-                .fill(theme::PANEL)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::panel())
+                .stroke(Stroke::new(1.0, theme::line()))
                 .corner_radius(CornerRadius::same(8))
                 .shadow(egui::Shadow { offset: [0, 3], blur: 10, spread: 0, color: Color32::from_black_alpha(22) })
                 .inner_margin(egui::Margin::symmetric(8, 6))
@@ -1433,7 +1433,7 @@ fn palette(
                             egui::RichText::new(s.doc.dimension_text(d))
                                 .family(theme::semibold())
                                 .size(12.5)
-                                .color(theme::INK),
+                                .color(theme::ink()),
                         );
                         ui.separator();
                         let sym = matches!(edited.tolerance, Tolerance::Symmetric { .. });

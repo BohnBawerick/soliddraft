@@ -108,7 +108,7 @@ fn built_in(kind: LocationKind) -> Vec<String> {
 
 /// `text` cut from the start with an ellipsis until it fits in `width`.
 fn fit_end(ui: &egui::Ui, text: &str, width: f32) -> String {
-    let measure = |t: &str| ui.fonts_mut(|f| f.layout_no_wrap(t.to_owned(), theme::font(12.0), theme::INK).size().x);
+    let measure = |t: &str| ui.fonts_mut(|f| f.layout_no_wrap(t.to_owned(), theme::font(12.0), theme::ink()).size().x);
     if measure(text) <= width {
         return text.to_owned();
     }
@@ -154,7 +154,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                      these add to it.",
                 )
                 .size(11.5)
-                .color(theme::MUTED),
+                .color(theme::muted()),
             );
             ui.add_space(6.0);
             ui.horizontal_top(|ui| {
@@ -171,11 +171,11 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                             egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, kind.label())
                         });
                         let (bg, ink) = if on {
-                            (theme::SELECTION_BG, theme::SELECTION_INK)
+                            (theme::selection_bg(), theme::selection_ink())
                         } else if resp.hovered() {
-                            (theme::HOVER, theme::INK)
+                            (theme::hover(), theme::ink())
                         } else {
-                            (Color32::TRANSPARENT, theme::INK)
+                            (Color32::TRANSPARENT, theme::ink())
                         };
                         ui.painter().rect_filled(rect, CornerRadius::same(5), bg);
                         ui.painter().text(
@@ -191,7 +191,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                                 egui::Align2::RIGHT_CENTER,
                                 n.to_string(),
                                 theme::font(11.0),
-                                theme::MUTED,
+                                theme::muted(),
                             );
                         }
                         if resp.clicked() && !on {
@@ -206,7 +206,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                 ui.vertical(|ui| {
                     ui.set_width(ui.available_width());
                     ui.label(egui::RichText::new(d.kind.label()).family(theme::semibold()).size(13.0));
-                    ui.label(egui::RichText::new(describe(d.kind)).size(11.0).color(theme::MUTED));
+                    ui.label(egui::RichText::new(describe(d.kind)).size(11.0).color(theme::muted()));
                     ui.add_space(6.0);
                     let built = built_in(d.kind);
                     if !built.is_empty() {
@@ -214,8 +214,8 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                         for b in &built {
                             ui.horizontal(|ui| {
                                 ui.add_space(6.0);
-                                ui.label(egui::RichText::new(b).size(12.0).color(theme::MUTED));
-                                ui.label(egui::RichText::new("· read-only").size(10.5).color(theme::MUTED));
+                                ui.label(egui::RichText::new(b).size(12.0).color(theme::muted()));
+                                ui.label(egui::RichText::new("· read-only").size(10.5).color(theme::muted()));
                             });
                         }
                         ui.add_space(6.0);
@@ -224,8 +224,8 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                     ui.horizontal_top(|ui| {
                         let list_w = ui.available_width() - 110.0;
                         egui::Frame::new()
-                            .fill(theme::FIELD_BG)
-                            .stroke(Stroke::new(1.0, theme::LINE))
+                            .fill(theme::field_bg())
+                            .stroke(Stroke::new(1.0, theme::line()))
                             .corner_radius(CornerRadius::same(6))
                             .inner_margin(egui::Margin::same(4))
                             .show(ui, |ui| {
@@ -234,7 +234,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                                 let entries: Vec<PathBuf> = d.locations.get(d.kind).to_vec();
                                 if entries.is_empty() {
                                     ui.add_space(4.0);
-                                    ui.label(egui::RichText::new("Nothing added").size(11.5).color(theme::MUTED));
+                                    ui.label(egui::RichText::new("Nothing added").size(11.5).color(theme::muted()));
                                 }
                                 for (i, p) in entries.iter().enumerate() {
                                     let on = d.selected == Some(i);
@@ -245,9 +245,9 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                                         egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, text.clone())
                                     });
                                     if on {
-                                        ui.painter().rect_filled(rect, CornerRadius::same(4), theme::SELECTION_BG);
+                                        ui.painter().rect_filled(rect, CornerRadius::same(4), theme::selection_bg());
                                     } else if resp.hovered() {
-                                        ui.painter().rect_filled(rect, CornerRadius::same(4), theme::HOVER);
+                                        ui.painter().rect_filled(rect, CornerRadius::same(4), theme::hover());
                                     }
                                     let what = if p.is_dir() {
                                         "folder"
@@ -263,14 +263,14 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                                         egui::Align2::LEFT_CENTER,
                                         shown,
                                         theme::font(12.0),
-                                        if on { theme::SELECTION_INK } else { theme::INK },
+                                        if on { theme::selection_ink() } else { theme::ink() },
                                     );
                                     ui.painter().text(
                                         egui::pos2(rect.right() - 6.0, rect.center().y),
                                         egui::Align2::RIGHT_CENTER,
                                         what,
                                         theme::font(10.5),
-                                        if what == "missing" { theme::WARN } else { theme::MUTED },
+                                        if what == "missing" { theme::warn() } else { theme::muted() },
                                     );
                                     if resp.clicked() {
                                         d.selected = Some(i);
@@ -327,15 +327,15 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                         }
                     });
                     if let Some(e) = &d.error {
-                        ui.label(egui::RichText::new(e).size(11.5).color(theme::ERROR));
+                        ui.label(egui::RichText::new(e).size(11.5).color(theme::error()));
                     }
                 });
             });
             ui.add_space(8.0);
             let frame = egui::Frame::new()
-                .fill(theme::ACCENT_SOFT)
+                .fill(theme::accent_soft())
                 .corner_radius(CornerRadius::same(6))
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .stroke(Stroke::new(1.0, theme::line()))
                 .inner_margin(egui::Margin::symmetric(8, 5));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -345,12 +345,12 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
                          here are read when SolidDraft starts.",
                     )
                     .size(11.0)
-                    .color(theme::SELECTION_INK),
+                    .color(theme::selection_ink()),
                 );
             });
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let ok = egui::Button::new(egui::RichText::new("OK").color(Color32::WHITE)).fill(theme::ACCENT);
+                let ok = egui::Button::new(egui::RichText::new("OK").color(theme::on_accent())).fill(theme::accent());
                 if ui.add(ok).clicked() {
                     done = Some(Done::Ok);
                 }

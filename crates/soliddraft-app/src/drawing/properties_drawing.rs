@@ -22,16 +22,16 @@ pub(super) fn header(ui: &mut egui::Ui, icon: Icon, title: &str) -> Rect {
         ui.painter(),
         icon,
         Rect::from_center_size(pos2(head.left() + 20.0, head.center().y), vec2(16.0, 16.0)),
-        theme::INK,
+        theme::ink(),
     );
     ui.painter().text(
         pos2(head.left() + 34.0, head.center().y),
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     head
 }
 
@@ -39,9 +39,9 @@ pub(super) fn small_button(ui: &mut egui::Ui, rect: Rect, icon: Icon, tip: &str,
     let resp = ui.interact(rect, ui.id().with(("dpm_btn", tip)), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     let (bg, fg) = if primary {
-        (if resp.hovered() { theme::ACCENT.gamma_multiply(0.9) } else { theme::ACCENT }, Color32::WHITE)
+        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, theme::on_accent())
     } else {
-        (if resp.hovered() { theme::LINE } else { theme::HOVER }, theme::INK)
+        (if resp.hovered() { theme::line() } else { theme::hover() }, theme::ink())
     };
     ui.painter().rect_filled(rect, CornerRadius::same(5), bg);
     icons::paint(ui.painter(), icon, rect.shrink(4.0), fg);
@@ -55,15 +55,15 @@ pub(super) fn section_gap(ui: &mut egui::Ui) {
 }
 
 pub(super) fn hint(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(11.0).color(theme::MUTED));
+    ui.label(egui::RichText::new(text).size(11.0).color(theme::muted()));
 }
 
 pub(super) fn value_row(ui: &mut egui::Ui, label: &str, value: &str) {
     ui.horizontal(|ui| {
-        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::MUTED)));
+        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::muted())));
         egui::Frame::new()
-            .fill(theme::FIELD_BG)
-            .stroke(Stroke::new(1.0, theme::LINE))
+            .fill(theme::field_bg())
+            .stroke(Stroke::new(1.0, theme::line()))
             .corner_radius(CornerRadius::same(6))
             .inner_margin(egui::Margin::symmetric(8, 3))
             .show(ui, |ui| {
@@ -78,11 +78,11 @@ pub(super) fn choice(ui: &mut egui::Ui, on: bool, label: &str, tag: Option<&str>
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width() - 4.0, 24.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, label));
     let (bg, stroke, ink) = if on {
-        (theme::SELECTION_BG, theme::ACCENT, theme::SELECTION_INK)
+        (theme::selection_bg(), theme::accent(), theme::selection_ink())
     } else if resp.hovered() {
-        (theme::HOVER, theme::LINE, theme::INK)
+        (theme::hover(), theme::line(), theme::ink())
     } else {
-        (theme::PANEL, theme::LINE, theme::INK)
+        (theme::panel(), theme::line(), theme::ink())
     };
     ui.painter().rect(rect, CornerRadius::same(6), bg, Stroke::new(1.0, stroke), StrokeKind::Inside);
     ui.painter().text(pos2(rect.left() + 10.0, rect.center().y), Align2::LEFT_CENTER, label, theme::font(12.0), ink);
@@ -92,7 +92,7 @@ pub(super) fn choice(ui: &mut egui::Ui, on: bool, label: &str, tag: Option<&str>
             Align2::RIGHT_CENTER,
             t,
             theme::font(10.5),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     resp.clicked()
@@ -101,7 +101,8 @@ pub(super) fn choice(ui: &mut egui::Ui, on: bool, label: &str, tag: Option<&str>
 pub(super) fn primary_button(ui: &mut egui::Ui, label: &str) -> bool {
     ui.add_sized(
         vec2(ui.available_width() - 4.0, 26.0),
-        egui::Button::new(egui::RichText::new(label).color(Color32::WHITE).family(theme::medium())).fill(theme::ACCENT),
+        egui::Button::new(egui::RichText::new(label).color(theme::on_accent()).family(theme::medium()))
+            .fill(theme::accent()),
     )
     .clicked()
 }
@@ -146,7 +147,7 @@ pub fn new_drawing(ui: &mut egui::Ui, state: &mut AppState) {
             theme::section_label(ui, "Sheet");
             let template = templates::template(&new.template);
             ui.horizontal(|ui| {
-                ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Scale").size(12.0).color(theme::MUTED)));
+                ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Scale").size(12.0).color(theme::muted())));
                 let label = new.scale.map(|s| s.to_string()).unwrap_or("Auto (fit the part)".into());
                 egui::ComboBox::from_id_salt("new_drawing_scale").width(ui.available_width() - 20.0).selected_text(label).show_ui(ui, |ui| {
                     ui.selectable_value(&mut new.scale, None, "Auto (fit the part)");
@@ -156,7 +157,7 @@ pub fn new_drawing(ui: &mut egui::Ui, state: &mut AppState) {
                 });
             });
             ui.horizontal(|ui| {
-                ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Projection").size(12.0).color(theme::MUTED)));
+                ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Projection").size(12.0).color(theme::muted())));
                 let label = match new.projection {
                     Projection::FirstAngle => "First angle",
                     Projection::ThirdAngle => "Third angle",
@@ -178,11 +179,11 @@ pub fn new_drawing(ui: &mut egui::Ui, state: &mut AppState) {
                     let (rect, resp) = ui.allocate_exact_size(vec2(w, 46.0), Sense::click());
                     let name = standard_label(*view).trim_end_matches(" view").to_owned();
                     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *on, format!("Place {name}")));
-                    let (bg, stroke) = if *on { (theme::SELECTION_BG, theme::ACCENT) } else { (theme::PANEL, theme::LINE) };
+                    let (bg, stroke) = if *on { (theme::selection_bg(), theme::accent()) } else { (theme::panel(), theme::line()) };
                     ui.painter().rect(rect, CornerRadius::same(6), bg, Stroke::new(1.0, stroke), StrokeKind::Inside);
                     let glyph = Rect::from_center_size(pos2(rect.center().x, rect.top() + 16.0), vec2(18.0, 18.0));
-                    view_glyph(ui.painter(), *view, glyph, if *on { theme::SELECTION_INK } else { theme::MUTED });
-                    ui.painter().text(pos2(rect.center().x, rect.bottom() - 9.0), Align2::CENTER_CENTER, &name, theme::font(10.5), if *on { theme::SELECTION_INK } else { theme::MUTED });
+                    view_glyph(ui.painter(), *view, glyph, if *on { theme::selection_ink() } else { theme::muted() });
+                    ui.painter().text(pos2(rect.center().x, rect.bottom() - 9.0), Align2::CENTER_CENTER, &name, theme::font(10.5), if *on { theme::selection_ink() } else { theme::muted() });
                     if resp.clicked() {
                         *on = !*on;
                     }
@@ -193,7 +194,7 @@ pub fn new_drawing(ui: &mut egui::Ui, state: &mut AppState) {
             });
             if let Some(e) = &new.error {
                 ui.add_space(6.0);
-                ui.label(egui::RichText::new(e).size(11.5).color(theme::ERROR));
+                ui.label(egui::RichText::new(e).size(11.5).color(theme::error()));
             }
             ui.add_space(10.0);
             if primary_button(ui, "Create drawing") {
@@ -297,8 +298,8 @@ fn needs_attention(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<
             let view_name = sheet.view(a.view).map(|v| view_label(&sheet, v)).unwrap_or_else(|| "sheet".into());
             let focused = s.attention_focus == Some(a.id) || s.selection == Some(DrawingSel::Annotation(a.id));
             let card = egui::Frame::new()
-                .fill(if focused { theme::FIELD_BG } else { theme::PANEL })
-                .stroke(Stroke::new(1.0, if focused { theme::ERROR.gamma_multiply(0.6) } else { theme::LINE }))
+                .fill(if focused { theme::field_bg() } else { theme::panel() })
+                .stroke(Stroke::new(1.0, if focused { theme::error().gamma_multiply(0.6) } else { theme::line() }))
                 .corner_radius(CornerRadius::same(7))
                 .inner_margin(egui::Margin::symmetric(9, 7));
             card.show(ui, |ui| {
@@ -307,21 +308,22 @@ fn needs_attention(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<
                     ui.max_rect().left_top() - vec2(9.0, 7.0),
                     vec2(3.0, ui.max_rect().height() + 14.0),
                 );
-                ui.painter().rect_filled(bar, CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, theme::ERROR);
+                ui.painter().rect_filled(bar, CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, theme::error());
                 ui.horizontal(|ui| {
-                    ui.painter().circle_filled(ui.cursor().left_top() + vec2(4.0, 10.0), 3.5, theme::ERROR);
+                    ui.painter().circle_filled(ui.cursor().left_top() + vec2(4.0, 10.0), 3.5, theme::error());
                     ui.add_space(12.0);
-                    ui.label(egui::RichText::new(&name).family(theme::semibold()).size(12.5).color(theme::ERROR));
-                    ui.label(egui::RichText::new(format!("· {}", kind_words(a))).size(11.5).color(theme::MUTED));
-                    ui.label(egui::RichText::new(format!("· {view_name}")).size(11.5).color(theme::MUTED));
+                    ui.label(egui::RichText::new(&name).family(theme::semibold()).size(12.5).color(theme::error()));
+                    ui.label(egui::RichText::new(format!("· {}", kind_words(a))).size(11.5).color(theme::muted()));
+                    ui.label(egui::RichText::new(format!("· {view_name}")).size(11.5).color(theme::muted()));
                 });
                 ui.add_space(2.0);
-                ui.label(egui::RichText::new(cause).size(11.0).color(theme::MUTED).italics());
+                ui.label(egui::RichText::new(cause).size(11.0).color(theme::muted()).italics());
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let end = lost.first().copied().unwrap_or(0);
-                    let reattach = egui::Button::new(egui::RichText::new("Reattach…").color(Color32::WHITE).size(11.5))
-                        .fill(theme::ACCENT);
+                    let reattach =
+                        egui::Button::new(egui::RichText::new("Reattach…").color(theme::on_accent()).size(11.5))
+                            .fill(theme::accent());
                     if ui
                         .add(reattach)
                         .on_hover_text("One pick per lost end: click the new edge or point in the view")
@@ -352,8 +354,8 @@ fn needs_attention(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<
                 let name = annotation_name(a, style);
                 let view_name = sheet.view(a.view).map(|v| view_label(&sheet, v)).unwrap_or_else(|| "sheet".into());
                 egui::Frame::new()
-                    .fill(theme::PANEL)
-                    .stroke(Stroke::new(1.0, theme::LINE))
+                    .fill(theme::panel())
+                    .stroke(Stroke::new(1.0, theme::line()))
                     .corner_radius(CornerRadius::same(7))
                     .inner_margin(egui::Margin::symmetric(9, 6))
                     .show(ui, |ui| {
@@ -362,19 +364,19 @@ fn needs_attention(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<
                             ui.max_rect().left_top() - vec2(9.0, 6.0),
                             vec2(3.0, ui.max_rect().height() + 12.0),
                         );
-                        ui.painter().rect_filled(bar, CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, theme::WARN);
+                        ui.painter().rect_filled(bar, CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, theme::warn());
                         ui.horizontal(|ui| {
                             ui.add_space(4.0);
                             ui.label(
                                 egui::RichText::new(format!("{previous} → {name}"))
                                     .family(theme::semibold())
                                     .size(12.0)
-                                    .color(theme::WARN),
+                                    .color(theme::warn()),
                             );
                             ui.label(
                                 egui::RichText::new(format!("· {} · {view_name}", kind_words(a)))
                                     .size(11.0)
-                                    .color(theme::MUTED),
+                                    .color(theme::muted()),
                             );
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if ui.add(egui::Button::new(egui::RichText::new("Accept").size(11.0))).clicked() {
@@ -479,7 +481,7 @@ fn view_panel(
             ui.horizontal(|ui| {
                 ui.add_sized(
                     vec2(68.0, 22.0),
-                    egui::Label::new(egui::RichText::new("Custom").size(12.0).color(theme::MUTED)),
+                    egui::Label::new(egui::RichText::new("Custom").size(12.0).color(theme::muted())),
                 );
                 let current = match v.scale {
                     ViewScale::Custom { factor } => soliddraft_drawing::display::scale_text(factor),
@@ -521,7 +523,7 @@ fn view_panel(
             ui.horizontal(|ui| {
                 ui.add_sized(
                     vec2(68.0, 22.0),
-                    egui::Label::new(egui::RichText::new("Tangent edges").size(12.0).color(theme::MUTED)),
+                    egui::Label::new(egui::RichText::new("Tangent edges").size(12.0).color(theme::muted())),
                 );
                 let label = match v.display.tangent {
                     TangentEdges::Removed => "Removed",
@@ -657,9 +659,9 @@ fn annotation_panel(
                     let text = format!("{} · {kind} · {attach}", an.entity.role);
                     ui.horizontal(|ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
-                        icons::paint(ui.painter(), Icon::Axis, r, if lost { theme::ERROR } else { theme::INK });
+                        icons::paint(ui.painter(), Icon::Axis, r, if lost { theme::error() } else { theme::ink() });
                         let rich = egui::RichText::new(text).size(11.5);
-                        ui.label(if lost { rich.strikethrough().color(theme::ERROR) } else { rich });
+                        ui.label(if lost { rich.strikethrough().color(theme::error()) } else { rich });
                     });
                     if lost && ui.small_button("Reattach this end…").clicked() {
                         actions.push(DrawingAction::StartReattach { annotation: id, end: i });
@@ -716,7 +718,7 @@ fn annotation_panel(
                     ui.add_space(4.0);
                     let mut text = d.text.clone();
                     ui.horizontal(|ui| {
-                        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Text").size(12.0).color(theme::MUTED)));
+                        ui.add_sized(vec2(68.0, 22.0), egui::Label::new(egui::RichText::new("Text").size(12.0).color(theme::muted())));
                         let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(ui.available_width() - 20.0));
                         if r.lost_focus() && text != d.text {
                             edited.text = if text.trim().is_empty() { soliddraft_drawing::Dimension::VALUE_TEXT.into() } else { text.clone() };
@@ -767,14 +769,14 @@ fn annotation_panel(
             match &a.state {
                 AnnotationState::Changed { previous } => {
                     section_gap(ui);
-                    ui.label(egui::RichText::new(format!("Changed from {previous} in the last update")).size(11.5).color(theme::WARN));
+                    ui.label(egui::RichText::new(format!("Changed from {previous} in the last update")).size(11.5).color(theme::warn()));
                     if ui.button("Accept the new value").clicked() {
                         actions.push(DrawingAction::AcceptChange(id));
                     }
                 }
                 AnnotationState::Dangling { cause, .. } => {
                     section_gap(ui);
-                    ui.label(egui::RichText::new(cause).size(11.5).color(theme::ERROR));
+                    ui.label(egui::RichText::new(cause).size(11.5).color(theme::error()));
                 }
                 AnnotationState::Ok => {}
             }
@@ -868,7 +870,7 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
             ui.horizontal(|ui| {
                 ui.add_sized(
                     vec2(68.0, 22.0),
-                    egui::Label::new(egui::RichText::new("Name").size(12.0).color(theme::MUTED)),
+                    egui::Label::new(egui::RichText::new("Name").size(12.0).color(theme::muted())),
                 );
                 let mut text = s
                     .sheet_rename
@@ -919,7 +921,7 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
             ui.horizontal(|ui| {
                 ui.add_sized(
                     vec2(68.0, 22.0),
-                    egui::Label::new(egui::RichText::new("Scale").size(12.0).color(theme::MUTED)),
+                    egui::Label::new(egui::RichText::new("Scale").size(12.0).color(theme::muted())),
                 );
                 egui::ComboBox::from_id_salt("sheet_scale")
                     .width(ui.available_width() - 20.0)
@@ -936,7 +938,7 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
             ui.horizontal(|ui| {
                 ui.add_sized(
                     vec2(68.0, 22.0),
-                    egui::Label::new(egui::RichText::new("Projection").size(12.0).color(theme::MUTED)),
+                    egui::Label::new(egui::RichText::new("Projection").size(12.0).color(theme::muted())),
                 );
                 let label = match sheet.projection {
                     Projection::FirstAngle => "First angle",
@@ -983,7 +985,7 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
                 ui.horizontal(|ui| {
                     ui.add_sized(
                         vec2(68.0, 22.0),
-                        egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::MUTED)),
+                        egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::muted())),
                     );
                     let r = ui.add(egui::TextEdit::singleline(value).desired_width(ui.available_width() - 20.0));
                     r.widget_info(|| {
@@ -1006,7 +1008,7 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
                     let label = key[..1].to_uppercase() + &key[1..];
                     ui.add_sized(
                         vec2(68.0, 22.0),
-                        egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::MUTED)),
+                        egui::Label::new(egui::RichText::new(label).size(12.0).color(theme::muted())),
                     );
                     let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(ui.available_width() - 20.0));
                     if r.lost_focus() && text != current {

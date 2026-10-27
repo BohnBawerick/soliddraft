@@ -1816,7 +1816,7 @@ pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
     use crate::theme;
     let Some(s) = state.drawing.session.as_ref() else { return };
     let sheet = s.sheet();
-    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::MUTED);
+    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::muted());
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 18.0;
         ui.add_space(4.0);
@@ -1837,14 +1837,14 @@ pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
                 egui::RichText::new(format!("{part} not found · repair the reference"))
                     .family(theme::semibold())
                     .size(11.5)
-                    .color(theme::ERROR),
+                    .color(theme::error()),
             );
         } else if s.doc.is_stale() {
             ui.label(
                 egui::RichText::new(format!("Newer version of {part} available · showing rev {rev} (Ctrl+B rebuilds)"))
                     .family(theme::semibold())
                     .size(11.5)
-                    .color(theme::WARN),
+                    .color(theme::warn()),
             );
         } else if dangling > 0 || changed > 0 {
             let mut parts = Vec::new();
@@ -1858,14 +1858,14 @@ pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
                 egui::RichText::new(format!("Updated to {part} rev {rev} · {}", parts.join(" · ")))
                     .family(theme::semibold())
                     .size(11.5)
-                    .color(if dangling > 0 { theme::ERROR } else { theme::WARN }),
+                    .color(if dangling > 0 { theme::error() } else { theme::warn() }),
             );
         } else {
             ui.label(
                 egui::RichText::new(format!("Up to date with {part} rev {rev}"))
                     .family(theme::semibold())
                     .size(11.5)
-                    .color(theme::OK),
+                    .color(theme::ok()),
             );
         }
         if s.tool != DrawingTool::Select {
