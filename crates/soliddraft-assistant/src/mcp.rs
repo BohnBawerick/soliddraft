@@ -11,11 +11,11 @@
 use crate::tools::{Caller, ToolHost, call_checked, clip_error};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Protocol versions this server speaks, newest first.
 pub const PROTOCOL_VERSIONS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
@@ -262,6 +262,11 @@ impl Drop for HttpServer {
 const MAX_LINE: usize = 64 * 1024;
 const MAX_HEADERS: usize = 100;
 
+/// How long, and how many bytes, a refused client may go on sending before the server
+/// closes on it.
+const DRAIN_TIME: Duration = Duration::from_secs(2);
+const DRAIN_BYTES: usize = MAX_MESSAGE;
+
 /// One line of a request's head.
 enum Head {
     Line(String),
@@ -299,8 +304,8 @@ fn connection(
         let request_line = match head_line(&mut reader)? {
             Head::Line(line) => line,
             Head::Closed => return Ok(()),
-            Head::TooLong => return respond(&mut writer, 431, None, true),
-            Head::NotText => return respond(&mut writer, 400, None, true),
+            Head::TooLong => return refuse(&mut writer, &mut reader, 431),
+            Head::NotText => return refuse(&mut writer, &mut reader, 400),
         };
         let mut parts = request_line.split_whitespace();
         let (method, path) = (parts.next().unwrap_or_default().to_owned(), parts.next().unwrap_or_default().to_owned());
@@ -311,15 +316,15 @@ fn connection(
             let line = match head_line(&mut reader)? {
                 Head::Line(line) => line,
                 Head::Closed => return Ok(()),
-                Head::TooLong => return respond(&mut writer, 431, None, true),
-                Head::NotText => return respond(&mut writer, 400, None, true),
+                Head::TooLong => return refuse(&mut writer, &mut reader, 431),
+                Head::NotText => return refuse(&mut writer, &mut reader, 400),
             };
             let line = line.trim_end();
             if line.is_empty() {
                 break;
             }
             if headers >= MAX_HEADERS {
-                return respond(&mut writer, 431, None, true);
+                return refuse(&mut writer, &mut reader, 431);
             }
             if let Some((k, v)) = line.split_once(':') {
                 let v = v.trim();
@@ -332,8 +337,7 @@ fn connection(
             }
         }
         if length > MAX_MESSAGE {
-            respond(&mut writer, 413, None, true)?;
-            return Ok(());
+            return refuse(&mut writer, &mut reader, 413);
         }
         let mut body = vec![0; length];
         reader.read_exact(&mut body)?;
@@ -384,6 +388,33 @@ fn local_origin(origin: &str) -> bool {
         .map(|(h, p)| if p.chars().all(|c| c.is_ascii_digit()) { h } else { host })
         .unwrap_or(host);
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+}
+
+/// Answers a request the server will not read to its end, then closes the connection.
+/// Closing on unread request bytes resets the connection, and Windows then drops the
+/// answer before the client reads it. So the server stops writing, reads and discards
+/// what the client still sends, for at most [`DRAIN_TIME`] and [`DRAIN_BYTES`], and only
+/// then closes.
+fn refuse(writer: &mut TcpStream, reader: &mut BufReader<TcpStream>, status: u16) -> std::io::Result<()> {
+    respond(writer, status, None, true)?;
+    writer.shutdown(Shutdown::Write)?;
+    let deadline = Instant::now() + DRAIN_TIME;
+    let mut sink = [0; 8192];
+    let mut drained = 0;
+    while drained < DRAIN_BYTES {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            break;
+        }
+        reader.get_ref().set_read_timeout(Some(left))?;
+        match reader.read(&mut sink) {
+            Ok(0) => break,
+            Ok(n) => drained += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    Ok(())
 }
 
 fn respond(w: &mut TcpStream, status: u16, body: Option<&Value>, close: bool) -> std::io::Result<()> {
