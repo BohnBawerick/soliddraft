@@ -99,6 +99,7 @@ impl View {
             pixels_per_point: 1.0,
             display: DisplayMode::Shaded,
             preset: Preset::default(),
+            backdrop: soliddraft_app::theme::viewport_backdrop(),
             hover_id: 0,
             selected_id: 0,
             selected_feature: 0,

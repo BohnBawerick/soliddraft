@@ -124,6 +124,8 @@ pub struct FrameInput {
     pub pixels_per_point: f32,
     pub display: DisplayMode,
     pub preset: Preset,
+    /// The backdrop the scene is composited over: top and bottom of the fade, sRGB.
+    pub backdrop: [egui::Color32; 2],
     pub hover_id: u32,
     pub selected_id: u32,
     pub selected_feature: u32,
@@ -194,6 +196,24 @@ struct Globals {
     /// Faces made by this feature are highlighted (0 for none).
     selected_feature: u32,
     _pad: u32,
+}
+
+/// Mirrors `Backdrop` in scene.wgsl: the top and bottom of the fade, linear.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Backdrop {
+    top: [f32; 4],
+    bottom: [f32; 4],
+}
+
+impl Backdrop {
+    fn from_srgb([top, bottom]: [egui::Color32; 2]) -> Backdrop {
+        let linear = |c: egui::Color32| {
+            let [r, g, b, _] = egui::Rgba::from(c).to_array();
+            [r, g, b, 1.0]
+        };
+        Backdrop { top: linear(top), bottom: linear(bottom) }
+    }
 }
 
 /// Appearances one body can show; a face indexing past them shows the first.
@@ -383,6 +403,7 @@ pub struct ViewportRenderer {
     ao_pipelines: Option<[wgpu::RenderPipeline; 3]>,
     blit_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
+    backdrop: wgpu::Buffer,
     globals_bind_group: wgpu::BindGroup,
     uniforms_bind_group: wgpu::BindGroup,
     layouts: Layouts,
@@ -471,6 +492,7 @@ impl ViewportRenderer {
                 entries: &[
                     texture_entry(0, wgpu::TextureSampleType::Float { filterable: true }, d2),
                     sampler_entry(1, wgpu::SamplerBindingType::Filtering),
+                    uniform_entry(2),
                 ],
             }),
         };
@@ -704,6 +726,12 @@ impl ViewportRenderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let backdrop = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("backdrop"),
+            size: std::mem::size_of::<Backdrop>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("scene"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -790,6 +818,7 @@ impl ViewportRenderer {
             ao_pipelines,
             blit_pipeline,
             globals,
+            backdrop,
             globals_bind_group,
             uniforms_bind_group,
             layouts,
@@ -865,6 +894,7 @@ impl ViewportRenderer {
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&color) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.backdrop.as_entire_binding() },
             ],
         });
         let ao = self.ao_pipelines.is_some().then(|| {
@@ -1039,6 +1069,7 @@ impl ViewportRenderer {
             texel: 1.0,
         });
         let toward_sun = environment::softbox_direction();
+        queue.write_buffer(&self.backdrop, 0, bytemuck::bytes_of(&Backdrop::from_srgb(input.backdrop)));
         let model_radius = bounds.map_or(100.0, |(lo, hi)| ((hi - lo).length() / 2.0).max(1.0));
         queue.write_buffer(
             &self.globals,

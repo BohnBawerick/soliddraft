@@ -568,6 +568,14 @@ fn fs_ao_blur(in: BlitOut) -> @location(0) vec4<f32> {
 
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
 @group(0) @binding(1) var scene_sampler: sampler;
+// The modelling space behind the scene: a vertical fade, linear colour, from the
+// theme's viewport tokens (theme.rs). The ground disc darkens whatever lies behind it,
+// so the shadow lands on the bottom tone.
+struct Backdrop {
+    top: vec4<f32>,
+    bottom: vec4<f32>,
+};
+@group(0) @binding(2) var<uniform> backdrop: Backdrop;
 
 struct BlitOut {
     @builtin(position) clip: vec4<f32>,
@@ -586,9 +594,7 @@ fn vs_blit(@builtin(vertex_index) i: u32) -> BlitOut {
 
 fn composite(uv: vec2<f32>) -> vec3<f32> {
     let scene = textureSample(scene_tex, scene_sampler, uv);
-    let top = srgb_to_linear(vec3<f32>(0.985, 0.988, 0.992));
-    let bottom = srgb_to_linear(vec3<f32>(0.885, 0.900, 0.922));
-    let bg = mix(top, bottom, uv.y);
+    let bg = mix(backdrop.top.rgb, backdrop.bottom.rgb, uv.y);
     return scene.rgb + bg * (1.0 - scene.a);
 }
 

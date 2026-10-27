@@ -291,6 +291,7 @@ impl ViewportState {
             pixels_per_point: ppp,
             display: self.display,
             preset: self.preset,
+            backdrop: theme::viewport_backdrop(),
             hover_id: 0,
             selected_id: 0,
             selected_feature: 0,
@@ -539,11 +540,7 @@ impl ViewportState {
                 hovered = Some(*sv);
             }
             let shade = 0.82 + 0.18 * facing.clamp(0.0, 1.0);
-            let base = if is_hover {
-                theme::selection_bg()
-            } else {
-                Color32::from_rgb((248.0 * shade) as u8, (249.0 * shade) as u8, (251.0 * shade) as u8)
-            };
+            let base = if is_hover { theme::selection_bg() } else { theme::chip().gamma_multiply(shade) };
             painter.add(egui::Shape::convex_polygon(
                 poly.clone(),
                 base,
