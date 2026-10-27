@@ -359,6 +359,7 @@ pub enum FeatureKind {
     Mirror(model::MirrorFeature),
     Draft(model::DraftFeature),
     Shell(model::ShellFeature),
+    ImportStep(model::ImportStepFeature),
 }
 
 impl FeatureKind {
@@ -378,6 +379,7 @@ impl FeatureKind {
             FeatureKind::Mirror(_) => "Mirror",
             FeatureKind::Draft(_) => "Draft",
             FeatureKind::Shell(_) => "Shell",
+            FeatureKind::ImportStep(_) => "Import",
         }
     }
 
@@ -398,6 +400,7 @@ impl FeatureKind {
             FeatureKind::Mirror(_) => "mirror",
             FeatureKind::Draft(_) => "draft",
             FeatureKind::Shell(_) => "shell",
+            FeatureKind::ImportStep(_) => "import",
         }
     }
 
@@ -446,6 +449,7 @@ impl FeatureKind {
             FeatureKind::Mirror(m) => model::FeatureKind::Mirror(m.clone()),
             FeatureKind::Draft(d) => model::FeatureKind::Draft(d.clone()),
             FeatureKind::Shell(s) => model::FeatureKind::Shell(s.clone()),
+            FeatureKind::ImportStep(i) => model::FeatureKind::ImportStep(i.clone()),
         }
     }
 
@@ -517,6 +521,7 @@ impl FeatureKind {
             model::FeatureKind::Mirror(m) => FeatureKind::Mirror(m.clone()),
             model::FeatureKind::Draft(d) => FeatureKind::Draft(d.clone()),
             model::FeatureKind::Shell(s) => FeatureKind::Shell(s.clone()),
+            model::FeatureKind::ImportStep(i) => FeatureKind::ImportStep(i.clone()),
         }
     }
 }
@@ -638,6 +643,7 @@ impl Feature {
             FeatureKind::Mirror(m) => plane_ref_label(&m.plane),
             FeatureKind::Draft(d) => format!("{}°", fmt_mm(d.angle)),
             FeatureKind::Shell(s) => format!("{} mm wall", fmt_mm(s.thickness)),
+            FeatureKind::ImportStep(i) => i.source_name.clone(),
         }
     }
 
@@ -1968,6 +1974,15 @@ impl Document {
                     }
                     FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_) => {
                         details.push(("Layout".to_owned(), f.summary()));
+                    }
+                    FeatureKind::ImportStep(i) => {
+                        details.push(("File".to_owned(), i.source_name.clone()));
+                        details.push(("SHA-256".to_owned(), i.sha256.clone()));
+                        details.push(("Size".to_owned(), format!("{} bytes", i.source.len())));
+                        details.push(("Answers".to_owned(), i.decisions.len().to_string()));
+                        if let Some(note) = self.model().import_check_note(model_id(id)) {
+                            details.push(("Check".to_owned(), note));
+                        }
                     }
                 }
                 if !f.is_sketch()

@@ -16,6 +16,7 @@ soliddraft-materials.workspace = true
 soliddraft-sketch.workspace = true
 soliddraft-tessellation.workspace = true
 serde.workspace = true
+sha2.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 zip.workspace = true

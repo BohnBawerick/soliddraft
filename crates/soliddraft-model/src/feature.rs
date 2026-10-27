@@ -1,9 +1,11 @@
 //! Features: the steps of a part, in tree order.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip, Plane, Vec3};
+use sha2::{Digest, Sha256};
+use soliddraft_kernel_api::{Decision, HoleDepth, HoleHead, HoleTip, Plane, Vec3, question_index};
 use soliddraft_sketch::{P2, Sketch};
 
 use crate::reference::{EdgeRef, FaceRef};
@@ -68,6 +70,8 @@ pub enum FeatureKind {
     Draft(DraftFeature),
     /// Hollows the body, leaving the selected faces open.
     Shell(ShellFeature),
+    /// A body read from an external STEP file, with the answers to its repair questions.
+    ImportStep(ImportStepFeature),
 }
 
 impl FeatureKind {
@@ -88,6 +92,7 @@ impl FeatureKind {
             FeatureKind::Mirror(_) => "Mirror",
             FeatureKind::Draft(_) => "Draft",
             FeatureKind::Shell(_) => "Shell",
+            FeatureKind::ImportStep(_) => "Import",
         }
     }
 
@@ -114,7 +119,7 @@ impl FeatureKind {
                 out.extend(b.edges.iter().flat_map(|e| e.faces.iter().map(|f| f.feature)));
             }
             FeatureKind::Hole(h) => out.push(h.face.feature),
-            FeatureKind::Pattern(_) => {}
+            FeatureKind::Pattern(_) | FeatureKind::ImportStep(_) => {}
             FeatureKind::Mirror(m) => {
                 if let PlaneRef::Face { face } = &m.plane {
                     out.push(face.feature);
@@ -418,4 +423,116 @@ pub struct ShellFeature {
     pub open_faces: Vec<FaceRef>,
     /// Positive, finite wall thickness in millimetres.
     pub thickness: f64,
+}
+
+/// An imported body: the source file, kept unchanged, and what the user decided about
+/// its proposed repairs. The body is derived from the two and rebuilds from them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ImportStepFeature {
+    /// The file name as imported, for display. It is never used as a path.
+    pub source_name: String,
+    /// The sha256 of `source`, in lowercase hex.
+    pub sha256: String,
+    /// The file bytes, unchanged.
+    #[serde(with = "hex_bytes")]
+    pub source: Vec<u8>,
+    /// Answers to repair questions, by question id: `accept:<tolerance_mm>` or `decline`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub decisions: BTreeMap<String, String>,
+    /// Who accepted the proposals, as the app supplied it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub approver: String,
+}
+
+impl ImportStepFeature {
+    /// An import of `source`, hashed, with no decisions.
+    pub fn new(source_name: impl Into<String>, source: Vec<u8>) -> ImportStepFeature {
+        ImportStepFeature {
+            source_name: source_name.into(),
+            sha256: sha256_hex(&source),
+            source,
+            decisions: BTreeMap::new(),
+            approver: String::new(),
+        }
+    }
+
+    /// True when `sha256` is the hash of `source`.
+    pub fn hash_matches(&self) -> bool {
+        self.sha256 == sha256_hex(&self.source)
+    }
+
+    /// This import with `question` accepted at `tolerance_mm`, replacing any earlier answer.
+    pub fn accepted(&self, question: &str, tolerance_mm: &str, approver: &str) -> ImportStepFeature {
+        let mut out = self.clone();
+        out.decisions.insert(question.to_string(), format!("accept:{tolerance_mm}"));
+        out.approver = approver.to_string();
+        out
+    }
+
+    /// This import with `question` declined, replacing any earlier answer.
+    pub fn declined(&self, question: &str) -> ImportStepFeature {
+        let mut out = self.clone();
+        out.decisions.insert(question.to_string(), "decline".to_string());
+        out
+    }
+
+    /// This import with the answer to `question` removed, so it is asked again.
+    pub fn unanswered(&self, question: &str) -> ImportStepFeature {
+        let mut out = self.clone();
+        out.decisions.remove(question);
+        out
+    }
+
+    /// The saved answers as the kernel reads them, or why one cannot be read. A question
+    /// must name a gap of this source, a tolerance must be a plain decimal, and an
+    /// acceptance needs an approver.
+    pub fn kernel_decisions(&self) -> Result<Vec<Decision>, String> {
+        let mut out = Vec::new();
+        for (question, answer) in &self.decisions {
+            let Some(index) = question_index(&self.sha256, question) else {
+                return Err(format!("{question} is not a question about this file"));
+            };
+            let id = format!("g{index}");
+            match answer.strip_prefix("accept:") {
+                _ if answer == "decline" => out.push(Decision::Decline { id }),
+                Some(tol) if is_decimal(tol) && !self.approver.is_empty() => {
+                    out.push(Decision::Accept { id, tolerance_mm: tol.to_string(), approver: self.approver.clone() });
+                }
+                Some(tol) if is_decimal(tol) => return Err(format!("{question} is accepted without an approver")),
+                _ => return Err(format!("{question} has an unreadable answer {answer:?}")),
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// True for a plain non-negative decimal such as `0.02`.
+fn is_decimal(text: &str) -> bool {
+    let (whole, frac) = text.split_once('.').unwrap_or((text, "0"));
+    !whole.is_empty()
+        && !frac.is_empty()
+        && whole.bytes().all(|b| b.is_ascii_digit())
+        && frac.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The sha256 of `bytes`, in lowercase hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Source bytes in a part file: lowercase hex, so the text file stays deterministic.
+mod hex_bytes {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&bytes.iter().map(|b| format!("{b:02x}")).collect::<String>())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        let text = String::deserialize(d)?;
+        if text.len() % 2 != 0 || !text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+            return Err(D::Error::custom("source bytes must be lowercase hex"));
+        }
+        Ok((0..text.len()).step_by(2).map(|i| u8::from_str_radix(&text[i..i + 2], 16).expect("checked hex")).collect())
+    }
 }

@@ -1050,6 +1050,8 @@ impl SolidDraftApp {
                         reverse: d.reverse,
                         picking_neutral: false,
                     }),
+                    // An import has no editor; its repair questions have their own dialog.
+                    FeatureKind::ImportStep(_) => return,
                 };
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(None));
