@@ -4,7 +4,9 @@
 
 SolidDraft uses `0.x.y` versions. Every `0.x` release is labelled **alpha** and marked as a GitHub prerelease. Numbers describe completed work, never dates. Increase the minor number for a completed capability milestone and the patch number for fixes to that milestone. Set `[workspace.package].version` in `Cargo.toml`; packaging reads that value rather than maintaining a second release counter. Keep `Cargo.lock` in sync when changing the workspace version.
 
-**Do not cut `0.1.0` until all work currently in flight has landed and been pushed to `main`.** Preparing or merging the release machinery is not permission to publish the first release. There are no scheduled releases or nightlies.
+Before the first `0.1.0` cut, record an explicit landed-or-parked disposition for the work in flight at the candidate freeze. Included feature work must have landed and been pushed to `main`; parked work remains unfinished. Preparing or merging release machinery is not permission to publish. There are no scheduled releases or nightlies.
+
+The freeze selects release candidates, not a development stop. Record both repositories' frozen commit hashes and create `release/<version>` branches from them. Continue development on `main`. Final kernel pins, acceptance, packages and smoke checks use the release branches. A blocker fix lands on `main` through its owning lane first, then is cherry-picked to the release branch, unless the fix applies only to the release. Record the resulting candidate hashes and repeat affected exact-source evidence after each fix. If release checks are starved by development CI, ask the integration owner to prioritize the release queue; do not cancel other lanes' runs yourself.
 
 ## What the workflow builds
 
@@ -36,15 +38,15 @@ gh attestation verify soliddraft-0.1.0-linux-x86_64.AppImage --repo BohnBawerick
 
 ## Dry run, without publishing
 
-On `main`, select **Release packages > Run workflow** in GitHub Actions, or run:
+Select **Release packages > Run workflow** on the candidate's versioned release branch, or run:
 
 ```sh
-gh workflow run release.yml --ref main
+gh workflow run release.yml --ref release/0.1.0
 ```
 
 `workflow_dispatch` always builds without creating a release, deploying Pages, signing with repository credentials or publishing attestations. It takes no publish switch. A pull request that changes release configuration also runs the same complete packaging path. This lets a new workflow be tested before GitHub permits manual dispatch from the default branch.
 
-Branch dry runs cancel their superseded runs. Each run on `main` or a version tag has its own concurrency group and cannot cancel or replace another protected run. A manual check against a release tag must not interrupt publishing.
+Feature-branch dry runs cancel their superseded runs. Each run on `main`, a `release/` branch or a version tag has its own concurrency group and cannot cancel or replace another protected run. A manual check against a release tag must not interrupt publishing.
 
 Download these run artifacts:
 
@@ -58,14 +60,14 @@ Before release, also download the AppImage and browser zip from the successful r
 
 ## Release checklist
 
-1. Confirm the owner's first-release gate above. For `0.1.0`, all work in flight must be merged and pushed to `main`.
-2. Confirm `main` is green in Hosted CI, including the application scenarios, click budgets and survival checks. Packaging success does not replace these checks. The tag workflow requires a successful Hosted CI push run at the tagged commit.
+1. Confirm the first-release gate above and record the landed/parked scope and frozen base commits. Create the versioned release branches without holding development on `main`.
+2. Confirm the candidate release commit is green in Hosted CI, including application scenarios, click budgets and survival checks. Packaging success does not replace these checks. The tag workflow requires a successful Hosted CI push run on `release/<version>` at the tagged commit.
 3. Test the supported desktop part and drawing flows. Open older supported `.dwprt` and `.dwdrw` documents, save and reopen them, and check document identities and references.
    Separately, run the reserved `.dwasm` assembly-format and schema checks. Desktop assembly opening and saving are not supported, so installers must not register an assembly file association. Keep the reserved format and extension unchanged.
-4. Land the workspace version and lockfile update on `main`. Run the full release dry run at that commit. Inspect all seven packages, the SBOM, SHA256SUMS, generated notes and both smoke screenshots. After installation, double-click a `.dwprt` part and a `.dwdrw` drawing and confirm that each opens in the application.
+4. Commit the final kernel pin, workspace version and generated lockfile on the release branch. Run the full release dry run at that exact commit. Inspect all seven packages, the SBOM, SHA256SUMS, generated notes and both smoke screenshots. After installation, double-click a `.dwprt` part and a `.dwdrw` drawing and confirm that each opens in the application.
 5. Review the generated source revisions and document-format lines. Notes record the exact SolidDraft commit and Catallax pin, and generation rejects disagreement between the adapter dependencies, backend identity and locked kernel sources. These identities do not substitute for acceptance of that source pair. The generator reads `DocKind::format` at the release commit and the nearest reachable previous released tag. It reports each current format and explicitly names a changed previous version. The first release prints all current format versions. Migration details belong in the merged change's pull request and `docs/documents.md`, not a hand-edited changelog.
 6. Review signing status. Until credentials exist, macOS and Windows builds are unsigned. Warn users about Gatekeeper and SmartScreen; do not claim that an attestation is an operating-system signing certificate.
-7. Only after approval, push the version tag from that green commit. For example, `git tag v0.1.0 <commit>` followed by `git push origin v0.1.0`. The workflow requires the tag to match the workspace version exactly and its commit to be reachable from `main`.
+7. Only after approval, push the version tag from that green release commit. For example, `git tag v0.1.0 <commit>` followed by `git push origin v0.1.0`. The tag must match the workspace version exactly and its commit must be reachable from the matching `release/0.1.0` branch, not merely `main`.
 8. Inspect the created GitHub prerelease, asset inventory, checksums and attestations. Do not move an existing release tag. Fix a failed or incorrect published build with a new patch release after completing validation.
 
 Release notes are generated from merged GitHub pull requests whose merge commits fall between the nearest previous released tag and the current commit. The generator lists titles, authors and links, then adds the document-format versions and alpha/file-backup warning. It uses read-only GitHub APIs and includes prereleases when finding the previous release. Do not maintain a hand-edited CHANGELOG.
