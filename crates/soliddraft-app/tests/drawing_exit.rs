@@ -53,6 +53,13 @@ fn save(harness: &mut App<'_>, name: &str) {
 
 fn settle(harness: &mut App<'_>) {
     harness.run_steps(24);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while harness.state().state.doc.proof_pending() {
+        assert!(std::time::Instant::now() < deadline, "the part proof did not settle");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        harness.run_steps(1);
+    }
+    harness.run_steps(1);
 }
 
 fn click_at(harness: &mut App<'_>, pos: Pos2) {
