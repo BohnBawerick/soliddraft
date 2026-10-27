@@ -24,7 +24,7 @@ path and its proof requirements.
 | Planar tray | No application shell tool | Kernel checks and rendered create/edit/save/reopen/select/export path pass |
 | Circular-extrusion shell | Generic stage-3 refusal | Exact `distance.cylinder-domain` refusal retained; unsupported in this slice |
 | Nonconvex planar shell | Generic stage-3 refusal | Exact `distance.unsupported-envelope` refusal retained; input unchanged |
-| Full P4 intersection/edit | Outside this tool's completed evidence | Not run or claimed complete |
+| Full P4 intersection/edit | Outside the original tool's evidence | Kernel adapter geometry/export passes on the checked-in pin; application intersection feature and complete rendered acceptance remain pending |
 
 ## Validation
 
@@ -73,5 +73,39 @@ The Workspace Linux leg now installs Mesa's software Vulkan adapter and sets its
 runtime directory/backend, as the dedicated interactive job already does. The
 renderer assertion and all geometry/UI expectations remain unchanged. Local
 validation with the Vulkan driver unavailable fails to create a render state;
-with the software adapter available, the full rendered tray path passes. Hosted
-package installation and the complete Workspace run still require CI validation.
+with the software adapter available, the full rendered tray path passes. Subsequent
+Ubuntu Workspace and bracket jobs passed before PR44 merged as `f1d50ca`.
+
+## U8 canonical P4 dependency checkpoint
+
+Source pairing: SolidDraft main `f1d50cabe9c5f77739ea7eacc984351dae40494f`
+and its unchanged Catallax pin `a5c42583dd684e54c473bc377267e5e190c37bb6`.
+The public specification is Catallax `parts/P4-shelled-tray.json`,
+`parts/edit-checks.json`, and PLAN section 9: centred 40 × 30 × 12 blank,
+top open, wall 2 mm, intersected with a centred radius-23 cylinder from z=-1
+to 13; the prescribed wall edit is 1.5 mm. The original simple tray is still
+separate evidence.
+
+`tests/u8_p4.rs` uses the normal application adapter with no dependency override
+or work-allowance change. It rebuilds the shell and final intersection at walls
+2, 1.5, 2, 1.5 mm, checking valid topology, 15 faces, volume against the analytic
+rectangle/circle intersection minus the cavity, inner/outer floor orientation,
+and STEP face count and the existing default deviation bound. All four pass.
+Observed intersection adapter calls were 357–417 ms in the local test build;
+these include the adapter's construction/display work, exclude requested
+measurement/export, and are neither rendered click times nor budget acceptance.
+
+The remaining integration dependency is an authored intersection feature. The
+current model's `ExtrudeOp` only has `Boss` and `Cut`; its build dispatch chooses
+Union or Subtract, and the app has no Intersect command/editor. A coordinated
+extension needs an explicit Intersect operation (never the existing Cut fallback),
+a circle sketch on z=-1 extruded +14, and persistent serialization, command schema,
+preview/commit and tree support. The wall edit must rebuild this downstream feature.
+This crosses shared model/app dispatch files and must be reconciled with L03 before
+editing them; lifecycle, rebuild policy, pins and shared export code are untouched.
+
+Owned changes at this checkpoint are only the new adapter test and this ledger.
+Rendered full-P4 creation, repeated interactive edits, inner/outer pick identity,
+save/reopen, exact-revision application export, STEP import, and preview/proof
+latency gates remain untested. Kernel success does not complete U8 or qualify a
+SINGLEPAIR/FULL SIX tier. No earlier waiver is applied here.
