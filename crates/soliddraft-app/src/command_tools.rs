@@ -103,6 +103,8 @@ pub enum Line {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         up_to_face: Option<String>,
     },
+    /// Keeps the common material of the part and one fixed-depth sketch extrusion.
+    Intersect { sketch: String, depth: f64, flip: bool },
     /// Revolves a meridian sketch around a model-space axis.
     Revolve { sketch: String, axis_origin: [f64; 3], axis_direction: [f64; 3], angle_deg: f64 },
     /// Changes a revolution angle without changing its sketch or axis.
@@ -413,6 +415,15 @@ pub fn extrude_params() -> Vec<(&'static str, Value)> {
     ];
     params.extend(up_to_params());
     params
+}
+
+/// The `intersect` verb's parameters.
+pub fn intersect_params() -> Vec<(&'static str, Value)> {
+    vec![
+        sketch_param(),
+        ("depth", number("Depth, mm, greater than 0")),
+        ("flip", boolean("true extrudes against the sketch normal")),
+    ]
 }
 
 /// The `revolve` verb's parameters.
@@ -978,6 +989,16 @@ impl Line {
                 };
                 run.apply(doc, Command::AddExtrude { params, via_assistant: true })?;
             }
+            Line::Intersect { sketch, depth, flip } => {
+                let params = ExtrudeParams {
+                    sketch: Some(run.sketch(doc, sketch)?),
+                    depth: positive("depth", *depth)?,
+                    flip: *flip,
+                    intersect: true,
+                    ..Default::default()
+                };
+                run.apply(doc, Command::AddExtrude { params, via_assistant: true })?;
+            }
             Line::Revolve { sketch, axis_origin, axis_direction, angle_deg } => {
                 if axis_direction.iter().any(|v| !v.is_finite()) || axis_direction.iter().all(|v| *v == 0.0) {
                     return Err("axis direction must be finite and nonzero".into());
@@ -1209,6 +1230,7 @@ impl Line {
             Line::Sketch { .. } => "sketch",
             Line::SketchGeometry { .. } => "sketch_geometry",
             Line::Extrude { .. } => "extrude",
+            Line::Intersect { .. } => "intersect",
             Line::Revolve { .. } => "revolve",
             Line::EditRevolve { .. } => "edit_revolve",
             Line::Cut { .. } => "cut",
@@ -1287,6 +1309,7 @@ impl Line {
             }
             Line::Revolve { sketch, angle_deg, .. } => ("Revolve".into(), format!("{sketch}, {}°", fmt_mm(*angle_deg))),
             Line::EditRevolve { feature, angle_deg } => (format!("Edit {feature}"), format!("{}°", fmt_mm(*angle_deg))),
+            Line::Intersect { sketch, depth, flip } => (format!("Intersect {sketch}"), end(false, *depth, *flip)),
             Line::Extrude { sketch, depth, flip, up_to_next, up_to_face } => {
                 ("Extrude".into(), format!("{sketch}, {}", up_to(*up_to_next, up_to_face, end(false, *depth, *flip))))
             }
@@ -1940,6 +1963,9 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
                     "type": "extrude", "profile": p.profile.summary(), "plane": doc.model().datum_name(p.plane.to_model()), "depth": p.depth, "flip": p.flip,
                 }),
             };
+            if p.intersect {
+                v["type"] = json!("intersect");
+            }
             end_json(&mut v, &p.end);
             v
         }

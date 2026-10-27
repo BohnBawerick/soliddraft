@@ -910,13 +910,22 @@ impl Document {
             Ok(_) => return Built::failed(current, "the built-in profile has no closed region"),
             Err(err) => return Built::failed(current, format!("the built-in profile has no closed region: {err}")),
         };
+        if e.operation == ExtrudeOp::Intersect {
+            if current.is_none() {
+                return Built::failed(current, "intersection needs an existing body");
+            }
+            if regions.len() != 1 || !matches!(e.end, EndCondition::Blind { .. }) {
+                return Built::failed(current, "intersection currently requires one closed profile and a fixed depth");
+            }
+        }
         let dir = if e.reverse { -sk.plane.normal } else { sk.plane.normal };
         // Behind the face is material for a boss along the normal and air for a cut
         // against it; only there is starting behind the face harmless. An extrusion up
         // to a boundary starts on the face, since starting in material stops at its exit.
         let away = (e.operation == ExtrudeOp::Boss) != e.reverse;
         let limited = matches!(e.end, EndCondition::UpToNext | EndCondition::UpToFace { .. });
-        let back = if sk.on_face && away && !limited { FACE_OVERLAP } else { 0.0 };
+        let back =
+            if e.operation != ExtrudeOp::Intersect && sk.on_face && away && !limited { FACE_OVERLAP } else { 0.0 };
         let start = sk.plane.with_origin(sk.plane.origin - dir * back);
         let limit = match &e.end {
             EndCondition::UpToNext => Some(ExtrudeLimit::UpToNext),
@@ -997,15 +1006,15 @@ impl Document {
                 }
                 let next = match (e.operation, body) {
                     (ExtrudeOp::Boss, None) => tool.body,
-                    (ExtrudeOp::Cut, None) => {
+                    (ExtrudeOp::Cut | ExtrudeOp::Intersect, None) => {
                         let _ = k.release(tool.body);
                         return Err(KernelError::InvalidInput("there is no body to cut".into()));
                     }
                     (op, Some(b)) => {
-                        let (kind, step) = if op == ExtrudeOp::Boss {
-                            (BooleanOp::Union, "union")
-                        } else {
-                            (BooleanOp::Subtract, "cut")
+                        let (kind, step) = match op {
+                            ExtrudeOp::Boss => (BooleanOp::Union, "union"),
+                            ExtrudeOp::Cut => (BooleanOp::Subtract, "cut"),
+                            ExtrudeOp::Intersect => (BooleanOp::Intersect, "intersect"),
                         };
                         let joined = k.boolean(&tag(step), kind, b, tool.body);
                         let _ = k.release(tool.body);

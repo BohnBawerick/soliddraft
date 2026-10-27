@@ -16,6 +16,7 @@ fn disc() -> Document {
         std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()),
     );
     let params = ExtrudeParams {
+        intersect: false,
         sketch: None,
         profile: ProfileKind::Circle { diameter: 200.0 },
         plane: PlaneKind::Top,
@@ -75,6 +76,7 @@ fn the_camera_moves_the_part_between_levels() {
 
     // A rebuild keeps the level the camera asked for and makes it at once.
     let params = ExtrudeParams {
+        intersect: false,
         sketch: None,
         profile: ProfileKind::Circle { diameter: 40.0 },
         plane: PlaneKind::Top,
@@ -129,6 +131,7 @@ fn an_unchanged_body_keeps_its_mesh_and_undo_shows_the_earlier_one_again() {
         std::sync::Arc::new(Counting::new(std::sync::Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new())));
     let mut doc = Document::new("Part1", kernel.clone());
     let params = ExtrudeParams {
+        intersect: false,
         sketch: None,
         profile: ProfileKind::Circle { diameter: 200.0 },
         plane: PlaneKind::Top,

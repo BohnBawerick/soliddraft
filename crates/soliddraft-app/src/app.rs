@@ -907,6 +907,11 @@ impl SolidDraftApp {
                 };
                 self.open_editor(None, EditorParams::Extrude(params));
             }
+            AppAction::StartIntersect => {
+                let sketch = self.state.selected_sketch().filter(|id| self.state.doc.consumer_of(*id).is_none());
+                let params = ExtrudeParams { sketch, depth: 10.0, intersect: true, ..Default::default() };
+                self.open_editor(None, EditorParams::Extrude(params));
+            }
             AppAction::StartRevolve => {
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(Some(ExitInto::Revolve)));

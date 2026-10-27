@@ -76,6 +76,7 @@ impl FeatureKind {
         match self {
             FeatureKind::Sketch(_) => "Sketch",
             FeatureKind::Revolve(_) => "Revolve",
+            FeatureKind::Extrude(e) if e.operation == ExtrudeOp::Intersect => "Intersect-Extrude",
             FeatureKind::Extrude(e) if e.operation == ExtrudeOp::Cut => "Cut-Extrude",
             FeatureKind::Extrude(_) => "Boss-Extrude",
             FeatureKind::Fillet(_) => "Fillet",
@@ -210,12 +211,14 @@ impl DatumPlane {
     }
 }
 
-/// Whether an extrusion adds or removes material.
+/// Whether an extrusion adds, removes, or keeps common material.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtrudeOp {
     /// Adds material: the first boss makes the part's body, later ones join it.
     Boss,
+    /// Keeps material shared with one extruded profile.
+    Intersect,
     /// Removes material from the part's body.
     Cut,
 }

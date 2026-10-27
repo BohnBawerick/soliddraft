@@ -407,7 +407,11 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 section_gap(ui);
                 theme::section_label(ui, "Direction 1");
                 let mut end = params.end.clone();
-                end_combo(ui, "extrude_end", &mut end, false, params.sketch.is_some());
+                if params.intersect {
+                    ui.label("Fixed depth · keep common material");
+                } else {
+                    end_combo(ui, "extrude_end", &mut end, false, params.sketch.is_some());
+                }
                 params.end = end;
                 match &params.end {
                     EndKind::Blind => {

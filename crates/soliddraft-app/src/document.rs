@@ -195,6 +195,9 @@ impl EndKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExtrudeParams {
+    /// Keep only material shared with the extrusion; absent in older app data.
+    #[serde(default)]
+    pub intersect: bool,
     /// The sketch to extrude; when `None`, the built-in profile on `plane`.
     pub sketch: Option<FeatureId>,
     pub profile: ProfileKind,
@@ -209,6 +212,7 @@ pub struct ExtrudeParams {
 impl Default for ExtrudeParams {
     fn default() -> Self {
         Self {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Rectangle { width: 60.0, height: 40.0 },
             plane: PlaneKind::Top,
@@ -365,6 +369,7 @@ impl FeatureKind {
     pub fn prefix(&self) -> &'static str {
         match self {
             FeatureKind::Sketch(_) => "Sketch",
+            FeatureKind::Extrude(p) if p.intersect => "Intersect-Extrude",
             FeatureKind::Extrude(_) => "Boss-Extrude",
             FeatureKind::Revolve(_) => "Revolve",
             FeatureKind::Cut(_) => "Cut-Extrude",
@@ -385,6 +390,7 @@ impl FeatureKind {
     pub fn noun(&self) -> &'static str {
         match self {
             FeatureKind::Sketch(_) => "sketch",
+            FeatureKind::Extrude(p) if p.intersect => "intersect extrude",
             FeatureKind::Extrude(_) => "extrude",
             FeatureKind::Revolve(_) => "revolve",
             FeatureKind::Cut(_) => "cut",
@@ -423,7 +429,7 @@ impl FeatureKind {
                     Some(id) => model::ProfileSource::Sketch { feature: model_id(id) },
                     None => model::ProfileSource::Shape { datum: p.plane.to_model(), shape: p.profile.to_model() },
                 },
-                operation: model::ExtrudeOp::Boss,
+                operation: if p.intersect { model::ExtrudeOp::Intersect } else { model::ExtrudeOp::Boss },
                 end: p.end.to_model(p.depth),
                 reverse: p.flip,
             }),
@@ -485,25 +491,29 @@ impl FeatureKind {
                         cut.set_end(end);
                         FeatureKind::Cut(cut)
                     }
-                    (model::ExtrudeOp::Boss, model::ProfileSource::Sketch { feature }) => {
-                        FeatureKind::Extrude(ExtrudeParams {
-                            sketch: Some(app_id(*feature)),
-                            depth,
-                            flip: e.reverse,
-                            end,
-                            ..Default::default()
-                        })
-                    }
-                    (model::ExtrudeOp::Boss, model::ProfileSource::Shape { datum, shape }) => {
-                        FeatureKind::Extrude(ExtrudeParams {
-                            sketch: None,
-                            profile: ProfileKind::from_model(*shape),
-                            plane: PlaneKind::from_model(*datum),
-                            depth,
-                            flip: e.reverse,
-                            end,
-                        })
-                    }
+                    (
+                        model::ExtrudeOp::Boss | model::ExtrudeOp::Intersect,
+                        model::ProfileSource::Sketch { feature },
+                    ) => FeatureKind::Extrude(ExtrudeParams {
+                        intersect: e.operation == model::ExtrudeOp::Intersect,
+                        sketch: Some(app_id(*feature)),
+                        depth,
+                        flip: e.reverse,
+                        end,
+                        ..Default::default()
+                    }),
+                    (
+                        model::ExtrudeOp::Boss | model::ExtrudeOp::Intersect,
+                        model::ProfileSource::Shape { datum, shape },
+                    ) => FeatureKind::Extrude(ExtrudeParams {
+                        intersect: e.operation == model::ExtrudeOp::Intersect,
+                        sketch: None,
+                        profile: ProfileKind::from_model(*shape),
+                        plane: PlaneKind::from_model(*datum),
+                        depth,
+                        flip: e.reverse,
+                        end,
+                    }),
                 }
             }
             model::FeatureKind::Fillet(b) => {
@@ -1725,6 +1735,9 @@ impl Document {
 
     /// Builds the extrusion tool without changing the document.
     pub fn preview_extrude(&self, params: &ExtrudeParams) -> Result<Preview, String> {
+        if params.intersect {
+            return self.preview_intersect(params, self.display_body());
+        }
         if params.end != EndKind::Blind {
             // An extrusion up to the part's boundary previews only once applied.
             return Ok(Preview::default());
@@ -1741,6 +1754,36 @@ impl Document {
         let mesh = self.mesh_of(tool);
         self.release_all(&made);
         Ok(Preview { result: None, tool: Some(mesh?), removes: false })
+    }
+
+    /// The actual common material, using the same single-profile contract as the model.
+    pub fn preview_intersect(&self, params: &ExtrudeParams, before: Option<BodyId>) -> Result<Preview, String> {
+        let base = before.ok_or("intersection needs an existing body")?;
+        if params.end != EndKind::Blind {
+            return Err("intersection currently requires one closed profile and a fixed depth".into());
+        }
+        let (profiles, plane) = match params.sketch {
+            Some(id) => self.sketch_profiles(id)?,
+            None => {
+                let plane = params.plane.to_kernel();
+                (vec![params.profile.to_kernel(plane)], plane)
+            }
+        };
+        if profiles.len() != 1 {
+            return Err("intersection currently requires one closed profile and a fixed depth".into());
+        }
+        let dir = if params.flip { -plane.normal } else { plane.normal };
+        let (tool, mut made) = self.extrude_profiles(&profiles, dir, params.depth).map_err(|e| e.to_string())?;
+        let result = self.kernel().boolean(&OpTag::new("preview-intersect"), BooleanOp::Intersect, base, tool);
+        let mesh = match result {
+            Ok(result) => {
+                made.push(result.body);
+                self.mesh_of(result.body)
+            }
+            Err(error) => Err(error.to_string()),
+        };
+        self.release_all(&made);
+        Ok(Preview { result: Some(mesh?), tool: None, removes: true })
     }
 
     /// The body after a cut and the material it removes.

@@ -999,9 +999,16 @@ fn registry() -> Vec<CommandSpec> {
                     if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Extrude)) } else { AppAction::StartExtrude }
                 },
             )
-            .lit(|s| editing(s, |p| matches!(p, EditorParams::Extrude(_))))
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Extrude(e) if !e.intersect)))
             .agents(Agents::Verb, "Every profile of the sketch extrudes along its normal.", tools::extrude_params)
 .undo(Undo::Step),
+        cmd("intersect", "Intersect", Icon::Extrude, "Keep material common to the part and an extrusion")
+            .on(Features, "Cut", Small)
+            .run(|_| AppAction::StartIntersect)
+            .when(|s| has_body(s) && !s.in_sketch())
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Extrude(e) if e.intersect)))
+            .agents(Agents::Verb, "Intersect one closed sketch profile at a fixed depth. Edit with edit_extrude.", tools::intersect_params)
+            .undo(Undo::Step),
         cmd("revolve", "Revolve", Icon::Revolve, "Add material: revolve a sketch about an axis")
             .on(Features, "Boss", Large)
             .on(Sketch, "Use", Large)

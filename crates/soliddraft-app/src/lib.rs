@@ -82,6 +82,7 @@ pub fn demo_document() -> Document {
 pub fn populate_demo(doc: &mut Document) {
     for params in [
         ExtrudeParams {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Rectangle { width: 120.0, height: 90.0 },
             plane: PlaneKind::Top,
@@ -90,6 +91,7 @@ pub fn populate_demo(doc: &mut Document) {
             end: Default::default(),
         },
         ExtrudeParams {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Rectangle { width: 120.0, height: 60.0 },
             plane: PlaneKind::Front,
@@ -98,6 +100,7 @@ pub fn populate_demo(doc: &mut Document) {
             end: Default::default(),
         },
         ExtrudeParams {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Circle { diameter: 24.0 },
             plane: PlaneKind::Top,
@@ -119,6 +122,7 @@ pub fn bench_document() -> Document {
     doc.set_viewport_quality(Quality::Custom(edges)).expect("valid advanced values");
     doc.apply(Command::AddExtrude {
         params: ExtrudeParams {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Rectangle { width: 100.0, height: 60.0 },
             plane: PlaneKind::Top,

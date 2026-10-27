@@ -43,6 +43,7 @@ pub enum AppAction {
     EditSketch(FeatureId),
     ExitSketch(Option<ExitInto>),
     StartExtrude,
+    StartIntersect,
     StartRevolve,
     StartCut,
     StartFillet,
@@ -202,6 +203,7 @@ impl FeatureEditor {
     pub fn title(&self) -> String {
         let edit = if self.target.is_some() { "Edit " } else { "" };
         match &self.params {
+            EditorParams::Extrude(p) if p.intersect => format!("{edit}Intersect-Extrude"),
             EditorParams::Extrude(_) => format!("{edit}Boss-Extrude"),
             EditorParams::Revolve(_) => format!("{edit}Revolve"),
             EditorParams::Cut(_) => format!("{edit}Cut-Extrude"),
@@ -248,6 +250,7 @@ impl FeatureEditor {
             None => doc.display_body(),
         };
         let result = match &self.params {
+            EditorParams::Extrude(p) if p.intersect => doc.preview_intersect(p, before),
             EditorParams::Extrude(p) => doc.preview_extrude(p),
             EditorParams::Revolve(r) => doc.preview_revolve(r),
             EditorParams::Cut(p) => doc.preview_cut(p, before),

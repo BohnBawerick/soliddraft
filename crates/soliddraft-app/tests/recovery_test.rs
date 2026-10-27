@@ -39,6 +39,7 @@ fn folder(name: &str) -> PathBuf {
 fn block(depth: f64) -> Command {
     Command::AddExtrude {
         params: ExtrudeParams {
+            intersect: false,
             sketch: None,
             profile: ProfileKind::Rectangle { width: 40.0, height: 30.0 },
             plane: PlaneKind::Top,
