@@ -72,6 +72,8 @@ pub enum FeatureKind {
     Shell(ShellFeature),
     /// A body read from an external STEP file, with the answers to its repair questions.
     ImportStep(ImportStepFeature),
+    /// Turns the finished body into a lattice. It is always the last feature.
+    Lattice(LatticeFeature),
 }
 
 impl FeatureKind {
@@ -93,7 +95,13 @@ impl FeatureKind {
             FeatureKind::Draft(_) => "Draft",
             FeatureKind::Shell(_) => "Shell",
             FeatureKind::ImportStep(_) => "Import",
+            FeatureKind::Lattice(_) => "Lattice",
         }
+    }
+
+    /// True for the terminal lattice, which no CAD feature may follow.
+    pub fn is_lattice(&self) -> bool {
+        matches!(self, FeatureKind::Lattice(_))
     }
 
     /// The features this one reads: its sketch, and the features that made the faces
@@ -119,7 +127,7 @@ impl FeatureKind {
                 out.extend(b.edges.iter().flat_map(|e| e.faces.iter().map(|f| f.feature)));
             }
             FeatureKind::Hole(h) => out.push(h.face.feature),
-            FeatureKind::Pattern(_) | FeatureKind::ImportStep(_) => {}
+            FeatureKind::Pattern(_) | FeatureKind::ImportStep(_) | FeatureKind::Lattice(_) => {}
             FeatureKind::Mirror(m) => {
                 if let PlaneRef::Face { face } = &m.plane {
                     out.push(face.feature);
@@ -423,6 +431,22 @@ pub struct ShellFeature {
     pub open_faces: Vec<FaceRef>,
     /// Positive, finite wall thickness in millimetres.
     pub thickness: f64,
+}
+
+/// The final lattice stage. It reads the whole finished body, so it references nothing.
+/// Export relaxes only these two numbers, and both are saved with the feature.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LatticeFeature {
+    /// Accuracy the lattice is proven to, in millimetres.
+    pub accuracy_mm: f64,
+    /// The smallest detail the lattice keeps, in millimetres.
+    pub min_detail_mm: f64,
+}
+
+impl Default for LatticeFeature {
+    fn default() -> Self {
+        LatticeFeature { accuracy_mm: 0.1, min_detail_mm: 0.5 }
+    }
 }
 
 /// An imported body: the source file, kept unchanged, and what the user decided about

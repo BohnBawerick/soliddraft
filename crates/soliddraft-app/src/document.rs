@@ -360,6 +360,7 @@ pub enum FeatureKind {
     Draft(model::DraftFeature),
     Shell(model::ShellFeature),
     ImportStep(model::ImportStepFeature),
+    Lattice(model::LatticeFeature),
 }
 
 impl FeatureKind {
@@ -380,6 +381,7 @@ impl FeatureKind {
             FeatureKind::Draft(_) => "Draft",
             FeatureKind::Shell(_) => "Shell",
             FeatureKind::ImportStep(_) => "Import",
+            FeatureKind::Lattice(_) => "Lattice",
         }
     }
 
@@ -401,6 +403,7 @@ impl FeatureKind {
             FeatureKind::Draft(_) => "draft",
             FeatureKind::Shell(_) => "shell",
             FeatureKind::ImportStep(_) => "import",
+            FeatureKind::Lattice(_) => "lattice",
         }
     }
 
@@ -450,6 +453,7 @@ impl FeatureKind {
             FeatureKind::Draft(d) => model::FeatureKind::Draft(d.clone()),
             FeatureKind::Shell(s) => model::FeatureKind::Shell(s.clone()),
             FeatureKind::ImportStep(i) => model::FeatureKind::ImportStep(i.clone()),
+            FeatureKind::Lattice(l) => model::FeatureKind::Lattice(*l),
         }
     }
 
@@ -522,6 +526,7 @@ impl FeatureKind {
             model::FeatureKind::Draft(d) => FeatureKind::Draft(d.clone()),
             model::FeatureKind::Shell(s) => FeatureKind::Shell(s.clone()),
             model::FeatureKind::ImportStep(i) => FeatureKind::ImportStep(i.clone()),
+            model::FeatureKind::Lattice(l) => FeatureKind::Lattice(*l),
         }
     }
 }
@@ -644,6 +649,7 @@ impl Feature {
             FeatureKind::Draft(d) => format!("{}°", fmt_mm(d.angle)),
             FeatureKind::Shell(s) => format!("{} mm wall", fmt_mm(s.thickness)),
             FeatureKind::ImportStep(i) => i.source_name.clone(),
+            FeatureKind::Lattice(l) => format!("±{} mm", fmt_mm(l.accuracy_mm)),
         }
     }
 
@@ -1974,6 +1980,10 @@ impl Document {
                     }
                     FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_) => {
                         details.push(("Layout".to_owned(), f.summary()));
+                    }
+                    FeatureKind::Lattice(l) => {
+                        details.push(("Accuracy".to_owned(), format!("{} mm", fmt_mm(l.accuracy_mm))));
+                        details.push(("Minimum detail".to_owned(), format!("{} mm", fmt_mm(l.min_detail_mm))));
                     }
                     FeatureKind::ImportStep(i) => {
                         details.push(("File".to_owned(), i.source_name.clone()));

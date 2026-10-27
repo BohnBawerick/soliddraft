@@ -346,6 +346,9 @@ impl Document {
                 }
             }
         }
+        // The lattice is the only one and the last feature; a file that puts CAD after it is
+        // damaged, not a different part.
+        Document::check_lattice_last(&recipe.features).map_err(|e| FileError::Invalid(e.to_string()))?;
         // An imported file is immutable: bytes that no longer match their hash are a damaged
         // file, not a different geometry.
         for f in &recipe.features {
