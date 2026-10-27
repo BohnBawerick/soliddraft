@@ -6,6 +6,7 @@ import json
 import math
 import pathlib
 import queue
+import re
 import statistics
 import subprocess
 import sys
@@ -45,6 +46,23 @@ def phase(operation, default):
     if operation["operation"] in MEASUREMENT:
         return "measurement"
     return default
+
+
+def pinned_revision():
+    """The Catallax commit the adapter is built against; the evidence must come from that sha."""
+    source = pathlib.Path(__file__).resolve().parent.parent / "crates/soliddraft-kernel-catallax/src/lib.rs"
+    found = re.search(r'^pub const CATALLAX_REVISION: &str = "([0-9a-f]{40})";', source.read_text(), re.M)
+    if found is None:
+        raise ValueError("CATALLAX_REVISION is not a full commit sha")
+    return found.group(1)
+
+
+def backend_pinned(command, pin):
+    """A command run on any other Catallax revision is not evidence for this one."""
+    backend = command.get("backend")
+    version = backend.get("version") if isinstance(backend, dict) else None
+    return {"check": "Catallax backend is the pinned revision", "expected": pin, "actual": version,
+            "pass": isinstance(backend, dict) and backend.get("name") == "catallax" and version == pin}
 
 
 def milliseconds(value):
@@ -158,8 +176,7 @@ def answers(request, command, evidence, selectable=False):
         if got != want:
             return f"stale: answers {key} {got}, not {want}"
     if selectable:
-        faces = evidence.get("selectable_faces")
-        if isinstance(faces, bool) or not isinstance(faces, int) or faces < 1:
+        if evidence.get("selectable") is not True:
             return "the edit is not selectable in the viewport"
     return None
 
@@ -413,7 +430,9 @@ def run(args):
         raise ValueError("expected soliddraft-scenario/1 with steps")
     args.out.mkdir(parents=True, exist_ok=False)
     write(args.out / "scenario.json", scenario)
-    report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "steps": [], "pass": False,
+    pin = pinned_revision()
+    report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "catallax_revision": pin,
+              "steps": [], "pass": False,
               "strict_pass": False}
     client = None
     try:
@@ -450,6 +469,7 @@ def run(args):
                 checks.append({"check": "command evidence is this request", "actual": command.get("request"),
                                "pass": False})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
+            checks.append(backend_pinned(command, pin))
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
             checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature"))

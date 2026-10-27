@@ -274,7 +274,7 @@ Each step's `intervals` record what the user waited for, with its own verdict:
 
 - `preview` starts when the command request is sent and ends only at a visible
   selectable edit: the `scenario_display` capture of the same request and document
-  revision, with at least one pickable face. A step with no solid ends at the command
+  revision, with a pickable face. A step with no solid ends at the command
   reply. This is the click and keeps its class budget.
 - `view` is the hidden-line SVG request, with its own 1,000 ms ceiling.
 - `measurement` is the explicit measurement request. It keeps its unchanged 1,000 ms
@@ -283,9 +283,10 @@ Each step's `intervals` record what the user waited for, with its own verdict:
 
 The bundle tags `command.json`, `display.json`, `view.json` and `measurement.json`
 with the `request` number and document `revision` they describe, and `display.json`
-with `selectable_faces`. The runner accepts a reply only if it names this step's request
+with `selectable`, true when some vertex of the displayed mesh carries a face pick id (an early-exit
+check, so the timed capture does no per-face counting). The runner accepts a reply only if it names this step's request
 and the command's revision (check `answers`). A reply with no tags, an older request or
-revision, a pending marker or no pickable faces does not end the interval: the step fails
+revision, a pending marker or no pickable face does not end the interval: the step fails
 as `click ends at a visible selectable edit`, `view answers this request` or `measurement
 answers this request`. A proof for an earlier edit therefore cannot satisfy a newer one,
 and a command reply that returns before the viewport shows the edit cannot pass. A
@@ -301,6 +302,19 @@ The result lists `known_gaps` and sets `strict_pass` only when the run passed wi
 is true, so an approved known gap exits one and is printed as an error. Without the flag the
 exit status keeps its meaning of CI acceptance, where a listed gap is a warning. The hosted
 workflow runs without `--strict`; a release gate runs the same scenarios with it.
+
+### Pinned evidence
+
+`result.json` records `catallax_revision`, the full commit sha in `CATALLAX_REVISION`,
+and every command must report that same sha as its backend version
+(`Catallax backend is the pinned revision`). Evidence from another revision, a branch name
+or a missing version fails the step. The runner cannot yet check the replay verifier the
+same way: `catallax-verify about` does not report its source commit, so hosted CI builds it
+from the pinned sha and the workflow remains the evidence for that binary.
+
+The baseline-reuse ledger holds no measured real-corpus time saving, so this runner
+claims none and does not consume it. A reused baseline would have to arrive as pinned,
+qualified evidence of its own before it could excuse a measurement.
 
 ### Independent drawing-view gate
 

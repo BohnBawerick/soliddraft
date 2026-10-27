@@ -97,7 +97,7 @@ impl<'a> Evidence<'a> {
         // The request and revision let the runner tell this capture from an older one.
         let result = json!({
             "backend":doc.kernel().backend(),"method":"viewport","mesh":"unproved preview","live_document":true,
-            "request":self.sequence,"revision":doc.revision(),"selectable_faces":selectable_faces(doc),
+            "request":self.sequence,"revision":doc.revision(),"selectable":selectable(doc),
         });
         write_json(dir.join("display.json"), &result)?;
         Ok(result)
@@ -143,10 +143,15 @@ impl<'a> Evidence<'a> {
     }
 }
 
-/// The faces of the displayed body a click can pick, from the pick ids of its display mesh.
-fn selectable_faces(doc: &soliddraft_app::document::Document) -> usize {
-    let Some(mesh) = doc.display_body().and_then(|body| doc.meshes.get(&body)) else { return 0 };
-    mesh.face_picks.iter().filter(|pick| **pick != 0).collect::<BTreeSet<_>>().len()
+/// Whether the displayed body has a face a click can pick. This runs inside the timed
+/// display capture, so it stops at the first pick id instead of counting faces.
+fn selectable(doc: &soliddraft_app::document::Document) -> bool {
+    doc.display_body().and_then(|body| doc.meshes.get(&body)).is_some_and(|mesh| pickable(&mesh.face_picks))
+}
+
+/// Pick id 0 means no face; any other id is a face a click can select.
+fn pickable(face_picks: &[u32]) -> bool {
+    face_picks.iter().any(|pick| *pick != 0)
 }
 
 /// What a command rebuilt: the features whose kernel operations ran, in tree order
@@ -349,5 +354,18 @@ impl ToolHost for Evidence<'_> {
             return ToolOutput::error(format!("bundle write failed after {name}: {error}"));
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pickable;
+
+    #[test]
+    fn a_mesh_is_selectable_only_if_some_vertex_belongs_to_a_face() {
+        assert!(!pickable(&[]));
+        assert!(!pickable(&[0, 0, 0]));
+        assert!(pickable(&[0, 0, 7]));
+        assert!(pickable(&[3]));
     }
 }
