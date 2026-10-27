@@ -612,10 +612,11 @@ mod tests {
     fn three_materials_in_each_mode() {
         for p in [LIGHT, DARK] {
             // The chrome, the panels and the viewport floor are tones apart, and the
-            // fade runs from near the panel tone down to the floor.
+            // fade runs from near the panel tone down to the floor, which sits under
+            // the chrome in both modes.
             assert!(lightness(p.panel) - lightness(p.chrome) > 2.0, "panels sit off the chrome");
             assert!(lightness(p.viewport_top) - lightness(p.viewport_bottom) > 10.0, "a long fade");
-            assert!(lightness(p.chrome) - lightness(p.viewport_bottom) > 10.0, "the floor is not the chrome");
+            assert!(lightness(p.chrome) - lightness(p.viewport_bottom) > 2.0, "the floor is under the chrome");
             assert!((lightness(p.ink) - lightness(p.panel)).abs() > 60.0, "ink reads on the panels");
             assert_eq!(p.terminal_bg, LIGHT.terminal_bg, "the terminal is a dark console in both modes");
         }

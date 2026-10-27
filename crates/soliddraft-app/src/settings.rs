@@ -3,8 +3,9 @@
 //! shown and how wide, the command line's chips and session height, the pinned and recent
 //! commands, File locations: the folders and
 //! files where reference files are found (`soliddraft_document::locations`), the
-//! viewport's default look, and autosave, recovery and backups ([`DocumentSettings`]). The user's own material library sits beside it
-//! ([`user_library_path`]).
+//! viewport's default look, the interface's light or dark [`Appearance`], and autosave,
+//! recovery and backups ([`DocumentSettings`]). The user's own material library sits
+//! beside it ([`user_library_path`]).
 //!
 //! Saving rewrites only the sections the app knows and keeps every other key, so a
 //! file written by a newer build survives an older one.
@@ -175,6 +176,28 @@ fn view_in(file: &Path) -> ViewSettings {
     serde_json::from_value(read(file)["view"].clone()).unwrap_or_default()
 }
 
+/// Appearance: light or dark interface. The `appearance` key of the settings file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Appearance {
+    pub theme: crate::theme::Mode,
+}
+
+/// The appearance, light when the file does not say.
+pub fn appearance() -> Appearance {
+    crate::file::config_read_file("settings.json").map(|f| appearance_in(&f)).unwrap_or_default()
+}
+
+/// Saves the appearance.
+pub fn save_appearance(appearance: &Appearance) -> Result<(), String> {
+    let Some(file) = settings_file() else { return Err("no config directory".into()) };
+    save_section_in(&file, "appearance", appearance)
+}
+
+fn appearance_in(file: &Path) -> Appearance {
+    serde_json::from_value(read(file)["appearance"].clone()).unwrap_or_default()
+}
+
 /// How documents are protected: autosave's interval and edit count, where recovery
 /// copies go, and how many backups a save keeps and where. The `documents` key of the
 /// settings file.
@@ -295,6 +318,23 @@ mod tests {
         let all: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(all["view"]["preset"], "realistic");
         assert_eq!(all["theme"], "dark");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_appearance_is_light_until_saved() {
+        use crate::theme::Mode;
+        let dir = std::env::temp_dir().join(format!("soliddraft-appearance-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("settings.json");
+        assert_eq!(appearance_in(&file).theme, Mode::Light);
+        std::fs::write(&file, r#"{"appearance":{"theme":"sepia"},"theme":"dark"}"#).unwrap();
+        assert_eq!(appearance_in(&file).theme, Mode::Light, "an unknown theme falls back to light");
+        save_section_in(&file, "appearance", &Appearance { theme: Mode::Dark }).unwrap();
+        assert_eq!(appearance_in(&file).theme, Mode::Dark);
+        let all: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(all["appearance"]["theme"], "dark");
+        assert_eq!(all["theme"], "dark", "a foreign key is kept");
         let _ = std::fs::remove_dir_all(dir);
     }
 

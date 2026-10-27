@@ -8,7 +8,7 @@ use soliddraft_app::app::{Automation, SolidDraftApp};
 #[cfg(not(target_arch = "wasm32"))]
 const USAGE: &str =
     "soliddraft [FILE.dwprt | FILE.dwasm | FILE.dwdrw] [--demo] [--bench [SECONDS]] [--screenshot PATH [--after FRAMES] [--stay]] [--size WxH] [--no-vsync]
-          [--mcp [PORT]] [--no-assistant] [--preset fast|studio|realistic]
+          [--mcp [PORT]] [--no-assistant] [--preset fast|studio|realistic] [--theme light|dark]
 
   FILE.dwprt        open a saved part (.dwpart still opens)
   FILE.dwasm        open a saved assembly in a tab beside the part
@@ -21,6 +21,7 @@ const USAGE: &str =
   --mcp [PORT]      serve the open part to MCP clients at http://127.0.0.1:PORT/mcp (default 47811)
   --no-assistant    do not connect the assistant, even when an API key is available
   --preset NAME     start in the Fast, Studio or Realistic look instead of the one in the settings
+  --theme NAME      start light or dark instead of the appearance in the settings
 
 The assistant runs on OpenRouter or on the Anthropic API. It reads the key from
 OPENROUTER_API_KEY or ANTHROPIC_API_KEY, or from the OS keychain (store one with
@@ -77,6 +78,17 @@ fn main() -> eframe::Result {
                     Some(p) => automation.preset = Some(p),
                     None => {
                         eprintln!("unknown preset {name:?}; use fast, studio or realistic\n{USAGE}");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            "--theme" => {
+                let name = args.get(i + 1).map(String::as_str).unwrap_or("");
+                match soliddraft_app::theme::Mode::parse(name) {
+                    Some(m) => automation.theme = Some(m),
+                    None => {
+                        eprintln!("unknown theme {name:?}; use light or dark\n{USAGE}");
                         std::process::exit(2);
                     }
                 }

@@ -224,6 +224,8 @@ pub struct Automation {
     pub mcp_port: Option<u16>,
     /// Start in this render look instead of the default from the settings.
     pub preset: Option<Preset>,
+    /// Start light or dark instead of the appearance from the settings.
+    pub theme: Option<theme::Mode>,
 }
 
 struct Bench {
@@ -257,7 +259,7 @@ pub struct SolidDraftApp {
 
 impl SolidDraftApp {
     pub fn new(cc: &eframe::CreationContext<'_>, doc: Document, automation: Automation) -> Self {
-        theme::install(&cc.egui_ctx, theme::Mode::default());
+        theme::install(&cc.egui_ctx, automation.theme.unwrap_or_else(|| crate::settings::appearance().theme));
         if let Some(rs) = cc.wgpu_render_state.as_ref() {
             let tier = Tier::of(rs.adapter.get_info().backend);
             let renderer = ViewportRenderer::new(&rs.device, &rs.queue, rs.target_format, tier);
@@ -572,6 +574,13 @@ impl SolidDraftApp {
                 for p in Preset::ALL {
                     if ui.radio(st.viewport.preset == p, p.label()).clicked() {
                         st.push(AppAction::SetPreset(p));
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                for m in theme::Mode::ALL {
+                    if ui.radio(theme::mode() == m, format!("{} theme", m.label())).clicked() {
+                        st.push(AppAction::SetTheme(m));
                         ui.close();
                     }
                 }
@@ -1390,6 +1399,12 @@ impl SolidDraftApp {
                 }
                 viewport.preset = p;
             }
+            AppAction::SetTheme(mode) => {
+                theme::set_mode(ctx, mode);
+                if let Err(e) = crate::settings::save_appearance(&crate::settings::Appearance { theme: mode }) {
+                    log::warn!("cannot save the appearance: {e}");
+                }
+            }
             AppAction::ToggleProjection => {
                 self.state.viewport.camera.orthographic = !self.state.viewport.camera.orthographic
             }
@@ -2029,10 +2044,12 @@ impl eframe::App for SolidDraftApp {
             .and_then(|sel| self.state.doc.describe(sel));
         self.state.hover_point = self.state.viewport.hover_point;
 
+        // The menu and status bars are chrome; the ribbon paints its own strip and body.
+        let chrome_frame = egui::Frame::new().fill(theme::chrome()).inner_margin(egui::Margin::ZERO);
         let panel_frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         egui::Panel::top("menu")
             .exact_size(theme::MENU_HEIGHT)
-            .frame(panel_frame)
+            .frame(chrome_frame)
             .show_separator_line(true)
             .show(root, |ui| self.menu_bar(ui));
         egui::Panel::top("ribbon")
@@ -2042,7 +2059,7 @@ impl eframe::App for SolidDraftApp {
             .show(root, |ui| ribbon::show(ui, &mut self.state));
         egui::Panel::bottom("status")
             .exact_size(theme::STATUS_HEIGHT)
-            .frame(panel_frame)
+            .frame(chrome_frame)
             .show_separator_line(true)
             .show(root, |ui| self.status_bar(ui));
         crate::command_line::panel(root, &mut self.state);
