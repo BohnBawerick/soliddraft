@@ -1,9 +1,9 @@
-//! Early display of retained scalar edits, with one reserved exact-proof scope.
+//! Early display of retained scalar edits, then exact proof with the ordinary build allowances.
 
 use std::collections::BTreeMap;
 
 use catallax_app::{ConstructionOptions, lifecycle::WorkAllocation};
-use catallax_numbers::{Decider, OperationAllowance, Refusal};
+use catallax_numbers::{Decider, OperationAllowance, Refusal, operation_budget_active};
 use catallax_recipe::Operation;
 use serde_json::json;
 use soliddraft_kernel_api::{
@@ -13,11 +13,22 @@ use soliddraft_kernel_api::{
 
 use super::{CatallaxKernel, build_error, convert, converted_recipe, native, options, query_error};
 
-struct ReservedProof(OperationAllowance);
+/// Work for an early construction display, separate from the exact rebuild.
+const CONSTRUCTION_WORK: u64 = 2_000_000;
+
+enum ReservedProof {
+    /// No caller allowance: each kernel build in the rebuild takes its own
+    /// default allowance, exactly as the synchronous rebuild does.
+    PerBuild,
+    /// Work already taken from a caller-owned allowance. Nested builds share it.
+    Caller(OperationAllowance),
+}
 
 impl ProofWork for ReservedProof {
     fn run(self: Box<Self>, rebuild: &mut dyn FnMut() -> KernelResult<()>) -> KernelResult<()> {
-        let Self(allowance) = *self;
+        let Self::Caller(allowance) = *self else {
+            return rebuild();
+        };
         let (answer, work) = allowance.run(rebuild);
         if work.exhausted {
             return Err(query_error(
@@ -29,10 +40,23 @@ impl ProofWork for ReservedProof {
     }
 }
 
+/// Reserves `construction` units for the early display and the exact proof's work.
+/// A caller-owned allowance pays for both from one existing default, so a nested
+/// request never obtains fresh work.
+fn reserve(construction: u64) -> KernelResult<(OperationAllowance, ReservedProof)> {
+    let refused = |refusal| query_error("edit allocation", refusal);
+    if !operation_budget_active() {
+        return Ok((OperationAllowance::reserve(construction).map_err(refused)?, ReservedProof::PerBuild));
+    }
+    let allocation = WorkAllocation::application(construction).expect("constant split is within the application total");
+    let mut display = OperationAllowance::reserve(catallax_app::DEFAULT_BUILD_WORK).map_err(refused)?;
+    let proof = display.split_off(allocation.proof).expect("validated phase split");
+    Ok((display, ReservedProof::Caller(proof)))
+}
+
 pub(super) fn reserve_proof_work() -> KernelResult<Box<dyn ProofWork>> {
-    let allowance = OperationAllowance::reserve(catallax_app::DEFAULT_BUILD_WORK)
-        .map_err(|refusal| query_error("edit allocation", refusal))?;
-    Ok(Box::new(ReservedProof(allowance)))
+    let (_, proof) = reserve(0)?;
+    Ok(Box::new(proof))
 }
 
 pub(super) fn prepare(
@@ -52,10 +76,7 @@ pub(super) fn prepare(
         let records: BTreeMap<_, _> = stored.history.iter().map(|record| (record.seq, record.tag.clone())).collect();
         (input, records, source)
     };
-    let allocation = WorkAllocation::application(2_000_000).expect("constant split is within the application total");
-    let mut preview = OperationAllowance::reserve(catallax_app::DEFAULT_BUILD_WORK)
-        .map_err(|refusal| query_error("edit allocation", refusal))?;
-    let proof = preview.split_off(allocation.proof).expect("validated phase split");
+    let (preview, proof) = reserve(CONSTRUCTION_WORK)?;
     let (mut display, work) = preview.run(|| {
         let op = match edits.first().map(|edit| edit.parameter) {
             Some(ScalarParameter::FilletRadius) => OpKind::Fillet,
@@ -136,7 +157,7 @@ pub(super) fn prepare(
             Refusal::new("numbers.operation-budget", "the reserved construction-preview allowance was exhausted"),
         ));
     }
-    Ok(ConstructionEdit { display, proof: Box::new(ReservedProof(proof)) })
+    Ok(ConstructionEdit { display, proof: Box::new(proof) })
 }
 
 #[cfg(test)]
@@ -187,6 +208,24 @@ mod tests {
         }
         assert_eq!(kernel.mass_properties(original).unwrap().volume, 12_000.0);
         assert_eq!(kernel.mass_properties(rebuilt).unwrap().volume, 24_000.0);
+    }
+
+    #[test]
+    fn exact_proof_without_a_caller_allowance_gives_each_build_its_own_default() {
+        let kernel = CatallaxKernel::new();
+        let original = contract::block(&kernel);
+        let request = kernel.construction_edit(original, &[edit()], &TessellationParams::default()).unwrap();
+        assert!(request.display.is_ok());
+        for proof in [request.proof, kernel.reserve_proof_work().unwrap()] {
+            let mut scoped = None;
+            proof
+                .run(&mut || {
+                    scoped = Some(catallax_numbers::operation_budget_active());
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(scoped, Some(false), "a shared scope would make every build split one default");
+        }
     }
 
     #[test]

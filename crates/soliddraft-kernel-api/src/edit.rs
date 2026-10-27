@@ -43,9 +43,10 @@ pub struct ConstructionMesh {
     pub faces: Vec<ConstructionFace>,
 }
 
-/// Single-use work already reserved for the exact model rebuild.
-/// A backend must charge every nested kernel operation to this reservation;
-/// it cannot obtain another default allowance when this scope ends or refuses.
+/// Single-use work for the exact model rebuild. Each nested kernel operation
+/// receives the same allowance as in the synchronous rebuild. When the request
+/// ran inside a caller-owned allowance, the work was reserved from it and nested
+/// operations cannot obtain another default allowance.
 pub trait ProofWork: Send {
     /// Runs the caller's existing synchronous rebuild on its worker thread.
     /// Returning success after exhausting the reservation is forbidden.

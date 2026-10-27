@@ -717,15 +717,16 @@ pub trait Kernel: Send + Sync {
         self.tessellate(body, params)
     }
 
-    /// Reserves one normal exact-build allowance when no early representation
-    /// is requested. All nested rebuild operations share this single scope.
+    /// Prepares exact-proof work when no early representation is requested.
+    /// Nested rebuild operations receive the synchronous rebuild's allowances.
     fn reserve_proof_work(&self) -> KernelResult<Box<dyn ProofWork>> {
         Err(KernelError::Unsupported("reserved background proof is unavailable in this backend".into()))
     }
 
     /// Builds a definition-native display before rebuilding the exact model.
-    /// Edits name existing operation tags in `body` and share one reserved
-    /// construction/proof allowance. No provisional face id is an exact handle.
+    /// Edits name existing operation tags in `body`. Construction has its own
+    /// reserved allowance and exact proof keeps the synchronous rebuild's
+    /// allowances. No provisional face id is an exact handle.
     /// The default explicitly refuses this early representation.
     fn construction_edit(
         &self,
