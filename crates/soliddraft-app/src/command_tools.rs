@@ -395,11 +395,10 @@ pub fn extrude_params() -> Vec<(&'static str, Value)> {
 
 /// The `revolve` verb's parameters.
 pub fn revolve_params() -> Vec<(&'static str, Value)> {
-    let vector = |description: &str| json!({"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3,"description":description});
     vec![
         sketch_param(),
-        ("axis_origin", vector("Point on the axis in model millimetres")),
-        ("axis_direction", vector("Nonzero model-space axis direction")),
+        ("axis_origin", array(number("component"), "Point on the axis [x, y, z] in model millimetres")),
+        ("axis_direction", array(number("component"), "Nonzero model-space axis direction [x, y, z]")),
         ("angle_deg", number("Angle in degrees, greater than 0 and at most 360")),
     ]
 }
@@ -2268,6 +2267,18 @@ mod tests {
         assert!(tools.len() <= 20, "strict tools per request");
         let text = serde_json::to_string(&tools.iter().map(|t| &t.input_schema).collect::<Vec<_>>()).unwrap();
         assert!(text.matches("anyOf").count() <= 16, "union parameters");
+    }
+
+    #[test]
+    fn revolve_axes_still_require_three_components() {
+        for field in ["axis_origin", "axis_direction"] {
+            for malformed in [json!([]), json!([0, 1]), json!([0, 1, 0, 0])] {
+                let mut input = json!({"op":"revolve", "sketch":"Sketch1",
+                    "axis_origin":[0,0,0], "axis_direction":[0,1,0], "angle_deg":360});
+                input[field] = malformed;
+                assert!(serde_json::from_value::<Line>(input).is_err(), "{field} requires exactly three components");
+            }
+        }
     }
 
     #[test]
