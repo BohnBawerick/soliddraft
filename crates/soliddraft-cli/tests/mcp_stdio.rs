@@ -160,7 +160,6 @@ fn mcp_bundle_keeps_the_part_and_question_after_a_refused_extrusion() {
     assert_eq!(question["format"], "catallax-question/1");
     assert_eq!(question["max_work"], 0);
     assert_eq!(question["source"], "recipe");
-    assert_eq!(question["problem"]["format"], "catallax-recipe/3");
     let kernel: Value = serde_json::from_str(&read("0002/kernel.json")).unwrap();
     assert!(kernel["calls"].as_array().unwrap().iter().any(|call| {
         call["operation_log"]["operations"]

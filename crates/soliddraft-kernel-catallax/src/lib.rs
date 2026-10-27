@@ -273,10 +273,10 @@ impl CatallaxKernel {
         let result = format!("op_{seq}");
         step["id"] = result.clone().into();
         steps.insert(seq, step);
-        // A tool's independent recipe need not be a leading prefix of the merged
-        // recipe. Retain the longest matching operand, not merely the largest one.
+        // Read-only targets can supply geometry checkpoints without becoming history
+        // parents. Independent tools still require an exact matching leading prefix.
         let mut prefix: Option<&Stored> = None;
-        for body in inputs {
+        for body in inputs.iter().chain(context) {
             let stored = state.get(*body)?;
             if stored.solid.is_some()
                 && prefix.is_none_or(|best| stored.steps.len() > best.steps.len())
@@ -392,6 +392,9 @@ fn build(
     }
     let mut converted =
         catallax_app::soliddraft::convert(&legacy.to_string()).map_err(|e| build_error(op, Error::Conversion(e)))?;
+    // Start in the end-condition format so adding a limited sweep does not discard
+    // an otherwise identical target checkpoint merely to upgrade its recipe version.
+    catallax_recipe::FORMAT_V4.clone_into(&mut converted.recipe.format);
     let sources = input["steps"].as_array().expect("generated recipe steps");
     let mut planes = BTreeMap::new();
     for source in sources {
@@ -441,12 +444,6 @@ fn build(
             | catallax_recipe::Operation::ExtrudeNext { direction: d, .. } = &mut native
         {
             *d = Some(direction);
-        }
-        if matches!(
-            native,
-            catallax_recipe::Operation::ExtrudeTo { .. } | catallax_recipe::Operation::ExtrudeNext { .. }
-        ) {
-            converted.recipe.format = catallax_recipe::FORMAT_V4.into();
         }
         let step = converted.recipe.steps.iter_mut().find(|s| s.id == id).expect("converted native step");
         step.op = native;
@@ -993,5 +990,45 @@ mod tests {
             assert_eq!(kernel.export_step(base, &options).unwrap(), original);
         }
         assert_eq!(kernel.mass_properties(base).unwrap().volume, 12000.0);
+    }
+
+    #[test]
+    fn limited_sweeps_reuse_read_only_targets_without_claiming_their_history() {
+        let kernel = CatallaxKernel::with_operation_log();
+        let target = contract::block(&kernel);
+        let original = kernel.export_step(target, &StepOptions::default()).unwrap();
+        let target_recipe = kernel.body_recipe(target).unwrap();
+        let bottom =
+            kernel.topology(target).unwrap().faces.iter().find(|face| face.normal == Some(-Vec3::Z)).unwrap().id;
+        let profile = kernel
+            .create_body_from_profile(
+                &OpTag::new("post"),
+                &Profile::circle(Plane::XY.with_origin(Vec3::new(0.0, 0.0, -5.0)), Point2::new(0.0, 0.0), 3.0),
+            )
+            .unwrap()
+            .body;
+
+        for limit in [ExtrudeLimit::UpToNext, ExtrudeLimit::UpToFace { face: bottom }] {
+            kernel.take_diagnostics().unwrap();
+            let swept = kernel.extrude_to(&OpTag::new("sweep"), profile, target, None, &limit).unwrap();
+            let evidence = kernel.take_diagnostics().unwrap();
+            let operations = evidence["calls"][0]["operation_log"]["operations"].as_array().unwrap();
+            for step in target_recipe["steps"].as_array().unwrap() {
+                let id = &step["id"];
+                assert!(!operations.iter().any(|op| &op["id"] == id), "rebuilt read-only target {id}: {evidence}");
+            }
+            let recipe = kernel.body_recipe(swept.body).unwrap();
+            let (fresh, _) = build(&recipe, OpKind::ExtrudeTo, None, None).unwrap();
+            assert_eq!(kernel.solid(swept.body).unwrap().app.names, fresh.names);
+            assert_eq!(
+                kernel.export_step(swept.body, &StepOptions::default()).unwrap(),
+                step::export(&fresh, &StepOptions::default()).unwrap()
+            );
+            assert!((kernel.mass_properties(swept.body).unwrap().volume - 45.0 * std::f64::consts::PI).abs() < 1e-6);
+            let history = kernel.history(swept.body).unwrap();
+            assert_eq!(history.iter().map(|record| record.tag.as_str()).collect::<Vec<_>>(), ["post", "sweep"]);
+            assert!(swept.record.faces.deleted.is_empty());
+            assert_eq!(kernel.export_step(target, &StepOptions::default()).unwrap(), original);
+        }
     }
 }

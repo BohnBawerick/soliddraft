@@ -3,14 +3,17 @@
 The backend pins Catallax main revision `878bb7fa78d036508564173d7ed425fc13385a37`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
 
 Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
-For a new solid, the adapter merges operand recipes, selects the longest operand that
-is a matching leading prefix, and calls `catallax_app::build_incremental`. Independent
-tool recipes are not assumed to be leading prefixes. The selected checkpoint is cloned
-outside the body arena lock, preserving earlier immutable bodies for undo, branches
-and concurrent queries. Catallax shares the immutable checkpoint build and continues
+For a new solid, the adapter merges operand and read-only context recipes, selects the
+longest matching leading checkpoint among them, and calls `catallax_app::build_incremental`.
+A limited sweep can reuse its target's geometry without claiming that target's history.
+Independent tool recipes are still not assumed to be leading prefixes. The selected
+checkpoint is cloned outside the body arena lock, preserving earlier immutable bodies
+for undo, branches and concurrent queries. Catallax shares that checkpoint and continues
 with persistent geometry, topology and fact storage rather than copying all history.
 It validates native step definitions and numerical policy before resuming; a mismatch
 restarts evaluation rather than accepting stale geometry.
+The adapter emits recipe format 4 from the first solid, so adding an end condition
+does not discard an otherwise matching checkpoint through a format upgrade.
 The document's first-changed-feature cache supplies earlier bodies for parameter edits,
 so both model-feature reuse and native prefix reuse apply to the changed suffix.
 
