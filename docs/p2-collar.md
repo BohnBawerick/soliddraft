@@ -33,16 +33,39 @@ in the existing dependency calculation.
 - Individual GUI harness command-through-render samples were 209 ms
   original and 255 ms edited. These are not controlled performance
   comparisons or qualification results.
-- Current integration blocker: CLI evidence's exhaustive feature match
-  needs `FeatureKind::Revolve(_) => Vec::new()`. Revolve contains no
-  stored FaceRef slots. This file belongs to L12 and is left untouched
-  pending coordination. The full scenario has not run.
+- Resolved integration blocker: CLI evidence now handles Revolve in its
+  exhaustive feature match. Revolve contains no stored FaceRef slots.
+  Release CLI build and CLI Clippy now pass.
 - The separate Catallax cap triangulation fix is commit
   `260dc026645f20d70fd8a81c300608b31ea1b718`. SolidDraft retains its existing
   Catallax pin; these app checks do not claim integrated acceptance of
   that fix. L14 owns dependency integration.
 
-Functional app checks are distinct from complete acceptance: scenario
-budgets, certified drawing export, failure snap-back/red-state behavior,
-and integrated mesh-fix acceptance remain to be demonstrated. No
-qualification tier is claimed by this public-only slice.
+## Full public scenario follow-up
+
+All six steps in `ci/scenarios/collar.json` pass with the checked-in
+Catallax pin `878bb7fa78d036508564173d7ed425fc13385a37` and a verifier built
+from that same revision. No temporary dependency override was used.
+The unchanged click and drawing-view budgets pass, together with live
+viewport PNGs, hidden-line SVGs, original/edited drawing outputs,
+STEP/STL exports, volume checks and undo/redo. Command plus live display
+times in this run were 499.998 ms for revolve, 145.218 ms for the original
+chamfer and 211.482 ms for its edit. These are single-run observations.
+
+Reproduce after building the release CLI and matching verifier:
+
+```sh
+SOLIDDRAFT_CONFIG_DIR=/tmp/soliddraft-collar-config python3 ci/run-scenarios.py ci/scenarios/collar.json --out /tmp/soliddraft-collar-evidence --soliddraft target/release/soliddraft --catallax-verify /path/to/pinned/catallax-verify
+```
+
+The first launch could not create its journal in the environment's default
+read-only configuration directory; the supported `SOLIDDRAFT_CONFIG_DIR`
+override resolved this without source changes. The focused CLI schema
+refusal regression also passes.
+
+Functional app checks are distinct from complete acceptance. Main was
+still `a743000060cafd9304beb87e65b3b496dfd6cd4d` at reconciliation; L03 lifecycle
+work had not landed, so failure snap-back/red-state acceptance remains
+pending L03. Integrated mesh-fix acceptance remains pending the separately
+owned dependency update. No qualification tier is claimed by this
+public-only slice.
