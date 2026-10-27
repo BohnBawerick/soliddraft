@@ -118,6 +118,8 @@ pub enum AppAction {
     Quit,
     /// Everything the drawing tab does.
     Drawing(crate::drawing::DrawingAction),
+    /// Everything the assembly tab does.
+    Assembly(crate::assembly::AssemblyAction),
     /// A step of a drag of a feature's dimension.
     DragDimension(DragStep),
 }
@@ -480,6 +482,8 @@ pub struct AppState {
     pub frame_ms: f32,
     /// The open drawing, the New drawing PropertyManager and which document is active.
     pub drawing: crate::drawing::DrawingState,
+    /// The open assembly and whether it is the active document.
+    pub assembly: crate::assembly::AssemblyState,
     /// Which side areas are shown and how wide they are.
     pub layout: crate::panels::Layout,
     /// Where pinned revisions of referenced documents come from. Cache-only for now: the
@@ -522,6 +526,7 @@ impl AppState {
             recent: crate::file::recent(),
             frame_ms: 0.0,
             drawing: Default::default(),
+            assembly: Default::default(),
             layout: crate::panels::Layout::load(),
             revisions: Arc::new(soliddraft_document::CacheOnlyStore::new()),
             commands: crate::settings::command_history(),

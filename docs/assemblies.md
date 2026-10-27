@@ -457,6 +457,35 @@ soliddraft asm bench <file.dwasm> [--size <w>x<h>] [--frames <n>] [--json]
 `doc where-used` read assemblies like any document. `asm info` reports how long each
 opening phase took and roughly how much memory the open assembly holds.
 
+## In the app
+
+The desktop app opens one assembly at a time, in a tab beside the part
+(`crates/soliddraft-app/src/assembly.rs`). While that tab is active the ribbon, the tree,
+the property panel and the status bar are the assembly's.
+
+- **File > New assembly** starts an empty assembly. **File > Make assembly from part**
+  saves the open part if it has unsaved changes, then starts an assembly that places it
+  at the origin.
+- **Insert component** (Ctrl+I) asks for part or assembly files; dropping files on the
+  window while the assembly is active does the same. The first component goes at the
+  origin; each later one sits 20 mm beside what is already placed, along x. Each is pinned
+  at its file's revision now. Before the assembly's first save it has no folder to resolve
+  references from, so the app hands the loader each inserted file's bytes through its
+  revision store (`AssemblyDocument::new_with` with `OpenOptions::revisions`). The first
+  save stores every reference relative to the new file.
+- **The tree** lists the components by `label`, with sub-assemblies opening to their own;
+  a failed or stale definition shows its problem. A click in the tree or the viewport
+  selects a component of the root.
+- **The property panel** places the selection: x, y and z in millimetres and rotations
+  about x, then y, then z in degrees, relative to the assembly that holds it. A change
+  applies with `move_to` when the field lets go, as one undo step.
+- **Save assembly** (Ctrl+S) and **Save assembly as** (Ctrl+Shift+S) write the `.dwasm`
+  with its display copies; **File > Open** and Open recent open one with
+  `open_in_background`. Undo and redo follow the active tab.
+
+Mates and constraints between components are the next slice; placements stay fixed until
+then. The browser build leaves these commands off, because the loader needs threads.
+
 ## For the interface
 
 The Assembly tab, its tree and Insert component build on:

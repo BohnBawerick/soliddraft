@@ -32,7 +32,15 @@ pub struct ViewportEvents {
     pub toggle_projection: bool,
     /// Actions the sketcher raised.
     pub actions: Vec<AppAction>,
+    /// For an assembly: the id-buffer texel under the cursor, from the last readback.
+    pub hover_texel: Option<[u32; 2]>,
+    /// For an assembly: a primary click happened, with the texel under the cursor.
+    pub clicked_texel: Option<Option<[u32; 2]>>,
 }
+
+/// The part meshes version an assembly frame hands the renderer: none, so the part's
+/// are uploaded again when its tab comes back.
+const NO_PART: u64 = u64::MAX - 1;
 
 /// What the viewport draws besides the document this frame.
 pub struct Overlay<'a> {
@@ -120,37 +128,7 @@ impl ViewportState {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "3D viewport"));
         let ppp = ui.ctx().pixels_per_point();
-        let aspect = rect.width() / rect.height().max(1.0);
-
-        let dt = ui.input(|i| i.stable_dt).min(0.1);
-        if self.camera.tick(dt) {
-            ui.ctx().request_repaint();
-        }
-
-        // Navigation: left drag orbits, right or middle drag pans, wheel zooms toward the cursor.
-        let shift = ui.input(|i| i.modifiers.shift);
-        let delta = response.drag_delta();
-        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
-            self.camera.orbit(delta.x, delta.y);
-        } else if response.dragged_by(egui::PointerButton::Secondary)
-            || response.dragged_by(egui::PointerButton::Middle)
-            || (response.dragged_by(egui::PointerButton::Primary) && shift)
-        {
-            self.camera.pan(delta.x, delta.y, rect.height());
-        }
-        if response.hovered() {
-            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = (scroll * 0.0025).exp() * pinch;
-            if (factor - 1.0).abs() > 1e-5 {
-                let ndc = response.hover_pos().map(|p| {
-                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
-                });
-                self.camera.zoom(factor, ndc, aspect);
-            }
-        }
-        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        }
+        self.navigate(ui, &response, rect, sketching);
 
         // Hover pick from the last id-buffer readback. The readback lags one
         // frame, so keep repainting briefly while the pointer rests on the view.
@@ -192,33 +170,14 @@ impl ViewportState {
             Some(Selection::Feature(id)) if sketch.is_none() => id as u32,
             _ => 0,
         };
-        let selected_body = None;
-        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
-        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-            rect,
-            ViewportCallback(FrameInput {
-                view: self.camera.view(),
-                proj: self.camera.projection(aspect),
-                eye: self.camera.eye(),
-                basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
-                orthographic: self.camera.orthographic,
-                distance: self.camera.distance,
-                size_px,
-                pixels_per_point: ppp,
-                display: self.display,
-                preset: self.preset,
-                hover_id,
-                selected_id,
-                selected_feature,
-                selected_body,
-                cursor_px,
-                meshes,
-                ghost,
-                preview,
-                pick_out: self.pick.clone(),
-                assembly: None,
-            }),
-        ));
+        let mut input = self.frame_input(rect, ppp, cursor_px);
+        input.meshes = meshes;
+        input.hover_id = hover_id;
+        input.selected_id = selected_id;
+        input.selected_feature = selected_feature;
+        input.ghost = ghost;
+        input.preview = preview;
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
 
         let painter = ui.painter().with_clip_rect(rect);
         if let Some((plane, sk)) = passive_sketch {
@@ -237,6 +196,111 @@ impl ViewportState {
             paint_preview_label(ui, rect, &label, failed);
         }
         events
+    }
+
+    /// Shows an assembly with the part's camera controls, heads-up toolbar and view cube:
+    /// `frame`'s scene in place of the part's meshes, with the camera filled in here. The
+    /// events carry the id-buffer texels under the cursor for `Scene::decode`.
+    pub fn show_assembly(
+        &mut self,
+        ui: &mut egui::Ui,
+        mut frame: assembly::AssemblyFrame,
+        hover_label: Option<&str>,
+    ) -> ViewportEvents {
+        let mut events = ViewportEvents::default();
+        let rect = ui.available_rect_before_wrap();
+        self.rect = rect;
+        let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Assembly viewport"));
+        let ppp = ui.ctx().pixels_per_point();
+        self.navigate(ui, &response, rect, false);
+        let hover_pos = if response.hovered() && !response.dragged() { response.hover_pos() } else { None };
+        let cursor_px = hover_pos
+            .map(|p| [((p.x - rect.left()) * ppp).max(0.0) as u32, ((p.y - rect.top()) * ppp).max(0.0) as u32]);
+        self.hover = None;
+        self.hover_point = None;
+        if let Some(px) = cursor_px {
+            events.hover_texel = self.pick.lock().unwrap().texel(px[0], px[1]).filter(|t| t[0] != 0);
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        if response.clicked_by(egui::PointerButton::Primary) {
+            events.clicked_texel = Some(events.hover_texel);
+        }
+        let aspect = rect.width() / rect.height().max(1.0);
+        frame.view_proj = (self.camera.projection(aspect) * self.camera.view()).as_dmat4();
+        frame.eye = self.camera.eye().as_dvec3();
+        let mut input = self.frame_input(rect, ppp, cursor_px);
+        input.assembly = Some(frame);
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
+        let painter = ui.painter().with_clip_rect(rect);
+        self.paint_triad(&painter, rect);
+        self.paint_hud(ui, rect, &mut events);
+        self.paint_view_cube(ui, rect, &mut events);
+        let label = hover_label.unwrap_or("Hover a component");
+        self.paint_pills(ui, rect, Some(label));
+        events
+    }
+
+    /// What every frame hands the renderer from the camera and the look, with nothing in
+    /// the scene yet.
+    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
+        FrameInput {
+            view: self.camera.view(),
+            proj: self.camera.projection(aspect),
+            eye: self.camera.eye(),
+            basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
+            orthographic: self.camera.orthographic,
+            distance: self.camera.distance,
+            size_px,
+            pixels_per_point: ppp,
+            display: self.display,
+            preset: self.preset,
+            hover_id: 0,
+            selected_id: 0,
+            selected_feature: 0,
+            selected_body: None,
+            cursor_px,
+            meshes: (NO_PART, Vec::new()),
+            ghost: None,
+            preview: None,
+            pick_out: self.pick.clone(),
+            assembly: None,
+        }
+    }
+
+    /// Left drag orbits, right or middle drag (or Shift with the left) pans, the wheel
+    /// zooms toward the cursor. In a sketch the left button belongs to the sketcher.
+    fn navigate(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect, sketching: bool) {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        if self.camera.tick(dt) {
+            ui.ctx().request_repaint();
+        }
+        let shift = ui.input(|i| i.modifiers.shift);
+        let delta = response.drag_delta();
+        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
+            self.camera.orbit(delta.x, delta.y);
+        } else if response.dragged_by(egui::PointerButton::Secondary)
+            || response.dragged_by(egui::PointerButton::Middle)
+            || (response.dragged_by(egui::PointerButton::Primary) && shift)
+        {
+            self.camera.pan(delta.x, delta.y, rect.height());
+        }
+        if response.hovered() {
+            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
+            let factor = (scroll * 0.0025).exp() * pinch;
+            if (factor - 1.0).abs() > 1e-5 {
+                let ndc = response.hover_pos().map(|p| {
+                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
+                });
+                self.camera.zoom(factor, ndc, aspect);
+            }
+        }
+        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
     }
 
     fn paint_highlights(&self, painter: &egui::Painter, doc: &Document, selection: Option<Selection>, rect: Rect) {

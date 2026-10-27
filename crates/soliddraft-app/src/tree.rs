@@ -464,23 +464,23 @@ fn rollback_bar(
     let _ = (released, &target);
 }
 
-struct RowSpec<'a> {
-    indent: u8,
-    chevron: Option<bool>,
-    icon: Icon,
-    name: &'a str,
-    sub: &'a str,
-    selected: bool,
-    dim: bool,
-    error: Option<&'a str>,
-    warn: Option<&'a str>,
-    via_assistant: bool,
-    suppressed: bool,
-    drop_above: bool,
+pub(crate) struct RowSpec<'a> {
+    pub(crate) indent: u8,
+    pub(crate) chevron: Option<bool>,
+    pub(crate) icon: Icon,
+    pub(crate) name: &'a str,
+    pub(crate) sub: &'a str,
+    pub(crate) selected: bool,
+    pub(crate) dim: bool,
+    pub(crate) error: Option<&'a str>,
+    pub(crate) warn: Option<&'a str>,
+    pub(crate) via_assistant: bool,
+    pub(crate) suppressed: bool,
+    pub(crate) drop_above: bool,
 }
 
 impl RowSpec<'static> {
-    fn plain() -> Self {
+    pub(crate) fn plain() -> Self {
         RowSpec {
             indent: 0,
             chevron: None,
@@ -498,7 +498,7 @@ impl RowSpec<'static> {
     }
 }
 
-fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
+pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), theme::ROW_HEIGHT), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, spec.selected, spec.name));
     if !ui.is_rect_visible(rect) {

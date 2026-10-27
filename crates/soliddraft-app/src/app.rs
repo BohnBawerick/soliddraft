@@ -28,6 +28,8 @@ pub enum Tab {
     Assistant,
     /// The drawing document, opened beside the part by Make drawing.
     Drawing,
+    /// The assembly document, opened beside the part by New assembly or Open.
+    Assembly,
 }
 
 impl Tab {
@@ -38,11 +40,12 @@ impl Tab {
             Tab::Viewport => "Part",
             Tab::Assistant => "Assistant",
             Tab::Drawing => "Drawing",
+            Tab::Assembly => "Assembly",
         }
     }
 }
 
-/// The middle: the part, and the drawing tab beside it once one is open.
+/// The middle: the part, and the drawing and assembly tabs beside it once open.
 fn center_dock() -> DockState<Tab> {
     DockState::new(vec![Tab::Viewport])
 }
@@ -116,7 +119,12 @@ impl TabViewer for Panels<'_> {
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
         let text = match tab {
             Tab::Viewport => self.state.doc.name.clone(),
+            Tab::Tree if self.state.assembly.is_active() => "Assembly tree".to_owned(),
             Tab::Tree if self.state.drawing.is_active() => "Drawing tree".to_owned(),
+            Tab::Assembly => match self.state.assembly.session.as_ref() {
+                Some(s) => s.title(),
+                None => "Assembly".to_owned(),
+            },
             Tab::Drawing => match self.state.drawing.session.as_ref() {
                 // A dot marks a drawing with stale views or unresolved annotations.
                 Some(s) if s.has_issues() => format!("{} •", s.title()),
@@ -131,6 +139,9 @@ impl TabViewer for Panels<'_> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
         ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
         match tab {
+            Tab::Tree if self.state.assembly.is_active() => crate::assembly::tree(ui, self.state),
+            Tab::Properties if self.state.assembly.is_active() => crate::assembly::properties(ui, self.state),
+            Tab::Assembly => crate::assembly::viewport(ui, self.state),
             Tab::Tree if self.state.drawing.is_active() => crate::drawing::tree_drawing::show(ui, self.state),
             Tab::Tree => tree::show(ui, self.state),
             Tab::Properties if self.state.drawing.new.is_some() && !self.state.drawing.is_active() => {
@@ -189,13 +200,17 @@ impl TabViewer for Panels<'_> {
     }
 
     fn is_closeable(&self, tab: &Tab) -> bool {
-        matches!(tab, Tab::Drawing)
+        matches!(tab, Tab::Drawing | Tab::Assembly)
     }
 
     fn on_close(&mut self, tab: &mut Tab) -> egui_dock::tab_viewer::OnCloseResponse {
         if matches!(tab, Tab::Drawing) {
             self.state.drawing.session = None;
             self.state.drawing.active = false;
+        }
+        if matches!(tab, Tab::Assembly) {
+            self.state.assembly.session = None;
+            self.state.assembly.active = false;
         }
         egui_dock::tab_viewer::OnCloseResponse::Close
     }
@@ -468,6 +483,8 @@ impl SolidDraftApp {
                 menu_command(ui, st, "new_part", "New part");
                 menu_command(ui, st, "open", "Open…");
                 menu_command(ui, st, "make_drawing", "New drawing from part…");
+                menu_command(ui, st, "new_assembly", "New assembly");
+                menu_command(ui, st, "make_assembly", "Make assembly from part");
                 ui.menu_button("Open recent", |ui| {
                     if st.recent.is_empty() {
                         ui.add_enabled(false, egui::Button::new("No recent files"));
@@ -486,8 +503,14 @@ impl SolidDraftApp {
                     }
                 });
                 ui.separator();
-                menu_command(ui, st, "save", "Save");
-                menu_command(ui, st, "save_as", "Save as…");
+                if st.assembly.is_active() {
+                    menu_command(ui, st, "assembly_save", "Save assembly");
+                    menu_command(ui, st, "assembly_save_as", "Save assembly as…");
+                    menu_command(ui, st, "insert_component", "Insert component…");
+                } else {
+                    menu_command(ui, st, "save", "Save");
+                    menu_command(ui, st, "save_as", "Save as…");
+                }
                 ui.menu_button("Export", |ui| {
                     menu_command(ui, st, "export_step", "STEP AP242…");
                     menu_command(ui, st, "export_stl", "STL…");
@@ -517,8 +540,12 @@ impl SolidDraftApp {
                 };
                 menu_command(ui, st, "drawing_rebuild", &rebuild);
                 ui.separator();
-                let undo = st.doc.undo_label().map(|l| format!("Undo {l}")).unwrap_or("Undo".into());
-                let redo = st.doc.redo_label().map(|l| format!("Redo {l}")).unwrap_or("Redo".into());
+                let labels = match st.assembly.session.as_ref().filter(|_| st.assembly.is_active()) {
+                    Some(a) => (a.doc.undo_label(), a.doc.redo_label()),
+                    None => (st.doc.undo_label(), st.doc.redo_label()),
+                };
+                let undo = labels.0.map(|l| format!("Undo {l}")).unwrap_or("Undo".into());
+                let redo = labels.1.map(|l| format!("Redo {l}")).unwrap_or("Redo".into());
                 menu_command(ui, st, "undo", &undo);
                 menu_command(ui, st, "redo", &redo);
                 ui.separator();
@@ -635,6 +662,10 @@ impl SolidDraftApp {
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
+        if self.state.assembly.is_active() {
+            crate::assembly::status_bar(ui, &mut self.state);
+            return;
+        }
         if self.state.drawing.is_active() {
             crate::drawing::status_bar(ui, &mut self.state);
             return;
@@ -812,7 +843,21 @@ impl SolidDraftApp {
             AppAction::Redo if self.state.drawing.is_active() => {
                 self.apply(ctx, AppAction::Drawing(crate::drawing::DrawingAction::Redo));
             }
+            AppAction::Undo if self.state.assembly.is_active() => {
+                self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Undo));
+            }
+            AppAction::Redo if self.state.assembly.is_active() => {
+                self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Redo));
+            }
             AppAction::Drawing(a) => crate::drawing::apply(&mut self.state, &mut self.dock, ctx, a),
+            AppAction::Assembly(crate::assembly::AssemblyAction::FromPart) => {
+                // The assembly references the part's file, so the part is saved first.
+                if self.state.doc.dirty || self.state.doc.path.is_none() {
+                    self.apply(ctx, AppAction::Save);
+                }
+                crate::assembly::apply(&mut self.state, &mut self.dock, crate::assembly::AssemblyAction::FromPart);
+            }
+            AppAction::Assembly(a) => crate::assembly::apply(&mut self.state, &mut self.dock, a),
             AppAction::Undo => {
                 self.close_editor();
                 match self.state.doc.undo() {
@@ -1391,7 +1436,7 @@ impl SolidDraftApp {
                         self.apply(ctx, AppAction::Drawing(crate::drawing::DrawingAction::OpenFile(path)));
                     }
                     Some(soliddraft_document::DocKind::Assembly) => {
-                        self.state.note("Assemblies arrive in a later phase", NoteKind::Error);
+                        self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Open(path)));
                     }
                     _ => {
                         let opened = file::open(&path, self.state.doc.kernel().clone(), Some(self.state.doc.model()));
@@ -1450,9 +1495,13 @@ impl SolidDraftApp {
             }
             AppAction::ResetLayout => {
                 let drawing_open = self.dock.find_tab(&Tab::Drawing).is_some();
+                let assembly_open = self.dock.find_tab(&Tab::Assembly).is_some();
                 self.dock = center_dock();
                 if drawing_open {
                     self.dock.push_to_focused_leaf(Tab::Drawing);
+                }
+                if assembly_open {
+                    self.dock.push_to_focused_leaf(Tab::Assembly);
                 }
                 self.tree_dock = tree_dock();
                 self.assistant_dock = assistant_dock();
@@ -1894,6 +1943,22 @@ pub fn open_at_start(app: &mut SolidDraftApp, path: PathBuf) {
 }
 
 impl SolidDraftApp {
+    /// Hands the open assembly the coarse and fine levels the GPU asked for, which its
+    /// loader brings in the background.
+    fn request_assembly_levels(&mut self) {
+        let (Some(rs), Some(s)) = (self.render_state.as_ref(), self.state.assembly.session.as_mut()) else { return };
+        if !self.frame.is_multiple_of(15) {
+            return;
+        }
+        let wanted = match rs.renderer.write().callback_resources.get_mut::<ViewportRenderer>() {
+            Some(r) => r.take_assembly_wanted(),
+            None => return,
+        };
+        if !wanted.is_empty() {
+            s.doc.request_levels(&wanted);
+        }
+    }
+
     /// Hands autosave the documents as this frame left them, notes any copy that failed,
     /// and wakes the app when the next copy is due.
     fn autosave(&mut self, ctx: &egui::Context) {
@@ -1927,6 +1992,17 @@ impl eframe::App for SolidDraftApp {
         self.state.frame_ms = if self.state.frame_ms == 0.0 { dt } else { self.state.frame_ms * 0.9 + dt * 0.1 };
         self.shortcuts(ctx);
         crate::drawing::frame(&mut self.state, &mut self.dock);
+        crate::assembly::frame(&mut self.state, &mut self.dock, ctx);
+        // The browser hands over a dropped file's name only, not a path to read.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dropped: Vec<PathBuf> =
+                ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
+            if !dropped.is_empty() {
+                crate::assembly::dropped(&mut self.state, dropped);
+            }
+        }
+        self.request_assembly_levels();
         self.state.poll_assistant();
         self.state.service_mcp();
         // In the browser an opened file arrives as an upload, frames after the request.
