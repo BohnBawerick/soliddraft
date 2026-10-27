@@ -108,6 +108,8 @@ impl View {
             meshes: (0, Vec::new()),
             ghost: None,
             preview: None,
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: self.pick.clone(),
             assembly: Some(AssemblyFrame {
                 scene: scene.clone(),

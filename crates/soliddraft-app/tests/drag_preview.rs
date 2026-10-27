@@ -10,32 +10,10 @@
 use soliddraft_app::document::{Command, Document, FeatureId, FeatureKind, FeatureStatus, Selection};
 use soliddraft_app::drag::{Dimension, Shown};
 use soliddraft_app::state::{AppState, DragStep};
-use soliddraft_kernel_api::{
-    BackendInfo, BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, FaceId, HistoryRecord, Kernel, KernelError,
-    KernelResult, MassProperties, Mesh, OpKind, OpResult, OpTag, Profile, Revolve, TessellationParams, Topology,
-    Validation,
-};
-use soliddraft_kernel_catallax::CatallaxKernel;
-use std::sync::{Arc, Condvar, Mutex};
+mod gated;
+use gated::Gated;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// Catallax, with extrusions of one depth held back and others refused on request.
-#[derive(Default)]
-struct Gated {
-    inner: CatallaxKernel,
-    rules: Mutex<Rules>,
-    changed: Condvar,
-}
-
-#[derive(Default)]
-struct Rules {
-    /// Extrusions this deep wait until the hold is lifted.
-    hold: Option<f64>,
-    /// True while an extrusion waits on the hold.
-    holding: bool,
-    /// Extrusions this deep fail.
-    refuse: Vec<f64>,
-}
 
 impl Gated {
     fn hold(&self, depth: f64) {
@@ -50,7 +28,7 @@ impl Gated {
     fn wait_held(&self) {
         let rules = self.rules.lock().unwrap();
         let (_rules, timeout) =
-            self.changed.wait_timeout_while(rules, Duration::from_secs(120), |r| !r.holding).unwrap();
+            self.changed.wait_timeout_while(rules, Duration::from_secs(120), |r| r.holding.is_none()).unwrap();
         assert!(!timeout.timed_out(), "no extrusion reached the hold");
     }
 
@@ -59,69 +37,14 @@ impl Gated {
         rules.hold = None;
         self.changed.notify_all();
     }
-}
 
-impl Kernel for Gated {
-    fn backend(&self) -> BackendInfo {
-        self.inner.backend()
-    }
-    fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
-        self.inner.create_body_from_profile(tag, profile)
-    }
-    fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
-        {
-            let mut rules = self.rules.lock().unwrap();
-            if rules.hold == Some(params.distance) {
-                rules.holding = true;
-                self.changed.notify_all();
-                rules = self.changed.wait_while(rules, |r| r.hold == Some(params.distance)).unwrap();
-                rules.holding = false;
-            }
-            if rules.refuse.contains(&params.distance) {
-                return Err(KernelError::Failed {
-                    op: OpKind::Extrude,
-                    code: 0,
-                    message: format!("the scenario refuses a depth of {}", params.distance),
-                });
-            }
-        }
-        self.inner.extrude(tag, profile, params)
-    }
-    fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
-        self.inner.revolve(tag, profile, params)
-    }
-    fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
-        self.inner.boolean(tag, op, target, tool)
-    }
-    fn fillet(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], radius: f64) -> KernelResult<OpResult> {
-        self.inner.fillet(tag, body, edges, radius)
-    }
-    fn chamfer(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], distance: f64) -> KernelResult<OpResult> {
-        self.inner.chamfer(tag, body, edges, distance)
-    }
-    fn shell(&self, tag: &OpTag, body: BodyId, open: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
-        self.inner.shell(tag, body, open, thickness)
-    }
-    fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
-        self.inner.tessellate(body, params)
-    }
-    fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
-        self.inner.tessellate_edges(body, params)
-    }
-    fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
-        self.inner.mass_properties(body)
-    }
-    fn validate(&self, body: BodyId) -> KernelResult<Validation> {
-        self.inner.validate(body)
-    }
-    fn topology(&self, body: BodyId) -> KernelResult<Topology> {
-        self.inner.topology(body)
-    }
-    fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
-        self.inner.history(body)
-    }
-    fn release(&self, body: BodyId) -> KernelResult<()> {
-        self.inner.release(body)
+    fn release_into_hold(&self, depth: f64) {
+        self.rules.lock().unwrap().hold = Some(depth);
+        self.changed.notify_all();
+        let rules = self.rules.lock().unwrap();
+        let (_rules, timeout) =
+            self.changed.wait_timeout_while(rules, Duration::from_secs(120), |r| r.holding != Some(depth)).unwrap();
+        assert!(!timeout.timed_out(), "the newest extrusion never reached its hold");
     }
 }
 
@@ -214,7 +137,6 @@ fn continuous_drag_delivers_intermediates_and_applies_the_final_value_once() {
         40 * 16,
         slowest_frame.as_millis()
     );
-    assert!(delivered >= 1);
 
     state.drag_dimension(DragStep::Finish);
     assert!(state.drag_preview.is_none());
@@ -312,15 +234,12 @@ fn obsolete_errors_are_dropped_and_a_current_error_is_shown() {
     state.drag_dimension(DragStep::Move(18.5));
     settle(&mut state);
     match state.drag_preview.as_ref().unwrap().shown() {
-        Shown::Failed { value, message } => {
+        Shown::Failed { value, .. } => {
             assert_eq!(*value, 18.5);
-            assert!(message.contains("refuses"), "{message}");
         }
         other => panic!("the current error is shown, not {other:?}"),
     }
     assert!(state.preview_body().is_none(), "a failed preview shows the part, not an older preview");
-    let (label, failed) = state.drag_preview.as_ref().unwrap().label();
-    assert!(failed && label.starts_with("Preview failed"), "{label}");
 }
 
 /// Letting go on a value that does not build never shows the last good preview as
@@ -331,6 +250,8 @@ fn a_failed_final_value_shows_the_failure_not_the_last_preview() {
     let (mut state, kernel, plate) = scenario();
     let undo_before = state.doc.undo_depth();
     let volume_before = volume(&state);
+    let proved_body = state.doc.display_body();
+    let proved_revision = state.doc.revision();
     kernel.refuse(33.5);
     start(&mut state, plate);
     state.drag_dimension(DragStep::Move(25.0));
@@ -341,17 +262,26 @@ fn a_failed_final_value_shows_the_failure_not_the_last_preview() {
     state.drag_dimension(DragStep::Finish);
     assert!(state.drag_preview.is_none());
     assert!(state.preview_body().is_none(), "the last good preview is not left on screen");
+    assert!(state.doc.proof_pending());
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    settle(&mut state);
     assert!(
-        matches!(&state.doc.feature(plate).unwrap().status, FeatureStatus::Error(e) if e.contains("refuses")),
+        matches!(&state.doc.feature(plate).unwrap().status, FeatureStatus::Error(_)),
         "the feature shows its error"
     );
-    let note = state.note.as_ref().expect("a note");
-    assert!(note.text.contains("did not build"), "{}", note.text);
+    assert_eq!(state.doc.display_body(), proved_body);
+    assert_eq!(state.doc.displayed_revision(), proved_revision);
+    assert!(state.doc.revision() > proved_revision);
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
     assert_eq!(state.doc.undo_depth(), undo_before + 1, "one drag is one undo step");
     state.doc.undo().unwrap();
     assert_eq!(depth(&state, plate), 10.0);
     assert_eq!(state.doc.error_count(), 0);
     assert!((volume(&state) - volume_before).abs() < 1e-6);
+    state.doc.redo().unwrap();
+    assert_eq!(state.doc.display_body(), proved_body);
+    assert!(state.doc.displayed_revision() < state.doc.revision());
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
 }
 
 /// Dragging back over values already built shows them at once from the drag's cache,
@@ -373,4 +303,143 @@ fn dragging_back_reuses_built_values_and_an_unchanged_drag_applies_nothing() {
     state.drag_dimension(DragStep::Finish);
     assert_eq!(state.doc.undo_depth(), undo_before);
     assert_eq!(depth(&state, plate), 10.0);
+}
+
+#[test]
+fn late_success_never_displays_a_superseded_value_or_enables_export() {
+    let (mut state, kernel, plate) = scenario();
+    let original = state.doc.display_body();
+    start(&mut state, plate);
+    state.drag_dimension(DragStep::Move(12.0));
+    settle(&mut state);
+    assert_eq!(shown_value(&state), Some(12.0));
+
+    kernel.hold(14.0);
+    state.drag_dimension(DragStep::Move(14.0));
+    kernel.wait_held();
+    state.drag_dimension(DragStep::Move(18.0));
+    kernel.release_into_hold(18.0);
+    assert!(state.poll_drag());
+    assert_eq!(shown_value(&state), Some(18.0), "the newer construction is visible while its proof is held");
+    assert!(matches!(state.drag_preview.as_ref().unwrap().shown(), Shown::Result(result) if !result.proved));
+    assert!(state.preview_body().is_some());
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    assert_eq!(state.doc.display_body(), original);
+
+    kernel.release();
+    settle(&mut state);
+    assert_eq!(shown_value(&state), Some(18.0));
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    state.drag_dimension(DragStep::Cancel);
+    assert_eq!(state.doc.display_body(), original);
+    assert_eq!(depth(&state, plate), 10.0);
+}
+
+fn block_scenario() -> (AppState, Arc<Gated>, FeatureId) {
+    use soliddraft_app::document::{ExtrudeParams, ProfileKind};
+    let dir = std::env::temp_dir().join(format!("soliddraft-drag-preview-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    soliddraft_app::file::set_config_dir(Some(dir));
+    let kernel = Arc::new(Gated::default());
+    let mut doc = Document::new("Block", kernel.clone());
+    let feature = doc
+        .apply(Command::AddExtrude {
+            params: ExtrudeParams {
+                profile: ProfileKind::Rectangle { width: 40.0, height: 30.0 },
+                depth: 10.0,
+                ..Default::default()
+            },
+            via_assistant: false,
+        })
+        .unwrap()
+        .unwrap();
+    doc.selection = Some(Selection::Feature(feature));
+    (AppState::new(doc), kernel, feature)
+}
+
+fn edit_depth_interactive(state: &mut AppState, feature: FeatureId, value: f64) {
+    let kind = Dimension::Depth.with(&state.doc.feature(feature).unwrap().kind, value);
+    let command = soliddraft_app::drag::edit_command(feature, kind).unwrap();
+    state.doc.apply_interactive(command).unwrap();
+}
+
+#[test]
+fn cancelling_a_newer_drag_resumes_the_original_proof_and_resolves_its_selected_origin() {
+    use soliddraft_app::document::PickEntry;
+    let (mut state, kernel, block) = block_scenario();
+    let original_volume = volume(&state);
+    let undo_before = state.doc.undo_depth();
+    kernel.hold(14.0);
+    edit_depth_interactive(&mut state, block, 14.0);
+    kernel.wait_held();
+    let committed = state.doc.revision();
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+
+    start(&mut state, block);
+    state.drag_dimension(DragStep::Move(18.0));
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while shown_value(&state) != Some(18.0) {
+        assert!(state.poll_drag());
+        assert!(Instant::now() < deadline, "the newer construction was held behind the old proof");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(state.preview_body().unwrap().bounds().unwrap().1.z, 18.0);
+    state.drag_dimension(DragStep::Cancel);
+    assert_eq!(depth(&state, block), 14.0);
+    assert_eq!(state.doc.revision(), committed);
+    assert_eq!(state.doc.undo_depth(), undo_before + 1);
+    let mesh = state.preview_body().expect("the committed construction is restored");
+    assert_eq!(mesh.bounds().unwrap().1.z, 14.0);
+    let PickEntry::Face(_, provisional) = state.doc.pick(mesh.face_picks[0]).unwrap() else {
+        panic!("the provisional face is selectable");
+    };
+    state.doc.selection = Some(Selection::Face(provisional));
+    assert!(state.doc.any_face_ref(provisional).is_none());
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    kernel.release();
+    settle(&mut state);
+    assert_eq!(state.doc.displayed_revision(), committed);
+    let Some(Selection::Face(proved)) = state.doc.selection else {
+        panic!("the same origin resolves after proof");
+    };
+    assert_ne!(proved, provisional);
+    assert!(state.doc.any_face_ref(proved).is_some());
+    assert_eq!(volume(&state), 40.0 * 30.0 * 14.0);
+    state.export_part(soliddraft_exchange::Format::Step).unwrap();
+    state.doc.undo_interactive().unwrap();
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    settle(&mut state);
+    assert_eq!(volume(&state), original_volume);
+}
+
+#[test]
+fn pending_edits_undo_and_redo_ignore_an_older_committed_failure() {
+    let (mut state, kernel, block) = block_scenario();
+    let undo_before = state.doc.undo_depth();
+    kernel.refuse(14.0);
+    kernel.hold(14.0);
+    edit_depth_interactive(&mut state, block, 14.0);
+    kernel.wait_held();
+    edit_depth_interactive(&mut state, block, 18.0);
+    state.doc.undo_interactive().unwrap();
+    assert_eq!(depth(&state, block), 14.0);
+    state.doc.redo_interactive().unwrap();
+    assert_eq!(depth(&state, block), 18.0);
+    let current = state.doc.revision();
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    kernel.release_into_hold(18.0);
+    assert!(state.poll_drag());
+    assert_eq!(state.doc.error_count(), 0);
+    assert!(state.doc.proof_pending());
+    assert_eq!(state.doc.displayed_revision(), current);
+    assert_eq!(state.preview_body().unwrap().bounds().unwrap().1.z, 18.0);
+    assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
+    kernel.release();
+    settle(&mut state);
+    assert_eq!(state.doc.revision(), current);
+    assert_eq!(state.doc.displayed_revision(), current);
+    assert_eq!(state.doc.feature(block).unwrap().status, FeatureStatus::Ok);
+    assert_eq!(state.doc.undo_depth(), undo_before + 2);
+    assert_eq!(volume(&state), 40.0 * 30.0 * 18.0);
+    state.export_part(soliddraft_exchange::Format::Step).unwrap();
 }

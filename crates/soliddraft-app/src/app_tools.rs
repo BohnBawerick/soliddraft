@@ -218,6 +218,23 @@ impl AppTools<'_> {
     /// What `model_summary` says: the part, and the open drawing.
     pub fn summary(&mut self) -> Value {
         let mut v = self.part().summary();
+        let mut proof = self.state.doc.proof_state();
+        if let Some(drag) = &self.state.drag_preview
+            && let Some(request) = drag.current_request()
+        {
+            proof.requested_edit = Some(request);
+            proof.displayed_edit = proof.displayed_edit.or_else(|| drag.displayed_request());
+            proof.proved_edit = drag.proved_request();
+            proof.transient = true;
+            proof.pending = drag.pending();
+            proof.failed = matches!(drag.shown(), crate::drag::Shown::Failed { .. });
+        }
+        v["edit_state"] = serde_json::json!(proof);
+        if proof.transient {
+            for key in ["volume_mm3", "area_mm2", "faces", "edges"] {
+                v["body"][key] = Value::Null;
+            }
+        }
         if let Some(d) = drawing_json(self.state) {
             v["drawing"] = d;
         }
@@ -357,7 +374,7 @@ impl AppTools<'_> {
         if doc.display_body().is_none() {
             return Err("the part has no body to export".into());
         }
-        let out = doc.model().export(format)?;
+        let out = self.state.export_part(format)?;
         crate::platform::write_file(&path, &out.bytes)?;
         Ok(json!({ "exported": path, "report": out.report.summary() }))
     }

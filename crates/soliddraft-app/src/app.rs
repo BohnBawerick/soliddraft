@@ -154,9 +154,7 @@ impl TabViewer for Panels<'_> {
                 } else {
                     None
                 };
-                let preview_label = st.drag_preview.as_ref().map(|d| d.label());
-                let overlay =
-                    Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive, preview_label };
+                let overlay = Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref());
                 let (dt, ppp) = ui.input(|i| (i.stable_dt.min(0.1), i.pixels_per_point));
                 if st.doc.update_display(&st.viewport.projection(ppp), dt) {
@@ -672,7 +670,14 @@ impl SolidDraftApp {
             ui.add_space(4.0);
             let errors = st.doc.error_count();
             let repairs = st.doc.repair_count();
-            if errors == 0 && repairs == 0 {
+            if let Some((message, kind)) = st.edit_status() {
+                ui.label(
+                    egui::RichText::new(message)
+                        .family(theme::semibold())
+                        .size(11.5)
+                        .color(if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() }),
+                );
+            } else if errors == 0 && repairs == 0 {
                 ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::ok()));
             } else if errors > 0 {
                 ui.label(
@@ -817,16 +822,23 @@ impl SolidDraftApp {
     fn apply(&mut self, ctx: &egui::Context, action: AppAction) {
         match action {
             AppAction::Command(cmd) => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 // A sketch edit from the sketcher must not close the editor state.
                 let is_sketch_edit = matches!(cmd, Command::EditSketch { .. });
-                match self.state.doc.apply(cmd) {
+                match self.state.doc.apply_interactive(cmd) {
                     Ok(Some(id)) => {
                         self.state.doc.selection = Some(Selection::Feature(id));
                         self.state.note("Feature added", NoteKind::Ok);
                     }
                     Ok(None) => {
                         if !is_sketch_edit {
-                            self.state.note("Rebuilt", NoteKind::Ok);
+                            if self.state.doc.proof_pending() {
+                                self.state.note("Edit requested", NoteKind::Info);
+                            } else {
+                                self.state.note("Rebuilt", NoteKind::Ok);
+                            }
                         }
                     }
                     Err(e) => self.state.note(e, NoteKind::Error),
@@ -855,16 +867,22 @@ impl SolidDraftApp {
             }
             AppAction::Assembly(a) => crate::assembly::apply(&mut self.state, &mut self.dock, a),
             AppAction::Undo => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 self.close_editor();
-                match self.state.doc.undo() {
+                match self.state.doc.undo_interactive() {
                     Ok(l) => self.state.note(format!("Undid {l}"), NoteKind::Info),
                     Err(e) => self.state.note(e, NoteKind::Error),
                 }
                 self.sync_sketch_session();
             }
             AppAction::Redo => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 self.close_editor();
-                match self.state.doc.redo() {
+                match self.state.doc.redo_interactive() {
                     Ok(l) => self.state.note(format!("Redid {l}"), NoteKind::Info),
                     Err(e) => self.state.note(e, NoteKind::Error),
                 }
@@ -1494,7 +1512,7 @@ impl SolidDraftApp {
                     crate::platform::save_path(&title, format.name(), format.extension(), &name)
                 });
                 let Some(path) = path else { return };
-                let exported = self.state.doc.model().export(format);
+                let exported = self.state.export_part(format);
                 match exported.and_then(|out| crate::platform::write_file(&path, &out.bytes).map(|()| out.report)) {
                     Ok(report) => {
                         let kind = match &report {

@@ -993,10 +993,40 @@ pub fn frame(state: &mut AppState, dock: &mut DockState<Tab>) {
     follow_part(state);
 }
 
+fn part_wait_reason(state: &AppState) -> Option<&'static str> {
+    if state.drag_preview.is_some() {
+        return Some("Finish or cancel the dimension edit before rebuilding; the drawing keeps its last views.");
+    }
+    if state.editor.is_some() || state.doc.rollback.is_some() {
+        return Some("Finish the feature edit or leave rollback before rebuilding; the drawing keeps its last views.");
+    }
+    let proof = state.doc.proof_state();
+    if proof.failed {
+        Some("The part edit failed; fix or undo it before rebuilding. The drawing keeps its last views.")
+    } else if !proof.current_proved_model() {
+        Some("The requested part revision is not proved yet; the drawing keeps its last views.")
+    } else {
+        None
+    }
+}
+
 /// Keeps the model reference resolved and, when the part changed, re-resolves the
 /// drawing (automatic update) or marks it stale: [`frame`] without the window. The
 /// agent tools run it after every call.
 pub fn follow_part(state: &mut AppState) {
+    if state.drawing.session.is_none() {
+        return;
+    }
+    if part_is_model(state)
+        && let Some(reason) = part_wait_reason(state)
+    {
+        if let Some(session) = state.drawing.session.as_mut()
+            && session.message.as_ref().is_none_or(|(message, _)| message != reason)
+        {
+            session.say(reason);
+        }
+        return;
+    }
     reference::refresh(state);
     let Some(session) = state.drawing.session.as_mut() else { return };
     if session.seen_version == state.doc.mesh_version {
@@ -1092,6 +1122,9 @@ fn rebuild(state: &mut AppState) {
 /// The Rebuild itself, once the open part is the drawing's model: one undo step that
 /// brings the views to the part's revision. Says what it did.
 pub(crate) fn update_views(state: &mut AppState) -> Result<String, String> {
+    if let Some(reason) = part_wait_reason(state) {
+        return Err(reason.into());
+    }
     let ctx = PartContext::new(&state.doc).ok_or("The part has no body; the drawing keeps its last views")?;
     let session = state.drawing.session.as_mut().ok_or("No drawing is open")?;
     session.doc.apply(Command::UpdateFromModel, Some(&ctx)).map_err(|e| format!("Rebuild failed: {e}"))?;

@@ -83,7 +83,9 @@ impl Offscreen {
             cursor_px: None,
             meshes: (self.uploads, doc.meshes.iter().map(|(b, m)| (*b, m.clone())).collect()),
             ghost: None,
-            preview: None,
+            preview: doc.provisional_mesh(),
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: Arc::new(Mutex::new(Default::default())),
             assembly: None,
         };

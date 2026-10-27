@@ -7,7 +7,7 @@
 //! model rebuild from that feature down, so an intermediate result is the whole part as the edit would leave it. It
 //! answers only the newest value it has been asked for, so a fast drag gets results at
 //! the worker's pace and none for values the drag has already passed. Results arrive as
-//! display meshes without picks: a preview is shown and labelled, never saved, exported,
+//! display meshes without picks: preview state stays in the feature controls and tree, never saved, exported,
 //! measured or used for a reference. Those all read the document, which a drag leaves
 //! alone until its final value is applied.
 //!
@@ -22,11 +22,16 @@
 //! at once without asking the worker.
 
 use crate::document::{
-    Command, DisplayMesh, Document, EndKind, FeatureId, FeatureKind, FeatureStatus, Selection, fmt_mm, preview_mesh,
+    CandidateDisplay, Command, DisplayMesh, Document, EndKind, FeatureId, FeatureKind, FeatureStatus, ReadyDisplay,
+    Selection, ViewToken, construction_view, fmt_mm, ready_display,
 };
-use soliddraft_kernel_api::{Kernel, TessellationParams};
+use soliddraft_kernel_api::{KernelError, ProofWork, TessellationParams};
 use soliddraft_model as model;
-use std::sync::{Arc, mpsc};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+    mpsc,
+};
 
 /// A feature dimension a drag can change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,6 +117,8 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
 /// What a drag's results depend on. Any change makes them obsolete.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Setup {
+    document: soliddraft_document::DocumentId,
+    basis: Option<soliddraft_kernel_api::BodyId>,
     pub revision: u64,
     pub selection: Option<Selection>,
     pub feature: FeatureId,
@@ -121,343 +128,637 @@ pub struct Setup {
 impl Setup {
     /// The setup of a drag of `dimension` on `feature` in `doc` as it is now.
     pub fn of(doc: &Document, feature: FeatureId, dimension: Dimension) -> Setup {
-        Setup { revision: doc.revision(), selection: doc.selection, feature, dimension }
+        Setup {
+            document: doc.model().id(),
+            basis: doc.display_body(),
+            revision: doc.revision(),
+            selection: doc.selection,
+            feature,
+            dimension,
+        }
     }
 }
 
-/// The whole part rebuilt with the dragged dimension at `value`, for display only.
+/// One displayed value. Its geometry is not a saved or exportable body.
 #[derive(Clone, Debug)]
 pub struct Intermediate {
     pub value: f64,
     pub mesh: Arc<DisplayMesh>,
+    pub proved: bool,
+    candidate: Option<CandidateDisplay>,
 }
 
-/// What a drag shows.
 #[derive(Clone, Debug)]
 pub enum Shown {
-    /// Nothing built yet: the document's body stays on screen.
     Waiting,
     Result(Intermediate),
-    /// The newest value did not build. The document's body stays on screen.
-    Failed {
-        value: f64,
-        message: String,
-    },
+    Failed { value: f64, message: String },
 }
 
-/// How a drag ended.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Finish {
-    /// The final value was applied as one undo step and built.
     Applied { value: f64 },
-    /// The final value was applied as one undo step and the feature reports `message`.
-    /// The preview is gone, so the failure shows on the part as it is.
+    Pending { value: f64 },
     Failed { value: f64, message: String },
-    /// The edit was refused before it reached the part: nothing changed.
     Refused { value: f64, message: String },
-    /// The drag ended where it started: nothing to apply.
     Unchanged,
-    /// The part, the selection or the feature changed during the drag: nothing applied.
     Obsolete,
 }
 
-/// How many built values a drag keeps for dragging back over them.
 const CACHED: usize = 16;
 
-/// One drag of one dimension.
+#[derive(Clone)]
+struct Cached {
+    shown: Intermediate,
+    proof: Option<ProvedBuild>,
+}
+
+/// The existing drag lifecycle owns the document's worker until commit/cancel.
 pub struct DragPreview {
     setup: Setup,
-    /// The feature's definition when the drag started.
     base: FeatureKind,
+    source: Arc<model::Document>,
     start: f64,
     value: f64,
-    /// The newest request. Requests count from 1; 0 is the starting value.
     latest: u64,
-    /// The request whose answer is shown.
     shown_request: u64,
+    proof_request: u64,
     shown: Shown,
-    cache: Vec<Intermediate>,
+    proof: Option<Result<ProvedBuild, String>>,
+    notice: Option<String>,
+    cache: Vec<Cached>,
     worker: Worker,
 }
 
 impl DragPreview {
-    /// Starts a drag of `dimension` on `feature`, with a worker over a copy of the part.
-    pub fn start(doc: &Document, feature: FeatureId, dimension: Dimension) -> Result<DragPreview, String> {
-        let f = doc.feature(feature).ok_or("no such feature")?;
-        let start = dimension.get(&f.kind).ok_or_else(|| format!("{} has no {}", f.name, dimension.label()))?;
-        if f.status == FeatureStatus::Inactive {
-            return Err(format!("{} is not built; unsuppress it or move the rollback bar below it", f.name));
+    pub fn start(doc: &mut Document, feature: FeatureId, dimension: Dimension) -> Result<Self, String> {
+        let item = doc.feature(feature).ok_or("no such feature")?;
+        let start = dimension.get(&item.kind).ok_or_else(|| format!("{} has no {}", item.name, dimension.label()))?;
+        if item.status == FeatureStatus::Inactive {
+            return Err(format!("{} is not built; unsuppress it or move the rollback bar below it", item.name));
         }
+        let base = item.kind.clone();
+        let setup = Setup::of(doc, feature, dimension);
         let mut cache = Vec::new();
-        if f.status == FeatureStatus::Ok
-            && let Some(mesh) = doc.display_body().and_then(|b| doc.meshes.get(&b))
+        if !doc.proof_pending()
+            && item.status == FeatureStatus::Ok
+            && let Some(mesh) = doc.display_body().and_then(|body| doc.meshes.get(&body))
         {
-            cache.push(Intermediate { value: start, mesh: mesh.clone() });
+            cache.push(Cached {
+                shown: Intermediate { value: start, mesh: mesh.clone(), proved: true, candidate: None },
+                proof: None,
+            });
         }
-        let scratch = Scratch {
-            model: doc.model().fork(),
-            kernel: doc.kernel().clone(),
-            params: doc.tess_params,
-            feature: model::FeatureId(feature as u32),
-            base: f.kind.clone(),
-            dimension,
-        };
-        Ok(DragPreview {
-            setup: Setup::of(doc, feature, dimension),
-            base: f.kind.clone(),
+        let worker = doc.take_worker()?;
+        let source = Arc::new(doc.model().fork());
+        Ok(Self {
+            setup,
+            base,
+            source,
             start,
             value: start,
             latest: 0,
             shown_request: 0,
+            proof_request: 0,
             shown: Shown::Waiting,
+            proof: None,
+            notice: None,
             cache,
-            worker: Worker::new(scratch),
+            worker,
         })
     }
 
     pub fn setup(&self) -> Setup {
         self.setup
     }
-
     pub fn feature(&self) -> FeatureId {
         self.setup.feature
     }
-
     pub fn dimension(&self) -> Dimension {
         self.setup.dimension
     }
-
-    /// The value the drag is at.
     pub fn value(&self) -> f64 {
         self.value
     }
-
     pub fn start_value(&self) -> f64 {
         self.start
     }
-
     pub fn shown(&self) -> &Shown {
         &self.shown
     }
-
-    /// The mesh to draw in place of the document's body, if a result is shown.
     pub fn mesh(&self) -> Option<Arc<DisplayMesh>> {
         match &self.shown {
-            Shown::Result(r) => Some(r.mesh.clone()),
+            Shown::Result(value) => Some(value.mesh.clone()),
             Shown::Waiting | Shown::Failed { .. } => None,
         }
     }
-
-    /// True while the newest value has no answer yet.
     pub fn pending(&self) -> bool {
-        self.shown_request < self.latest
+        self.proof_request < self.latest
     }
-
-    /// True while the document still has the setup the drag started from.
+    pub fn current_request(&self) -> Option<u64> {
+        (self.latest != 0).then_some(self.latest)
+    }
+    pub fn displayed_request(&self) -> Option<u64> {
+        matches!(self.shown, Shown::Result(_)).then_some(self.shown_request)
+    }
+    pub fn proved_request(&self) -> Option<u64> {
+        let proved = match &self.proof {
+            Some(Ok(proof)) => proof.failure.is_none() && !proof.model.is_dirty(),
+            _ => matches!(&self.shown, Shown::Result(shown) if shown.proved),
+        };
+        (proved && self.proof_request == self.latest).then_some(self.latest)
+    }
     pub fn is_current(&self, doc: &Document) -> bool {
         Setup::of(doc, self.setup.feature, self.setup.dimension) == self.setup
     }
+    fn token(&self) -> ViewToken {
+        ViewToken { revision: self.setup.revision, request: self.latest, transient: true }
+    }
 
-    /// Moves the drag to `value`. A value built before is shown at once; any other goes
-    /// to the worker.
-    pub fn request(&mut self, value: f64) {
+    pub fn request(&mut self, value: f64, doc: &mut Document) {
         if !value.is_finite() || value == self.value {
             return;
         }
+        doc.discard_provisional(self.token());
         self.value = value;
-        self.latest += 1;
-        if let Some(hit) = self.cache.iter().find(|c| c.value == value) {
-            self.shown = Shown::Result(hit.clone());
+        self.latest = self.worker.invalidate();
+        self.proof = None;
+        self.notice = None;
+        if let Some(hit) = self.cache.iter().find(|entry| entry.shown.value == value) {
+            self.shown = Shown::Result(hit.shown.clone());
             self.shown_request = self.latest;
+            self.proof_request = self.latest;
+            self.proof = hit.proof.clone().map(Ok);
+            if let Some(candidate) = &hit.shown.candidate {
+                doc.show_provisional(self.token(), candidate.clone());
+            }
             return;
         }
-        self.worker.ask(Job { request: self.latest, value });
+        self.shown = Shown::Waiting;
+        let edit = ScalarDraft { feature: model::FeatureId(self.feature() as u32), dimension: self.dimension(), value };
+        let result = self.worker.enqueue(self.latest, doc.build_job(self.source.clone(), Some(edit)));
+        if let Err(message) = result {
+            self.shown = Shown::Failed { value, message: message.clone() };
+            self.proof = Some(Err(message));
+            self.proof_request = self.latest;
+        }
     }
 
-    /// Takes the worker's answers. Returns true when what the drag shows changed.
-    pub fn poll(&mut self) -> bool {
+    pub fn poll(&mut self, doc: &mut Document) -> bool {
         let mut changed = false;
         for answer in self.worker.answers() {
-            match answer.result {
-                Ok(mesh) => {
-                    let result = Intermediate { value: answer.value, mesh };
-                    self.remember(result.clone());
-                    if answer.request > self.shown_request {
-                        self.shown = Shown::Result(result);
-                        self.shown_request = answer.request;
-                        changed = true;
-                    }
-                }
-                // An error for a value the drag has passed is dropped.
-                Err(message) if answer.request == self.latest && answer.request > self.shown_request => {
-                    self.shown = Shown::Failed { value: answer.value, message };
+            if answer.request != self.latest {
+                doc.hold_proof_answer(answer);
+                continue;
+            }
+            match answer.kind {
+                AnswerKind::Construction(Ok(candidate)) => {
+                    self.shown = Shown::Result(Intermediate {
+                        value: self.value,
+                        mesh: candidate.mesh(),
+                        proved: false,
+                        candidate: Some(candidate.clone()),
+                    });
                     self.shown_request = answer.request;
+                    doc.show_provisional(self.token(), candidate);
                     changed = true;
                 }
-                Err(_) => {}
+                AnswerKind::Construction(Err(message)) => self.notice = Some(message),
+                AnswerKind::Proved(result) => {
+                    self.proof_request = answer.request;
+                    match &result {
+                        Ok(proof) if proof.failure.is_none() => {
+                            if let Some(display) = &proof.display {
+                                let candidate = CandidateDisplay::Proved(display.clone());
+                                let shown = Intermediate {
+                                    value: self.value,
+                                    mesh: candidate.mesh(),
+                                    proved: true,
+                                    candidate: Some(candidate.clone()),
+                                };
+                                self.shown = Shown::Result(shown.clone());
+                                self.shown_request = self.latest;
+                                if self.cache.len() == CACHED {
+                                    self.cache.remove(0);
+                                }
+                                self.cache.push(Cached { shown, proof: Some(proof.clone()) });
+                                doc.show_provisional(self.token(), candidate);
+                            }
+                            self.notice = proof.display_error.clone();
+                        }
+                        Ok(proof) => {
+                            self.shown = Shown::Failed {
+                                value: self.value,
+                                message: proof.failure.clone().expect("matched failed proof"),
+                            };
+                            doc.discard_provisional(self.token());
+                        }
+                        Err(message) => {
+                            self.shown = Shown::Failed { value: self.value, message: message.clone() };
+                            doc.discard_provisional(self.token());
+                        }
+                    }
+                    self.proof = Some(result);
+                    changed = true;
+                }
             }
         }
         changed
     }
 
-    fn remember(&mut self, result: Intermediate) {
-        if self.cache.iter().any(|c| c.value == result.value) {
+    pub fn label(&self) -> (String, bool) {
+        if let Shown::Failed { value, message } = &self.shown {
+            return (format!("Edit failed · {} {} mm: {message}", self.dimension().label(), fmt_mm(*value)), true);
+        }
+        let phase = if self.pending() { "Proof pending" } else { "Preview" };
+        let mut label = format!("{phase} · {} {} mm", self.dimension().label(), fmt_mm(self.value));
+        if let Some(notice) = &self.notice {
+            label.push_str(&format!(" · {notice}"));
+        }
+        (label, false)
+    }
+
+    pub fn cancel(self, doc: &mut Document) {
+        if self.setup.document != doc.model().id()
+            || self.setup.revision != doc.revision()
+            || self.setup.basis != doc.display_body()
+        {
             return;
         }
-        if self.cache.len() == CACHED {
-            self.cache.remove(0);
-        }
-        self.cache.push(result);
+        doc.discard_provisional(self.token());
+        doc.return_worker(self.worker);
     }
 
-    /// What the viewport and the tree say about the drag, and whether it reports a failure.
-    pub fn label(&self) -> (String, bool) {
-        let what = self.dimension().label();
-        let building = fmt_mm(self.value);
-        match &self.shown {
-            Shown::Result(r) if self.pending() => {
-                (format!("Preview · {what} {} mm · building {building} mm", fmt_mm(r.value)), false)
-            }
-            _ if self.pending() => (format!("Preview · building {what} {building} mm"), false),
-            Shown::Waiting => (format!("Preview · {what} {building} mm"), false),
-            Shown::Result(r) => (format!("Preview · {what} {} mm", fmt_mm(r.value)), false),
-            Shown::Failed { value, message } => {
-                (format!("Preview failed · {what} {} mm: {message}", fmt_mm(*value)), true)
-            }
-        }
-    }
-
-    /// Ends the drag at its value. The worker stops after the value it is on; only the
-    /// exact result of the final value reaches the document, as one command.
     pub fn finish(self, doc: &mut Document) -> Finish {
         if !self.is_current(doc) {
+            self.cancel(doc);
             return Finish::Obsolete;
         }
         let value = self.value;
         if value == self.start {
+            self.cancel(doc);
             return Finish::Unchanged;
         }
-        let Some(command) = edit_command(self.setup.feature, self.setup.dimension.with(&self.base, value)) else {
+        let Some(command) = edit_command(self.feature(), self.dimension().with(&self.base, value)) else {
+            self.cancel(doc);
             return Finish::Unchanged;
         };
-        let feature = self.setup.feature;
-        drop(self);
-        if let Err(message) = doc.apply(command) {
-            return Finish::Refused { value, message };
-        }
-        match doc.feature(feature).map(|f| f.status.clone()) {
-            Some(FeatureStatus::Error(message)) => Finish::Failed { value, message },
-            Some(FeatureStatus::NeedsRepair(items)) => Finish::Failed {
-                value,
-                message: format!(
-                    "{} no longer resolve{}",
-                    items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>().join(", "),
-                    if items.len() == 1 { "s" } else { "" }
-                ),
+        let feature = self.feature();
+        let token = self.token();
+        let candidate = if self.proof.is_none() {
+            match &self.shown {
+                Shown::Result(value) => value.candidate.clone(),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let prepared = PreparedBuild { worker: self.worker, request: self.latest, completed: self.proof, candidate };
+        doc.discard_provisional(token);
+        drop(self.cache);
+        drop(self.shown);
+        match doc.apply_prepared(command, prepared) {
+            Err(message) => Finish::Refused { value, message },
+            Ok(false) => Finish::Pending { value },
+            Ok(true) => match doc.feature(feature).map(|feature| &feature.status) {
+                Some(FeatureStatus::Error(message)) => Finish::Failed { value, message: message.clone() },
+                _ => Finish::Applied { value },
             },
-            _ => Finish::Applied { value },
         }
     }
 }
 
-/// One value for the worker to build.
-struct Job {
-    request: u64,
-    value: f64,
+#[derive(Clone)]
+pub(crate) struct ProvedBuild {
+    pub model: Arc<model::Document>,
+    pub display: Option<Arc<ReadyDisplay>>,
+    pub failure: Option<String>,
+    pub display_error: Option<String>,
 }
 
-struct Answer {
-    request: u64,
-    value: f64,
-    result: Result<Arc<DisplayMesh>, String>,
+pub(crate) struct PreparedBuild {
+    pub worker: Worker,
+    pub request: u64,
+    pub completed: Option<Result<ProvedBuild, String>>,
+    pub candidate: Option<CandidateDisplay>,
 }
 
-/// The worker's fork of the part.
-struct Scratch {
+#[derive(Clone, Copy)]
+pub(crate) struct ScalarDraft {
+    pub feature: model::FeatureId,
+    pub dimension: Dimension,
+    pub value: f64,
+}
+
+pub(crate) struct Job {
+    pub source: Arc<model::Document>,
+    pub edit: Option<ScalarDraft>,
+    pub baseline: Option<Arc<model::Document>>,
+    pub params: TessellationParams,
+    pub level: soliddraft_tessellation::Level,
+}
+
+pub(crate) enum AnswerKind {
+    Construction(Result<CandidateDisplay, String>),
+    Proved(Result<ProvedBuild, String>),
+}
+
+pub(crate) struct Answer {
+    pub request: u64,
+    pub kind: AnswerKind,
+}
+
+struct Queued {
+    request: u64,
+    job: Job,
+}
+
+struct ProofTask {
+    request: u64,
     model: model::Document,
-    kernel: Arc<dyn Kernel>,
-    params: TessellationParams,
-    feature: model::FeatureId,
-    base: FeatureKind,
-    dimension: Dimension,
+    level: soliddraft_tessellation::Level,
+    allowance: Box<dyn ProofWork>,
 }
 
-impl Scratch {
-    fn answer(&mut self, job: Job) -> Answer {
-        Answer { request: job.request, value: job.value, result: self.build(job.value) }
-    }
-
-    fn build(&mut self, value: f64) -> Result<Arc<DisplayMesh>, String> {
-        let model = &mut self.model;
-        let kind = self.dimension.with(&self.base, value).to_model();
-        model.execute(model::Command::EditFeature { id: self.feature, kind }).map_err(|e| e.to_string())?;
-        match model.status(self.feature) {
-            Some(model::FeatureStatus::Failed(message)) => return Err(message.clone()),
-            Some(model::FeatureStatus::RepairNeeded(_)) => return Err("a reference no longer resolves".into()),
-            Some(model::FeatureStatus::Blocked(_)) => return Err("an input feature needs repair".into()),
-            _ => {}
+fn prepare(queued: Queued, answered: &mpsc::Sender<Answer>) -> Result<Option<ProofTask>, ()> {
+    let Queued { request, job: Job { source, edit, baseline, params, level } } = queued;
+    let mut model = Arc::try_unwrap(source).unwrap_or_else(|source| source.fork());
+    if let Some(edit) = edit {
+        let changed = crate::document::scalar_draft_command(&model, edit)
+            .and_then(|command| model.execute_deferred(command).map(|_| ()).map_err(|error| error.to_string()));
+        if let Err(message) = changed {
+            answered.send(Answer { request, kind: AnswerKind::Proved(Err(message)) }).map_err(|_| ())?;
+            return Ok(None);
         }
-        let body = model.body().ok_or("the part has no body")?;
-        preview_mesh(self.kernel.as_ref(), body, &self.params)
+    }
+    let kernel = model.kernel();
+    let body = baseline.as_ref().and_then(|baseline| baseline.body());
+    let edits = baseline.as_ref().and_then(|baseline| crate::document::scalar_edits(baseline, &model));
+    let allowance = match (edits.as_deref(), body) {
+        (Some(edits), Some(body)) if !edits.is_empty() => match kernel.construction_edit(body, edits, &params) {
+            Ok(preview) => {
+                let candidate = preview
+                    .display
+                    .map_err(|error| error.to_string())
+                    .and_then(|display| construction_view(display, &model))
+                    .map(|view| CandidateDisplay::Construction(Arc::new(view)));
+                answered.send(Answer { request, kind: AnswerKind::Construction(candidate) }).map_err(|_| ())?;
+                Ok(preview.proof)
+            }
+            Err(KernelError::Unsupported(message)) => {
+                answered.send(Answer { request, kind: AnswerKind::Construction(Err(message)) }).map_err(|_| ())?;
+                kernel.reserve_proof_work()
+            }
+            Err(error) => Err(error),
+        },
+        _ => kernel.reserve_proof_work(),
+    };
+    match allowance {
+        Ok(allowance) => Ok(Some(ProofTask { request, model, level, allowance })),
+        Err(error) => {
+            answered.send(Answer { request, kind: AnswerKind::Proved(Err(error.to_string())) }).map_err(|_| ())?;
+            Ok(None)
+        }
     }
 }
 
-/// Builds a drag's values on a thread of its own. Dropping it stops the thread after the
-/// value it is on; nothing waits for it. The browser build has no threads, so there each
-/// poll builds the newest value on the interface thread.
-struct Worker {
+fn model_failure(model: &model::Document) -> Option<String> {
+    model.features().iter().find_map(|feature| match model.status(feature.id) {
+        Some(model::FeatureStatus::Failed(message)) => Some(format!("{}: {message}", feature.name)),
+        Some(status @ (model::FeatureStatus::RepairNeeded(_) | model::FeatureStatus::Blocked(_))) => {
+            Some(format!("{}: {status:?}", feature.name))
+        }
+        _ => None,
+    })
+}
+
+fn prove(
+    task: ProofTask,
+    newest: &AtomicU64,
+    protected: &AtomicU64,
+    previous: Option<&model::Document>,
+) -> ProvedBuild {
+    let ProofTask { request, mut model, level, allowance } = task;
+    if let Some(previous) = previous {
+        model.reuse_builds_from(previous);
+    }
+    let mut display = None;
+    let mut display_error = None;
+    let mut failure = None;
+    let result = allowance.run(&mut || {
+        model.rebuild();
+        failure = model_failure(&model);
+        if failure.is_none() && wanted(request, newest, protected) {
+            match ready_display(&model, level) {
+                Ok(view) => display = view.map(Arc::new),
+                Err(error) => display_error = Some(error),
+            }
+        }
+        Ok(())
+    });
+    if let Err(error) = result
+        && failure.is_none()
+    {
+        display_error = Some(error.to_string());
+    }
+    ProvedBuild { model: Arc::new(model), display, failure, display_error }
+}
+
+fn wanted(request: u64, newest: &AtomicU64, protected: &AtomicU64) -> bool {
+    newest.load(Ordering::Acquire) == request || protected.load(Ordering::Acquire) == request
+}
+
+fn next_work<T>(pending: &mut Vec<T>, newest: u64, protected: u64, key: impl Fn(&T) -> u64) -> Option<T> {
+    pending.retain(|work| {
+        let request = key(work);
+        request == newest || request == protected
+    });
+    let index = pending.iter().position(|work| key(work) == newest).or_else(|| (!pending.is_empty()).then_some(0))?;
+    Some(pending.swap_remove(index))
+}
+
+/// One scheduler, with independent construction and exact jobs. A long proof
+/// cannot hold the next edit's construction preview behind it.
+pub(crate) struct Worker {
     answers: mpsc::Receiver<Answer>,
+    newest: Arc<AtomicU64>,
+    protected: Arc<AtomicU64>,
+    request: u64,
     #[cfg(not(target_arch = "wasm32"))]
-    jobs: mpsc::Sender<Job>,
+    jobs: mpsc::Sender<Queued>,
     #[cfg(target_arch = "wasm32")]
     answered: mpsc::Sender<Answer>,
     #[cfg(target_arch = "wasm32")]
-    scratch: Scratch,
+    queued: Vec<Queued>,
     #[cfg(target_arch = "wasm32")]
-    newest: Option<Job>,
+    proof: Vec<ProofTask>,
+    #[cfg(target_arch = "wasm32")]
+    previous: Option<Arc<model::Document>>,
 }
 
 impl Worker {
-    fn new(scratch: Scratch) -> Worker {
+    pub(crate) fn new() -> Result<Self, String> {
         let (answered, answers) = mpsc::channel();
+        let newest = Arc::new(AtomicU64::new(0));
+        let protected = Arc::new(AtomicU64::new(0));
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let (jobs, queue) = mpsc::channel::<Job>();
-            let mut scratch = scratch;
+            let (jobs, queue) = mpsc::channel::<Queued>();
+            let (proofs, proof_queue) = mpsc::channel::<ProofTask>();
+            let current = newest.clone();
+            let retained = protected.clone();
+            let finished = answered.clone();
             std::thread::Builder::new()
-                .name("drag-preview".into())
+                .name("edit-proof".into())
                 .spawn(move || {
-                    while let Ok(mut job) = queue.recv() {
-                        // Only the newest value matters; skip the ones the drag has passed.
-                        while let Ok(newer) = queue.try_recv() {
-                            job = newer;
+                    let mut previous: Option<Arc<model::Document>> = None;
+                    let mut pending = Vec::new();
+                    loop {
+                        if pending.is_empty() {
+                            match proof_queue.recv() {
+                                Ok(task) => pending.push(task),
+                                Err(_) => break,
+                            }
                         }
-                        if answered.send(scratch.answer(job)).is_err() {
+                        pending.extend(proof_queue.try_iter());
+                        let Some(task) = next_work(
+                            &mut pending,
+                            current.load(Ordering::Acquire),
+                            retained.load(Ordering::Acquire),
+                            |task| task.request,
+                        ) else {
+                            continue;
+                        };
+                        let request = task.request;
+                        if !wanted(request, &current, &retained) {
+                            continue;
+                        }
+                        let result = prove(task, &current, &retained, previous.as_deref());
+                        if result.failure.is_none() && !result.model.is_dirty() {
+                            previous = Some(result.model.clone());
+                        }
+                        if wanted(request, &current, &retained)
+                            && finished.send(Answer { request, kind: AnswerKind::Proved(Ok(result)) }).is_err()
+                        {
                             break;
                         }
                     }
                 })
-                .expect("starting the drag preview thread");
-            Worker { answers, jobs }
+                .map_err(|error| format!("cannot start edit proof: {error}"))?;
+            let current = newest.clone();
+            let retained = protected.clone();
+            std::thread::Builder::new()
+                .name("edit-construction".into())
+                .spawn(move || {
+                    let mut pending = Vec::new();
+                    loop {
+                        if pending.is_empty() {
+                            match queue.recv() {
+                                Ok(job) => pending.push(job),
+                                Err(_) => break,
+                            }
+                        }
+                        pending.extend(queue.try_iter());
+                        let Some(queued) = next_work(
+                            &mut pending,
+                            current.load(Ordering::Acquire),
+                            retained.load(Ordering::Acquire),
+                            |job| job.request,
+                        ) else {
+                            continue;
+                        };
+                        if !wanted(queued.request, &current, &retained) {
+                            continue;
+                        }
+                        match prepare(queued, &answered) {
+                            Ok(Some(task)) => {
+                                if proofs.send(task).is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(()) => break,
+                        }
+                    }
+                })
+                .map_err(|error| format!("cannot start edit construction: {error}"))?;
+            Ok(Self { answers, newest, protected, request: 0, jobs })
         }
         #[cfg(target_arch = "wasm32")]
-        Worker { answers, answered, scratch, newest: None }
+        Ok(Self {
+            answers,
+            newest,
+            protected,
+            request: 0,
+            answered,
+            queued: Vec::new(),
+            proof: Vec::new(),
+            previous: None,
+        })
     }
 
-    fn ask(&mut self, job: Job) {
+    pub(crate) fn protect(&mut self, request: Option<u64>) {
+        self.protected.store(request.unwrap_or(0), Ordering::Release);
+    }
+
+    pub(crate) fn activate(&mut self, request: u64) {
+        self.newest.store(request, Ordering::Release);
+    }
+
+    pub(crate) fn invalidate(&mut self) -> u64 {
+        self.request =
+            self.request.checked_add(1).filter(|request| *request != u64::MAX).expect("edit request space exhausted");
+        self.newest.store(self.request, Ordering::Release);
+        self.request
+    }
+
+    pub(crate) fn enqueue(&mut self, request: u64, job: Job) -> Result<(), String> {
         #[cfg(not(target_arch = "wasm32"))]
-        let _ = self.jobs.send(job);
+        {
+            self.jobs.send(Queued { request, job }).map_err(|_| "the edit proof worker stopped".into())
+        }
         #[cfg(target_arch = "wasm32")]
         {
-            self.newest = Some(job);
+            self.queued.push(Queued { request, job });
+            Ok(())
         }
     }
 
-    fn answers(&mut self) -> Vec<Answer> {
+    pub(crate) fn answers(&mut self) -> Vec<Answer> {
         #[cfg(target_arch = "wasm32")]
-        if let Some(job) = self.newest.take() {
-            let _ = self.answered.send(self.scratch.answer(job));
+        {
+            if let Some(queued) = next_work(
+                &mut self.queued,
+                self.newest.load(Ordering::Acquire),
+                self.protected.load(Ordering::Acquire),
+                |job| job.request,
+            ) {
+                if let Ok(Some(task)) = prepare(queued, &self.answered) {
+                    self.proof.push(task);
+                }
+            } else if let Some(task) = next_work(
+                &mut self.proof,
+                self.newest.load(Ordering::Acquire),
+                self.protected.load(Ordering::Acquire),
+                |task| task.request,
+            ) {
+                let request = task.request;
+                let result = prove(task, &self.newest, &self.protected, self.previous.as_deref());
+                if result.failure.is_none() && !result.model.is_dirty() {
+                    self.previous = Some(result.model.clone());
+                }
+                if wanted(request, &self.newest, &self.protected) {
+                    let _ = self.answered.send(Answer { request, kind: AnswerKind::Proved(Ok(result)) });
+                }
+            }
         }
         self.answers.try_iter().collect()
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.protected.store(u64::MAX, Ordering::Release);
+        self.newest.store(u64::MAX, Ordering::Release);
     }
 }

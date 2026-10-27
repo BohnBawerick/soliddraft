@@ -7,6 +7,12 @@ use crate::viewport::render::Picked;
 use glam::Vec3;
 
 pub fn hit_point(doc: &Document, picked: Picked, origin: Vec3, dir: Vec3) -> Option<Vec3> {
+    if let Some(mesh) = doc.provisional_mesh() {
+        return match picked {
+            Picked::Face(pick) => ray_face(&mesh, pick, origin, dir).map(|(_, point)| point),
+            Picked::Edge(_) | Picked::Vertex(_) => None,
+        };
+    }
     match picked {
         Picked::Face(pick) => doc
             .meshes

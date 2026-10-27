@@ -852,6 +852,15 @@ fn has_body(s: &AppState) -> bool {
     s.doc.display_body().is_some()
 }
 
+fn can_export(s: &AppState) -> bool {
+    s.drag_preview.is_none()
+        && !s.doc.proof_pending()
+        && !s.doc.proof_message().is_some_and(|(_, failed)| failed)
+        && s.doc.error_count() == 0
+        && s.doc.repair_count() == 0
+        && has_body(s)
+}
+
 fn editing(s: &AppState, f: fn(&EditorParams) -> bool) -> bool {
     s.editor.as_ref().is_some_and(|e| f(&e.params))
 }
@@ -1474,19 +1483,19 @@ fn registry() -> Vec<CommandSpec> {
             .app_only(ASSEMBLY),
         cmd("export_step", "STEP", Icon::Save, "Export the part as STEP AP242, with its proven deviation")
             .run(|_| AppAction::Export { format: ExportFormat::Step, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the deviation report.", app::step_path_params),
         cmd("export_stl", "STL", Icon::Save, "Export the part's mesh as binary STL at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::Stl, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::stl_path_params),
         cmd("export_3mf", "3MF", Icon::Save, "Export the part's mesh as 3MF at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::ThreeMf, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::three_mf_path_params),
         cmd("export_obj", "OBJ", Icon::Save, "Export the part's mesh as OBJ at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::Obj, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::obj_path_params),
         cmd("quit", "Quit", Icon::Close, "Quit SolidDraft")
             .both()
