@@ -124,6 +124,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 },
                 FeatureKind::Mirror(_) => Icon::Mirror,
                 FeatureKind::Draft(_) => Icon::Draft,
+                FeatureKind::Shell(_) => Icon::Shell,
             };
             let child = f.kind.sketch().and_then(|s| state.doc.feature(s));
             items.push(RowItem {

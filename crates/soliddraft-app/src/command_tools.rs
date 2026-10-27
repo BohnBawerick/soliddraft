@@ -172,6 +172,13 @@ pub enum Line {
         /// Unite the reflection with the original.
         keep_original: bool,
     },
+    /// Hollows the part, leaving named faces open.
+    Shell {
+        /// Faces left open; empty requests a closed shell.
+        open_faces: Vec<String>,
+        /// Positive wall thickness, mm.
+        thickness: f64,
+    },
     /// Tilts faces about a neutral plane.
     Draft {
         /// Face names.
@@ -259,6 +266,13 @@ pub enum Line {
         feature: String,
         /// Unite the reflection with the original.
         keep_original: bool,
+    },
+    /// Changes a shell's wall thickness, retaining its openings.
+    EditShell {
+        /// The shell feature's name.
+        feature: String,
+        /// Positive wall thickness, mm.
+        thickness: f64,
     },
     /// Changes a draft's angle.
     EditDraft {
@@ -477,6 +491,19 @@ pub fn mirror_params() -> Vec<(&'static str, Value)> {
         ("plane", string("`top`, `front`, `right`, or a planar face's name")),
         ("keep_original", boolean("true unites the reflection with the original")),
     ]
+}
+
+/// The `shell` verb's parameters.
+pub fn shell_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("open_faces", array(string("A face name"), "Faces left open; empty for a closed shell")),
+        ("thickness", number("Wall thickness, mm, greater than 0")),
+    ]
+}
+
+/// The `edit_shell` verb's parameters.
+pub fn edit_shell_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("thickness", number("Wall thickness, mm, greater than 0"))]
 }
 
 /// The `draft` verb's parameters.
@@ -1046,6 +1073,13 @@ impl Line {
                     soliddraft_model::MirrorFeature { plane: plane_ref(doc, plane)?, keep_original: *keep_original };
                 run.apply(doc, Command::AddFeature(FeatureKind::Mirror(mirror)))?;
             }
+            Line::Shell { open_faces, thickness } => {
+                let shell = soliddraft_model::ShellFeature {
+                    open_faces: open_faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
+                    thickness: positive("wall thickness", *thickness)?,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Shell(shell)))?;
+            }
             Line::Draft { faces, neutral, angle, reverse } => {
                 let draft = soliddraft_model::DraftFeature {
                     faces: faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
@@ -1125,6 +1159,14 @@ impl Line {
                 m.keep_original = *keep_original;
                 run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Mirror(m) })?;
             }
+            Line::EditShell { feature, thickness } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Shell(mut shell)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a shell"));
+                };
+                shell.thickness = positive("wall thickness", *thickness)?;
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Shell(shell) })?;
+            }
             Line::EditDraft { feature, angle } => {
                 let id = feature_by_name(doc, feature)?;
                 let Some(FeatureKind::Draft(mut d)) = doc.feature(id).map(|f| f.kind.clone()) else {
@@ -1181,6 +1223,8 @@ impl Line {
             Line::CircularPattern { .. } => "circular_pattern",
             Line::Mirror { .. } => "mirror",
             Line::Draft { .. } => "draft",
+            Line::Shell { .. } => "shell",
+            Line::EditShell { .. } => "edit_shell",
             Line::EditHole { .. } => "edit_hole",
             Line::EditPattern { .. } => "edit_pattern",
             Line::EditMirror { .. } => "edit_mirror",
@@ -1278,6 +1322,17 @@ impl Line {
             }
             Line::Mirror { plane, keep_original } => {
                 ("Mirror".into(), format!("in {plane}{}", if *keep_original { ", keeping the original" } else { "" }))
+            }
+            Line::Shell { open_faces, thickness } => (
+                "Shell".into(),
+                format!(
+                    "{} mm wall, {}",
+                    fmt_mm(*thickness),
+                    if open_faces.is_empty() { "closed".into() } else { format!("open at {}", open_faces.join(", ")) }
+                ),
+            ),
+            Line::EditShell { feature, thickness } => {
+                (format!("Edit {feature}"), format!("{} mm wall", fmt_mm(*thickness)))
             }
             Line::Draft { faces, neutral, angle, .. } => {
                 ("Draft".into(), format!("{}° on {} about {neutral}", fmt_mm(*angle), faces.join(", ")))
@@ -1931,6 +1986,10 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
         FeatureKind::Mirror(m) => {
             json!({ "type": "mirror", "plane": plane_ref_label(&m.plane), "keep_original": m.keep_original })
         }
+        FeatureKind::Shell(s) => json!({
+            "type": "shell", "open_faces": s.open_faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
+            "thickness": s.thickness,
+        }),
         FeatureKind::Draft(d) => json!({
             "type": "draft", "faces": d.faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
             "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,

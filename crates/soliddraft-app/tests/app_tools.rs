@@ -239,6 +239,12 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("drawing_close", json!({}));
     s.call("new_part", json!({}));
     assert!(s.state.doc.features.is_empty());
+    s.call("sketch", json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}));
+    s.call("extrude", json!({"sketch":"Sketch1","depth":12,"flip":false}));
+    s.call("shell", json!({"open_faces":["Boss-Extrude1 · End cap"],"thickness":2}));
+    s.call("edit_shell", json!({"feature":"Shell1","thickness":1.5}));
+    s.call("new_part", json!({}));
+    assert!(s.state.doc.features.is_empty());
     // Revolve on a fresh part exercises both verbs without changing the bracket.
     s.call(
         "sketch",

@@ -66,6 +66,8 @@ pub enum FeatureKind {
     Mirror(MirrorFeature),
     /// Tilts faces of the part away from a pull direction.
     Draft(DraftFeature),
+    /// Hollows the body, leaving the selected faces open.
+    Shell(ShellFeature),
 }
 
 impl FeatureKind {
@@ -85,6 +87,7 @@ impl FeatureKind {
             },
             FeatureKind::Mirror(_) => "Mirror",
             FeatureKind::Draft(_) => "Draft",
+            FeatureKind::Shell(_) => "Shell",
         }
     }
 
@@ -117,6 +120,7 @@ impl FeatureKind {
                     out.push(face.feature);
                 }
             }
+            FeatureKind::Shell(s) => out.extend(s.open_faces.iter().map(|f| f.feature)),
             FeatureKind::Draft(d) => {
                 out.extend(d.faces.iter().map(|f| f.feature));
                 if let PlaneRef::Face { face } = &d.neutral {
@@ -405,4 +409,13 @@ pub struct DraftFeature {
     /// Pull against the neutral plane's normal instead of along it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub reverse: bool,
+}
+
+/// A constant-thickness shell with persistent references to its openings.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ShellFeature {
+    /// Faces removed to open the shell; empty means a closed shell.
+    pub open_faces: Vec<FaceRef>,
+    /// Positive, finite wall thickness in millimetres.
+    pub thickness: f64,
 }

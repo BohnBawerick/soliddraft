@@ -358,6 +358,7 @@ pub enum FeatureKind {
     Pattern(model::PatternFeature),
     Mirror(model::MirrorFeature),
     Draft(model::DraftFeature),
+    Shell(model::ShellFeature),
 }
 
 impl FeatureKind {
@@ -376,6 +377,7 @@ impl FeatureKind {
             },
             FeatureKind::Mirror(_) => "Mirror",
             FeatureKind::Draft(_) => "Draft",
+            FeatureKind::Shell(_) => "Shell",
         }
     }
 
@@ -395,6 +397,7 @@ impl FeatureKind {
             },
             FeatureKind::Mirror(_) => "mirror",
             FeatureKind::Draft(_) => "draft",
+            FeatureKind::Shell(_) => "shell",
         }
     }
 
@@ -442,6 +445,7 @@ impl FeatureKind {
             FeatureKind::Pattern(p) => model::FeatureKind::Pattern(p.clone()),
             FeatureKind::Mirror(m) => model::FeatureKind::Mirror(m.clone()),
             FeatureKind::Draft(d) => model::FeatureKind::Draft(d.clone()),
+            FeatureKind::Shell(s) => model::FeatureKind::Shell(s.clone()),
         }
     }
 
@@ -512,6 +516,7 @@ impl FeatureKind {
             model::FeatureKind::Pattern(p) => FeatureKind::Pattern(p.clone()),
             model::FeatureKind::Mirror(m) => FeatureKind::Mirror(m.clone()),
             model::FeatureKind::Draft(d) => FeatureKind::Draft(d.clone()),
+            model::FeatureKind::Shell(s) => FeatureKind::Shell(s.clone()),
         }
     }
 }
@@ -632,6 +637,7 @@ impl Feature {
             },
             FeatureKind::Mirror(m) => plane_ref_label(&m.plane),
             FeatureKind::Draft(d) => format!("{}°", fmt_mm(d.angle)),
+            FeatureKind::Shell(s) => format!("{} mm wall", fmt_mm(s.thickness)),
         }
     }
 
@@ -1290,6 +1296,9 @@ impl Document {
                     (model::FeatureKind::Mirror(m), EntityRef::Face(face)) if index == 0 => {
                         m.plane = model::PlaneRef::Face { face };
                     }
+                    (model::FeatureKind::Shell(s), EntityRef::Face(face)) if index < s.open_faces.len() => {
+                        s.open_faces[index] = face;
+                    }
                     (model::FeatureKind::Draft(d), EntityRef::Face(face)) if index < d.faces.len() => {
                         d.faces[index] = face;
                     }
@@ -1792,6 +1801,27 @@ impl Document {
         Ok(Preview { result: Some(mesh?), tool: None, removes: false })
     }
 
+    /// Preview an analytic shell through the same kernel operation as a committed feature.
+    pub fn preview_shell(&self, shell: &model::ShellFeature, before: Option<BodyId>) -> Result<Preview, String> {
+        let body = before.ok_or("nothing to shell yet")?;
+        let faces = shell
+            .open_faces
+            .iter()
+            .map(|reference| {
+                self.model
+                    .resolve_face(reference, body)
+                    .map_err(|repair| format!("{}: {}", reference.label, repair.message))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let result = self
+            .kernel()
+            .shell(&OpTag::new("preview"), body, &faces, shell.thickness)
+            .map_err(|error| error.to_string())?;
+        let mesh = self.mesh_of(result.body);
+        let _ = self.kernel().release(result.body);
+        Ok(Preview { result: Some(mesh?), tool: None, removes: false })
+    }
+
     fn mesh_of(&self, body: BodyId) -> Result<Arc<DisplayMesh>, String> {
         preview_mesh(self.kernel().as_ref(), body, &self.tess_params)
     }
@@ -1932,6 +1962,10 @@ impl Document {
                             details.push(("Head".to_owned(), hole_head_text(head)));
                         }
                     }
+                    FeatureKind::Shell(s) => {
+                        details.push(("Open faces".to_owned(), s.open_faces.len().to_string()));
+                        details.push(("Wall thickness".to_owned(), f.summary()));
+                    }
                     FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_) => {
                         details.push(("Layout".to_owned(), f.summary()));
                     }
@@ -2064,6 +2098,10 @@ fn view_status(
                         ) => {
                             let label = b.edges.get(index as usize).map(|e| e.label.clone()).unwrap_or_default();
                             (index as usize, RefKind::Edge, label)
+                        }
+                        (model::ReferenceSlot::Face { index }, model::FeatureKind::Shell(s)) => {
+                            let label = s.open_faces.get(index as usize).map(|f| f.label.clone()).unwrap_or_default();
+                            (index as usize, RefKind::Face, label)
                         }
                         (model::ReferenceSlot::Face { index }, model::FeatureKind::Draft(d)) => {
                             let label = d.faces.get(index as usize).map(|f| f.label.clone()).unwrap_or_default();

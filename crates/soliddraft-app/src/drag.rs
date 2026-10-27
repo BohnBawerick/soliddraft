@@ -52,6 +52,7 @@ impl Dimension {
             | FeatureKind::Pattern(_)
             | FeatureKind::Mirror(_)
             | FeatureKind::Draft(_)
+            | FeatureKind::Shell(_)
             | FeatureKind::Revolve(_) => None,
         }
     }
@@ -100,6 +101,7 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
         | FeatureKind::Pattern(_)
         | FeatureKind::Mirror(_)
         | FeatureKind::Draft(_)
+        | FeatureKind::Shell(_)
         | FeatureKind::Revolve(_)) => Command::EditFeature { id, kind },
         FeatureKind::Sketch(_) => return None,
     })

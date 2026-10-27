@@ -53,6 +53,7 @@ pub enum AppAction {
     },
     StartMirror,
     StartDraft,
+    StartShell,
     StartRepair(FeatureId),
     EditFeature(FeatureId),
     SketchTool(Tool),
@@ -182,6 +183,7 @@ pub enum EditorParams {
     Pattern(soliddraft_model::PatternFeature),
     Mirror(soliddraft_model::MirrorFeature),
     Draft(DraftParams),
+    Shell(soliddraft_model::ShellFeature),
     /// Picking a plane or planar face for a new sketch.
     PickPlane,
     /// Choosing replacements for a feature's missing references.
@@ -212,6 +214,7 @@ impl FeatureEditor {
             },
             EditorParams::Mirror(_) => format!("{edit}Mirror"),
             EditorParams::Draft(_) => format!("{edit}Draft"),
+            EditorParams::Shell(_) => format!("{edit}Shell"),
             EditorParams::PickPlane => "Sketch".to_owned(),
             EditorParams::Repair { .. } => "Repair references".to_owned(),
         }
@@ -250,6 +253,7 @@ impl FeatureEditor {
             EditorParams::Cut(p) => doc.preview_cut(p, before),
             EditorParams::Fillet(f) => doc.preview_rounding(&f.edges, f.radius, false, before),
             EditorParams::Chamfer(c) => doc.preview_rounding(&c.edges, c.distance, true, before),
+            EditorParams::Shell(s) => doc.preview_shell(s, before),
             // These preview once applied; the interface half adds ghosts for them.
             EditorParams::Hole(_)
             | EditorParams::Pattern(_)

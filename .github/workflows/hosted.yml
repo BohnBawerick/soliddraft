@@ -115,6 +115,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter for rendered workspace tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$RUNNER_TEMP/soliddraft-runtime"
+          chmod 700 "$RUNNER_TEMP/soliddraft-runtime"
+          echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/soliddraft-runtime" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
       - run: cargo test --workspace --all-features --locked --no-fail-fast
 
   # Catallax is compiled into the application WebAssembly module.
@@ -195,6 +204,7 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test shell_tool -- --nocapture
       - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
       - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
       - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture

@@ -992,6 +992,17 @@ impl SolidDraftApp {
                 );
                 self.state.doc.selection = None;
             }
+            AppAction::StartShell => {
+                let open_faces = match self.state.doc.selection {
+                    Some(Selection::Face(face)) => self.state.doc.any_face_ref(face).into_iter().collect(),
+                    _ => Vec::new(),
+                };
+                self.open_editor(
+                    None,
+                    EditorParams::Shell(soliddraft_model::ShellFeature { open_faces, thickness: 2.0 }),
+                );
+                self.state.doc.selection = None;
+            }
             AppAction::StartDraft => {
                 let faces = match self.state.doc.selection {
                     Some(Selection::Face(f)) => self.state.doc.any_face_ref(f).into_iter().collect(),
@@ -1031,6 +1042,7 @@ impl SolidDraftApp {
                     }),
                     FeatureKind::Pattern(p) => EditorParams::Pattern(p.clone()),
                     FeatureKind::Mirror(m) => EditorParams::Mirror(m.clone()),
+                    FeatureKind::Shell(s) => EditorParams::Shell(s.clone()),
                     FeatureKind::Draft(d) => EditorParams::Draft(DraftParams {
                         faces: d.faces.clone(),
                         neutral: d.neutral.clone(),
@@ -1077,6 +1089,10 @@ impl SolidDraftApp {
                     (target, EditorParams::Mirror(m)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Mirror(m) },
                         None => Command::AddFeature(FeatureKind::Mirror(m)),
+                    },
+                    (target, EditorParams::Shell(s)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Shell(s) },
+                        None => Command::AddFeature(FeatureKind::Shell(s)),
                     },
                     (target, EditorParams::Draft(d)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Draft(d.to_model()) },
@@ -1142,6 +1158,16 @@ impl SolidDraftApp {
                             match self.state.doc.face_ref(f) {
                                 Some(face) => m.plane = soliddraft_model::PlaneRef::Face { face },
                                 None => e.error = Some("Mirror in a planar face or a reference plane".into()),
+                            }
+                            return;
+                        }
+                        (EditorParams::Shell(s), Some(Selection::Face(f))) => {
+                            if let Some(reference) = self.state.doc.any_face_ref(f) {
+                                if let Some(i) = s.open_faces.iter().position(|face| face == &reference) {
+                                    s.open_faces.remove(i);
+                                } else {
+                                    s.open_faces.push(reference);
+                                }
                             }
                             return;
                         }

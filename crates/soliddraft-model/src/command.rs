@@ -431,6 +431,9 @@ impl Document {
                 }
                 _ => Ok(()),
             },
+            FeatureKind::Shell(s) if !(s.thickness.is_finite() && s.thickness > 0.0) => {
+                Err(CommandError::Invalid("shell thickness must be finite and positive".into()))
+            }
             FeatureKind::Draft(d) if d.faces.is_empty() => {
                 Err(CommandError::Invalid("a draft needs at least one face".into()))
             }

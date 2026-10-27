@@ -94,3 +94,30 @@ fn a_script_is_refused_what_it_cannot_run() {
     assert_eq!((out.status.code(), results(&out).len()), (Some(1), 1));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn shell_script_creates_edits_saves_and_exports_the_analytic_tray() {
+    let dir = scratch("shell");
+    let script = r#"
+sketch {"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}
+extrude {"sketch":"Sketch1","depth":12,"flip":false}
+shell {"open_faces":["Boss-Extrude1 · End cap"],"thickness":2}
+mass_properties {"name":"Shell1"}
+edit_shell {"feature":"Shell1","thickness":1.5}
+mass_properties {"name":"Shell1"}
+save {"path":"tray.dwprt"}
+export_step {"path":"tray.step"}
+"#;
+    std::fs::write(dir.join("shell.txt"), script).unwrap();
+    let out = soliddraft(&dir, &["run", "--script", "shell.txt"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let lines = results(&out);
+    assert_eq!(lines.len(), 8, "{lines:#?}");
+    assert!((lines[3]["result"]["volume_mm3"].as_f64().unwrap() - 5040.0).abs() < 1e-6);
+    assert!((lines[5]["result"]["volume_mm3"].as_f64().unwrap() - 3910.5).abs() < 1e-6);
+    assert!(std::fs::read_to_string(dir.join("tray.step")).unwrap().starts_with("ISO-10303-21;"));
+    let out = soliddraft(&dir, &["run", "--open", "tray.dwprt", "mass_properties", r#"{"name":"Shell1"}"#]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!((results(&out)[0]["result"]["volume_mm3"].as_f64().unwrap() - 3910.5).abs() < 1e-6);
+    let _ = std::fs::remove_dir_all(&dir);
+}

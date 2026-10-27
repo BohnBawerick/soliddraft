@@ -50,6 +50,7 @@ Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/
 - Extrudes and cuts, blind, through all, up to the next boundary or up to a planar face; booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
 - Holes on a planar face, blind or through, with flat or drill-point tips, counterbores and countersinks at any angle, including the standard 118° tip and 82°, 90° and 100° countersinks. A countersink or drill point cannot yet go into a body that has another cylinder; see [the backend gaps](docs/needs-catallax.md).
 - Linear and circular patterns and mirrors of the part's body.
+- Analytic planar shells with selected open faces, editable wall thickness and persistent inner-wall names. See [shell coverage and evidence](docs/l08-shell-tool.md).
 - Fillets and equal-distance chamfers between planes and between planes and cylinders, and drafts of planar faces and cylinders parallel to the pull.
 - Drawings use Catallax meshes for polygon hidden-line removal. Plane sections on screen are cut from the same meshes; an exported section subtracts a half-space through a Catallax boolean. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.
 - The assistant, connected to Claude: it reads the part, proposes changes as cards you preview, apply and undo. The same commands are open to outside agents over MCP.
@@ -60,7 +61,7 @@ Waiting commands stay visible and disabled with a tooltip naming their Catallax 
 
 | Waiting feature | Catallax stage |
 |---|---|
-| Shell, offset and thicken | 3 |
+| Offset and thicken; unsupported shell envelopes | 3 |
 | Up to a curved face (Catallax covers bare stock targets only) | 3 |
 | Other fillets | 4 |
 | Sweep and loft; spline, ellipse and text profiles | 5 |

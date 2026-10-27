@@ -38,7 +38,7 @@ pub use document::{BuiltSketch, Document, FACE_OVERLAP, FaceLabel, FeatureStatus
 pub use feature::{
     BlendFeature, BuiltinShape, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId,
     FeatureKind, HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, RevolveFeature,
-    SketchFeature, SketchPlane,
+    ShellFeature, SketchFeature, SketchPlane,
 };
 pub use file::FileError;
 pub use materials::{

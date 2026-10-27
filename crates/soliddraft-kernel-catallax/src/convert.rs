@@ -221,6 +221,10 @@ fn face_role(role: &Role, parents: &[&Ids]) -> Option<FaceRole> {
                 .find_map(|p| p.edge_names.iter().find_map(|(id, n)| (*n == name).then_some(*id)))
                 .map(|edge| FaceRole::Blend { edge })
         }
+        Role::Inner { of } => parents
+            .iter()
+            .find_map(|p| p.origins.iter().find_map(|(id, os)| os.contains(of).then_some(*id)))
+            .map(|face| FaceRole::Offset { face }),
         Role::Copy { instance, of } => parents
             .iter()
             .find_map(|p| p.origins.iter().find_map(|(id, os)| os.contains(of).then_some(*id)))

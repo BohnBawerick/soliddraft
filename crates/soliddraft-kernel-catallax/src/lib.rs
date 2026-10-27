@@ -10,6 +10,7 @@ mod drawing_queries;
 mod edge_control;
 mod frames;
 mod native;
+mod shell;
 mod step;
 
 use std::collections::{BTreeMap, VecDeque};
@@ -650,10 +651,12 @@ impl Kernel for CatallaxKernel {
         })
     }
 
-    fn shell(&self, _: &OpTag, body: BodyId, _: &[FaceId], _: f64) -> KernelResult<OpResult> {
+    fn shell(&self, tag: &OpTag, body: BodyId, open: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
         self.observe("shell", || {
-            self.solid(body)?;
-            Err(gap("shell", "3"))
+            let state = self.state()?;
+            let solid = state.solid(body)?;
+            let operation = shell::operation(state.step(body)?, open, thickness, |face| solid.face_ref(face, body))?;
+            self.native(state, tag, OpKind::Shell, body, &[body], operation, None)
         })
     }
 
