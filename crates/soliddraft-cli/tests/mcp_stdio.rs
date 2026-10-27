@@ -104,6 +104,35 @@ fn mcp_over_stdio_builds_measures_and_undoes() {
 }
 
 #[test]
+fn mcp_bundle_tags_proofs_with_the_request_and_revision_they_answer() {
+    let dir = std::env::temp_dir().join(format!("soliddraft-mcp-revisions-{}", std::process::id()));
+    let mut c = Client::start(&["mcp", "--bundle", dir.to_str().unwrap()]);
+    c.request(
+        "initialize",
+        json!({"protocolVersion":"2025-06-18","capabilities":{},
+        "clientInfo":{"name":"evidence-test","version":"1"}}),
+    );
+    let sketch = c.call(
+        "sketch",
+        json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}),
+    );
+    assert_eq!(sketch["isError"], false, "{sketch}");
+    let extruded = c.call("extrude", json!({"sketch":"Sketch1","depth":10,"flip":false}));
+    assert_eq!(extruded["isError"], false, "{extruded}");
+    let measured = c.call("scenario_measure", json!({}));
+    assert_eq!(measured["isError"], false, "{measured}");
+    drop(c);
+    let read =
+        |path: &str| -> Value { serde_json::from_str(&std::fs::read_to_string(dir.join(path)).unwrap()).unwrap() };
+    let (first, second, measurement) =
+        (read("0001/command.json"), read("0002/command.json"), read("0002/measurement.json"));
+    assert_eq!((first["request"].as_u64(), second["request"].as_u64()), (Some(1), Some(2)));
+    assert!(second["revision"].as_u64().unwrap() > first["revision"].as_u64().unwrap(), "{first} {second}");
+    assert_eq!(measurement["request"], second["request"]);
+    assert_eq!(measurement["revision"], second["revision"]);
+}
+
+#[test]
 fn mcp_bundle_keeps_the_part_and_question_after_a_refused_extrusion() {
     let dir = std::env::temp_dir().join(format!("soliddraft-mcp-evidence-{}", std::process::id()));
     let mut c = Client::start(&["mcp", "--bundle", dir.to_str().unwrap(), "--max-work", "0"]);

@@ -1,7 +1,13 @@
 """Checks must fail closed when evidence or comparison fields are missing."""
 
+import argparse
+import contextlib
 import importlib.util
+import io
+import json
+import os
 import pathlib
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("scenarios", pathlib.Path(__file__).with_name("run-scenarios.py"))
@@ -222,6 +228,142 @@ class KnownBudgets(unittest.TestCase):
         over = self.verdict(1000.001, number=7)
         self.assertFalse(over["pass"])
         self.assertEqual(over["status"], "over-budget")
+
+
+class Replies(unittest.TestCase):
+    command = {"request": 3, "revision": 7}
+    good = {"request": 3, "revision": 7, "selectable_faces": 6}
+
+    def test_a_reply_for_this_request_and_revision_answers(self):
+        self.assertIsNone(scenarios.answers(3, self.command, self.good, True))
+
+    def test_early_stale_pending_and_unlabelled_replies_never_answer(self):
+        cases = {
+            "not selectable": dict(self.good, selectable_faces=0),
+            "no selection count": {"request": 3, "revision": 7},
+            "older revision": dict(self.good, revision=6),
+            "older request": dict(self.good, request=2),
+            "pending": dict(self.good, pending=True),
+            "no request": {"revision": 7, "selectable_faces": 6},
+            "no revision": {"request": 3, "selectable_faces": 6},
+            "boolean revision": dict(self.good, revision=True),
+        }
+        for label, reply in cases.items():
+            with self.subTest(label):
+                self.assertIsNotNone(scenarios.answers(3, self.command, reply, True))
+        self.assertIsNotNone(scenarios.answers(3, self.command, None))
+        self.assertIsNotNone(scenarios.answers(3, {"request": 3}, self.good), "the command has no revision")
+
+    def test_a_proof_needs_no_selection_but_still_the_right_revision(self):
+        self.assertIsNone(scenarios.answers(3, self.command, {"request": 3, "revision": 7}))
+        self.assertIn("stale", scenarios.answers(3, self.command, {"request": 3, "revision": 6}))
+
+
+class Verdicts(unittest.TestCase):
+    known = KnownBudgets.known
+
+    def test_known_gap_is_accepted_but_never_a_strict_pass(self):
+        latency = scenarios.timing("extrude", [Latency.segment(2240)])
+        accepted = scenarios.accept_latency("bracket", 6, "extrude", latency, self.known)
+        self.assertTrue(accepted["pass"])
+        self.assertEqual(accepted["verdict"], "known-gap")
+        self.assertEqual(scenarios.accept_latency("bracket", 7, "extrude", latency, self.known)["verdict"], "fail")
+        within = scenarios.timing("extrude", [Latency.segment(1000)])
+        self.assertEqual(scenarios.accept_latency("bracket", 7, "extrude", within, self.known)["verdict"], "strict-pass")
+        self.assertEqual(scenarios.accept_latency("bracket", 6, "extrude", within, self.known)["verdict"], "strict-pass")
+        regressed = scenarios.timing("extrude", [Latency.segment(2400.001)])
+        self.assertEqual(scenarios.accept_latency("bracket", 6, "extrude", regressed, self.known)["verdict"], "fail")
+
+    def test_measurement_of_4245_ms_fails_both_its_budget_and_the_2000_ms_gate(self):
+        slow = scenarios.measurement_timing(4245, {"calls": []})
+        self.assertFalse(slow["pass"])
+        self.assertFalse(slow["within_gate"])
+        self.assertEqual((slow["budget_ms"], slow["gate_ms"]), (1000, 2000))
+        self.assertEqual(scenarios.verdict(slow), "fail")
+
+    def test_measurement_budget_and_gate_boundaries(self):
+        self.assertTrue(scenarios.measurement_timing(1000, {"calls": []})["pass"])
+        between = scenarios.measurement_timing(1500, {"calls": []})
+        self.assertFalse(between["pass"], "the unchanged 1,000 ms budget still applies")
+        self.assertTrue(between["within_gate"])
+        self.assertTrue(scenarios.measurement_timing(2000, {"calls": []})["within_gate"])
+        self.assertFalse(scenarios.measurement_timing(2000.001, {"calls": []})["within_gate"])
+
+
+FAKE = pathlib.Path(__file__).with_name("fake_mcp_server.py")
+
+
+class RunnerEndToEnd(unittest.TestCase):
+    """The real run() against a synthetic MCP server, so the click ends where a user sees it."""
+
+    def run_step(self, mode, measure=False, timeout=5):
+        step = {"tool": "extrude", "arguments": {}}
+        if measure:
+            step["checks"] = [{"pointer": "/measurement/volume_mm3", "approx": 1.0}]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            scenario = root / "scenario.json"
+            scenario.write_text(json.dumps({"format": "soliddraft-scenario/1", "name": "synthetic-gate",
+                                            "steps": [step]}))
+            args = argparse.Namespace(scenario=scenario, out=root / "run", soliddraft=str(FAKE),
+                                      catallax_verify="unused", timeout=timeout)
+            os.environ["FAKE_MODE"] = mode
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    scenarios.run(args)
+            finally:
+                del os.environ["FAKE_MODE"]
+            report = json.loads((args.out / "result.json").read_text())
+        checks = {c["check"]: c for c in (report["steps"][0]["checks"] if report["steps"] else [])
+                  if isinstance(c["check"], str)}
+        return report, checks
+
+    def test_a_visible_selectable_edit_ends_the_click(self):
+        report, checks = self.run_step("ok")
+        self.assertTrue(checks["click ends at a visible selectable edit"]["pass"])
+        interval = report["steps"][0]["intervals"]["preview"]
+        self.assertEqual(interval["ends"], "visible selectable edit")
+        self.assertEqual(interval["verdict"], "strict-pass")
+
+    def test_early_command_reply_cannot_pass(self):
+        report, checks = self.run_step("early")
+        self.assertFalse(checks["click ends at a visible selectable edit"]["pass"])
+        self.assertFalse(report["steps"][0]["pass"])
+        self.assertFalse(report["pass"])
+
+    def test_stale_display_cannot_end_a_newer_click(self):
+        report, checks = self.run_step("stale")
+        self.assertIn("stale", checks["click ends at a visible selectable edit"]["reason"])
+        self.assertFalse(report["pass"])
+
+    def test_pending_display_stays_incomplete(self):
+        report, checks = self.run_step("pending")
+        self.assertIn("pending", checks["click ends at a visible selectable edit"]["reason"])
+        self.assertFalse(report["pass"])
+
+    def test_timeout_leaves_the_step_incomplete(self):
+        report, _ = self.run_step("silent", timeout=1)
+        self.assertFalse(report["pass"])
+        self.assertIn("timed out", report["steps"][0]["incomplete"]["reason"])
+        self.assertEqual(report["steps"][0]["incomplete"]["request"], "scenario_display")
+
+    def test_stale_measurement_cannot_satisfy_the_request(self):
+        report, checks = self.run_step("stale-measure", measure=True)
+        self.assertFalse(checks["measurement answers this request"]["pass"])
+        self.assertFalse(report["pass"])
+
+    def test_slow_measurement_of_over_four_seconds_fails_the_gate(self):
+        report, checks = self.run_step("slow-measure", measure=True)
+        budget = checks["requested measurement budget"]
+        self.assertGreater(budget["elapsed_ms"], 4245)
+        self.assertFalse(budget["pass"])
+        self.assertFalse(budget["within_gate"])
+        self.assertFalse(report["pass"])
+
+    def test_current_measurement_passes_with_its_interval_recorded(self):
+        report, checks = self.run_step("ok", measure=True)
+        self.assertTrue(checks["measurement answers this request"]["pass"])
+        self.assertEqual(report["steps"][0]["intervals"]["measurement"]["gate_ms"], 2000)
 
 
 class Trends(unittest.TestCase):

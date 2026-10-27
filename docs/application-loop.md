@@ -142,7 +142,7 @@ MCP tool call has a numbered directory under `commands/` containing:
   `/measurement/volume_mm3` or another quantity. The bundle-only `scenario_measure`
   request runs after the complete click interval, so it cannot pre-warm that display.
   It neither advances the command sequence nor changes the part. Its own elapsed time,
-  work and unchanged 1000 ms ceiling are retained as `measurement` in the step result.
+  work, unchanged 1000 ms ceiling and 2,000 ms gate are retained as `measurement` in the step result.
   Any measurement still performed by an edit is charged to that edit, not subtracted.
 - `waits.json` and `timing.json`: external command and viewport waits, their
   disjoint phase split, deterministic work and unchanged click-budget verdict.
@@ -267,6 +267,35 @@ external waits into construction, edit, display, measurement and refusal; nested
 calls are not charged twice. Concurrent background calls keep their own time/work
 record rather than inflating the caller's wait. Verifier replay is also outside
 the click interval.
+
+### Intervals, replies and verdicts
+
+Each step's `intervals` record what the user waited for, with its own verdict:
+
+- `preview` starts when the command request is sent and ends only at a visible
+  selectable edit: the `scenario_display` capture of the same request and document
+  revision, with at least one pickable face. A step with no solid ends at the command
+  reply. This is the click and keeps its class budget.
+- `view` is the hidden-line SVG request, with its own 1,000 ms ceiling.
+- `measurement` is the explicit measurement request. It keeps its unchanged 1,000 ms
+  budget and also records a 2,000 ms gate, so a 4,245 ms measurement fails both.
+- `export` records each export's elapsed time. It runs after the click, as a separate request.
+
+The bundle tags `command.json`, `display.json`, `view.json` and `measurement.json`
+with the `request` number and document `revision` they describe, and `display.json`
+with `selectable_faces`. The runner accepts a reply only if it names this step's request
+and the command's revision (check `answers`). A reply with no tags, an older request or
+revision, a pending marker or no pickable faces does not end the interval: the step fails
+as `click ends at a visible selectable edit`, `view answers this request` or `measurement
+answers this request`. A proof for an earlier edit therefore cannot satisfy a newer one,
+and a command reply that returns before the viewport shows the edit cannot pass. A
+timeout or closed pipe records `incomplete` on the step with the request that did not
+answer and fails the run; it is never counted as a pass.
+
+Every click carries a `verdict`: `strict-pass` met its budget, `known-gap` was accepted
+only under `ci/known-over-budget.json` and is not a strict pass, `fail` was not accepted.
+The result lists `known_gaps` and sets `strict_pass` only when the run passed with none.
+`pass` keeps its meaning of CI acceptance.
 
 ### Independent drawing-view gate
 
