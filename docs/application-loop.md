@@ -128,14 +128,15 @@ MCP tool call has a numbered directory under `commands/` containing:
   Collecting command evidence must not request more meshes of an unchanged body.
 - `recipe.json`, when a solid exists: the recipe that constructed the displayed
   body, for the existing view command.
-- `kernel.json`: the actual kernel calls, work counts, errors and Catallax's
+- `kernel.json`: the command's actual kernel calls, work counts, errors and Catallax's
   `catallax-operation-log/1` entries. Entries retain decision settlement counts,
   marks, refusal codes and timings. Catallax currently reports local tolerances
   as null. Cached queries can have no numeric operations. Nested drawing queries
   share the outer call's log and work allowance, identified by `log_scope`; their
   own `work` is null rather than a second charge. `on_capture_thread` distinguishes
   the command thread from concurrent display refinement, whose time must not be
-  added to the caller's external wait.
+  added to the caller's external wait. `evidence.kernel.json` holds the queries
+  that collecting this evidence made, such as reference topology, after the click.
 - `question-*.json`: portable `catallax-question/1` inputs for kernel builds,
   including scratch builds that rejected a proposal. These contain Catallax
   recipes, not numeric body handles or paths into this machine.
@@ -174,7 +175,9 @@ Directories must be new. Neither MCP capture nor the runner overwrites an older
 run. Commands have a timeout. An unexpected behavioral failure stops the run;
 latency-only failures do not, so later steps retain their measurements.
 To collect the same evidence from another agent, start
-`soliddraft mcp --bundle /tmp/new-agent-run`. `--max-work N` sets its per-call
+`soliddraft mcp --bundle /tmp/new-agent-run`. A command's files appear after its
+reply: the bundle writes them on `scenario_evidence`, before the next request other
+than `scenario_display`, or when the session ends. `--max-work N` sets its per-call
 kernel allowance. View, drawing and screenshot logging impose no work allowance.
 Normal MCP sessions without `--bundle` keep their existing
 kernel behavior and do not collect kernel diagnostic data.
@@ -273,7 +276,11 @@ The runner's monotonic clock measures each click as the command round trip plus
 the live viewport capture. Hidden-line SVG, explicit measurement and requested
 drawing exports run afterward, outside the click interval. SVG and measurement
 have their own checks; drawing export keeps its artifact check and elapsed time.
-GPU preparation runs once outside the click interval. Kernel logs partition the
+GPU preparation runs once, before the first step. Writing a command's evidence is
+not part of the click either: the command replies, the runner times the viewport
+capture, then asks `scenario_evidence` to write `command.json`, `kernel.json`, the
+part files and questions. The evidence's own kernel queries go to
+`evidence.kernel.json`, outside every interval. Kernel logs partition the
 external waits into construction, edit, display, measurement and refusal; nested
 calls are not charged twice. Concurrent background calls keep their own time/work
 record rather than inflating the caller's wait. Verifier replay is also outside
@@ -286,7 +293,8 @@ Each step's `intervals` record what the user waited for, with its own verdict:
 - `preview` starts when the command request is sent and ends only at a visible
   selectable edit: the `scenario_display` capture of the same request and document
   revision, with a pickable face. A step with no solid ends at the command
-  reply. This is the click and keeps its class budget.
+  reply; its display request answers `solid: false` and is not timed. This is the
+  click and keeps its class budget.
 - `view` is the hidden-line SVG request, with its own 1,000 ms ceiling.
 - `measurement` is the explicit measurement request. It keeps its unchanged 1,000 ms
   budget and also records a 2,000 ms gate, so a 4,245 ms measurement fails both.

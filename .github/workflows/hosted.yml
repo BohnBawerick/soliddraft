@@ -269,19 +269,23 @@ jobs:
                   {"shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30}]})
               call("extrude", {"sketch": "Sketch1", "depth": 10, "flip": False})
               directory = root / "commands/0002"
-              for name in ("part.dwprt", "part.json", "recipe.json"):
-                  (directory / name).unlink()
+              # The command's evidence is written after its click, so nothing is saved yet.
+              saved = ("part.dwprt", "part.json", "recipe.json")
+              assert not any((directory / name).exists() for name in saved), sorted(directory.iterdir())
               call("scenario_display", {})
               assert (directory / "viewport.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
               assert not (directory / "view.svg").exists()
               display_log = json.loads((directory / "display.kernel.json").read_text())
               assert all(call["operation"] != "view_curves" for call in display_log["calls"]), display_log
+              call("scenario_evidence", {})
+              for name in saved:
+                  (directory / name).unlink()
               call("scenario_view", {})
               assert "<path " in (directory / "view.svg").read_text()
               view_log = json.loads((directory / "view.kernel.json").read_text())
               assert all(call["operation"] not in {"extrude", "boolean", "create_body_from_profile"}
                   for call in display_log["calls"] + view_log["calls"]), (display_log, view_log)
-              print("Viewport and hidden-line SVG captured separately after deleting every saved input; no reconstruction calls.")
+              print("Viewport captured before any saved input existed, hidden-line SVG after deleting them; no reconstruction calls.")
           finally:
               client.close()
               scenarios.write(root / "protocol.json", client.transcript)

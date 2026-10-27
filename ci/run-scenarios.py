@@ -447,7 +447,10 @@ def run(args):
             raise RuntimeError("MCP initialization version mismatch")
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         known = {}
-        prepared = False
+        # GPU preparation runs once, outside every click.
+        response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
+        if response.get("isError"):
+            raise RuntimeError(f"renderer preparation failed: {response}")
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
             if "label" in step:
@@ -458,6 +461,15 @@ def run(args):
             result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000
             directory = args.out / "commands" / f"{number:04}"
+            # The click ends at the viewport, before the command's evidence is written. A step
+            # with no solid to show ends at the command's reply; its display request does not count.
+            started = time.perf_counter_ns()
+            displayed = wait(client, entry, "scenario_display", {})
+            display_ms = (time.perf_counter_ns() - started) / 1_000_000
+            solid = displayed.get("isError") or (directory / "display.json").exists()
+            written = wait(client, entry, "scenario_evidence", {})
+            if written.get("isError"):
+                raise RuntimeError(f"bundle evidence was not written: {written}")
             command = json.loads((directory / "command.json").read_text())
             kernel = json.loads((directory / "kernel.json").read_text())
             segments = [{"source": "kernel.json", "elapsed_ms": command_ms, "kernel": kernel,
@@ -487,15 +499,7 @@ def run(args):
                     replay["expected_refusal"] = code
                     replay["pass"] &= replay.get("refusal") == code and replay.get("status") == "refused"
                     checks.append(replay)
-            if (directory / "recipe.json").exists():
-                if not prepared:
-                    response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
-                    if response.get("isError"):
-                        raise RuntimeError(f"renderer preparation failed: {response}")
-                    prepared = True
-                started = time.perf_counter_ns()
-                displayed = wait(client, entry, "scenario_display", {})
-                display_ms = (time.perf_counter_ns() - started) / 1_000_000
+            if solid:
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
                                  "kernel": json.loads((directory / "display.kernel.json").read_text())})
@@ -515,8 +519,7 @@ def run(args):
             entry["timing"] = latency
             entry["intervals"] = {"preview": {
                 "starts": "command request sent",
-                "ends": "visible selectable edit" if (directory / "recipe.json").exists()
-                        else "command reply, no solid to show",
+                "ends": "visible selectable edit" if solid else "command reply, no solid to show",
                 "elapsed_ms": latency["elapsed_ms"], "budget_ms": latency["budget_ms"],
                 "verdict": latency["verdict"]}}
             checks.append(latency)
@@ -527,7 +530,7 @@ def run(args):
             elif latency["status"] in {"known-gap-regression", "invalid-known-over-budget"}:
                 print(f"::error::{latency['message']}", flush=True)
             view_latency = None
-            if (directory / "recipe.json").exists():
+            if solid:
                 started = time.perf_counter_ns()
                 viewed = wait(client, entry, "scenario_view", {})
                 view_ms = (time.perf_counter_ns() - started) / 1_000_000
