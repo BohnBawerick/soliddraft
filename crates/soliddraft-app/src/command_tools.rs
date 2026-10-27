@@ -1760,6 +1760,9 @@ pub fn find_entity(doc: &Document, name: &str) -> Option<Selection> {
     if let Some(f) = doc.features.iter().find(|f| f.name == name) {
         return Some(Selection::Feature(f.id));
     }
+    if name.eq_ignore_ascii_case(crate::document::BODY_NAME) {
+        return doc.display_body().map(|_| Selection::Body);
+    }
     if let Some(face) = face_by_name(doc, name) {
         return Some(Selection::Face(face));
     }
@@ -1781,6 +1784,10 @@ fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>>
     let f32s = |v: soliddraft_kernel_api::Vec3| Vec3::new(v.x as f32, v.y as f32, v.z as f32);
     let measured = || doc.display_body().map(|body| doc.kernel().measured_topology(body)).transpose();
     Ok(match sel {
+        Selection::Body => match doc.display_body() {
+            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
+            None => None,
+        },
         Selection::Feature(id) => match doc.feature(id).and_then(|f| f.body) {
             Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
             None => None,
@@ -1894,6 +1901,7 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
     }
     v["name"] = info.title.into();
     v["kind"] = match sel {
+        Selection::Body => "body",
         Selection::Feature(_) => "feature",
         Selection::Face(_) => "face",
         Selection::Edge(_) => "edge",

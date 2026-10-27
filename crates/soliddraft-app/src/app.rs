@@ -11,6 +11,7 @@ use crate::panels::{self, Layout, Side};
 use crate::state::{AppAction, AppState, EditorParams, ExitInto, FeatureEditor, NoteKind, SketchSession};
 use crate::theme;
 use crate::viewport::Overlay;
+use crate::viewport::dimensions::DimensionTarget;
 use crate::viewport::look::{Preset, Tier};
 use crate::viewport::render::{DisplayMode, Picked, ViewportRenderer};
 use crate::{assistant, file, properties, ribbon, tree};
@@ -1180,6 +1181,23 @@ impl SolidDraftApp {
                 self.close_editor();
             }
             AppAction::DragDimension(step) => self.state.drag_dimension(step),
+            AppAction::EditDimension(target) => match target {
+                DimensionTarget::Feature(id) => self.apply(ctx, AppAction::EditFeature(id)),
+                DimensionTarget::Sketch { sketch, constraint } => {
+                    self.apply(ctx, AppAction::EditSketch(sketch));
+                    // The sketch opens with the value editor on the dimension, as a
+                    // double-click on it inside the sketch does.
+                    if let Some(s) = self.state.sketch.as_mut().filter(|s| s.feature == sketch)
+                        && let Some(value) = s.sketch.constraint(constraint).and_then(|c| c.value())
+                    {
+                        s.dim_edit = Some(crate::state::DimEdit {
+                            constraint,
+                            text: crate::sketch::fmt_value(value),
+                            focus: true,
+                        });
+                    }
+                }
+            },
             AppAction::Select(sel) => {
                 // Editors that collect picks take the click instead of selecting.
                 if let Some(e) = self.state.editor.as_mut() {

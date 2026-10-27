@@ -309,7 +309,7 @@ pub fn run(
     paint_regions(&painter, &frame, &s.sketch);
     paint_entities(&painter, &frame, s);
     paint_glyphs(&painter, s, &glyphs);
-    paint_dimensions(&painter, ui, &frame, s);
+    paint_dimensions(&painter, &frame, s);
     paint_rubber_band(&painter, &frame, s, snapped);
     paint_snaps(&painter, &frame, s, hover_pos, snapped);
     dim_editor(ui, s, &frame, &mut actions);
@@ -968,7 +968,7 @@ fn paint_glyphs(painter: &egui::Painter, s: &SketchSession, glyphs: &[(Constrain
     }
 }
 
-fn arrow(painter: &egui::Painter, tip: Pos2, dir: egui::Vec2, color: Color32) {
+pub fn arrow(painter: &egui::Painter, tip: Pos2, dir: egui::Vec2, color: Color32) {
     let d = dir.normalized();
     let side = vec2(-d.y, d.x);
     painter.add(egui::Shape::convex_polygon(
@@ -1002,7 +1002,7 @@ fn dim_text(c: &Constraint) -> String {
     }
 }
 
-fn paint_dimensions(painter: &egui::Painter, ui: &egui::Ui, frame: &Frame<'_>, s: &SketchSession) {
+fn paint_dimensions(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession) {
     let conflicting = match &s.sketch.status {
         SolveStatus::OverDefined { conflicting } => conflicting.clone(),
         _ => Vec::new(),
@@ -1018,132 +1018,9 @@ fn paint_dimensions(painter: &egui::Painter, ui: &egui::Ui, frame: &Frame<'_>, s
         } else {
             theme::MUTED.gamma_multiply(1.15)
         };
-        let st = Stroke::new(1.0, color);
         let Some(label) = c.label() else { continue };
         let Some(lp) = frame.screen(label) else { continue };
-        let sk = &s.sketch;
-        match c.kind {
-            ConstraintKind::Distance { a, b, kind, .. } => {
-                let (Some(pa), Some(pb)) = (sk.point(a), sk.point(b)) else { continue };
-                // Dimension line end points in plane coordinates.
-                let (da, db) = match kind {
-                    DistanceKind::Aligned => {
-                        let dir = pb.sub(pa).normalized();
-                        let n = dir.perp();
-                        let off = label.sub(pa).dot(n);
-                        (pa.add(n.scale(off)), pb.add(n.scale(off)))
-                    }
-                    DistanceKind::Horizontal => (P2::new(pa.u, label.v), P2::new(pb.u, label.v)),
-                    DistanceKind::Vertical => (P2::new(label.u, pa.v), P2::new(label.u, pb.v)),
-                };
-                let (Some(sa), Some(sb), Some(spa), Some(spb)) =
-                    (frame.screen(da), frame.screen(db), frame.screen(pa), frame.screen(pb))
-                else {
-                    continue;
-                };
-                let ext = |from: Pos2, to: Pos2| {
-                    let d = (to - from).normalized();
-                    painter.line_segment([from + d * 4.0, to + d * 5.0], Stroke::new(0.8, color.gamma_multiply(0.8)));
-                };
-                ext(spa, sa);
-                ext(spb, sb);
-                painter.line_segment([sa, sb], st);
-                let dir = sb - sa;
-                if dir.length() > 20.0 {
-                    arrow(painter, sa, -dir, color);
-                    arrow(painter, sb, dir, color);
-                }
-            }
-            ConstraintKind::PointLineDistance { point, line, .. } => {
-                let (Some(p), Some(l)) = (sk.point(point), sk.entity(line)) else { continue };
-                let EntityKind::Line { a, b } = l.kind else { continue };
-                // The foot on the infinite line, so the dimension works past the ends.
-                let dir = b.sub(a).normalized();
-                let foot = a.add(dir.scale(p.sub(a).dot(dir)));
-                let along = label.sub(foot).dot(dir);
-                let (da, db) = (p.add(dir.scale(along)), foot.add(dir.scale(along)));
-                let (Some(sa), Some(sb), Some(sp), Some(sf)) =
-                    (frame.screen(da), frame.screen(db), frame.screen(p), frame.screen(foot))
-                else {
-                    continue;
-                };
-                painter.line_segment([sp, sa], Stroke::new(0.8, color.gamma_multiply(0.8)));
-                painter.line_segment([sf, sb], Stroke::new(0.8, color.gamma_multiply(0.8)));
-                painter.line_segment([sa, sb], st);
-                let d = sb - sa;
-                if d.length() > 20.0 {
-                    arrow(painter, sa, -d, color);
-                    arrow(painter, sb, d, color);
-                }
-            }
-            ConstraintKind::Angle { a, b, .. } => {
-                let (Some(la), Some(lb)) = (sk.entity(a), sk.entity(b)) else { continue };
-                let (EntityKind::Line { a: a0, b: a1 }, EntityKind::Line { a: b0, b: b1 }) = (la.kind, lb.kind) else {
-                    continue;
-                };
-                // Intersection of the two lines.
-                let (d1, d2) = (a1.sub(a0), b1.sub(b0));
-                let den = d1.cross(d2);
-                if den.abs() < 1e-9 {
-                    continue;
-                }
-                let t = b0.sub(a0).cross(d2) / den;
-                let x = a0.add(d1.scale(t));
-                let r = label.dist(x);
-                let ang = |d: P2| {
-                    // Point each direction toward the label's side.
-                    let d = d.normalized();
-                    if label.sub(x).dot(d) < 0.0 { d.scale(-1.0).angle() } else { d.angle() }
-                };
-                let (mut a_from, mut a_to) = (ang(d1), ang(d2));
-                if a_to < a_from {
-                    std::mem::swap(&mut a_from, &mut a_to);
-                }
-                if a_to - a_from > std::f64::consts::PI {
-                    std::mem::swap(&mut a_from, &mut a_to);
-                    a_to += std::f64::consts::TAU;
-                }
-                let n = 24;
-                let pts: Vec<Pos2> = (0..=n)
-                    .filter_map(|i| {
-                        frame.screen(x.add(P2::from_angle(a_from + (a_to - a_from) * i as f64 / n as f64).scale(r)))
-                    })
-                    .collect();
-                if pts.len() >= 2 {
-                    painter.add(egui::Shape::line(pts, st));
-                }
-                for d in [d1, d2] {
-                    let end = x.add(P2::from_angle(ang(d)).scale(r * 1.1));
-                    if let (Some(sx), Some(se)) = (frame.screen(x), frame.screen(end)) {
-                        painter.line_segment([sx, se], Stroke::new(0.8, color.gamma_multiply(0.8)));
-                    }
-                }
-            }
-            ConstraintKind::Radius { entity, diameter, .. } => {
-                let Some(e) = sk.entity(entity) else { continue };
-                let (Some(center), Some(r)) = (e.point(0), e.radius()) else { continue };
-                let dir = label.sub(center).normalized();
-                let on = center.add(dir.scale(r));
-                let (Some(son), Some(sc)) = (frame.screen(on), frame.screen(center)) else { continue };
-                if diameter {
-                    let opposite = center.sub(dir.scale(r));
-                    if let Some(so) = frame.screen(opposite) {
-                        painter.line_segment([so, son], st);
-                        arrow(painter, so, so - son, color);
-                    }
-                } else {
-                    painter.line_segment([sc, son], st);
-                }
-                arrow(painter, son, son - sc, color);
-                painter.line_segment([son, lp], st);
-            }
-            _ => {}
-        }
-        // The value pill.
-        let text = dim_text(c);
-        let galley =
-            ui.painter().layout_no_wrap(text, theme::font_medium(11.5), if bad { theme::ERROR } else { theme::INK });
-        let r = Rect::from_center_size(lp, galley.size() + vec2(12.0, 6.0));
+        paint_dimension_lines(painter, frame, &s.sketch, c, label, lp, color);
         let bg = if sel {
             theme::SELECTION_BG
         } else if hover {
@@ -1151,15 +1028,203 @@ fn paint_dimensions(painter: &egui::Painter, ui: &egui::Ui, frame: &Frame<'_>, s
         } else {
             theme::hud_bg()
         };
-        painter.rect(
-            r,
-            CornerRadius::same(4),
-            bg,
-            Stroke::new(1.0, if sel { theme::ACCENT } else { theme::LINE }),
-            StrokeKind::Inside,
-        );
-        painter.galley(r.center() - galley.size() / 2.0, galley, theme::INK);
+        let ink = if bad { theme::ERROR } else { theme::INK };
+        value_pill(painter, lp, dim_text(c), ink, bg, Stroke::new(1.0, if sel { theme::ACCENT } else { theme::LINE }));
     }
+}
+
+/// Draws a dimension's extension and dimension lines, arrows and leader in `color`.
+fn paint_dimension_lines(
+    painter: &egui::Painter,
+    frame: &Frame<'_>,
+    sk: &Sketch,
+    c: &Constraint,
+    label: P2,
+    lp: Pos2,
+    color: Color32,
+) {
+    let st = Stroke::new(1.0, color);
+    match c.kind {
+        ConstraintKind::Distance { a, b, kind, .. } => {
+            let (Some(pa), Some(pb)) = (sk.point(a), sk.point(b)) else { return };
+            // Dimension line end points in plane coordinates.
+            let (da, db) = match kind {
+                DistanceKind::Aligned => {
+                    let dir = pb.sub(pa).normalized();
+                    let n = dir.perp();
+                    let off = label.sub(pa).dot(n);
+                    (pa.add(n.scale(off)), pb.add(n.scale(off)))
+                }
+                DistanceKind::Horizontal => (P2::new(pa.u, label.v), P2::new(pb.u, label.v)),
+                DistanceKind::Vertical => (P2::new(label.u, pa.v), P2::new(label.u, pb.v)),
+            };
+            let (Some(sa), Some(sb), Some(spa), Some(spb)) =
+                (frame.screen(da), frame.screen(db), frame.screen(pa), frame.screen(pb))
+            else {
+                return;
+            };
+            let ext = |from: Pos2, to: Pos2| {
+                let d = (to - from).normalized();
+                painter.line_segment([from + d * 4.0, to + d * 5.0], Stroke::new(0.8, color.gamma_multiply(0.8)));
+            };
+            ext(spa, sa);
+            ext(spb, sb);
+            painter.line_segment([sa, sb], st);
+            let dir = sb - sa;
+            if dir.length() > 20.0 {
+                arrow(painter, sa, -dir, color);
+                arrow(painter, sb, dir, color);
+            }
+        }
+        ConstraintKind::PointLineDistance { point, line, .. } => {
+            let (Some(p), Some(l)) = (sk.point(point), sk.entity(line)) else { return };
+            let EntityKind::Line { a, b } = l.kind else { return };
+            // The foot on the infinite line, so the dimension works past the ends.
+            let dir = b.sub(a).normalized();
+            let foot = a.add(dir.scale(p.sub(a).dot(dir)));
+            let along = label.sub(foot).dot(dir);
+            let (da, db) = (p.add(dir.scale(along)), foot.add(dir.scale(along)));
+            let (Some(sa), Some(sb), Some(sp), Some(sf)) =
+                (frame.screen(da), frame.screen(db), frame.screen(p), frame.screen(foot))
+            else {
+                return;
+            };
+            painter.line_segment([sp, sa], Stroke::new(0.8, color.gamma_multiply(0.8)));
+            painter.line_segment([sf, sb], Stroke::new(0.8, color.gamma_multiply(0.8)));
+            painter.line_segment([sa, sb], st);
+            let d = sb - sa;
+            if d.length() > 20.0 {
+                arrow(painter, sa, -d, color);
+                arrow(painter, sb, d, color);
+            }
+        }
+        ConstraintKind::Angle { a, b, .. } => {
+            let (Some(la), Some(lb)) = (sk.entity(a), sk.entity(b)) else { return };
+            let (EntityKind::Line { a: a0, b: a1 }, EntityKind::Line { a: b0, b: b1 }) = (la.kind, lb.kind) else {
+                return;
+            };
+            // Intersection of the two lines.
+            let (d1, d2) = (a1.sub(a0), b1.sub(b0));
+            let den = d1.cross(d2);
+            if den.abs() < 1e-9 {
+                return;
+            }
+            let t = b0.sub(a0).cross(d2) / den;
+            let x = a0.add(d1.scale(t));
+            let r = label.dist(x);
+            let ang = |d: P2| {
+                // Point each direction toward the label's side.
+                let d = d.normalized();
+                if label.sub(x).dot(d) < 0.0 { d.scale(-1.0).angle() } else { d.angle() }
+            };
+            let (mut a_from, mut a_to) = (ang(d1), ang(d2));
+            if a_to < a_from {
+                std::mem::swap(&mut a_from, &mut a_to);
+            }
+            if a_to - a_from > std::f64::consts::PI {
+                std::mem::swap(&mut a_from, &mut a_to);
+                a_to += std::f64::consts::TAU;
+            }
+            let n = 24;
+            let pts: Vec<Pos2> = (0..=n)
+                .filter_map(|i| {
+                    frame.screen(x.add(P2::from_angle(a_from + (a_to - a_from) * i as f64 / n as f64).scale(r)))
+                })
+                .collect();
+            if pts.len() >= 2 {
+                painter.add(egui::Shape::line(pts, st));
+            }
+            for d in [d1, d2] {
+                let end = x.add(P2::from_angle(ang(d)).scale(r * 1.1));
+                if let (Some(sx), Some(se)) = (frame.screen(x), frame.screen(end)) {
+                    painter.line_segment([sx, se], Stroke::new(0.8, color.gamma_multiply(0.8)));
+                }
+            }
+        }
+        ConstraintKind::Radius { entity, diameter, .. } => {
+            let Some(e) = sk.entity(entity) else { return };
+            let (Some(center), Some(r)) = (e.point(0), e.radius()) else { return };
+            let dir = label.sub(center).normalized();
+            let on = center.add(dir.scale(r));
+            let (Some(son), Some(sc)) = (frame.screen(on), frame.screen(center)) else { return };
+            if diameter {
+                let opposite = center.sub(dir.scale(r));
+                if let Some(so) = frame.screen(opposite) {
+                    painter.line_segment([so, son], st);
+                    arrow(painter, so, so - son, color);
+                }
+            } else {
+                painter.line_segment([sc, son], st);
+            }
+            arrow(painter, son, son - sc, color);
+            painter.line_segment([son, lp], st);
+        }
+        _ => {}
+    }
+}
+
+/// Draws a dimension's value pill centred on `at` and returns its rectangle.
+pub fn value_pill(painter: &egui::Painter, at: Pos2, text: String, ink: Color32, bg: Color32, stroke: Stroke) -> Rect {
+    let galley = painter.layout_no_wrap(text, theme::font_medium(11.5), ink);
+    let r = Rect::from_center_size(at, galley.size() + vec2(12.0, 6.0));
+    painter.rect(r, CornerRadius::same(4), bg, stroke, StrokeKind::Inside);
+    painter.galley(r.center() - galley.size() / 2.0, galley, ink);
+    r
+}
+
+/// Draws the dimensions of a sketch that is not open, on its plane, and returns each
+/// value's rectangle with its constraint. A value that would cover one of the `taken`
+/// values, or an earlier one of this sketch, moves clear of it on a short leader. A value
+/// under `pointer` shows as hovered.
+pub fn paint_closed_dimensions(
+    painter: &egui::Painter,
+    camera: &Camera,
+    rect: Rect,
+    plane: Plane,
+    sketch: &Sketch,
+    taken: &[Rect],
+    pointer: Option<Pos2>,
+) -> Vec<(ConstraintId, Rect)> {
+    let frame = Frame { plane, camera, rect };
+    let mut taken = taken.to_vec();
+    let mut shown = Vec::new();
+    for c in sketch.constraints.iter().filter(|c| c.is_dimension()) {
+        let Some(label) = c.label() else { continue };
+        let Some(lp) = frame.screen(label) else { continue };
+        let text = dim_text(c);
+        let size = painter.layout_no_wrap(text.clone(), theme::font_medium(11.5), theme::INK).size() + vec2(12.0, 6.0);
+        let at = clear_spot(lp, size, &taken);
+        let hover = pointer.is_some_and(|p| Rect::from_center_size(at, size).contains(p));
+        let color = if hover { theme::ACCENT } else { theme::INK.gamma_multiply(0.7) };
+        paint_dimension_lines(painter, &frame, sketch, c, label, lp, color);
+        if at != lp {
+            painter.line_segment([lp, at], Stroke::new(1.0, color));
+        }
+        let (bg, stroke) = if hover { (theme::HOVER, theme::ACCENT) } else { (theme::hud_bg(), theme::LINE) };
+        let r = value_pill(painter, at, text, theme::INK, bg, Stroke::new(1.0, stroke));
+        taken.push(r);
+        shown.push((c.id, r));
+    }
+    shown
+}
+
+/// Where a value of `size` centred near `at` covers none of `taken`: `at` itself, or just
+/// below, above, right or left of the first value it would cover.
+fn clear_spot(at: Pos2, size: egui::Vec2, taken: &[Rect]) -> Pos2 {
+    let free = |p: Pos2| !taken.iter().any(|t| t.intersects(Rect::from_center_size(p, size).expand(2.0)));
+    let Some(t) = taken.iter().find(|t| t.intersects(Rect::from_center_size(at, size).expand(2.0))) else {
+        return at;
+    };
+    let gap = 4.0;
+    [
+        pos2(at.x, t.bottom() + gap + size.y / 2.0),
+        pos2(at.x, t.top() - gap - size.y / 2.0),
+        pos2(t.right() + gap + size.x / 2.0, at.y),
+        pos2(t.left() - gap - size.x / 2.0, at.y),
+    ]
+    .into_iter()
+    .find(|&p| free(p))
+    .unwrap_or(at)
 }
 
 fn paint_rubber_band(painter: &egui::Painter, frame: &Frame<'_>, s: &SketchSession, snapped: Option<P2>) {
