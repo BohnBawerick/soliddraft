@@ -289,6 +289,7 @@ fn error_row(ui: &mut egui::Ui, err: &str) {
 
 fn editor(ui: &mut egui::Ui, state: &mut AppState) {
     let (title, icon) = match state.editor.as_ref().map(|e| &e.params) {
+        Some(EditorParams::Revolve(_)) => (state.editor.as_ref().unwrap().title(), Icon::Revolve),
         Some(EditorParams::Extrude(_)) => (state.editor.as_ref().unwrap().title(), Icon::Extrude),
         Some(EditorParams::Cut(_)) => (state.editor.as_ref().unwrap().title(), Icon::Cut),
         Some(EditorParams::Fillet(_)) => (state.editor.as_ref().unwrap().title(), Icon::Fillet),
@@ -331,6 +332,26 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
     let Some(editor) = state.editor.as_mut() else { return };
     egui::ScrollArea::vertical().id_salt("pm").auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| match &mut editor.params {
+            EditorParams::Revolve(r) => {
+                theme::section_label(ui, "Meridian sketch");
+                ui.label(
+                    sketch_names
+                        .iter()
+                        .find(|(id, _)| *id == r.sketch.0 as u64)
+                        .map(|(_, name)| name.as_str())
+                        .unwrap_or("Missing sketch"),
+                );
+                theme::section_label(ui, "Axis point");
+                for (i, label) in ["X", "Y", "Z"].iter().enumerate() {
+                    coord(ui, &format!("revolve origin {label}"), label, &mut r.axis_origin[i]);
+                }
+                theme::section_label(ui, "Axis direction");
+                for (i, label) in ["X", "Y", "Z"].iter().enumerate() {
+                    coord(ui, &format!("revolve direction {label}"), label, &mut r.axis_direction[i]);
+                }
+                theme::section_label(ui, "Angle");
+                ui.add(egui::DragValue::new(&mut r.angle_deg).speed(1.0).range(0.0..=360.0).suffix("°"));
+            }
             EditorParams::Extrude(params) => {
                 theme::section_label(ui, "Profile");
                 match params.sketch {

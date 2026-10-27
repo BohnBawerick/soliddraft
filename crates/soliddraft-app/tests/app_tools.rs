@@ -239,6 +239,23 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("drawing_close", json!({}));
     s.call("new_part", json!({}));
     assert!(s.state.doc.features.is_empty());
+    // Revolve on a fresh part exercises both verbs without changing the bracket.
+    s.call(
+        "sketch",
+        json!({"plane":"top", "shapes":[
+            {"shape":"rectangle", "center":[9,6,0], "width":6, "height":12}
+        ]}),
+    );
+    let revolved = s.call(
+        "revolve",
+        json!({"sketch":"Sketch1", "axis_origin":[0,0,0],
+        "axis_direction":[0,1,0], "angle_deg":180}),
+    );
+    assert!(!revolved.is_null(), "revolve must succeed");
+    let edited = s.call("edit_revolve", json!({"feature":"Revolve1", "angle_deg":360}));
+    assert!(!edited.is_null(), "edit_revolve must succeed");
+    s.call("undo", json!({}));
+    s.call("redo", json!({}));
     s.call("open", json!({ "path": part }));
     assert!(s.state.doc.features.iter().any(|f| f.name == "Hole"), "the saved part opens with its features");
 

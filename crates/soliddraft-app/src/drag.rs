@@ -51,7 +51,8 @@ impl Dimension {
             | FeatureKind::Hole(_)
             | FeatureKind::Pattern(_)
             | FeatureKind::Mirror(_)
-            | FeatureKind::Draft(_) => None,
+            | FeatureKind::Draft(_)
+            | FeatureKind::Revolve(_) => None,
         }
     }
 
@@ -95,9 +96,11 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
         FeatureKind::Cut(params) => Command::EditCut { id, params },
         FeatureKind::Fillet(params) => Command::EditFillet { id, params },
         FeatureKind::Chamfer(params) => Command::EditChamfer { id, params },
-        kind @ (FeatureKind::Hole(_) | FeatureKind::Pattern(_) | FeatureKind::Mirror(_) | FeatureKind::Draft(_)) => {
-            Command::EditFeature { id, kind }
-        }
+        kind @ (FeatureKind::Hole(_)
+        | FeatureKind::Pattern(_)
+        | FeatureKind::Mirror(_)
+        | FeatureKind::Draft(_)
+        | FeatureKind::Revolve(_)) => Command::EditFeature { id, kind },
         FeatureKind::Sketch(_) => return None,
     })
 }

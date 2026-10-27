@@ -15,7 +15,8 @@ use soliddraft_tessellation::{Report, Settings};
 use crate::command::UndoEntry;
 use crate::feature::{
     BlendFeature, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind,
-    HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, SketchFeature, SketchPlane,
+    HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, RevolveFeature, SketchFeature,
+    SketchPlane,
 };
 use crate::materials::PartMaterials;
 use crate::rebuild::BuildCache;
@@ -564,6 +565,10 @@ impl Document {
     fn profile_sketch(&self, id: FeatureId) -> Option<Sketch> {
         match &self.feature(id)?.kind {
             FeatureKind::Sketch(s) => Some(s.sketch.clone()),
+            FeatureKind::Revolve(r) => match &self.feature(r.sketch)?.kind {
+                FeatureKind::Sketch(s) => Some(s.sketch.clone()),
+                _ => None,
+            },
             FeatureKind::Extrude(e) => match &e.profile {
                 ProfileSource::Sketch { feature } => match &self.feature(*feature)?.kind {
                     FeatureKind::Sketch(s) => Some(s.sketch.clone()),
@@ -715,7 +720,8 @@ impl Document {
     /// kept, so a rename shows in them without building anything.
     fn build(&self, f: &Feature, current: Option<BodyId>, cache: &mut BuildCache) -> Built {
         let profile = match &f.kind {
-            FeatureKind::Extrude(ExtrudeFeature { profile: ProfileSource::Sketch { feature }, .. }) => {
+            FeatureKind::Revolve(RevolveFeature { sketch: feature, .. })
+            | FeatureKind::Extrude(ExtrudeFeature { profile: ProfileSource::Sketch { feature }, .. }) => {
                 match self.profile_input(*feature, current) {
                     Ok(input) => Some(input.version),
                     Err(refused) => return *refused,
@@ -730,6 +736,7 @@ impl Document {
         let built = match &f.kind {
             FeatureKind::Sketch(s) => self.build_sketch(s, current),
             FeatureKind::Extrude(e) => self.build_extrude(f, e, current),
+            FeatureKind::Revolve(r) => self.build_revolve(f, r, current),
             FeatureKind::Fillet(b) => self.build_blend(f, b, false, current),
             FeatureKind::Chamfer(b) => self.build_blend(f, b, true, current),
             FeatureKind::Hole(h) => self.build_hole(f, h, current),
@@ -804,6 +811,83 @@ impl Document {
             names: Vec::new(),
             sketch: Some(BuiltSketch { plane, on_face, regions }),
             version: 0,
+        }
+    }
+
+    fn build_revolve(&self, f: &Feature, r: &RevolveFeature, current: Option<BodyId>) -> Built {
+        if !r.angle_deg.is_finite()
+            || r.angle_deg <= 0.0
+            || r.angle_deg > 360.0
+            || !r.axis_origin.iter().chain(&r.axis_direction).all(|v| v.is_finite())
+            || r.axis_direction.iter().all(|v| *v == 0.0)
+        {
+            return Built::failed(current, "revolve needs a finite axis, nonzero direction and angle in (0, 360]");
+        }
+        let input = match self.profile_input(r.sketch, current) {
+            Ok(input) => input,
+            Err(refused) => return *refused,
+        };
+        let sk = input.sketch.as_ref().expect("a profile input is a built sketch");
+        let regions = match &sk.regions {
+            Ok(regions) if !regions.is_empty() => regions,
+            _ => return Built::failed(current, "revolve needs a closed sketch region"),
+        };
+        let mut mine = None;
+        let mut faces = Vec::new();
+        let mut run = || -> KernelResult<Option<BodyId>> {
+            let k = &self.kernel;
+            let mut body = current;
+            for (i, region) in regions.iter().enumerate() {
+                let tag = |step: &str| OpTag::new(format!("{}.r{i}.{step}", f.id));
+                let sheet = k.create_body_from_profile(&tag("profile"), &region.to_profile(sk.plane))?;
+                let tool = k.revolve(
+                    &tag("sweep"),
+                    sheet.body,
+                    &soliddraft_kernel_api::Revolve {
+                        axis_origin: r.axis_origin.into(),
+                        axis_direction: r.axis_direction.into(),
+                        angle_deg: r.angle_deg,
+                    },
+                );
+                let _ = k.release(sheet.body);
+                let tool = tool?;
+                for origin in &tool.record.face_roles {
+                    let generator = match origin.role {
+                        FaceRole::StartCap => Some(Generator::StartCap),
+                        FaceRole::EndCap => Some(Generator::EndCap),
+                        FaceRole::Side { loop_index, segment } => region
+                            .entity(loop_index as usize, segment as usize)
+                            .map(|entity| Generator::Side { entity }),
+                        _ => None,
+                    };
+                    if let Some(generator) = generator {
+                        faces.push((Origin { tag: tool.record.tag.clone(), role: origin.role }, generator, i));
+                    }
+                }
+                let next = if let Some(previous) = body {
+                    let joined = k.boolean(&tag("union"), BooleanOp::Union, previous, tool.body);
+                    let _ = k.release(tool.body);
+                    joined?.body
+                } else {
+                    tool.body
+                };
+                if let Some(previous) = mine.replace(next) {
+                    let _ = k.release(previous);
+                }
+                body = Some(next);
+            }
+            Ok(body)
+        };
+        match run() {
+            Ok(output) => {
+                Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None, version: 0 }
+            }
+            Err(error) => {
+                if let Some(body) = mine {
+                    let _ = self.kernel.release(body);
+                }
+                Built::failed(current, error.to_string())
+            }
         }
     }
 

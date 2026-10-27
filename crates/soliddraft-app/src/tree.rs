@@ -113,6 +113,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             let icon = match &f.kind {
                 FeatureKind::Sketch(_) => Icon::Sketch,
                 FeatureKind::Extrude(_) => Icon::Extrude,
+                FeatureKind::Revolve(_) => Icon::Revolve,
                 FeatureKind::Cut(_) => Icon::Cut,
                 FeatureKind::Fillet(_) => Icon::Fillet,
                 FeatureKind::Chamfer(_) => Icon::Chamfer,

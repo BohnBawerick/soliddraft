@@ -880,6 +880,10 @@ impl SolidDraftApp {
                             }),
                         );
                     }
+                    Some(ExitInto::Revolve) => {
+                        self.state.doc.selection = Some(Selection::Feature(id));
+                        self.apply(ctx, AppAction::StartRevolve);
+                    }
                     Some(ExitInto::Cut) => {
                         self.open_editor(None, EditorParams::Cut(CutParams::new(id)));
                     }
@@ -897,6 +901,24 @@ impl SolidDraftApp {
                     None => ExtrudeParams::default(),
                 };
                 self.open_editor(None, EditorParams::Extrude(params));
+            }
+            AppAction::StartRevolve => {
+                if self.state.in_sketch() {
+                    self.apply(ctx, AppAction::ExitSketch(Some(ExitInto::Revolve)));
+                    return;
+                }
+                match self.state.selected_sketch().filter(|id| self.state.doc.consumer_of(*id).is_none()) {
+                    Some(id) => self.open_editor(
+                        None,
+                        EditorParams::Revolve(soliddraft_model::RevolveFeature {
+                            sketch: soliddraft_model::FeatureId(id as u32),
+                            axis_origin: [0.0; 3],
+                            axis_direction: [0.0, 1.0, 0.0],
+                            angle_deg: 360.0,
+                        }),
+                    ),
+                    None => self.state.note("Select a closed meridian sketch to revolve", NoteKind::Info),
+                }
             }
             AppAction::StartCut => {
                 if self.state.in_sketch() {
@@ -990,6 +1012,7 @@ impl SolidDraftApp {
                         return;
                     }
                     FeatureKind::Extrude(p) => EditorParams::Extrude(p.clone()),
+                    FeatureKind::Revolve(r) => EditorParams::Revolve(r.clone()),
                     FeatureKind::Cut(p) => EditorParams::Cut(p.clone()),
                     FeatureKind::Fillet(p) => EditorParams::Fillet(p.clone()),
                     FeatureKind::Chamfer(p) => EditorParams::Chamfer(p.clone()),
@@ -1020,6 +1043,10 @@ impl SolidDraftApp {
             AppAction::CommitEditor => {
                 let Some(e) = self.close_editor() else { return };
                 let cmd = match (e.target, e.params) {
+                    (target, EditorParams::Revolve(r)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Revolve(r) },
+                        None => Command::AddFeature(FeatureKind::Revolve(r)),
+                    },
                     (Some(id), EditorParams::Extrude(p)) => Command::EditExtrude { id, params: p },
                     (None, EditorParams::Extrude(p)) => Command::AddExtrude { params: p, via_assistant: false },
                     (Some(id), EditorParams::Cut(p)) => Command::EditCut { id, params: p },

@@ -1,0 +1,114 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "collar",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              9,
+              6,
+              0
+            ],
+            "width": 6,
+            "height": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "revolve",
+      "arguments": {
+        "sketch": "Sketch1",
+        "axis_origin": [
+          0,
+          0,
+          0
+        ],
+        "axis_direction": [
+          0,
+          1,
+          0
+        ],
+        "angle_deg": 360
+      },
+      "label": "P2 full meridian revolution",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4071.5040790523717,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "chamfer",
+      "arguments": {
+        "edges": [
+          "Revolve1 · Edge 1",
+          "Revolve1 · Edge 3"
+        ],
+        "distance": 1
+      },
+      "label": "P2 collar original",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3998.20025046861,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ]
+    },
+    {
+      "tool": "edit_chamfer",
+      "arguments": {
+        "feature": "Chamfer1",
+        "distance": 0.75
+      },
+      "label": "P2 collar edited",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4029.9761511627316,
+          "tolerance": 0.005
+        }
+      ],
+      "drawing": true,
+      "export": [
+        "step",
+        "stl"
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3998.20025046861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4029.9761511627316,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ]
+}

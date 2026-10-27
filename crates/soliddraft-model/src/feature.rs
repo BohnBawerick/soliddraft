@@ -52,6 +52,8 @@ pub enum FeatureKind {
     Sketch(SketchFeature),
     /// A boss or cut swept from a sketch's closed regions.
     Extrude(ExtrudeFeature),
+    /// A sketch swept around a model-space axis.
+    Revolve(RevolveFeature),
     /// Rounds edges.
     Fillet(BlendFeature),
     /// Bevels edges.
@@ -71,6 +73,7 @@ impl FeatureKind {
     pub fn base_name(&self) -> &'static str {
         match self {
             FeatureKind::Sketch(_) => "Sketch",
+            FeatureKind::Revolve(_) => "Revolve",
             FeatureKind::Extrude(e) if e.operation == ExtrudeOp::Cut => "Cut-Extrude",
             FeatureKind::Extrude(_) => "Boss-Extrude",
             FeatureKind::Fillet(_) => "Fillet",
@@ -95,6 +98,7 @@ impl FeatureKind {
                     out.push(face.feature);
                 }
             }
+            FeatureKind::Revolve(r) => out.push(r.sketch),
             FeatureKind::Extrude(e) => {
                 if let ProfileSource::Sketch { feature } = e.profile {
                     out.push(feature);
@@ -124,6 +128,19 @@ impl FeatureKind {
         out.dedup();
         out
     }
+}
+
+/// A boss swept around an exact axis through the kernel's revolution operation.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RevolveFeature {
+    /// The closed meridian sketch.
+    pub sketch: FeatureId,
+    /// Point on the axis, in model millimetres.
+    pub axis_origin: [f64; 3],
+    /// Nonzero axis direction, in model coordinates.
+    pub axis_direction: [f64; 3],
+    /// Sweep angle in degrees, greater than zero and at most 360.
+    pub angle_deg: f64,
 }
 
 /// A sketch and the plane it is drawn on.
