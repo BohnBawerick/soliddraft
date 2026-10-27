@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use soliddraft_document::DocumentId;
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, Draft, EdgeId, Extrude, ExtrudeLimit, FaceId, FaceRole, Hole, HolePlacement, Kernel,
-    KernelError, KernelResult, Mirror, OpResult, OpTag, Origin, PatternLayout, Plane, Topology, Vec3,
+    BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FaceId, FaceRole, Hole, HolePlacement,
+    ImportOptions, ImportStepRequest, ImportStepResult, Kernel, KernelError, KernelResult, Mirror, OpResult, OpTag,
+    Origin, PatternLayout, Plane, SurfaceKind, Topology, Vec3,
 };
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
@@ -15,8 +16,8 @@ use soliddraft_tessellation::{Report, Settings};
 use crate::command::UndoEntry;
 use crate::feature::{
     BlendFeature, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind,
-    HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, RevolveFeature, SketchFeature,
-    SketchPlane,
+    HoleFeature, ImportStepFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource,
+    RevolveFeature, SketchFeature, SketchPlane,
 };
 use crate::materials::PartMaterials;
 use crate::rebuild::BuildCache;
@@ -744,6 +745,7 @@ impl Document {
             FeatureKind::Mirror(m) => self.build_mirror(f, m, current),
             FeatureKind::Draft(d) => self.build_draft(f, d, current),
             FeatureKind::Shell(s) => self.build_shell(f, s, current),
+            FeatureKind::ImportStep(i) => self.build_import(f, i, current),
         };
         cache.insert(key, built, &self.kernel)
     }
@@ -1278,6 +1280,82 @@ impl Document {
                 })
                 .collect()
         })
+    }
+
+    /// What the part says about the self-intersection of imported body `id`. A body with
+    /// curved faces or edges is not checked for it, and is never called validated. A
+    /// planar, straight-edged body gets no claim either, until the backend's check is
+    /// pinned. `None` when the import did not build.
+    pub fn import_check_note(&self, id: FeatureId) -> Option<String> {
+        let built = &self.built[self.built_index(id)?];
+        if !matches!(self.feature(id)?.kind, FeatureKind::ImportStep(_)) || !built.status.is_ok() {
+            return None;
+        }
+        let topology = self.view_of(built.output?).ok()?;
+        let curved = topology.faces.iter().any(|f| f.surface != SurfaceKind::Plane)
+            || topology.edges.iter().any(|e| e.curve != CurveKind::Line);
+        curved.then(|| {
+            "self-intersection not verified: this body has curved faces or edges, which are not checked for \
+             self-intersection. It is not marked validated."
+                .to_string()
+        })
+    }
+
+    fn build_import(&self, f: &Feature, i: &ImportStepFeature, current: Option<BodyId>) -> Built {
+        if current.is_some() {
+            return Built::failed(current, "an imported body must come first in the part");
+        }
+        if !i.hash_matches() {
+            return Built::failed(current, "the imported file does not match its sha256");
+        }
+        let decisions = match i.kernel_decisions() {
+            Ok(d) => d,
+            Err(message) => return Built::failed(current, message),
+        };
+        let request = ImportStepRequest {
+            name: &i.source_name,
+            source: &i.source,
+            sha256: &i.sha256,
+            options: &ImportOptions::default(),
+            decisions: &decisions,
+        };
+        match self.kernel.import_step(&OpTag::new(format!("{}.import", f.id)), &request) {
+            Ok(mut r) => {
+                let release = |r: &ImportStepResult| {
+                    for b in &r.bodies {
+                        let _ = self.kernel.release(b.result.body);
+                    }
+                };
+                if !r.left_open.is_empty() {
+                    release(&r);
+                    let names = r.left_open.join(", ");
+                    return Built::failed(
+                        current,
+                        format!(
+                            "{names} not imported until the gap is resolved: a declined or unanswered repair leaves the solid open and unbuilt. The original file was never changed"
+                        ),
+                    );
+                }
+                if r.bodies.len() != 1 {
+                    release(&r);
+                    let n = r.bodies.len();
+                    return Built::failed(current, format!("the file holds {n} solids; a part holds one body"));
+                }
+                let body = r.bodies.remove(0).result.body;
+                Built {
+                    status: FeatureStatus::Ok,
+                    output: Some(body),
+                    owned: Some(body),
+                    names: Vec::new(),
+                    sketch: None,
+                    version: 0,
+                }
+            }
+            Err(KernelError::Unsupported(what)) => {
+                Built::failed(current, format!("this build cannot import STEP files yet: the backend has no {what}"))
+            }
+            Err(err) => Built::failed(current, err.to_string()),
+        }
     }
 
     fn build_draft(&self, f: &Feature, d: &DraftFeature, current: Option<BodyId>) -> Built {

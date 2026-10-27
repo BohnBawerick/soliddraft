@@ -30,11 +30,17 @@ pub mod drawing;
 mod geometry;
 mod history;
 mod ids;
+mod import;
 mod profile;
 
 pub use geometry::{Aabb, Plane, Point2, Vec3};
 pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, HolePart, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
+pub use import::{
+    Approval, DecimalBounds, Decision, Disposition, ImportOptions, ImportStepRequest, ImportStepResult, ImportedBody,
+    PROPOSALS_FORMAT, Proposal, ProposalSet, REPAIR_FORMAT, RepairChange, RepairDerivative, RepairRecord, RepairSource,
+    question_id, question_index,
+};
 pub use profile::{Loop, PROFILE_JOIN_TOLERANCE, Profile, ProfileError, Segment};
 
 use serde::{Deserialize, Serialize};
@@ -800,6 +806,21 @@ pub trait Kernel: Send + Sync {
     }
 
     // Exchange.
+
+    /// Measures an imported STEP file and classifies every gap, moving no geometry. The
+    /// default reports `Unsupported`.
+    fn propose_import(&self, source: &[u8], options: &ImportOptions) -> KernelResult<ProposalSet> {
+        let _ = (source, options);
+        Err(KernelError::Unsupported("propose_import".into()))
+    }
+
+    /// Reads a STEP file as a body: automatic repairs and accepted decisions applied, a
+    /// declined proposal leaving the file's own geometry. The default reports
+    /// `Unsupported`.
+    fn import_step(&self, tag: &OpTag, request: &ImportStepRequest<'_>) -> KernelResult<ImportStepResult> {
+        let _ = (tag, request);
+        Err(KernelError::Unsupported("import_step".into()))
+    }
 
     /// Writes a solid as a STEP AP242 file, with a proven bound on the distance between
     /// the written and the exact geometry. A bound over `options.tolerance` is reported,

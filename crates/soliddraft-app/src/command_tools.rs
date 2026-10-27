@@ -1994,6 +1994,10 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
             "type": "draft", "faces": d.faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
             "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,
         }),
+        FeatureKind::ImportStep(i) => json!({
+            "type": "import_step", "source_name": i.source_name, "sha256": i.sha256,
+            "bytes": i.source.len(), "decisions": i.decisions,
+        }),
     }
 }
 

@@ -53,6 +53,7 @@ impl Dimension {
             | FeatureKind::Mirror(_)
             | FeatureKind::Draft(_)
             | FeatureKind::Shell(_)
+            | FeatureKind::ImportStep(_)
             | FeatureKind::Revolve(_) => None,
         }
     }
@@ -103,7 +104,7 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
         | FeatureKind::Draft(_)
         | FeatureKind::Shell(_)
         | FeatureKind::Revolve(_)) => Command::EditFeature { id, kind },
-        FeatureKind::Sketch(_) => return None,
+        FeatureKind::Sketch(_) | FeatureKind::ImportStep(_) => return None,
     })
 }
 

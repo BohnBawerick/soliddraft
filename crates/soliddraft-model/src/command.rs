@@ -440,6 +440,13 @@ impl Document {
             FeatureKind::Draft(d) if !(d.angle.is_finite() && d.angle.abs() < 90.0 && d.angle != 0.0) => {
                 Err(CommandError::Invalid(format!("draft angle must be between -90 and 90 and not 0, got {}", d.angle)))
             }
+            FeatureKind::ImportStep(i) if i.source.is_empty() => {
+                Err(CommandError::Invalid("the imported file is empty".into()))
+            }
+            FeatureKind::ImportStep(i) if !i.hash_matches() => {
+                Err(CommandError::Invalid("the imported file does not match its sha256".into()))
+            }
+            FeatureKind::ImportStep(i) => i.kernel_decisions().map(drop).map_err(CommandError::Invalid),
             _ => Ok(()),
         }
     }

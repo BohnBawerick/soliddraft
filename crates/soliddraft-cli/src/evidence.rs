@@ -271,7 +271,7 @@ fn references(doc: &soliddraft_model::Document) -> Value {
                 .map(|(i, face)| (ReferenceSlot::Face { index: i as u32 }, origin(face), vec![face]))
                 .chain(plane(&d.neutral))
                 .collect(),
-            FeatureKind::Pattern(_) | FeatureKind::Revolve(_) => Vec::new(),
+            FeatureKind::Pattern(_) | FeatureKind::Revolve(_) | FeatureKind::ImportStep(_) => Vec::new(),
         };
         if refs.is_empty() {
             continue;
