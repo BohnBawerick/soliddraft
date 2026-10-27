@@ -50,9 +50,11 @@ The [release workflow](RELEASING.md) also produces a static browser zip and a Gi
 
 `deploy/web/deploy.sh --latest-release` serves the highest stable `vMAJOR.MINOR.PATCH`
 tag by numeric version, including tags whose GitHub release is marked as a prerelease.
-The tag must be reachable from `origin/main`. Before the first tag exists, it deploys
-`main` once as a preview. Later main commits do not trigger deployments. Tags are
-immutable; publish a new patch tag to fix a release.
+The tag must be reachable from `origin/main` or its matching versioned release branch,
+for example `origin/release/0.1.0` for `v0.1.0`. The controller fetches both main and
+release branches, including release-only commits. Before the first tag exists, it
+deploys `main` once as a preview. Later main commits do not trigger deployments. Tags
+are immutable; publish a new patch tag to fix a release.
 
 The controller keeps its own clone, separate from development checkouts. Install the
 controller and compose file outside that clone so a release need not contain either

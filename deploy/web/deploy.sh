@@ -109,7 +109,9 @@ main() {
     mkdir -p "$(dirname "$src")"
     git clone --quiet "$repo" "$src"
   fi
-  git -C "$src" fetch --quiet --tags origin main
+  git -C "$src" fetch --quiet --prune --tags origin \
+    '+refs/heads/main:refs/remotes/origin/main' \
+    '+refs/heads/release/*:refs/remotes/origin/release/*'
   serving=$(served_commit)
   if [ "$mode" = --latest-release ]; then
     # Only stable vMAJOR.MINOR.PATCH tags. Version order, not tag creation time.
@@ -122,9 +124,11 @@ main() {
       previous=$(cat "$state/release" 2>/dev/null || true)
       if [ -n "$previous" ] && [ "$(printf '%s\n' "$previous" "$release" | sort -V | tail -n 1)" != "$release" ]; then return 0; fi
       ref=refs/tags/$release
-      git -C "$src" merge-base --is-ancestor "$ref^{commit}" origin/main || {
-        echo "Release $release is not on main" >&2; return 1;
-      }
+      if ! git -C "$src" merge-base --is-ancestor "$ref^{commit}" origin/main &&
+        ! git -C "$src" merge-base --is-ancestor "$ref^{commit}" "origin/release/${release#v}" 2>/dev/null; then
+        echo "Release $release is not on main or release/${release#v}" >&2
+        return 1
+      fi
     fi
   else
     git -C "$src" fetch --quiet origin "$mode"
