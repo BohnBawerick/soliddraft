@@ -1,0 +1,163 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "p3-rounded-boss",
+  "max_work": 20000000,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              20,
+              15,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              20,
+              15,
+              10
+            ],
+            "diameter": 16
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 12,
+        "flip": false
+      }
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      }
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Boss-Extrude2 \u00b7 Edge 1"
+        ],
+        "radius": 2
+      },
+      "label": "P3 concave junction radius 2"
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      }
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Boss-Extrude1 \u00b7 Edge 5",
+          "Boss-Extrude1 \u00b7 Edge 6",
+          "Boss-Extrude1 \u00b7 Edge 7",
+          "Boss-Extrude1 \u00b7 Edge 8"
+        ],
+        "radius": 1
+      },
+      "label": "P3 all four convex top edges radius 1",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14428.640126047918,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 2.5
+      },
+      "label": "P3 junction radius 2 to 2.5",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14455.207561827563,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      }
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14428.640126047918,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14455.207561827563,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/p3-rounded-boss.dwprt"
+      }
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/p3-rounded-boss.dwprt"
+      },
+      "label": "P3 reopen edited rounded boss",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 14455.207561827563,
+          "tolerance": 0.005
+        }
+      ]
+    }
+  ]
+}
