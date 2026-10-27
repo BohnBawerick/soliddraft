@@ -1098,6 +1098,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::ImportStep(_))) => Icon::Import,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Lattice(_))) => Icon::LinearPattern,
         (Selection::Feature(_), _) => Icon::Extrude,
+        (Selection::Body, _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,
         (Selection::Vertex(_), _) => Icon::Point,
@@ -1119,6 +1120,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
     let is_planar_face = matches!(sel, Selection::Face(f) if state.doc.named_face(f).is_some_and(|nf| nf.surface == soliddraft_kernel_api::SurfaceKind::Plane));
     egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
         let kind = match sel {
+            Selection::Body => "Body",
             Selection::Feature(_) => "Feature",
             Selection::Face(_) => "Face",
             Selection::Edge(_) => "Edge",
@@ -1216,6 +1218,15 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             }
             Selection::Vertex(_) => {}
+            Selection::Body => {
+                ui.label(
+                    egui::RichText::new(
+                        "The viewport shows every dimension that builds the body. Double-click one to edit it.",
+                    )
+                    .size(11.0)
+                    .color(theme::MUTED),
+                );
+            }
         });
         let _ = fmt_mm(0.0);
     });

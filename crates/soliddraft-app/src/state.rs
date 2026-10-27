@@ -122,6 +122,8 @@ pub enum AppAction {
     Assembly(crate::assembly::AssemblyAction),
     /// A step of a drag of a feature's dimension.
     DragDimension(DragStep),
+    /// Opens a dimension the selected body shows for editing.
+    EditDimension(crate::viewport::dimensions::DimensionTarget),
 }
 
 /// The steps of a drag of a feature's dimension, in the order a drag makes them.

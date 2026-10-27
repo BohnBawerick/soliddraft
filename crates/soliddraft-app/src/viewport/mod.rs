@@ -3,6 +3,7 @@
 
 pub mod assembly;
 pub mod camera;
+pub mod dimensions;
 pub mod environment;
 pub mod look;
 pub mod offscreen;
@@ -64,6 +65,8 @@ pub struct ViewportState {
     pub hover: Option<Picked>,
     pub hover_point: Option<Vec3>,
     pub rect: Rect,
+    /// The dimensions a selected body showed last frame.
+    pub dimensions: Vec<dimensions::ShownDimension>,
     pick: Arc<Mutex<PickSample>>,
     cube_hover: Option<StandardView>,
 }
@@ -77,6 +80,7 @@ impl Default for ViewportState {
             hover: None,
             hover_point: None,
             rect: Rect::NOTHING,
+            dimensions: Vec::new(),
             pick: Arc::new(Mutex::new(PickSample::default())),
             cube_hover: None,
         }
@@ -175,6 +179,10 @@ impl ViewportState {
         input.hover_id = hover_id;
         input.selected_id = selected_id;
         input.selected_feature = selected_feature;
+        input.selected_body = match selection {
+            Some(Selection::Body) => doc.display_body(),
+            _ => None,
+        };
         input.ghost = ghost;
         input.preview = preview;
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
@@ -189,6 +197,31 @@ impl ViewportState {
         }
         self.paint_origin_axes(&painter, doc, rect);
         self.paint_highlights(&painter, doc, selection, rect);
+        // A selected body shows the dimensions that build it. A click on one keeps the
+        // body selected and a double-click edits it; a double-click on the part selects
+        // the body.
+        let pointer = response.hover_pos();
+        let dims = if selection == Some(Selection::Body) && !sketching {
+            dimensions::paint(&painter, &self.camera, rect, doc, pointer)
+        } else {
+            Vec::new()
+        };
+        if let Some(d) = pointer.and_then(|p| dims.iter().find(|d| d.rect.contains(p))) {
+            events.clicked = None;
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            if response.double_clicked_by(egui::PointerButton::Primary) {
+                events.actions.push(AppAction::EditDimension(d.target));
+            }
+            response.clone().on_hover_text_at_pointer(format!("{} · double-click to edit", d.tip));
+        } else if response.double_clicked_by(egui::PointerButton::Primary)
+            && !sketching
+            && self.hover.is_some()
+            && doc.display_body().is_some()
+        {
+            events.clicked = None;
+            events.actions.push(AppAction::Select(Some(Selection::Body)));
+        }
+        self.dimensions = dims;
         self.paint_triad(&painter, rect);
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);

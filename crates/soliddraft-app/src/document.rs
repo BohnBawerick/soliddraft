@@ -705,11 +705,16 @@ pub struct VertexKey {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Selection {
+    /// The part's solid body: the running body at the rollback bar.
+    Body,
     Feature(FeatureId),
     Face(FaceId),
     Edge(EdgeId),
     Vertex(VertexKey),
 }
+
+/// What the tree, the property panel and the agent tools call the part's body.
+pub const BODY_NAME: &str = "Solid body";
 
 /// What a pick id in the id buffer stands for.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1657,6 +1662,7 @@ impl Document {
                 self.picks.iter().any(|p| matches!(p, PickEntry::Vertex(k, _) if *k == v)).then_some(sel)
             }
             Selection::Feature(id) => self.feature(id).map(|_| sel),
+            Selection::Body => None,
         };
     }
 
@@ -1954,6 +1960,14 @@ impl Document {
 
     pub fn describe(&self, sel: Selection) -> Option<EntityInfo> {
         match sel {
+            Selection::Body => {
+                self.display_body()?;
+                let end = self.rollback.unwrap_or(self.features.len()).min(self.features.len());
+                let built = self.features[..end].iter().filter(|f| f.body.is_some()).count();
+                let details =
+                    vec![("Built from".to_owned(), format!("{built} feature{}", if built == 1 { "" } else { "s" }))];
+                Some(EntityInfo { title: BODY_NAME.to_owned(), feature: None, details })
+            }
             Selection::Feature(id) => {
                 let f = self.feature(id)?;
                 let mut details = Vec::new();

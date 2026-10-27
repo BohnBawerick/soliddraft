@@ -127,6 +127,23 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             row(ui, RowSpec { indent: 1, icon: Icon::Point, name: "Origin", dim: true, ..RowSpec::plain() });
         }
         row(ui, RowSpec { indent: 0, icon: Icon::Material, name: "Material", sub: "Not set", ..RowSpec::plain() });
+        // The body row: selecting it shows every dimension that builds the body.
+        if state.doc.display_body().is_some() {
+            let r = row(
+                ui,
+                RowSpec {
+                    indent: 0,
+                    icon: Icon::Extrude,
+                    name: crate::document::BODY_NAME,
+                    selected: state.doc.selection == Some(Selection::Body),
+                    ..RowSpec::plain()
+                },
+            )
+            .on_hover_text("Select to show every dimension that builds the body");
+            if r.clicked() {
+                actions.push(AppAction::Select(Some(Selection::Body)));
+            }
+        }
 
         // Flatten features: absorbed sketches sit under their consumer.
         let absorbed: Vec<FeatureId> = state.doc.features.iter().filter_map(|f| f.kind.sketch()).collect();
