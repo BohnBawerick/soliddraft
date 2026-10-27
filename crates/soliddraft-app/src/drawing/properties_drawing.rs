@@ -39,7 +39,7 @@ pub(super) fn small_button(ui: &mut egui::Ui, rect: Rect, icon: Icon, tip: &str,
     let resp = ui.interact(rect, ui.id().with(("dpm_btn", tip)), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     let (bg, fg) = if primary {
-        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, Color32::WHITE)
+        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, theme::on_accent())
     } else {
         (if resp.hovered() { theme::line() } else { theme::hover() }, theme::ink())
     };
@@ -101,7 +101,7 @@ pub(super) fn choice(ui: &mut egui::Ui, on: bool, label: &str, tag: Option<&str>
 pub(super) fn primary_button(ui: &mut egui::Ui, label: &str) -> bool {
     ui.add_sized(
         vec2(ui.available_width() - 4.0, 26.0),
-        egui::Button::new(egui::RichText::new(label).color(Color32::WHITE).family(theme::medium()))
+        egui::Button::new(egui::RichText::new(label).color(theme::on_accent()).family(theme::medium()))
             .fill(theme::accent()),
     )
     .clicked()
@@ -321,8 +321,9 @@ fn needs_attention(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let end = lost.first().copied().unwrap_or(0);
-                    let reattach = egui::Button::new(egui::RichText::new("Reattach…").color(Color32::WHITE).size(11.5))
-                        .fill(theme::accent());
+                    let reattach =
+                        egui::Button::new(egui::RichText::new("Reattach…").color(theme::on_accent()).size(11.5))
+                            .fill(theme::accent());
                     if ui
                         .add(reattach)
                         .on_hover_text("One pick per lost end: click the new edge or point in the view")

@@ -350,7 +350,7 @@ pub fn window(ctx: &egui::Context, state: &mut AppState) {
             });
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let ok = egui::Button::new(egui::RichText::new("OK").color(Color32::WHITE)).fill(theme::accent());
+                let ok = egui::Button::new(egui::RichText::new("OK").color(theme::on_accent())).fill(theme::accent());
                 if ui.add(ok).clicked() {
                     done = Some(Done::Ok);
                 }

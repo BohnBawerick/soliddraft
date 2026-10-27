@@ -60,14 +60,14 @@ pub(super) fn strip(ui: &mut egui::Ui, s: &mut DrawingSession, rect: Rect, push:
         if on {
             painter.rect(
                 r,
-                CornerRadius { nw: 0, ne: 0, sw: 6, se: 6 },
-                theme::chrome(),
+                CornerRadius { nw: 0, ne: 0, sw: theme::RADIUS, se: theme::RADIUS },
+                theme::canvas_bg(),
                 Stroke::new(1.0, theme::line()),
                 StrokeKind::Inside,
             );
-            painter.hline((r.left() + 1.0)..=(r.right() - 1.0), rect.top() + 0.5, Stroke::new(1.0, theme::chrome()));
+            painter.hline((r.left() + 1.0)..=(r.right() - 1.0), rect.top() + 0.5, Stroke::new(1.0, theme::canvas_bg()));
         } else if resp.hovered() {
-            painter.rect_filled(r, CornerRadius { nw: 0, ne: 0, sw: 6, se: 6 }, theme::hover());
+            painter.rect_filled(r, CornerRadius { nw: 0, ne: 0, sw: theme::RADIUS, se: theme::RADIUS }, theme::hover());
         }
         if editing {
             let mut text = s.sheet_rename.as_ref().map(|(_, t)| t.clone()).unwrap_or_default();

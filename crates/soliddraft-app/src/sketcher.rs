@@ -730,7 +730,7 @@ fn paint_plane(painter: &egui::Painter, frame: &Frame<'_>, doc: &Document, sketc
     if pts.len() == 4 {
         painter.add(egui::Shape::convex_polygon(
             pts.clone(),
-            Color32::from_rgba_unmultiplied(0x1f, 0x5f, 0xd0, 10),
+            theme::accent_alpha(10),
             Stroke::new(1.0, theme::accent().gamma_multiply(0.35)),
         ));
     }
@@ -748,7 +748,7 @@ fn paint_regions(painter: &egui::Painter, frame: &Frame<'_>, sketch: &Sketch) {
     for outline in crate::sketch::profile::region_outlines(sketch) {
         let pts: Vec<Pos2> = outline.iter().filter_map(|p| frame.screen(*p)).collect();
         if pts.len() >= 3 {
-            let mesh = polygon_fill(&pts, Color32::from_rgba_unmultiplied(0x1f, 0x5f, 0xd0, 18));
+            let mesh = polygon_fill(&pts, theme::accent_alpha(18));
             painter.add(mesh);
         }
     }
@@ -900,9 +900,9 @@ fn paint_glyphs(painter: &egui::Painter, s: &SketchSession, glyphs: &[(Constrain
         let hover = s.hover == Some(SketchSel::Constraint(*id));
         let bad = conflicting.contains(id);
         let (bg, fg) = if sel {
-            (theme::accent(), Color32::WHITE)
+            (theme::accent(), theme::on_accent())
         } else if bad {
-            (theme::error(), Color32::WHITE)
+            (theme::error(), theme::on_accent())
         } else if hover {
             (theme::selection_bg(), theme::selection_ink())
         } else {

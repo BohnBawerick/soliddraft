@@ -434,7 +434,7 @@ fn candidate_card(
                 ui.label(egui::RichText::new(format!("· {tag}")).size(11.5).color(theme::muted()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let use_it =
-                        egui::Button::new(egui::RichText::new("Use this part").color(Color32::WHITE).size(11.5))
+                        egui::Button::new(egui::RichText::new("Use this part").color(theme::on_accent()).size(11.5))
                             .fill(theme::accent());
                     if ui.add(use_it).clicked() {
                         actions.push(DrawingAction::RepairModel { path: c.path.clone(), replace: !same_id });
@@ -485,11 +485,7 @@ pub fn bar(ui: &mut egui::Ui, s: &DrawingSession, rect: Rect, push: &mut impl Fn
     };
     let width = (rect.width() - 40.0).min(820.0);
     let area = Rect::from_min_size(egui::pos2(rect.center().x - width / 2.0, rect.top() + 38.0), vec2(width, 44.0));
-    let bg = if colour == theme::error() {
-        Color32::from_rgb(0xfd, 0xee, 0xe8)
-    } else {
-        Color32::from_rgb(0xfd, 0xf6, 0xe3)
-    };
+    let bg = if colour == theme::error() { theme::error_soft() } else { theme::warn_soft() };
     ui.scope_builder(
         egui::UiBuilder::new().max_rect(area).layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
@@ -520,7 +516,7 @@ pub fn bar(ui: &mut egui::Ui, s: &DrawingSession, rect: Rect, push: &mut impl Fn
                 {
                     push(DrawingAction::DismissMarker);
                 }
-                let button = egui::Button::new(egui::RichText::new(label).color(Color32::WHITE)).fill(colour);
+                let button = egui::Button::new(egui::RichText::new(label).color(theme::on_accent())).fill(colour);
                 if ui.add(button).clicked() {
                     push(action);
                 }
@@ -593,14 +589,14 @@ pub fn panel(ui: &mut egui::Ui, s: &DrawingSession, part_open: bool, actions: &m
             let newer = matches!(state, LinkState::Newer { .. }) || s.doc.is_stale();
             if newer {
                 let rebuild =
-                    egui::Button::new(egui::RichText::new("Rebuild").color(Color32::WHITE)).fill(theme::warn());
+                    egui::Button::new(egui::RichText::new("Rebuild").color(theme::on_accent())).fill(theme::warn());
                 if ui.add(rebuild).on_hover_text("Bring the views to the current revision (Ctrl+B)").clicked() {
                     actions.push(DrawingAction::Rebuild);
                 }
             }
             if state == LinkState::Missing {
                 let repair =
-                    egui::Button::new(egui::RichText::new("Repair…").color(Color32::WHITE)).fill(theme::error());
+                    egui::Button::new(egui::RichText::new("Repair…").color(theme::on_accent())).fill(theme::error());
                 if ui.add(repair).clicked() {
                     actions.push(DrawingAction::ShowRepair { replace: false });
                 }

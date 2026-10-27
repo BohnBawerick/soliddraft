@@ -641,7 +641,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     }
     if let Some(err) = spec.error {
         painter.circle_filled(pos2(x0 + 29.0, rect.top() + 6.0), 3.0, theme::error());
-        return resp.on_hover_text(egui::RichText::new(err).color(Color32::WHITE));
+        return resp.on_hover_text(egui::RichText::new(err).color(theme::ink()));
     }
     if let Some(w) = spec.warn {
         icons::paint(
@@ -650,7 +650,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             Rect::from_center_size(pos2(x0 + 30.0, rect.top() + 6.5), vec2(9.0, 9.0)),
             theme::warn(),
         );
-        return resp.on_hover_text(egui::RichText::new(w).color(Color32::WHITE));
+        return resp.on_hover_text(egui::RichText::new(w).color(theme::ink()));
     }
     resp
 }

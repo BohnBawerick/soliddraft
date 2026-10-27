@@ -21,8 +21,8 @@ use soliddraft_drawing::{
 };
 use soliddraft_kernel_api::Point2;
 
-/// Colours of the sheet.
-const CANVAS_BG: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xee);
+/// Colours of the sheet. The paper stays white in both modes; the canvas around it
+/// comes from the theme.
 const PAPER: Color32 = Color32::WHITE;
 const CHANGED_FILL: Color32 = Color32::from_rgb(0xff, 0xf1, 0xc2);
 const HIT_PX: f32 = 6.0;
@@ -360,7 +360,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let sheet2 = Sheet2 { painter: &painter, cam: s.camera, rect };
 
     // Paper.
-    painter.rect_filled(rect, CornerRadius::ZERO, CANVAS_BG);
+    painter.rect_filled(rect, CornerRadius::ZERO, theme::canvas_bg());
     let p0 = sheet2.s(Point2::new(0.0, paper.1));
     let p1 = sheet2.s(Point2::new(paper.0, 0.0));
     let paper_rect = Rect::from_min_max(p0, p1);
@@ -1360,8 +1360,7 @@ fn banner(
     let detail = parts.join(" · ");
     let width = (rect.width() - 40.0).min(820.0);
     let area = Rect::from_min_size(pos2(rect.center().x - width / 2.0, rect.top() + 38.0), vec2(width, 44.0));
-    let bg =
-        if r.dangling.is_empty() { Color32::from_rgb(0xfd, 0xf6, 0xe3) } else { Color32::from_rgb(0xfd, 0xee, 0xe8) };
+    let bg = if r.dangling.is_empty() { theme::warn_soft() } else { theme::error_soft() };
     let stroke = if r.dangling.is_empty() { theme::warn() } else { theme::error() };
     ui.scope_builder(
         egui::UiBuilder::new().max_rect(area).layout(egui::Layout::left_to_right(egui::Align::Center)),
@@ -1395,7 +1394,7 @@ fn banner(
                     push(DrawingAction::UndoUpdate);
                 }
                 let review =
-                    egui::Button::new(egui::RichText::new("Review").color(Color32::WHITE)).fill(theme::accent());
+                    egui::Button::new(egui::RichText::new("Review").color(theme::on_accent())).fill(theme::accent());
                 if ui.add(review).on_hover_text("Open the Needs attention list").clicked() {
                     push(DrawingAction::Review);
                 }

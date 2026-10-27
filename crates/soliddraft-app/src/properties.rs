@@ -48,7 +48,7 @@ fn small_button(ui: &mut egui::Ui, rect: Rect, icon: Icon, tip: &str, primary: b
     let resp = ui.interact(rect, ui.id().with(("pm_btn", tip)), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     let (bg, fg) = if primary {
-        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, egui::Color32::WHITE)
+        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, theme::on_accent())
     } else {
         (if resp.hovered() { theme::line() } else { theme::hover() }, theme::ink())
     };
@@ -1154,7 +1154,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         {
             ui.add_space(8.0);
             egui::Frame::new()
-                .fill(egui::Color32::from_rgb(0xfd, 0xf4, 0xe3))
+                .fill(theme::warn_soft())
                 .stroke(Stroke::new(1.0, theme::warn().gamma_multiply(0.6)))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(egui::Margin::symmetric(8, 6))

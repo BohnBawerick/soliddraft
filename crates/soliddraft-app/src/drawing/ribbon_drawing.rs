@@ -51,7 +51,7 @@ fn groups(state: &AppState) -> Vec<Group> {
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let Some(current) = state.drawing.session.as_ref().map(|s| s.tab) else { return };
     let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::panel());
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::chrome());
     let mut x = strip.left() + 10.0;
     let mut chosen = None;
     for tab in DrawingTab::ALL {
@@ -67,13 +67,17 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if on {
             ui.painter().rect(
                 r,
-                CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
-                theme::chrome(),
+                CornerRadius { nw: theme::RADIUS, ne: theme::RADIUS, sw: 0, se: 0 },
+                theme::panel(),
                 Stroke::new(1.0, theme::line()),
                 StrokeKind::Inside,
             );
         } else if resp.hovered() {
-            ui.painter().rect_filled(r, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, theme::hover());
+            ui.painter().rect_filled(
+                r,
+                CornerRadius { nw: theme::RADIUS, ne: theme::RADIUS, sw: 0, se: 0 },
+                theme::hover(),
+            );
         }
         let color = if on { theme::ink() } else { theme::muted() };
         ui.painter().galley(r.center() - galley.size() / 2.0, galley, color);
@@ -87,7 +91,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
         let w = galley.size().x + 24.0;
         if current == tab {
-            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::chrome()));
+            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::panel()));
         }
         x += w + 2.0;
     }
@@ -104,7 +108,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     }
 
     let (body, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_BODY_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::chrome());
+    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::panel());
     ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let groups = groups(state);
     let mut x = body.left() + 8.0;
