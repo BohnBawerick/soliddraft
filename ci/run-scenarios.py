@@ -474,10 +474,18 @@ def timings(steps):
              "pass": s["pass"]} for s in steps if "label" in s]
 
 
-def shows_solid(displayed):
-    """Whether the display reply shows a solid. Only a reply that says `solid: false` has none;
-    a failed or successful capture owes this step its display, whatever files exist."""
-    return (displayed.get("structuredContent") or {}).get("solid") is not False
+def no_solid(request, command, displayed):
+    """Whether the display reply shows no solid, and why a reply that claims none cannot.
+
+    Only a successful reply for this request and command revision may say `solid: false`.
+    Every other reply owes the step its display, whatever files exist."""
+    reply = displayed.get("structuredContent") or {}
+    if reply.get("solid") is not False:
+        return False, None
+    if displayed.get("isError"):
+        return False, "a failed reply cannot report no solid"
+    reason = answers(request, command, reply)
+    return reason is None, reason
 
 
 def wait(client, entry, name, arguments):
@@ -531,7 +539,6 @@ def run(args):
             started = time.perf_counter_ns()
             displayed = wait(client, entry, "scenario_display", {})
             display_ms = (time.perf_counter_ns() - started) / 1_000_000
-            solid = shows_solid(displayed)
             written = wait(client, entry, "scenario_evidence", {})
             if written.get("isError"):
                 raise RuntimeError(f"bundle evidence was not written: {written}")
@@ -541,6 +548,10 @@ def run(args):
                          "phase": "refusal" if result.get("isError") else command_phase(step["tool"])}]
             entry["feature_count"] = len(command["summary"]["features"])
             checks = entry["checks"]
+            none, reason = no_solid(number, command, displayed)
+            if reason is not None:
+                checks.append({"check": "no-solid reply answers this request", "reason": reason, "pass": False})
+            solid = not none
             expected_error = bool(step.get("refusal") or step.get("refused"))
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == expected_error})
             if command.get("request") != number:
@@ -585,7 +596,7 @@ def run(args):
                     name for name in ("display.json", "display.kernel.json") if not (directory / name).exists()]
                 if lost:
                     checks.append({"check": "display evidence written", "pass": False,
-                                   "reason": f"scenario_display showed a solid but wrote no {' or '.join(lost)}"})
+                                   "reason": f"scenario_display wrote no {' or '.join(lost)} for this step's solid"})
                 # Without its capture calls the display still keeps its whole wait in the click.
                 log = directory / "display.kernel.json"
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",

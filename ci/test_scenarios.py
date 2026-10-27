@@ -425,6 +425,16 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertTrue(report["pass"])
         self.assertEqual(self.code, 0)
 
+    def test_a_stale_or_failed_no_solid_reply_cannot_skip_the_display(self):
+        for mode, reason in (("stale-no-solid", "stale"), ("failed-no-solid", "failed")):
+            with self.subTest(mode=mode):
+                report, checks = self.run_step(mode)
+                self.assertFalse(checks["no-solid reply answers this request"]["pass"])
+                self.assertIn(reason, checks["no-solid reply answers this request"]["reason"])
+                self.assertNotEqual(report["steps"][0]["intervals"]["preview"]["ends"],
+                                    "command reply, no solid to show")
+                self.assertFalse(report["pass"])
+
     def test_early_command_reply_cannot_pass(self):
         report, checks = self.run_step("early")
         self.assertFalse(checks["click ends at a visible selectable edit"]["pass"])
