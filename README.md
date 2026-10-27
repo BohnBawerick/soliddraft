@@ -67,7 +67,7 @@ Waiting commands stay visible and disabled with a tooltip naming their Catallax 
 | Sweep and loft; spline, ellipse and text profiles | 5 |
 | STEP import | 6 |
 
-Parts export as STEP AP242 with Catallax's proven deviation, and as STL and 3MF from Catallax's meshes, from File > Export or `soliddraft export`; see [part export](docs/exchange.md). IGES import and export, surfacing and sheet metal are not available. Assemblies are in progress. The [roadmap](docs/roadmap.md) orders the remaining work.
+Parts export as STEP AP242 with Catallax's proven deviation, and as STL and 3MF from Catallax's meshes, from File > Export or `soliddraft export`; see [part export](docs/exchange.md). IGES import and export, surfacing and sheet metal are not available. In the desktop app an assembly opens in a tab beside the part: File > New assembly or Make assembly from part, insert parts from a file dialog or by dropping their files on the window, place each by typing its position and rotation, then save and reopen it; see [assemblies](docs/assemblies.md#in-the-app). Mates come next. The [roadmap](docs/roadmap.md) orders the remaining work.
 
 ## Building
 

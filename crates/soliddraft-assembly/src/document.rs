@@ -182,9 +182,16 @@ pub struct Selection {
 impl AssemblyDocument {
     /// A new, empty, unsaved assembly.
     pub fn new(name: impl Into<String>) -> AssemblyDocument {
+        AssemblyDocument::new_with(name, OpenOptions::default())
+    }
+
+    /// A new, empty, unsaved assembly that loads what is inserted into it as an opened
+    /// one would, with `options`: before its first save it has no folder to resolve
+    /// references from, so its parts come from `options.revisions` and `options.display`.
+    pub fn new_with(name: impl Into<String>, options: OpenOptions) -> AssemblyDocument {
         let assembly = Assembly::new(name);
         let id = DocumentId::new();
-        let mut doc = AssemblyDocument::from_parts(None, id, assembly, Vec::new(), OpenOptions::default());
+        let mut doc = AssemblyDocument::from_parts(None, id, assembly, Vec::new(), options);
         let mut lookup = Lookup::new_empty(&doc.options);
         doc.restructure(&mut lookup).expect("an empty assembly flattens");
         doc
@@ -309,7 +316,11 @@ impl AssemblyDocument {
             .filter(|(_, d)| d.kind == DocKind::Part && d.state == LoadState::Unresolved)
             .filter_map(|(i, d)| Some((i, self.refs.get(&i)?.clone(), d.quality)))
             .collect();
-        let mut refs: Vec<(DefinitionIndex, DocRef, DefinitionIndex)> = if self.options.check_freshness {
+        // An unsaved assembly has no folder to resolve its references from, so its parts
+        // stay unchecked rather than missing until it is saved.
+        let mut refs: Vec<(DefinitionIndex, DocRef, DefinitionIndex)> = if self.options.check_freshness
+            && self.path.is_some()
+        {
             self.refs.iter().map(|(i, r)| (*i, r.clone(), self.parents.get(i).copied().unwrap_or(self.root))).collect()
         } else {
             Vec::new()
@@ -1125,12 +1136,13 @@ impl AssemblyDocument {
             Some(p) => soliddraft_document::kind::saved_path(p, DocKind::Assembly),
             None => return Err(FileError::Io(std::io::Error::other("the assembly has no file yet; name one"))),
         };
-        // References store paths relative to the file, so a new folder rewrites them.
-        if let Some(old) = &self.path
-            && old.parent() != path.parent()
-        {
-            for s in &mut self.assembly.sources {
-                let target = s.document.stored_path(old);
+        // References store paths relative to the file, so a new folder rewrites them. An
+        // assembly saved for the first time holds them as they were given: absolute, or
+        // relative to the working folder.
+        let old = self.path.clone().unwrap_or_default();
+        if self.path.is_none() || old.parent() != path.parent() {
+            for s in self.assembly.sources.iter_mut().filter(|s| !s.document.path.is_empty()) {
+                let target = s.document.stored_path(&old);
                 s.document.set_path(&path, &target);
             }
         }

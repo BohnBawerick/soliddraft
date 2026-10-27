@@ -7,10 +7,11 @@ use soliddraft_app::app::{Automation, SolidDraftApp};
 
 #[cfg(not(target_arch = "wasm32"))]
 const USAGE: &str =
-    "soliddraft [FILE.dwprt | FILE.dwdrw] [--demo] [--bench [SECONDS]] [--screenshot PATH [--after FRAMES] [--stay]] [--size WxH] [--no-vsync]
+    "soliddraft [FILE.dwprt | FILE.dwasm | FILE.dwdrw] [--demo] [--bench [SECONDS]] [--screenshot PATH [--after FRAMES] [--stay]] [--size WxH] [--no-vsync]
           [--mcp [PORT]] [--no-assistant] [--preset fast|studio|realistic]
 
   FILE.dwprt        open a saved part (.dwpart still opens)
+  FILE.dwasm        open a saved assembly in a tab beside the part
   FILE.dwdrw        open a saved drawing, and its part when it is found
   --demo            start with a sample part (three extrudes)
   --bench [SECONDS] load a 10,000+ triangle body, orbit with vsync off, print frame-time statistics and exit

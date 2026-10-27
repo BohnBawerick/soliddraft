@@ -24,9 +24,9 @@ struct Group {
     items: Vec<Item>,
 }
 
-/// The current tab's panels, from the command registry.
-fn groups(state: &AppState) -> Vec<Group> {
-    commands::ribbon(state.ribbon_tab)
+/// A tab's panels, from the command registry.
+fn groups(state: &AppState, tab: commands::Tab) -> Vec<Group> {
+    commands::ribbon(tab)
         .into_iter()
         .map(|(label, items)| Group {
             label,
@@ -48,6 +48,10 @@ fn groups(state: &AppState) -> Vec<Group> {
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     if state.drawing.is_active() {
         crate::drawing::ribbon_drawing::show(ui, state);
+        return;
+    }
+    if state.assembly.is_active() {
+        show_assembly(ui, state);
         return;
     }
     // Tab strip.
@@ -99,11 +103,38 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         x += w + 2.0;
     }
 
-    // Body.
+    body(ui, state, commands::Tab::Part(state.ribbon_tab));
+}
+
+/// The assembly's ribbon: its one tab, in the part ribbon's grammar.
+fn show_assembly(ui: &mut egui::Ui, state: &mut AppState) {
+    let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::PANEL);
+    let tab = commands::Tab::Assembly;
+    let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+    let r = Rect::from_min_size(
+        pos2(strip.left() + 10.0, strip.top() + 4.0),
+        vec2(galley.size().x + 24.0, strip.height() - 4.0),
+    );
+    ui.painter().rect(
+        r,
+        CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
+        theme::BG,
+        Stroke::new(1.0, theme::LINE),
+        StrokeKind::Inside,
+    );
+    ui.painter().galley(r.center() - galley.size() / 2.0, galley, theme::INK);
+    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline((r.left() + 1.0)..=(r.right() - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::BG));
+    body(ui, state, tab);
+}
+
+/// A tab's panels of buttons.
+fn body(ui: &mut egui::Ui, state: &mut AppState, tab: commands::Tab) {
     let (body, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_BODY_HEIGHT), Sense::hover());
     ui.painter().rect_filled(body, CornerRadius::ZERO, theme::BG);
     ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
-    let groups = groups(state);
+    let groups = groups(state, tab);
     let mut x = body.left() + 8.0;
     let top = body.top() + 6.0;
     let item_h = body.height() - 26.0;

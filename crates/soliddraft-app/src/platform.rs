@@ -35,6 +35,20 @@ pub fn open_path(title: &str, filter: &str, extensions: &[&str]) -> Option<PathB
     }
 }
 
+/// Asks for one or more files with one of `extensions`, such as the parts to insert in an
+/// assembly. The browser cannot hand over several files by path, so it asks for none.
+pub fn open_paths(title: &str, filter: &str, extensions: &[&str]) -> Option<Vec<PathBuf>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rfd::FileDialog::new().add_filter(filter, extensions).set_title(title).pick_files()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (title, filter, extensions);
+        None
+    }
+}
+
 /// Asks for a folder, for File locations. The browser has no folders to pick.
 pub fn pick_folder(title: &str) -> Option<PathBuf> {
     #[cfg(not(target_arch = "wasm32"))]

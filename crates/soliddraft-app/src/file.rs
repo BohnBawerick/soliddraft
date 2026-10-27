@@ -12,9 +12,11 @@ use std::sync::Arc;
 use soliddraft_document::DocKind;
 pub use soliddraft_model::file::{EXTENSION, Extras, FORMAT, LEGACY_EXTENSION};
 
-/// The extensions the Open dialog offers: parts and drawings, current and old names.
-pub const OPEN_EXTENSIONS: [&str; 4] = [
+/// The extensions the Open dialog offers: parts, assemblies and drawings, current and old
+/// names.
+pub const OPEN_EXTENSIONS: [&str; 5] = [
     EXTENSION,
+    soliddraft_document::kind::ASSEMBLY_EXTENSION,
     soliddraft_document::DRAWING_EXTENSION,
     LEGACY_EXTENSION,
     soliddraft_document::LEGACY_DRAWING_EXTENSION,

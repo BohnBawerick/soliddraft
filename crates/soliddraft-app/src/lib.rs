@@ -8,6 +8,7 @@
 
 pub mod app;
 pub mod app_tools;
+pub mod assembly;
 pub mod assistant;
 pub mod chat;
 #[macro_use]
