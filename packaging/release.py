@@ -133,11 +133,38 @@ def pull_request_notes(pulls, previous):
     )
 
 
+def source_revisions():
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    adapter = ROOT / "crates/soliddraft-kernel-catallax"
+    manifest = tomllib.loads((adapter / "Cargo.toml").read_text())
+    pins = {dependency["rev"] for name, dependency in manifest["dependencies"].items()
+            if name.startswith("catallax-")}
+    if len(pins) != 1 or not re.fullmatch(r"[0-9a-f]{40}", next(iter(pins))):
+        raise ValueError("Catallax dependencies must share one full commit pin")
+    kernel = pins.pop()
+    declared = re.findall(r'^pub const CATALLAX_REVISION: &str = "([0-9a-f]{40})";$',
+                          (adapter / "src/lib.rs").read_text(), re.MULTILINE)
+    if declared != [kernel]:
+        raise ValueError("Catallax backend identity differs from its dependency pin")
+    locked = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
+    expected = f"git+https://github.com/BohnBawerick/catallax?rev={kernel}#{kernel}"
+    sources = {package.get("source") for package in locked
+               if package["name"].startswith("catallax-")}
+    if sources != {expected}:
+        raise ValueError("Locked Catallax sources differ from the dependency pin")
+    return revision, kernel
+
+
 def notes(pulls, previous):
     current = formats("HEAD")
     old = formats(previous) if previous else {}
+    revision, kernel = source_revisions()
     lines = [f"# SolidDraft {version()}{' alpha' if version().startswith('0.') else ''}", "",
              "Alpha software. Keep backups of your documents before opening or saving them in a newer release.", "",
+             "## Source revisions", "",
+             f"- SolidDraft: `{revision}`.",
+             f"- Catallax dependency and lockfile: `{kernel}`.", "",
+             "These identify the packaged sources, not a claim of completed application acceptance.", "",
              "## Document formats", ""]
     for kind, value in current.items():
         change = f"changed from {old[kind]}" if kind in old and old[kind] != value else "unchanged" if old else "first release"

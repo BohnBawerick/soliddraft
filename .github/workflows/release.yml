@@ -33,6 +33,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Check release source identity regressions
+        run: python3 -m unittest discover -s packaging -p 'test_release.py'
       - id: version
         name: Validate version and release source
         env:
