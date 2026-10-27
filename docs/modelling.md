@@ -77,6 +77,19 @@ overlap changes nothing. A reversed boss or cut starts on the face.
 
 A hole's faces are named by the hole's place in the point list and the part of the hole: entry, counterbore wall and floor, countersink, wall, floor or tip. A pattern's or mirror's copy faces are named by the copy number and ranked by the names of the faces they copy, so editing the spacing, the count or an earlier feature keeps them. A drafted face keeps the name of the face it tilts. An extrusion up to a boundary starts on its sketch face rather than behind it, because a start inside the material would stop at the material's exit.
 
+Mass properties are requested explicitly from Evaluate, Mass props, after selecting
+a solid feature. Editing or displaying the hole does not request this proof. The
+kernel request includes volume, surface area, centre of mass and centroidal
+unit-density inertia. The application response exposes volume, area and centroid
+as midpoints of the kernel's proven enclosures. A measurement does not alter the
+hole's feature definition or history.
+
+`ci/scenarios/drill-point.json` keeps the 118-degree drill-point build and its
+diameter/depth edit under the ordinary 20-million-work policy. Its volume checks
+request full mass properties only after the changed body has reached the viewport.
+The complete requested measurement has its own elapsed time, separate from the
+hole click. Both the original and edited case must retain their existing values.
+
 ## Commands, undo and redo
 
 Every change is a `Command`: add, insert, edit, set a sketch dimension, rename, delete,
