@@ -9,6 +9,7 @@ mod diagnostics;
 mod drawing_queries;
 mod edge_control;
 mod frames;
+mod identity;
 mod native;
 mod shell;
 mod step;

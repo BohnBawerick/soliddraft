@@ -192,6 +192,46 @@ fn drafts_tilt_planar_faces_about_the_neutral_plane() {
 }
 
 #[test]
+fn unchanged_drafted_entities_keep_their_ids_after_their_roots_are_refined() {
+    let k = CatallaxKernel::new();
+    let b = block(&k, "block", 40.0, 30.0, 0.0, 20.0);
+    let sides: Vec<_> = k
+        .topology(b)
+        .unwrap()
+        .faces
+        .iter()
+        .filter(|f| f.normal.is_some_and(|n| n.distance(Vec3::X) < 1e-12 || n.distance(-Vec3::X) < 1e-12))
+        .map(|f| f.id)
+        .collect();
+    let params = Draft { pull: Vec3::Z, neutral_origin: Vec3::ZERO, neutral_normal: Vec3::Z, angle_deg: 3.0 };
+    let drafted = k.draft(&OpTag::new("draft"), b, &sides, &params).unwrap().body;
+    let before = k.topology(drafted).unwrap();
+    // A measurement and a finer mesh refine the drafted corners' exact roots between
+    // the parent's build and the child's, as background display refinement can.
+    k.measured_topology(drafted).unwrap();
+    k.tessellate(drafted, &TessellationParams { chord_height: 0.01, ..TessellationParams::default() }).unwrap();
+    let circle = Profile::circle(Plane::XY.with_origin(Vec3::new(0.0, 0.0, 20.0)), Point2::new(0.0, 0.0), 5.0);
+    let sheet = k.create_body_from_profile(&OpTag::new("boss"), &circle).unwrap().body;
+    let boss = k.extrude(&OpTag::new("boss"), sheet, &Extrude { distance: 5.0, direction: None }).unwrap().body;
+    let joined = k.boolean(&OpTag::new("join"), BooleanOp::Union, drafted, boss).unwrap();
+    let after = k.topology(joined.body).unwrap();
+    // The boss only touches the top, so everything below it is the parent's.
+    let below = |z: f64| z < 20.0 - 1e-9;
+    for face in before.faces.iter().filter(|f| below(f.centroid.z)) {
+        assert!(after.faces.iter().any(|g| g.id == face.id), "face {:?} at {:?} lost its id", face.id, face.centroid);
+    }
+    for edge in before.edges.iter().filter(|e| below(e.midpoint.z)) {
+        assert!(after.edges.iter().any(|g| g.id == edge.id), "edge {:?} at {:?} lost its id", edge.id, edge.midpoint);
+    }
+    for vertex in before.vertices.iter().filter(|v| below(v.position.z)) {
+        assert!(after.vertices.iter().any(|g| g.id == vertex.id), "vertex {:?} lost its id", vertex.position);
+    }
+    let changed = &joined.record.faces;
+    let gone: Vec<_> = changed.deleted.iter().chain(changed.split.iter().map(|s| &s.from)).collect();
+    assert!(before.faces.iter().filter(|f| below(f.centroid.z)).all(|f| !gone.contains(&&f.id)), "{changed:?}");
+}
+
+#[test]
 fn extrusions_stop_at_the_next_boundary_or_a_face() {
     let k = CatallaxKernel::new();
     let plate = block(&k, "plate", 60.0, 40.0, 0.0, 5.0);
