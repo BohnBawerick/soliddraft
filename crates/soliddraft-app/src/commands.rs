@@ -526,7 +526,6 @@ impl CommandSpec {
     /// Commands whose geometry is waiting for Catallax, in roadmap section 6 order.
     pub fn catallax_wait(&self) -> Option<&'static str> {
         match self.id {
-            "shell" => Some("Arrives with Catallax stage 3"),
             "sweep" | "loft" => Some("Arrives with Catallax stage 5"),
             _ => None,
         }
@@ -1074,7 +1073,12 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Verb, "", tools::chamfer_params)
 .undo(Undo::Step),
         cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
-            .on(Features, "Finish", Small),
+            .on(Features, "Finish", Small)
+            .run(|_| AppAction::StartShell)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Shell(_))))
+            .hint(|s| (!has_body(s)).then(|| "Shell needs a body".into()))
+            .undo(Undo::Step),
         cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle about a neutral plane")
             .on(Features, "Finish", Small)
             .run(|_| AppAction::StartDraft)
@@ -2009,7 +2013,7 @@ mod tests {
     #[test]
     fn waiting_commands_stay_visible_disabled_and_name_their_stages() {
         let state = AppState::new(crate::demo_document());
-        for (id, stages) in [("shell", &[3][..]), ("sweep", &[5][..]), ("loft", &[5][..])] {
+        for (id, stages) in [("sweep", &[5][..]), ("loft", &[5][..])] {
             let command = get(id).unwrap();
             assert!(!command.ribbon.is_empty(), "{id}");
             assert!((command.shown)(&state), "{id}");

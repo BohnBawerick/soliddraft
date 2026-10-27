@@ -126,7 +126,7 @@ fn the_arrow_keys_move_the_choice() {
 }
 
 #[test]
-fn a_disabled_command_says_why_from_the_palette() {
+fn shell_without_a_body_says_why_from_the_palette() {
     let _turn = gpu_turn();
     if !gpu_available() {
         eprintln!("skipping: no GPU adapter");
@@ -144,6 +144,6 @@ fn a_disabled_command_says_why_from_the_palette() {
     harness.key_press(Key::Enter);
     harness.run_steps(3);
     let state = &harness.state().state;
-    assert!(state.editor.is_none(), "no shell until Catallax has it");
-    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Arrives with Catallax stage 3"));
+    assert!(state.editor.is_none(), "shell needs an input body");
+    assert_eq!(state.note.as_ref().map(|n| n.text.as_str()), Some("Shell needs a body"));
 }

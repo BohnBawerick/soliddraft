@@ -1903,6 +1903,10 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
         FeatureKind::Mirror(m) => {
             json!({ "type": "mirror", "plane": plane_ref_label(&m.plane), "keep_original": m.keep_original })
         }
+        FeatureKind::Shell(s) => json!({
+            "type": "shell", "open_faces": s.open_faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
+            "thickness": s.thickness,
+        }),
         FeatureKind::Draft(d) => json!({
             "type": "draft", "faces": d.faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
             "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,

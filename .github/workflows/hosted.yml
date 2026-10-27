@@ -197,6 +197,7 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test shell_tool -- --nocapture
       - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
       - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
       - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture

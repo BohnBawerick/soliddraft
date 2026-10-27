@@ -207,6 +207,12 @@ fn references(doc: &soliddraft_model::Document) -> Value {
             },
             FeatureKind::Hole(h) => vec![(ReferenceSlot::Plane, origin(&h.face), vec![&h.face])],
             FeatureKind::Mirror(m) => plane(&m.plane).into_iter().collect(),
+            FeatureKind::Shell(s) => s
+                .open_faces
+                .iter()
+                .enumerate()
+                .map(|(i, face)| (ReferenceSlot::Face { index: i as u32 }, origin(face), vec![face]))
+                .collect(),
             FeatureKind::Draft(d) => d
                 .faces
                 .iter()

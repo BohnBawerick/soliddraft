@@ -66,6 +66,8 @@ pub enum Generator {
     },
     /// Any other face a feature made.
     Other,
+    /// An inset wall of a shell, ranked by its source face name.
+    ShellWall,
 }
 
 impl fmt::Display for Generator {
@@ -78,6 +80,7 @@ impl fmt::Display for Generator {
             Generator::Hole { placement, part } => write!(f, "Hole {} {}", placement + 1, part.label().to_lowercase()),
             Generator::Copy { instance } => write!(f, "Copy {instance} face"),
             Generator::Other => f.write_str("Face"),
+            Generator::ShellWall => f.write_str("Inner wall"),
         }
     }
 }

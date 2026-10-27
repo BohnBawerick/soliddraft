@@ -743,6 +743,7 @@ impl Document {
             FeatureKind::Pattern(p) => self.build_pattern(f, p, current),
             FeatureKind::Mirror(m) => self.build_mirror(f, m, current),
             FeatureKind::Draft(d) => self.build_draft(f, d, current),
+            FeatureKind::Shell(s) => self.build_shell(f, s, current),
         };
         cache.insert(key, built, &self.kernel)
     }
@@ -1235,6 +1236,48 @@ impl Document {
             ordinal += 1;
         }
         out
+    }
+
+    fn build_shell(&self, f: &Feature, s: &crate::ShellFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body to shell") };
+        let mut repairs = Vec::new();
+        let mut faces = Vec::new();
+        for (i, reference) in s.open_faces.iter().enumerate() {
+            match self.resolve_face(reference, body) {
+                Ok(face) => faces.push(face),
+                Err(repair) => repairs.push(RepairNeeded { slot: ReferenceSlot::Face { index: i as u32 }, ..repair }),
+            }
+        }
+        if !repairs.is_empty() {
+            return Built::pass(FeatureStatus::RepairNeeded(repairs), current);
+        }
+        let result = self.kernel.shell(&OpTag::new(format!("{}.shell", f.id)), body, &faces, s.thickness);
+        self.finish(result, current, |r| {
+            let view = self.view_of(body).ok();
+            let names = self.name_map();
+            let mut walls: Vec<_> = r
+                .record
+                .face_roles
+                .iter()
+                .filter_map(|o| {
+                    let FaceRole::Offset { face } = o.role else { return None };
+                    // Never rank an unnamed wall by a transient kernel handle.
+                    let source =
+                        view.as_ref().and_then(|t| reference::origin_label(face, &View { topology: t }, &names))?;
+                    Some((source, o.role))
+                })
+                .collect();
+            walls.sort();
+            walls
+                .into_iter()
+                .enumerate()
+                .map(|(ordinal, (_, role))| NamedFace {
+                    origin: Origin { tag: r.record.tag.clone(), role },
+                    generator: Generator::ShellWall,
+                    ordinal: ordinal as u32,
+                })
+                .collect()
+        })
     }
 
     fn build_draft(&self, f: &Feature, d: &DraftFeature, current: Option<BodyId>) -> Built {

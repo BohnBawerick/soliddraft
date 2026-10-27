@@ -301,6 +301,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         ),
         Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
         Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
+        Some(EditorParams::Shell(_)) => (state.editor.as_ref().unwrap().title(), Icon::Shell),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
         Some(EditorParams::Repair { .. }) => ("Repair references".to_owned(), Icon::Repair),
         None => return,
@@ -621,6 +622,35 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 ui.checkbox(&mut m.keep_original, "Keep the original");
                 if let Some(err) = &editor.error {
                     error_row(ui, err);
+                }
+            }
+            EditorParams::Shell(s) => {
+                theme::section_label(ui, "Open faces");
+                pick_prompt(ui, "Click faces to open; leave empty for a closed shell");
+                let mut remove = None;
+                for (i, face) in s.open_faces.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&face.label).size(12.0));
+                        if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove {
+                    s.open_faces.remove(i);
+                }
+                section_gap(ui);
+                // Keep the user's typed value: invalid walls must be reported, not
+                // silently clamped to the generic positive dimension-field range.
+                ui.horizontal(|ui| {
+                    ui.label("Wall thickness");
+                    let response = ui.add(egui::DragValue::new(&mut s.thickness).speed(0.1).suffix(" mm"));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Wall thickness value")
+                    });
+                });
+                if let Some(error) = &editor.error {
+                    error_row(ui, error);
                 }
             }
             EditorParams::Draft(d) => {
@@ -1064,6 +1094,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::Pattern(_))) => Icon::LinearPattern,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Mirror(_))) => Icon::Mirror,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Draft(_))) => Icon::Draft,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Shell(_))) => Icon::Shell,
         (Selection::Feature(_), _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,
