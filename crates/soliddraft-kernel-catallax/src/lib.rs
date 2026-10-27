@@ -4,6 +4,7 @@
 //! immutable Catallax application build. Legacy history is derived from Catallax's
 //! origin sets; display estimates never decide topology or operation success.
 
+mod construction;
 mod convert;
 mod diagnostics;
 mod drawing_queries;
@@ -25,7 +26,7 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "a5c42583dd684e54c473bc377267e5e190c37bb6";
+pub const CATALLAX_REVISION: &str = "7c64f6294d3012c19ab83670a9954f1bf3f04ec8";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -370,13 +371,8 @@ fn gap(what: &str, stage: &str) -> KernelError {
     ))
 }
 
-/// Builds a legacy recipe, returning the body and the legacy step names' Catallax step ids.
-fn build(
-    input: &Value,
-    op: OpKind,
-    prefix: Option<&IncrementalApplicationBody>,
-    questions: Option<&mut Vec<Value>>,
-) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+/// Converts retained application definitions, preserving native steps and frames.
+fn converted_recipe(input: &Value, op: OpKind) -> KernelResult<catallax_app::soliddraft::Converted> {
     // The converter reads `soliddraft-recipe/1` only. A native step stands in as an
     // identity union of the body it reads, then takes its own operation back.
     let mut legacy = input.clone();
@@ -450,6 +446,17 @@ fn build(
         let step = converted.recipe.steps.iter_mut().find(|s| s.id == id).expect("converted native step");
         step.op = native;
     }
+    Ok(converted)
+}
+
+/// Builds a legacy recipe, returning the body and the legacy step names' Catallax step ids.
+fn build(
+    input: &Value,
+    op: OpKind,
+    prefix: Option<&IncrementalApplicationBody>,
+    questions: Option<&mut Vec<Value>>,
+) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+    let converted = converted_recipe(input, op)?;
     if let Some(questions) = questions {
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
         questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
@@ -780,6 +787,19 @@ impl Kernel for CatallaxKernel {
                 })
                 .collect())
         })
+    }
+
+    fn reserve_proof_work(&self) -> KernelResult<Box<dyn ProofWork>> {
+        construction::reserve_proof_work()
+    }
+
+    fn construction_edit(
+        &self,
+        body: BodyId,
+        edits: &[ScalarEdit],
+        params: &TessellationParams,
+    ) -> KernelResult<ConstructionEdit> {
+        self.observe("construction_edit", || construction::prepare(self, body, edits, params))
     }
 
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
