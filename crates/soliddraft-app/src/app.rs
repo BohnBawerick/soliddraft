@@ -1,4 +1,4 @@
-//! The eframe application: menu bar, ribbon, docked panels, status bar,
+//! The eframe application: menu bar, ribbon, docked panels, command line, status bar,
 //! keyboard shortcuts and the action loop.
 
 use crate::commands;
@@ -13,7 +13,7 @@ use crate::theme;
 use crate::viewport::Overlay;
 use crate::viewport::look::{Preset, Tier};
 use crate::viewport::render::{DisplayMode, Picked, ViewportRenderer};
-use crate::{assistant, file, properties, ribbon, tree};
+use crate::{file, properties, ribbon, tree};
 use egui::{Align2, CornerRadius, Key, Rect, Sense, Stroke, pos2, vec2};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use std::path::PathBuf;
@@ -25,7 +25,6 @@ pub enum Tab {
     Tree,
     Properties,
     Viewport,
-    Assistant,
     /// The drawing document, opened beside the part by Make drawing.
     Drawing,
     /// The assembly document, opened beside the part by New assembly or Open.
@@ -38,7 +37,6 @@ impl Tab {
             Tab::Tree => "Feature tree",
             Tab::Properties => "Properties",
             Tab::Viewport => "Part",
-            Tab::Assistant => "Assistant",
             Tab::Drawing => "Drawing",
             Tab::Assembly => "Assembly",
         }
@@ -57,11 +55,6 @@ fn tree_dock() -> DockState<Tab> {
     dock
 }
 
-/// The right side area: the assistant.
-fn assistant_dock() -> DockState<Tab> {
-    DockState::new(vec![Tab::Assistant])
-}
-
 /// A dock area in the app's style, without the buttons the shell does not use.
 fn show_dock(ui: &mut egui::Ui, dock: &mut DockState<Tab>, id: egui::Id, panels: &mut Panels<'_>) {
     let style = theme::dock_style(ui.ctx());
@@ -76,7 +69,8 @@ fn show_dock(ui: &mut egui::Ui, dock: &mut DockState<Tab>, id: egui::Id, panels:
 }
 
 /// The strip a hidden side area leaves at its edge: a chevron pointing into the
-/// window and the title set on end. Returns true when clicked.
+/// window and the title set on end, reading bottom to top like the tab of a collapsed
+/// task pane. Returns true when clicked.
 fn strip(ui: &mut egui::Ui, side: Side, title: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click());
     let label = format!("Show the {}", side.name());
@@ -87,21 +81,13 @@ fn strip(ui: &mut egui::Ui, side: Side, title: &str) -> bool {
         painter.rect_filled(rect, CornerRadius::ZERO, theme::HOVER);
     }
     let color = if resp.hovered() { theme::INK } else { theme::MUTED };
-    let icon = match side {
-        Side::Tree => Icon::ChevronRight,
-        Side::Assistant => Icon::ChevronLeft,
-    };
     let icon_rect = Rect::from_center_size(pos2(rect.center().x, rect.top() + 16.0), vec2(14.0, 14.0));
-    icons::paint(painter, icon, icon_rect, color);
+    icons::paint(painter, Icon::ChevronRight, icon_rect, color);
     let galley = painter.layout_no_wrap(title.to_owned(), theme::font_medium(12.0), color);
     let (w, h) = (galley.size().x, galley.size().y);
-    // The text turns about its top-left corner: the left strip reads bottom to top,
-    // the right one top to bottom, like the tabs of a collapsed task pane.
-    let (pos, angle) = match side {
-        Side::Tree => (pos2(rect.center().x - h / 2.0, rect.top() + 34.0 + w), -std::f32::consts::FRAC_PI_2),
-        Side::Assistant => (pos2(rect.center().x + h / 2.0, rect.top() + 34.0), std::f32::consts::FRAC_PI_2),
-    };
-    painter.add(egui::epaint::TextShape::new(pos, galley, color).with_angle(angle));
+    // The text turns about its top-left corner.
+    let pos = pos2(rect.center().x - h / 2.0, rect.top() + 34.0 + w);
+    painter.add(egui::epaint::TextShape::new(pos, galley, color).with_angle(-std::f32::consts::FRAC_PI_2));
     resp.clicked()
 }
 
@@ -151,7 +137,6 @@ impl TabViewer for Panels<'_> {
                 crate::drawing::properties_drawing::show(ui, self.state)
             }
             Tab::Properties => properties::show(ui, self.state),
-            Tab::Assistant => assistant::show(ui, self.state),
             Tab::Drawing => crate::drawing::canvas::show(ui, self.state),
             Tab::Viewport => {
                 let st = &mut *self.state;
@@ -253,9 +238,10 @@ pub struct SolidDraftApp {
     /// The middle dock: the part and the drawing.
     dock: DockState<Tab>,
     tree_dock: DockState<Tab>,
-    assistant_dock: DockState<Tab>,
     /// The panel layout as last written to disk.
     saved_layout: Layout,
+    /// The command line's chips and session height as last written to disk.
+    saved_bar: crate::command_line::BarSettings,
     saved_commands: crate::commands::History,
     automation: Automation,
     frame: u64,
@@ -311,11 +297,11 @@ impl SolidDraftApp {
         });
         Self {
             saved_layout: state.layout,
+            saved_bar: state.command_line.settings.clone(),
             saved_commands: state.commands.clone(),
             state,
             dock: center_dock(),
             tree_dock: tree_dock(),
-            assistant_dock: assistant_dock(),
             automation,
             frame: 0,
             bench,
@@ -1399,13 +1385,12 @@ impl SolidDraftApp {
             }
             AppAction::UndoProposal(id) => self.state.undo_proposal(&id),
             AppAction::DiscardProposal(id) => self.state.discard_proposal(&id),
-            AppAction::FocusChat => {
-                self.state.layout.assistant.shown = true;
-                self.state.chat.focus_requested = true;
-            }
+            AppAction::FocusChat => self.state.command_line.open_session(),
+            AppAction::ToggleSession => self.state.command_line.toggle_session(),
             AppAction::SendChat => self.state.send_chat(),
             AppAction::StopChat => self.state.stop_chat(),
             AppAction::Ask(text) => {
+                self.state.command_line.open_session();
                 self.state.chat.draft = text;
                 self.state.send_chat();
             }
@@ -1504,13 +1489,14 @@ impl SolidDraftApp {
                     self.dock.push_to_focused_leaf(Tab::Assembly);
                 }
                 self.tree_dock = tree_dock();
-                self.assistant_dock = assistant_dock();
                 self.state.layout = Layout::default();
-                // Forget the widths egui kept, so the defaults apply again.
+                self.state.command_line.settings.session_height = crate::command_line::SESSION_DEFAULT_HEIGHT;
+                // Forget the sizes egui kept, so the defaults apply again.
                 ctx.data_mut(|d| {
                     for side in Side::ALL {
                         d.remove::<egui::PanelState>(side.panel_id());
                     }
+                    d.remove::<egui::PanelState>(crate::command_line::session_id());
                 });
             }
             AppAction::TogglePanel(side) => self.state.layout.toggle(side),
@@ -1579,14 +1565,13 @@ impl SolidDraftApp {
         }
     }
 
-    /// One side area: a resizable panel while shown, a strip with its title while
+    /// The side area: a resizable panel while shown, a strip with its title while
     /// hidden. Dragging the edge past the minimum hides it; clicking the strip,
     /// dragging it outward or double-clicking the edge shows it again.
     fn side_panel(&mut self, root: &mut egui::Ui, side: Side, window_width: f32) {
         let frame = egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::ZERO);
         let make = |id: egui::Id| match side {
             Side::Tree => egui::Panel::left(id),
-            Side::Assistant => egui::Panel::right(id),
         };
         let collapsed = make(side.strip_id()).resizable(true).exact_size(panels::STRIP_WIDTH).frame(frame);
         let expanded = make(side.panel_id())
@@ -1602,7 +1587,6 @@ impl SolidDraftApp {
         let mut open_requested = false;
         let dock = match side {
             Side::Tree => &mut self.tree_dock,
-            Side::Assistant => &mut self.assistant_dock,
         };
         let mut panels = Panels { state: &mut self.state };
         egui::Panel::show_switched(root, &mut shown, collapsed, expanded, |ui, expanded| {
@@ -2043,9 +2027,9 @@ impl eframe::App for SolidDraftApp {
             .frame(panel_frame)
             .show_separator_line(true)
             .show(root, |ui| self.status_bar(ui));
+        crate::command_line::panel(root, &mut self.state);
         let window_width = root.available_width();
         self.side_panel(root, Side::Tree, window_width);
-        self.side_panel(root, Side::Assistant, window_width);
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(root, |ui| {
             let mut panels = Panels { state: &mut self.state };
             show_dock(ui, &mut self.dock, egui::Id::new("center_dock"), &mut panels);
@@ -2062,6 +2046,12 @@ impl eframe::App for SolidDraftApp {
         if self.state.layout != self.saved_layout && !ctx.input(|i| i.pointer.any_down()) {
             self.state.layout.save();
             self.saved_layout = self.state.layout;
+        }
+        if self.state.command_line.settings != self.saved_bar && !ctx.input(|i| i.pointer.any_down()) {
+            if let Err(e) = crate::settings::save_command_line(&self.state.command_line.settings) {
+                log::warn!("cannot save the command line: {e}");
+            }
+            self.saved_bar = self.state.command_line.settings.clone();
         }
         self.autosave(ctx);
         self.automation_step(ctx, frame);

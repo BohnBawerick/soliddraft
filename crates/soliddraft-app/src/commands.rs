@@ -1393,13 +1393,18 @@ fn registry() -> Vec<CommandSpec> {
             .lit(|s| s.layout.tree.shown)
             .label_now(|s| s.drawing.is_active().then(|| "Drawing tree".to_owned()))
 .app_only(PANELS),
-        cmd("toggle_assistant", "Assistant", Icon::Chat, "Show or hide the assistant")
-            .both()
-            .on(View, "Panels", Large)
-            .on(DrawingTab::View, "Panels", Large)
-            .key_anytime(Scope::App, Modifiers::SHIFT, Key::F9)
-            .run(|_| AppAction::TogglePanel(Side::Assistant))
-            .lit(|s| s.layout.assistant.shown)
+        cmd(
+            crate::command_line::AI_COMMAND,
+            "AI session",
+            Icon::Chat,
+            "Open or close the assistant session above the command line",
+        )
+        .both()
+        .on(View, "Panels", Large)
+        .on(DrawingTab::View, "Panels", Large)
+        .key_anytime(Scope::App, Modifiers::SHIFT, Key::F9)
+        .run(|_| AppAction::ToggleSession)
+        .lit(|s| s.command_line.session_open)
 .app_only(PANELS),
         cmd("reset_layout", "Reset layout", Icon::Config, "Restore the default panel layout")
             .both()
@@ -2192,7 +2197,7 @@ mod tests {
         for c in all() {
             for k in &c.keys {
                 let ctrl = k.modifiers.command || k.modifiers.ctrl;
-                let panel_key = matches!(c.id, "toggle_tree" | "toggle_assistant");
+                let panel_key = c.id == "toggle_tree" || c.id == crate::command_line::AI_COMMAND;
                 assert_eq!(k.fires_while_typing(), ctrl || panel_key, "{} {}", c.id, k.text());
             }
         }
@@ -2204,7 +2209,7 @@ mod tests {
         let pos = |id: &str, m: Modifiers| order.iter().position(|(c, k)| c.id == id && k.modifiers == m).unwrap();
         assert!(pos("save_as", Modifiers::COMMAND | Modifiers::SHIFT) < pos("save", Modifiers::COMMAND));
         assert!(pos("redo", Modifiers::COMMAND | Modifiers::SHIFT) < pos("undo", Modifiers::COMMAND));
-        assert!(pos("toggle_assistant", Modifiers::SHIFT) < pos("toggle_tree", Modifiers::NONE));
+        assert!(pos(crate::command_line::AI_COMMAND, Modifiers::SHIFT) < pos("toggle_tree", Modifiers::NONE));
         let edge = bindings(Context { edge: true, ..Default::default() });
         let at = |id: &str| edge.iter().position(|(c, _)| c.id == id).unwrap();
         assert!(at("fillet") < at("view_front"), "with an edge selected, F is Fillet");
@@ -2245,7 +2250,7 @@ mod tests {
         };
         assert_eq!(drawing(DrawingTab::Views, "Edit"), ["undo", "redo"]);
         assert_eq!(drawing(DrawingTab::View, "Zoom"), ["zoom_fit", "drawing_zoom_in", "drawing_zoom_out"]);
-        assert_eq!(drawing(DrawingTab::View, "Panels"), ["toggle_tree", "toggle_assistant"]);
+        assert_eq!(drawing(DrawingTab::View, "Panels"), ["toggle_tree", crate::command_line::AI_COMMAND]);
         assert_eq!(drawing(DrawingTab::Assistant, "Chat"), ["ask", "drawing_explain"]);
     }
 
@@ -2312,7 +2317,7 @@ mod tests {
         assert_eq!(text("delete"), "Del");
         assert_eq!(text("rename"), "F2");
         assert_eq!(text("ask"), "/");
-        assert_eq!(text("toggle_assistant"), "Shift+F9");
+        assert_eq!(text(crate::command_line::AI_COMMAND), "Shift+F9");
         assert_eq!(text("shortcuts"), "?");
     }
 }

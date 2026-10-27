@@ -9,8 +9,8 @@
 pub mod app;
 pub mod app_tools;
 pub mod assembly;
-pub mod assistant;
 pub mod chat;
+pub mod command_line;
 #[macro_use]
 pub mod command_tools;
 pub mod commands;

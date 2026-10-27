@@ -195,8 +195,13 @@ fn body(ui: &mut egui::Ui, state: &mut AppState, tab: commands::Tab) {
 fn draw_item(ui: &mut egui::Ui, item: &Item, rect: Rect, key: (usize, usize)) -> egui::Response {
     let enabled = item.enabled;
     let label = item.command.label;
-    let resp =
-        ui.interact(rect, ui.id().with(("ribbon_item", key)), if enabled { Sense::click() } else { Sense::hover() });
+    let resp = ui.interact(
+        rect,
+        ui.id().with(("ribbon_item", key)),
+        if enabled { Sense::click_and_drag() } else { Sense::hover() },
+    );
+    // A button dragged onto the command line's chip row becomes a chip there.
+    resp.dnd_set_drag_payload(crate::command_line::ToolDrag { id: item.command.id });
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, item.active, label));
     let painter = ui.painter();
     if item.active {

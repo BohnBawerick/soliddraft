@@ -353,10 +353,14 @@ fn demo_part_renders() {
     assert_eq!(harness.state().state.doc.features.len(), 3);
     assert_eq!(harness.state().state.doc.meshes.len(), 1, "the demo part is one merged body");
     save(&mut harness, "07-demo-part");
-    // A message typed in the composer comes back as a proposal card; Apply runs it
-    // through the command layer and Undo takes it back.
-    harness.state_mut().state.chat.draft = "Add a Ø20 boss, 24 mm tall from the Top plane, on the base.".into();
-    harness.get_by_label("Send").click();
+    // A message typed at the session's prompt comes back as a proposal card; Apply runs
+    // it through the command layer and Undo takes it back.
+    harness.key_press(Key::Slash);
+    harness.run_steps(3);
+    assert!(harness.state().state.command_line.session_open, "/ opens the session");
+    harness.state_mut().state.command_line.input = "Add a Ø20 boss, 24 mm tall from the Top plane, on the base.".into();
+    harness.run_steps(1);
+    harness.key_press(Key::Enter);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
     while harness.state().state.chat.busy() && std::time::Instant::now() < deadline {
         harness.step();

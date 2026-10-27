@@ -1,5 +1,5 @@
-//! The assistant session behind the chat panel: the conversation with the model, the
-//! proposals, and the MCP endpoint, all driven once per frame on the interface thread,
+//! The assistant session behind the session pane at the bottom (`command_line.rs`): the
+//! conversation with the model, the proposals, and the MCP endpoint, all driven once per frame on the interface thread,
 //! where the document lives.
 
 use crate::app_tools::AppTools;
@@ -17,6 +17,8 @@ pub enum Role {
     System,
     User,
     Assistant,
+    /// A line typed in the session that ran as an app command. Shown, never sent.
+    Command,
 }
 
 /// What a tool call is doing, for the line under the assistant's text.
@@ -71,12 +73,11 @@ pub struct McpEndpoint {
 pub struct ChatState {
     pub messages: Vec<ChatMessage>,
     pub draft: String,
-    pub focus_requested: bool,
     /// The proposal being previewed, with the part as it would be after it.
     pub preview: Option<(String, Preview)>,
     pub book: ProposalBook,
     pub link: Link,
-    /// One line on the connection, for the panel header.
+    /// One line on the connection, for the session's header.
     pub status: String,
     pub mcp: Option<McpEndpoint>,
     /// The assistant message being streamed into.
@@ -146,7 +147,8 @@ impl ProviderDialog {
 /// The system prompt. It never changes during a session, so it stays cached.
 pub const SYSTEM_PROMPT: &str = "\
 You are the modelling assistant inside SolidDraft, a parametric CAD application for mechanical parts. \
-You work beside the user: they have a feature tree on the left, a 3D viewport in the middle and you on the right.
+You work beside the user: they have a feature tree on the left, a 3D viewport in the middle and you in a session \
+pane along the bottom, where they also type app commands.
 
 How you change the part:
 - You never change the part directly. To change it, call `propose` with recipe lines and a one-line summary. \
@@ -242,7 +244,6 @@ impl ChatState {
         Self {
             messages: Vec::new(),
             draft: String::new(),
-            focus_requested: false,
             preview: None,
             book: ProposalBook::default(),
             link,

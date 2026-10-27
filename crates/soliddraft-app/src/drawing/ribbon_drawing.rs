@@ -174,8 +174,10 @@ fn draw_item(ui: &mut egui::Ui, item: &Item, rect: Rect, key: (usize, usize)) ->
     let resp = ui.interact(
         rect,
         ui.id().with(("drawing_ribbon_item", key)),
-        if enabled { Sense::click() } else { Sense::hover() },
+        if enabled { Sense::click_and_drag() } else { Sense::hover() },
     );
+    // A button dragged onto the command line's chip row becomes a chip there.
+    resp.dnd_set_drag_payload(crate::command_line::ToolDrag { id: item.command.id });
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, item.active, &item.label));
     let painter = ui.painter();
     if item.active {

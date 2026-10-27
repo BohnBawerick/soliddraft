@@ -79,7 +79,10 @@ pub enum AppAction {
     ApplyProposal(String),
     DiscardProposal(String),
     UndoProposal(String),
+    /// Opens the assistant session and puts the keyboard on its prompt.
     FocusChat,
+    /// Opens the assistant session, or closes it when it is open.
+    ToggleSession,
     SendChat,
     StopChat,
     /// Sends a ready-made question to the assistant.
@@ -101,7 +104,7 @@ pub enum AppAction {
     },
     ClearRecent,
     ResetLayout,
-    /// Show or hide one side area.
+    /// Show or hide the side area.
     TogglePanel(crate::panels::Side),
     ShowShortcuts,
     /// Opens the command palette, or closes it when it is open.
@@ -484,8 +487,10 @@ pub struct AppState {
     pub drawing: crate::drawing::DrawingState,
     /// The open assembly and whether it is the active document.
     pub assembly: crate::assembly::AssemblyState,
-    /// Which side areas are shown and how wide they are.
+    /// Whether the side area is shown and how wide it is.
     pub layout: crate::panels::Layout,
+    /// The command line along the bottom and the assistant session above it.
+    pub command_line: crate::command_line::CommandLine,
     /// Where pinned revisions of referenced documents come from. Cache-only for now: the
     /// revisions this session opened or saved.
     pub revisions: Arc<dyn soliddraft_document::RevisionStore>,
@@ -528,6 +533,7 @@ impl AppState {
             drawing: Default::default(),
             assembly: Default::default(),
             layout: crate::panels::Layout::load(),
+            command_line: crate::command_line::CommandLine::load(),
             revisions: Arc::new(soliddraft_document::CacheOnlyStore::new()),
             commands: crate::settings::command_history(),
             recovery: None,
