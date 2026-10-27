@@ -3,7 +3,7 @@
 
 FAKE_MODE picks one misbehaviour: ok, early (display not selectable), stale (display of the
 previous revision), pending, silent (no display reply), stale-measure (measurement of the previous
-revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s)."""
+revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s), other-revision (the backend reports another Catallax sha)."""
 
 import json
 import os
@@ -12,6 +12,9 @@ import sys
 import time
 
 mode = os.environ.get("FAKE_MODE", "ok")
+revision_pin = os.environ.get("FAKE_PIN", "")
+if mode == "other-revision":
+    revision_pin = "0" * 40
 bundle = pathlib.Path(sys.argv[sys.argv.index("--bundle") + 1])
 bundle.mkdir(parents=True)
 sequence = 0
@@ -68,7 +71,8 @@ for line in sys.stdin:
         revision += 1
         directory = bundle / f"{sequence:04}"
         directory.mkdir()
-        write(directory, "command.json", {"summary": {"features": []}, "backend": {"name": "catallax"},
+        write(directory, "command.json", {"summary": {"features": []},
+              "backend": {"name": "catallax", "version": revision_pin},
               "references": [], "output": "", "request": sequence, "revision": revision})
         write(directory, "kernel.json", {"calls": []})
         write(directory, "recipe.json", {})

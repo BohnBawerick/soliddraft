@@ -260,6 +260,23 @@ class Replies(unittest.TestCase):
         self.assertIn("stale", scenarios.answers(3, self.command, {"request": 3, "revision": 6}))
 
 
+class Pinning(unittest.TestCase):
+    sha = "a" * 40
+
+    def test_pin_is_the_adapters_full_commit_sha(self):
+        self.assertRegex(scenarios.pinned_revision(), r"^[0-9a-f]{40}$")
+
+    def test_only_the_pinned_revision_passes(self):
+        good = {"backend": {"name": "catallax", "version": self.sha}}
+        self.assertTrue(scenarios.backend_pinned(good, self.sha)["pass"])
+        for bad in ({"backend": {"name": "catallax", "version": "b" * 40}},
+                    {"backend": {"name": "catallax"}},
+                    {"backend": {"name": "other", "version": self.sha}},
+                    {"backend": None}, {}):
+            with self.subTest(bad=bad):
+                self.assertFalse(scenarios.backend_pinned(bad, self.sha)["pass"])
+
+
 class Verdicts(unittest.TestCase):
     known = KnownBudgets.known
 
@@ -309,12 +326,13 @@ class RunnerEndToEnd(unittest.TestCase):
             args = argparse.Namespace(scenario=scenario, out=root / "run", soliddraft=str(FAKE),
                                       catallax_verify="unused", timeout=timeout, strict=strict)
             os.environ["FAKE_MODE"] = mode
+            os.environ["FAKE_PIN"] = scenarios.pinned_revision()
             try:
                 with contextlib.redirect_stdout(io.StringIO()), \
                         mock.patch.object(scenarios, "load_known_over_budget", return_value=known or {}):
                     code = scenarios.run(args)
             finally:
-                del os.environ["FAKE_MODE"]
+                del os.environ["FAKE_MODE"], os.environ["FAKE_PIN"]
             report = json.loads((args.out / "result.json").read_text())
         checks = {c["check"]: c for c in (report["steps"][0]["checks"] if report["steps"] else [])
                   if isinstance(c["check"], str)}
@@ -393,6 +411,16 @@ class RunnerEndToEnd(unittest.TestCase):
     def test_early_reply_fails_the_strict_path_too(self):
         _, _ = self.run_step("early", strict=True)
         self.assertEqual(self.code, 1)
+
+    def test_evidence_from_another_catallax_revision_cannot_pass(self):
+        report, checks = self.run_step("other-revision")
+        self.assertFalse(checks["Catallax backend is the pinned revision"]["pass"])
+        self.assertFalse(report["pass"])
+
+    def test_result_names_the_pinned_revision(self):
+        report, checks = self.run_step("ok")
+        self.assertEqual(report["catallax_revision"], scenarios.pinned_revision())
+        self.assertTrue(checks["Catallax backend is the pinned revision"]["pass"])
 
     def test_current_measurement_passes_with_its_interval_recorded(self):
         report, checks = self.run_step("ok", measure=True)

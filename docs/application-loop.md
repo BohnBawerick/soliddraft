@@ -302,6 +302,19 @@ is true, so an approved known gap exits one and is printed as an error. Without 
 exit status keeps its meaning of CI acceptance, where a listed gap is a warning. The hosted
 workflow runs without `--strict`; a release gate runs the same scenarios with it.
 
+### Pinned evidence
+
+`result.json` records `catallax_revision`, the full commit sha in `CATALLAX_REVISION`,
+and every command must report that same sha as its backend version
+(`Catallax backend is the pinned revision`). Evidence from another revision, a branch name
+or a missing version fails the step. The runner cannot yet check the replay verifier the
+same way: `catallax-verify about` does not report its source commit, so hosted CI builds it
+from the pinned sha and the workflow remains the evidence for that binary.
+
+The baseline-reuse ledger holds no measured real-corpus time saving, so this runner
+claims none and does not consume it. A reused baseline would have to arrive as pinned,
+qualified evidence of its own before it could excuse a measurement.
+
 ### Independent drawing-view gate
 
 Every step with a solid requests `scenario_display` first and records the click
