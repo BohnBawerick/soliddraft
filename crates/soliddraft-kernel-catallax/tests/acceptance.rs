@@ -210,6 +210,30 @@ fn polygon_views_and_boolean_sections_keep_sources_on_the_original_body() {
 }
 
 #[test]
+fn preview_sections_are_cut_from_the_mesh_and_match_the_boolean_ones() {
+    use soliddraft_kernel_api::drawing::{SectionSpec, ViewSpec};
+
+    let k = CatallaxKernel::with_operation_log();
+    contract::mesh_sections_match_boolean_sections(&k);
+    // The backend routes a preview section to the mesh slice: no boolean runs inside it.
+    let (_, body) = build(&k, &parse(BRACKET).unwrap()).unwrap();
+    k.take_diagnostics().unwrap();
+    let spec = contract::bracket_section_spec();
+    let preview = SectionSpec { view: ViewSpec { preview: true, ..spec.view }, ..spec };
+    let section = k.section_view(body, &preview).unwrap();
+    assert!(section.curves.unproved);
+    let calls = k.take_diagnostics().unwrap();
+    let calls = calls["calls"].as_array().unwrap();
+    assert!(calls.iter().any(|c| c["operation"] == "section_view" && c["nested"] == false), "{calls:?}");
+    assert!(calls.iter().all(|c| c["operation"] != "boolean"), "a preview section ran a boolean: {calls:?}");
+    let certified = k.section_view(body, &spec).unwrap();
+    assert!(!certified.curves.unproved);
+    let calls = k.take_diagnostics().unwrap();
+    assert!(calls["calls"].as_array().unwrap().iter().any(|c| c["operation"] == "boolean" && c["nested"] == true));
+    k.release(body).unwrap();
+}
+
+#[test]
 fn polygon_face_loops_keep_holes_and_coedge_order() {
     use soliddraft_kernel_api::drawing::{SectionSpec, StandardView, ViewSpec};
 

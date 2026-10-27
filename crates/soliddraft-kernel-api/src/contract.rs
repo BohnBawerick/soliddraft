@@ -1088,3 +1088,85 @@ pub fn step_export_reports_what_it_wrote(k: &dyn Kernel) {
     let refused = k.export_step(body, &crate::StepOptions { tolerance: 0.0, ..options });
     assert!(matches!(refused, Err(KernelError::InvalidInput(_))), "zero tolerance refused: {refused:?}");
 }
+
+/// The screen's section, cut from the preview mesh with no boolean
+/// ([`section::by_mesh_slice`](crate::drawing::section::by_mesh_slice)), hatches the
+/// same regions as the boolean section within the mesh's chord tolerance, names the
+/// uncut body's entities, closes every region, and refuses the same planes.
+pub fn mesh_sections_match_boolean_sections(k: &dyn Kernel) {
+    use crate::drawing::section::by_mesh_slice;
+    let preview = |spec: SectionSpec| SectionSpec { view: ViewSpec { preview: true, ..spec.view }, ..spec };
+    let region_loops_close = |section: &SectionView, what: &str| {
+        for region in &section.regions {
+            for boundary in std::iter::once(&region.outer).chain(&region.holes) {
+                let geometry: Vec<Curve3> = boundary.iter().map(|c| c.curve.clone()).collect();
+                assert!(closed_loop(&geometry, 1e-6), "{what}: a region boundary is not closed");
+                assert!(
+                    boundary.iter().all(|c| matches!(c.source, CurveSource::Section(_))),
+                    "{what}: boundary source"
+                );
+            }
+        }
+    };
+
+    // The bracket's Section A-A: three regions of 910, 560 and 230 mm².
+    let b = bracket(k);
+    let spec = bracket_section_spec();
+    let frame = spec.view.frame().unwrap();
+    let boolean = k.section_view(b, &spec).expect("boolean section A-A");
+    let sliced = by_mesh_slice(k, b, &preview(spec)).expect("mesh section A-A");
+    assert!(sliced.curves.unproved, "a section from the preview mesh is unproved");
+    let (exact, approximate) = (boolean.region_areas(&frame), sliced.region_areas(&frame));
+    assert_eq!(exact.len(), approximate.len(), "regions {exact:?} vs {approximate:?}");
+    for (want, got) in exact.iter().zip(&approximate) {
+        assert!((want - got).abs() < 1.0, "region areas {exact:?} vs {approximate:?}");
+    }
+    let (visible, _) = sliced.curves.counts();
+    assert!(visible > 0);
+    section_sources_resolve(k, b, &sliced, "mesh section A-A");
+    region_loops_close(&sliced, "mesh section A-A");
+    // Every curve the view keeps lies behind or on the cutting plane.
+    let n = frame.direction;
+    for c in &sliced.curves.curves {
+        for f in [0.0, 0.5, 1.0] {
+            let past = (c.curve.point_at(f) - spec.origin).dot(n);
+            assert!(past < 1e-3, "mesh section A-A: a curve lies {past} mm in front of the plane");
+        }
+    }
+    k.release(b).unwrap();
+
+    // The block through its middle: one region of 1200 mm² with four visible sides.
+    let b = block(k);
+    let before = fixed(k, b);
+    let spec = preview(SectionSpec { view: ViewSpec::standard(StandardView::Top), origin: Vec3::new(0.0, 0.0, 5.0) });
+    let section = by_mesh_slice(k, b, &spec).expect("mesh block section");
+    assert_eq!(section.regions.len(), 1, "{:?}", section.regions);
+    let area = section.regions[0].area(&spec.view.frame().unwrap());
+    assert!((area - 1200.0).abs() < 1e-2, "area {area}");
+    region_loops_close(&section, "mesh block section");
+    section_sources_resolve(k, b, &section, "mesh block section");
+    assert_eq!(fixed(k, b), before, "a mesh section changed its body");
+    // A plane in front cuts nothing; one behind the body is refused.
+    let view = ViewSpec { preview: true, ..ViewSpec::standard(StandardView::Top) };
+    let front = by_mesh_slice(k, b, &SectionSpec { view, origin: Vec3::new(0.0, 0.0, 50.0) }).expect("in front");
+    assert!(front.regions.is_empty());
+    let behind = by_mesh_slice(k, b, &SectionSpec { view, origin: Vec3::new(0.0, 0.0, -1.0) });
+    assert!(matches!(behind, Err(KernelError::InvalidInput(_))), "{behind:?}");
+    k.release(b).unwrap();
+
+    // A bored cylinder cut across: one region with one hole, the annulus's area.
+    let outer = cylinder(k, Vec3::ZERO, 10.0, 20.0);
+    let inner = cylinder(k, Vec3::new(0.0, 0.0, -1.0), 4.0, 22.0);
+    let bored = k.boolean(&tag("mesh_section_bore"), BooleanOp::Subtract, outer, inner).expect("bore").body;
+    let spec = preview(SectionSpec { view: ViewSpec::standard(StandardView::Top), origin: Vec3::new(0.0, 0.0, 10.0) });
+    let section = by_mesh_slice(k, bored, &spec).expect("mesh annulus section");
+    assert_eq!(section.regions.len(), 1, "{:?}", section.regions);
+    assert_eq!(section.regions[0].holes.len(), 1);
+    let area = section.regions[0].area(&spec.view.frame().unwrap());
+    assert!((area - std::f64::consts::PI * 84.0).abs() < 0.5, "annular area {area}");
+    region_loops_close(&section, "mesh annulus section");
+    section_sources_resolve(k, bored, &section, "mesh annulus section");
+    for id in [bored, outer, inner] {
+        k.release(id).unwrap();
+    }
+}
