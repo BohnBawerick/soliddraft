@@ -61,6 +61,17 @@ order and are never reused. Trim keeps the target id for the first surviving
 piece and allocates another id only when it splits a curve. Copies receive new
 ids. See the scenarios for complete requests, including construction boundaries.
 
+Both sketch tools accept an optional signed `offset` in millimetres along a
+reference plane's normal. Omitted offsets are zero; nonzero offsets on body
+faces are refused. For example, `front` has normal -Y, so `offset: -6` places
+the sketch at y=6. World-coordinate shapes must lie on that displaced plane;
+`sketch_geometry` operations still use its local u/v coordinates.
+
+`datum-offset.json` exercises this control at the normal 20M allowance. It
+extrudes from the displaced plane, saves and reopens the part, then edits the
+extrusion and sketch dimension. Volume and world-space bounds must survive;
+every displayed step retains its viewport PNG, SVG and click-budget verdict.
+
 Sketch arithmetic remains tolerance-based. These scenarios prove the resulting
 profiles work through Catallax's existing exact conversion, not that sketch
 intersections, offsets or rotations use rational arithmetic.

@@ -314,3 +314,92 @@ fn editing_and_inspection_measure_only_on_request_and_keep_body_results_separate
     let measured = session.call("mass_properties", json!({"name":"Boss-Extrude1"}));
     assert_eq!(measured["volume_mm3"], 24000.0);
 }
+
+fn offset_session() -> Session {
+    Session { state: AppState::new(soliddraft_app::new_document()), ran: BTreeSet::new(), dir: std::env::temp_dir() }
+}
+
+#[test]
+fn datum_offset_survives_dimension_edits_and_save_reopen() {
+    let mut s = offset_session();
+    s.dir = s.dir.join(format!("soliddraft-datum-offset-{}", std::process::id()));
+    std::fs::create_dir_all(&s.dir).unwrap();
+    s.call(
+        "sketch",
+        json!({
+            "plane": "front", "offset": -6,
+            "shapes": [{"shape": "circle", "center": [30, 6, 18], "diameter": 6}]
+        }),
+    );
+    s.call("extrude", json!({"sketch": "Sketch1", "depth": 7, "flip": false}));
+    let mass = s.state.doc.kernel().mass_properties(s.state.doc.display_body().unwrap()).unwrap();
+    assert!((mass.volume - 63.0 * std::f64::consts::PI).abs() < 0.005);
+    assert!((mass.centroid.y - 2.5).abs() < 1e-6);
+
+    s.call("edit_dimension", json!({"sketch": "Sketch1", "dimension": 1, "value": 8}));
+    let path = s.path("offset.dwprt");
+    s.call("save", json!({"path": path}));
+    s.call("new_part", json!({}));
+    s.call("open", json!({"path": path}));
+    s.call("edit_dimension", json!({"sketch": "Sketch1", "dimension": 1, "value": 10}));
+    let mass = s.state.doc.kernel().mass_properties(s.state.doc.display_body().unwrap()).unwrap();
+    assert!((mass.volume - 175.0 * std::f64::consts::PI).abs() < 0.005);
+    assert!((mass.centroid.x - 30.0).abs() < 1e-6);
+    assert!((mass.centroid.y - 2.5).abs() < 1e-6);
+    assert!((mass.centroid.z - 18.0).abs() < 1e-6);
+    std::fs::remove_dir_all(&s.dir).unwrap();
+}
+
+#[test]
+fn geometry_sketch_datum_offset_moves_the_solid_along_the_normal() {
+    let mut s = offset_session();
+    s.call(
+        "sketch_geometry",
+        json!({
+            "plane": "right", "offset": 3,
+            "operations": [{"tool": "polygon", "center": {"u": 0, "v": 0},
+                            "vertex": {"u": 2, "v": 0}, "sides": 4}]
+        }),
+    );
+    s.call("extrude", json!({"sketch": "Sketch1", "depth": 2, "flip": false}));
+    let mass = s.state.doc.kernel().mass_properties(s.state.doc.display_body().unwrap()).unwrap();
+    assert!((mass.volume - 16.0).abs() < 0.005);
+    assert!((mass.centroid.x - 4.0).abs() < 1e-6);
+    assert!(mass.centroid.y.abs() < 1e-6);
+    assert!(mass.centroid.z.abs() < 1e-6);
+}
+
+#[test]
+fn invalid_datum_offsets_leave_the_part_and_history_unchanged() {
+    let mut s = offset_session();
+    s.call(
+        "sketch",
+        json!({"plane": "top", "shapes": [{"shape": "rectangle", "center": [5, 5, 0], "width": 10, "height": 10}]}),
+    );
+    s.call("extrude", json!({"sketch": "Sketch1", "depth": 5, "flip": false}));
+    let before = depths(&s.state);
+    let body = s.state.doc.display_body().unwrap();
+    for (tool, arguments) in [
+        (
+            "sketch",
+            json!({"plane": "Boss-Extrude1 · End cap", "offset": 1,
+                   "shapes": [{"shape": "circle", "center": [5, 5, 5], "diameter": 2}]}),
+        ),
+        (
+            "sketch_geometry",
+            json!({"plane": "top", "offset": soliddraft_app::command_tools::MAX_LENGTH_MM + 1.0,
+                   "operations": [{"tool": "polygon", "center": {"u": 0, "v": 0},
+                                   "vertex": {"u": 2, "v": 0}, "sides": 4}]}),
+        ),
+    ] {
+        let out = call_checked(
+            &mut AppTools { state: &mut s.state },
+            tool,
+            arguments,
+            &Caller::Mcp { client: "test".into() },
+        );
+        assert!(out.is_error, "{}", out.content);
+        assert_eq!(depths(&s.state), before);
+        assert_eq!(s.state.doc.display_body(), Some(body));
+    }
+}

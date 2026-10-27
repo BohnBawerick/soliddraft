@@ -96,7 +96,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     "Double-click to sketch on this plane"
                 });
                 if (picking_plane && r.clicked()) || r.double_clicked() {
-                    actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane }));
+                    actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane, offset: 0.0 }));
                 }
             }
             row(ui, RowSpec { indent: 1, icon: Icon::Point, name: "Origin", dim: true, ..RowSpec::plain() });
