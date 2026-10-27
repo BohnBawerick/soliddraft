@@ -74,10 +74,12 @@ fn the_bracket_in_light_and_dark() {
         eprintln!("wrote {}", path.display());
 
         // The modelling space fades from near the panel tone at the top to a grey floor
-        // at the bottom, and the floor is clearly not the chrome. The chrome is read from
-        // the ribbon tab strip, right of the tabs (the menu bar centre holds the search field).
-        let top = brightness(&image, rect.center_top() + vec2(-300.0, 12.0));
-        let bottom = brightness(&image, rect.center_bottom() + vec2(-300.0, -12.0));
+        // at the bottom, and the floor is clearly not the chrome. The samples sit right of
+        // the heads-up toolbar and between the two bottom pills, clear of the origin axes.
+        // The chrome is read from the ribbon tab strip, right of the tabs (the menu bar
+        // centre holds the search field).
+        let top = brightness(&image, rect.center_top() + vec2(300.0, 12.0));
+        let bottom = brightness(&image, rect.center_bottom() + vec2(0.0, -12.0));
         let chrome =
             brightness(&image, egui::pos2(rect.center().x, theme::MENU_HEIGHT + theme::RIBBON_TABS_HEIGHT / 2.0));
         let panel = brightness(&image, egui::pos2(40.0, rect.center().y + 120.0));
