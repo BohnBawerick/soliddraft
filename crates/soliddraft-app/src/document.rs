@@ -604,6 +604,8 @@ pub struct RepairItem {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeatureStatus {
     Ok,
+    /// Authored definitions await the scoped proof; no prior body certifies them.
+    Pending,
     Error(String),
     /// Some reference no longer resolves; the feature was skipped.
     NeedsRepair(Vec<RepairItem>),
@@ -891,6 +893,197 @@ struct Shown {
     edges: Vec<NamedEdge>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ReadyDisplay {
+    body: BodyId,
+    params: TessellationParams,
+    pub mesh: Arc<DisplayMesh>,
+    picks: Vec<PickEntry>,
+    faces: Vec<NamedFace>,
+    edges: Vec<NamedEdge>,
+    topology: Topology,
+    kernel_mesh: Mesh,
+}
+
+#[derive(Clone, Debug)]
+struct ConstructionFace {
+    id: FaceId,
+    feature: FeatureId,
+    label: String,
+    origins: Vec<soliddraft_kernel_api::Origin>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ConstructionView {
+    mesh: Arc<DisplayMesh>,
+    picks: Vec<PickEntry>,
+    faces: Vec<ConstructionFace>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum CandidateDisplay {
+    Construction(Arc<ConstructionView>),
+    Proved(Arc<ReadyDisplay>),
+}
+
+impl CandidateDisplay {
+    pub(crate) fn mesh(&self) -> Arc<DisplayMesh> {
+        match self {
+            Self::Construction(view) => view.mesh.clone(),
+            Self::Proved(view) => view.mesh.clone(),
+        }
+    }
+
+    fn picks(&self) -> &[PickEntry] {
+        match self {
+            Self::Construction(view) => &view.picks,
+            Self::Proved(view) => &view.picks,
+        }
+    }
+
+    fn face(&self, id: FaceId) -> Option<(FeatureId, &str, &[soliddraft_kernel_api::Origin])> {
+        match self {
+            Self::Construction(view) => view
+                .faces
+                .iter()
+                .find(|face| face.id == id)
+                .map(|face| (face.feature, face.label.as_str(), face.origins.as_slice())),
+            Self::Proved(view) => {
+                let face = view.faces.iter().find(|face| face.id == id)?;
+                Some((
+                    face.feature,
+                    &face.label,
+                    view.topology.faces.iter().find(|face| face.id == id)?.origins.as_slice(),
+                ))
+            }
+        }
+    }
+
+    fn resolve(&self, origins: &[soliddraft_kernel_api::Origin]) -> Option<FaceId> {
+        unique_origin_face(
+            self.picks().iter().filter_map(|pick| {
+                let PickEntry::Face(_, face) = pick else {
+                    return None;
+                };
+                Some((*face, self.face(*face)?.2))
+            }),
+            origins,
+        )
+    }
+}
+
+fn unique_origin_face<'a>(
+    faces: impl Iterator<Item = (FaceId, &'a [soliddraft_kernel_api::Origin])>,
+    origins: &[soliddraft_kernel_api::Origin],
+) -> Option<FaceId> {
+    let mut matching = faces.filter(|(_, candidates)| candidates.iter().any(|origin| origins.contains(origin)));
+    let face = matching.next()?.0;
+    matching.next().is_none().then_some(face)
+}
+
+pub(crate) fn scalar_edits(
+    baseline: &model::Document,
+    edited: &model::Document,
+) -> Option<Vec<soliddraft_kernel_api::ScalarEdit>> {
+    use crate::drag::Dimension;
+    use soliddraft_kernel_api::{OpKind, ScalarEdit, ScalarParameter};
+    if baseline.features().len() != edited.features().len() || baseline.active_count() != edited.active_count() {
+        return None;
+    }
+    let mut changes = Vec::new();
+    for (before, after) in baseline.features().iter().zip(edited.features()) {
+        if before.id != after.id || before.suppressed != after.suppressed {
+            return None;
+        }
+        if before.kind == after.kind {
+            continue;
+        }
+        let original = FeatureKind::from_model(&before.kind);
+        let next = FeatureKind::from_model(&after.kind);
+        let dimension = Dimension::of(&original)?;
+        let value = dimension.get(&next)?;
+        if dimension.with(&original, value).to_model() != after.kind {
+            return None;
+        }
+        let (operation, parameter) = match dimension {
+            Dimension::Depth => (OpKind::Extrude, ScalarParameter::ExtrudeDistance),
+            Dimension::Radius => (OpKind::Fillet, ScalarParameter::FilletRadius),
+            Dimension::Distance => (OpKind::Chamfer, ScalarParameter::ChamferDistance),
+        };
+        changes.push((after.id, operation, parameter, value));
+    }
+    let history = baseline.kernel().history(baseline.body()?).ok()?;
+    let mut edits = Vec::new();
+    for (feature, operation, parameter, value) in changes {
+        let before = edits.len();
+        for record in &history {
+            if record.op == operation && model::feature_of_tag(record.tag.as_str()) == Some(feature) {
+                edits.push(ScalarEdit { tag: record.tag.clone(), parameter, value });
+            }
+        }
+        if edits.len() == before {
+            return None;
+        }
+    }
+    Some(edits)
+}
+
+pub(crate) fn scalar_draft_command(
+    source: &model::Document,
+    edit: crate::drag::ScalarDraft,
+) -> Result<model::Command, String> {
+    let feature = source.feature(edit.feature).ok_or("no such feature")?;
+    let original = FeatureKind::from_model(&feature.kind);
+    edit.dimension.get(&original).ok_or("the feature has no requested dimension")?;
+    Ok(model::Command::EditFeature { id: edit.feature, kind: edit.dimension.with(&original, edit.value).to_model() })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ViewToken {
+    pub revision: u64,
+    pub request: u64,
+    pub transient: bool,
+}
+
+/// Read-only model/display state, not an output or measurement certificate.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct ProofState {
+    pub document: soliddraft_document::DocumentId,
+    pub requested_revision: u64,
+    pub displayed_revision: u64,
+    pub display_ready: bool,
+    pub mesh_version: u64,
+    pub proved_revision: Option<u64>,
+    pub requested_edit: Option<u64>,
+    pub displayed_edit: Option<u64>,
+    pub proved_edit: Option<u64>,
+    pub transient: bool,
+    pub pending: bool,
+    pub failed: bool,
+}
+
+impl ProofState {
+    pub fn current_proved_model(&self) -> bool {
+        !self.pending
+            && !self.failed
+            && !self.transient
+            && self.proved_revision == Some(self.requested_revision)
+            && self.proved_edit == self.requested_edit
+    }
+
+    pub fn current_proved_display(&self) -> bool {
+        self.current_proved_model()
+            && self.display_ready
+            && self.displayed_edit.is_none()
+            && self.displayed_revision == self.requested_revision
+    }
+}
+
+struct ProvisionalShown {
+    token: ViewToken,
+    display: CandidateDisplay,
+}
+
 /// Ghost geometry of an unapplied feature.
 #[derive(Clone, Debug, Default)]
 pub struct Preview {
@@ -899,6 +1092,21 @@ pub struct Preview {
     /// Material the feature adds (extrude) or removes (cut), drawn as a ghost.
     pub tool: Option<Arc<DisplayMesh>>,
     pub removes: bool,
+}
+
+/// Keeps the previous proved bodies alive through the model's existing shared
+/// ownership. Failed definitions remain in the current model, not this snapshot.
+struct ProvedRevision {
+    revision: u64,
+    request: Option<u64>,
+    model: Arc<model::Document>,
+}
+
+struct PendingBuild {
+    revision: u64,
+    request: u64,
+    candidate: Option<CandidateDisplay>,
+    completed: Option<Result<crate::drag::ProvedBuild, String>>,
 }
 
 pub struct Document {
@@ -929,6 +1137,7 @@ pub struct Document {
     pub edits: u64,
     /// Counts every rebuild of the tree, undo and redo included; see [`Document::revision`].
     revision: u64,
+    edit_request: Option<u64>,
     /// Pick id (index + 1) to entity, rebuilt with the meshes.
     picks: Vec<PickEntry>,
     /// The immutable body `meshes` and `picks` show.
@@ -938,6 +1147,15 @@ pub struct Document {
     /// Bodies shown before, latest last, kept while the part keeps them.
     recent: Vec<Shown>,
     model: model::Document,
+    last_proved: Option<ProvedRevision>,
+    worker: Option<crate::drag::Worker>,
+    /// Woken when a background answer arrives; see [`Document::set_repaint`].
+    repaint: Option<egui::Context>,
+    pending: Option<PendingBuild>,
+    provisional: Option<ProvisionalShown>,
+    proof_failure: Option<String>,
+    proof_notice: Option<String>,
+    shown_revision: u64,
     /// Which display level is shown, and the worker that makes the others.
     quality: DisplayQuality,
     /// Marks added features as the assistant's; see [`Document::set_assistant_mark`].
@@ -971,17 +1189,32 @@ impl Document {
             dirty: false,
             edits: 0,
             revision: 0,
+            edit_request: None,
             picks: Vec::new(),
             shown: None,
             shading: model.materials().clone(),
             recent: Vec::new(),
             quality: DisplayQuality::new(model.kernel().clone()),
             model,
+            last_proved: None,
+            worker: None,
+            repaint: None,
+            pending: None,
+            provisional: None,
+            proof_failure: None,
+            proof_notice: None,
+            shown_revision: 0,
             assistant_mark: false,
             headless: false,
         };
         doc.sync();
+        doc.retain_proved_revision();
         doc.refresh_display();
+        if doc.model.is_dirty()
+            && let Err(message) = doc.schedule_proof()
+        {
+            doc.fail_proof(message);
+        }
         doc
     }
 
@@ -1001,11 +1234,24 @@ impl Document {
             dirty: self.dirty,
             edits: self.edits,
             revision: self.revision,
+            edit_request: self.edit_request,
             picks: self.picks.clone(),
             shown: self.shown,
             shading: self.shading.clone(),
             recent: Vec::new(),
             model: self.model.fork(),
+            last_proved: self.last_proved.as_ref().map(|proved| ProvedRevision {
+                revision: proved.revision,
+                request: proved.request,
+                model: proved.model.clone(),
+            }),
+            worker: None,
+            repaint: self.repaint.clone(),
+            pending: None,
+            provisional: None,
+            proof_failure: None,
+            proof_notice: None,
+            shown_revision: self.shown_revision,
             quality: self.quality.fork(self.kernel().clone()),
             assistant_mark: self.assistant_mark,
             headless: self.headless,
@@ -1034,6 +1280,399 @@ impl Document {
     /// started at one revision, such as a drag preview, is obsolete at the next.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// The revision whose geometry is displayed. Failed input keeps its own
+    /// requested revision while the viewport restores the last proved model.
+    pub fn displayed_revision(&self) -> u64 {
+        self.provisional.as_ref().map_or(self.shown_revision, |view| view.token.revision)
+    }
+
+    pub fn proof_state(&self) -> ProofState {
+        ProofState {
+            document: self.model.id(),
+            requested_revision: self.revision,
+            displayed_revision: self.displayed_revision(),
+            mesh_version: self.mesh_version,
+            display_ready: self.provisional.is_some()
+                || self.shown.is_some()
+                || (!self.model.is_dirty() && self.model.body().is_none()),
+            proved_revision: self.last_proved.as_ref().map(|proved| proved.revision),
+            requested_edit: self.edit_request,
+            displayed_edit: self.provisional.as_ref().map(|shown| shown.token.request),
+            proved_edit: self.last_proved.as_ref().and_then(|proved| proved.request),
+            transient: self.provisional.as_ref().is_some_and(|shown| shown.token.transient),
+            pending: self.proof_pending(),
+            failed: self.proof_failure.is_some() || self.has_model_failure(),
+        }
+    }
+
+    /// A feature that shapes the body did not build. A sketch adds no geometry: an
+    /// active feature that uses a sketch which did not build is blocked itself.
+    fn has_model_failure(&self) -> bool {
+        self.features.iter().any(|feature| {
+            !matches!(feature.kind, FeatureKind::Sketch(_))
+                && matches!(feature.status, FeatureStatus::Error(_) | FeatureStatus::NeedsRepair(_))
+        })
+    }
+
+    fn current_exact_display(&self) -> bool {
+        // Headless proposal documents have exact named entities without a rendered mesh.
+        self.proof_state().current_proved_model() && self.provisional.is_none() && self.shown_revision == self.revision
+    }
+
+    fn retain_proved_revision(&mut self) {
+        if self.model.is_dirty() || self.has_model_failure() || self.proof_failure.is_some() {
+            return;
+        }
+        if let Some(proved) = &mut self.last_proved
+            && proved.model.body() == self.model.body()
+            && proved.model.features() == self.model.features()
+            && proved.model.active_count() == self.model.active_count()
+        {
+            proved.revision = self.revision;
+            proved.request = self.edit_request;
+            return;
+        }
+        self.last_proved = Some(ProvedRevision {
+            revision: self.revision,
+            request: self.edit_request,
+            model: Arc::new(self.model.fork()),
+        });
+    }
+
+    /// Definitions are saved immediately, but only a current exact result may export.
+    pub fn proof_pending(&self) -> bool {
+        self.model.is_dirty() && self.proof_failure.is_none()
+    }
+
+    pub fn proof_message(&self) -> Option<(&str, bool)> {
+        if let Some(message) = &self.proof_failure {
+            return Some((message, true));
+        }
+        if self.proof_pending() {
+            return Some(("Proof pending", false));
+        }
+        self.proof_notice.as_deref().map(|message| (message, false))
+    }
+
+    /// Background proof answers wake `ctx` instead of waiting for a polled frame.
+    pub fn set_repaint(&mut self, ctx: &egui::Context) {
+        if self.repaint.is_none() {
+            self.repaint = Some(ctx.clone());
+        }
+    }
+
+    pub(crate) fn take_worker(&mut self) -> Result<crate::drag::Worker, String> {
+        self.worker.take().map_or_else(|| crate::drag::Worker::new(self.repaint.clone()), Ok)
+    }
+
+    pub(crate) fn return_worker(&mut self, mut worker: crate::drag::Worker) {
+        if let Some(mut pending) = self.pending.take() {
+            worker.activate(pending.request);
+            worker.protect(Some(pending.request));
+            self.worker = Some(worker);
+            if let Some(result) = pending.completed.take() {
+                self.worker.as_mut().expect("returned worker").protect(None);
+                if let Err(message) = self.adopt_proof(result) {
+                    self.fail_proof(message);
+                }
+            } else {
+                let token = ViewToken { revision: pending.revision, request: pending.request, transient: false };
+                let candidate = pending.candidate.clone();
+                self.pending = Some(pending);
+                if let Some(display) = candidate {
+                    self.show_provisional(token, display);
+                }
+            }
+        } else {
+            worker.invalidate();
+            worker.protect(None);
+            self.worker = Some(worker);
+        }
+    }
+
+    pub(crate) fn build_job(
+        &self,
+        source: Arc<model::Document>,
+        edit: Option<crate::drag::ScalarDraft>,
+    ) -> crate::drag::Job {
+        crate::drag::Job {
+            source,
+            edit,
+            baseline: self.last_proved.as_ref().map(|proved| proved.model.clone()),
+            params: self.tess_params,
+            level: self.quality.wanted(),
+        }
+    }
+
+    fn schedule_proof(&mut self) -> Result<(), String> {
+        if !self.model.is_dirty() {
+            self.sync();
+            self.retain_proved_revision();
+            self.refresh_display();
+            if !self.has_model_failure() {
+                self.shown_revision = self.revision;
+            }
+            return Ok(());
+        }
+        let job = self.build_job(Arc::new(self.model.fork()), None);
+        let mut worker = self.take_worker()?;
+        let request = worker.invalidate();
+        worker.protect(Some(request));
+        self.edit_request = Some(request);
+        let queued = worker.enqueue(request, job);
+        self.worker = Some(worker);
+        queued?;
+        self.pending = Some(PendingBuild { revision: self.revision, request, candidate: None, completed: None });
+        Ok(())
+    }
+
+    /// A committed revision remains owed while a newer transient edit borrows its
+    /// worker. Retain its receipt, never publish it over that transient display.
+    pub(crate) fn hold_proof_answer(&mut self, answer: crate::drag::Answer) {
+        let Some(pending) = &mut self.pending else {
+            return;
+        };
+        if pending.revision != self.revision || pending.request != answer.request {
+            return;
+        }
+        match answer.kind {
+            crate::drag::AnswerKind::Construction(Ok(display)) if pending.completed.is_none() => {
+                pending.candidate = Some(display);
+            }
+            crate::drag::AnswerKind::Construction(_) => {}
+            crate::drag::AnswerKind::Proved(result) => pending.completed = Some(result),
+        }
+    }
+
+    pub fn poll_proof(&mut self) -> bool {
+        let answers = self.worker.as_mut().map(crate::drag::Worker::answers).unwrap_or_default();
+        for answer in answers {
+            let Some(pending) = &self.pending else {
+                continue;
+            };
+            if pending.revision != self.revision || pending.request != answer.request {
+                continue;
+            }
+            let token = ViewToken { revision: pending.revision, request: pending.request, transient: false };
+            match answer.kind {
+                crate::drag::AnswerKind::Construction(Ok(display)) => {
+                    self.pending.as_mut().expect("matched pending revision").candidate = Some(display.clone());
+                    self.show_provisional(token, display);
+                }
+                crate::drag::AnswerKind::Construction(Err(message)) => self.proof_notice = Some(message),
+                crate::drag::AnswerKind::Proved(result) => {
+                    self.pending = None;
+                    self.worker.as_mut().expect("polled worker").protect(None);
+                    if let Err(message) = self.adopt_proof(result) {
+                        self.fail_proof(message);
+                    }
+                }
+            }
+        }
+        self.pending.is_some()
+    }
+
+    fn fail_proof(&mut self, message: String) {
+        let selected = self.selection.and_then(|selection| self.selection_feature(selection));
+        self.pending = None;
+        if let Some(worker) = &mut self.worker {
+            worker.protect(None);
+        }
+        self.proof_failure = Some(message);
+        self.provisional = None;
+        self.mesh_version += 1;
+        self.sync();
+        self.refresh_display();
+        self.selection = selected.filter(|feature| self.feature(*feature).is_some()).map(Selection::Feature);
+    }
+
+    pub(crate) fn show_provisional(&mut self, token: ViewToken, display: CandidateDisplay) {
+        if token.revision != self.revision {
+            return;
+        }
+        if self.provisional.as_ref().is_some_and(|shown| shown.token.transient && !token.transient) {
+            return;
+        }
+        let selected = self.provisional_selection();
+        let same_request = self.provisional.as_ref().is_some_and(|shown| shown.token == token);
+        self.provisional = Some(ProvisionalShown { token, display });
+        self.mesh_version += 1;
+        if let Some((feature, origins)) = selected {
+            if same_request {
+                self.restore_origins(feature, &origins);
+            } else {
+                self.selection = Some(Selection::Feature(feature));
+            }
+        }
+    }
+
+    pub(crate) fn discard_provisional(&mut self, token: ViewToken) {
+        if self.provisional.as_ref().is_some_and(|view| view.token == token) {
+            if let Some((feature, _)) = self.provisional_selection() {
+                self.selection = Some(Selection::Feature(feature));
+            }
+            self.provisional = None;
+            self.mesh_version += 1;
+        }
+    }
+
+    pub fn provisional_mesh(&self) -> Option<Arc<DisplayMesh>> {
+        self.provisional.as_ref().map(|view| view.display.mesh())
+    }
+
+    fn provisional_selection(&self) -> Option<(FeatureId, Vec<soliddraft_kernel_api::Origin>)> {
+        let Selection::Face(face) = self.selection? else {
+            return None;
+        };
+        let (feature, _, origins) = self.provisional.as_ref()?.display.face(face)?;
+        Some((feature, origins.to_vec()))
+    }
+
+    fn restore_origins(&mut self, feature: FeatureId, origins: &[soliddraft_kernel_api::Origin]) {
+        let face = self.provisional.as_ref().and_then(|view| view.display.resolve(origins));
+        self.selection = Some(face.map_or(Selection::Feature(feature), Selection::Face));
+    }
+
+    fn adopt_proof(&mut self, result: Result<crate::drag::ProvedBuild, String>) -> Result<(), String> {
+        let proof = result?;
+        self.model.rebuild_reusing(&proof.model)?;
+        let selected = self.provisional_selection();
+        let resolved = selected.as_ref().map(|(feature, origins)| {
+            let face = proof.display.as_ref().and_then(|display| {
+                unique_origin_face(
+                    display.topology.faces.iter().map(|face| (face.id, face.origins.as_slice())),
+                    origins,
+                )
+            });
+            face.map_or(Selection::Feature(*feature), Selection::Face)
+        });
+        self.provisional = None;
+        self.proof_failure = None;
+        self.proof_notice = proof.display_error;
+        self.sync();
+        if proof.failure.is_some() {
+            self.mesh_version += 1;
+            self.refresh_display();
+            if let Some((feature, _)) = selected {
+                self.selection = Some(Selection::Feature(feature));
+            }
+            return Ok(());
+        }
+        self.retain_proved_revision();
+        if let Some(display) = proof.display {
+            let display = Arc::try_unwrap(display).unwrap_or_else(|display| (*display).clone());
+            let wanted = self.quality.retarget(display.body, &display.topology, &self.model.settings().viewport);
+            if wanted == display.params {
+                self.quality.made(display.body, display.kernel_mesh);
+            } else {
+                self.quality.set_quality(&self.model.settings().viewport);
+            }
+            self.shown = Some(display.body);
+            self.tess_params = display.params;
+            self.faces = display.faces;
+            self.edges = display.edges;
+            self.picks = display.picks;
+            self.meshes.clear();
+            self.meshes.insert(display.body, display.mesh);
+            self.apply_appearances();
+            self.shown_revision = self.revision;
+            self.mesh_version += 1;
+        } else if self.model.body().is_none() {
+            self.refresh_display();
+            self.shown_revision = self.revision;
+        } else {
+            // A display refusal does not unprove the model, or retag an old LOD
+            // answer with the new body's identity.
+            self.quality.clear();
+            self.proof_notice = self.proof_notice.take().map(|message| format!("Display unavailable: {message}"));
+            self.mesh_version += 1;
+        }
+        if let Some(selection) = resolved {
+            self.selection = Some(selection);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn apply_prepared(
+        &mut self,
+        command: Command,
+        prepared: crate::drag::PreparedBuild,
+    ) -> Result<bool, String> {
+        let crate::drag::PreparedBuild { worker, request, completed, candidate } = prepared;
+        self.worker = Some(worker);
+        if let Err(message) = self.execute_command(command, true) {
+            let worker = self.worker.take().expect("prepared worker");
+            self.return_worker(worker);
+            return Err(message);
+        }
+        self.worker.as_mut().expect("prepared worker").protect(completed.is_none().then_some(request));
+        self.edit_request = Some(request);
+        if let Some(result) = completed {
+            if let Err(message) = self.adopt_proof(result) {
+                self.fail_proof(message);
+            }
+            return Ok(true);
+        }
+        self.pending =
+            Some(PendingBuild { revision: self.revision, request, candidate: candidate.clone(), completed: None });
+        if let Some(display) = candidate {
+            self.show_provisional(ViewToken { revision: self.revision, request, transient: false }, display);
+        }
+        Ok(false)
+    }
+
+    pub fn apply_interactive(&mut self, command: Command) -> Result<Option<FeatureId>, String> {
+        let scalar = match &command {
+            Command::EditExtrude { .. }
+            | Command::EditCut { .. }
+            | Command::EditFillet { .. }
+            | Command::EditChamfer { .. } => true,
+            Command::EditFeature { kind, .. } => crate::drag::Dimension::of(kind).is_some(),
+            _ => false,
+        };
+        if !scalar {
+            return self.apply(command);
+        }
+        let created = self.execute_command(command, true)?;
+        if let Err(message) = self.schedule_proof() {
+            self.fail_proof(message);
+        }
+        Ok(created)
+    }
+
+    pub fn undo_interactive(&mut self) -> Result<String, String> {
+        let label = self.model.undo_deferred().map_err(|error| error.to_string())?;
+        self.touch();
+        self.after_deferred_change();
+        if let Err(message) = self.schedule_proof() {
+            self.fail_proof(message);
+        }
+        Ok(label)
+    }
+
+    pub fn redo_interactive(&mut self) -> Result<String, String> {
+        let label = self.model.redo_deferred().map_err(|error| error.to_string())?;
+        self.touch();
+        self.after_deferred_change();
+        if let Err(message) = self.schedule_proof() {
+            self.fail_proof(message);
+        }
+        Ok(label)
+    }
+
+    fn after_deferred_change(&mut self) {
+        let selected = self.selection.and_then(|selection| self.selection_feature(selection));
+        self.revision += 1;
+        self.edit_request = None;
+        self.pending = None;
+        self.provisional = None;
+        self.proof_failure = None;
+        self.proof_notice = None;
+        self.mesh_version += 1;
+        self.sync();
+        self.selection = selected.filter(|feature| self.feature(*feature).is_some()).map(Selection::Feature);
     }
 
     /// The part behind the interface.
@@ -1120,8 +1759,14 @@ impl Document {
         (0..end).rev().find(|&i| self.features[i].body.is_some())
     }
 
-    /// The body shown in the viewport: the running body at the rollback bar.
+    /// The viewport body. A failed edit displays the last proved model, never
+    /// the successful prefix of the failed request as if it were its result.
     pub fn display_body(&self) -> Option<BodyId> {
+        if (self.model.is_dirty() || self.has_model_failure() || self.proof_failure.is_some())
+            && let Some(proved) = &self.last_proved
+        {
+            return proved.model.body();
+        }
         self.display_index().and_then(|i| self.features[i].body)
     }
 
@@ -1199,6 +1844,10 @@ impl Document {
     /// feature the command created. A created feature that fails to build stays
     /// in the tree with its error, and the error comes back here too.
     pub fn apply(&mut self, command: Command) -> Result<Option<FeatureId>, String> {
+        self.execute_command(command, false)
+    }
+
+    fn execute_command(&mut self, command: Command, deferred: bool) -> Result<Option<FeatureId>, String> {
         let journal = self.model.journal_command(|| {
             serde_json::json!({
                 "op":"app_command", "command":command, "assistant_mark":self.assistant_mark
@@ -1207,11 +1856,18 @@ impl Document {
         journal.finish((|| {
             let label = command.label();
             let commands = self.to_model(command)?;
-            let done = self.model.execute(model::Command::Batch { label, commands }).map_err(|e| e.to_string())?;
+            let batch = model::Command::Batch { label, commands };
+            let done = if deferred { self.model.execute_deferred(batch) } else { self.model.execute(batch) }
+                .map_err(|error| error.to_string())?;
             self.touch();
-            self.after_change();
+            if deferred {
+                self.after_deferred_change();
+            } else {
+                self.after_change();
+            }
             let created = done.created.map(app_id);
-            if let Some(id) = created
+            if !deferred
+                && let Some(id) = created
                 && let Some(FeatureStatus::Error(msg)) = self.feature(id).map(|f| f.status.clone())
             {
                 return Err(msg);
@@ -1383,10 +2039,25 @@ impl Document {
 
     /// Mirrors the model and refreshes the display, keeping the selection by name.
     fn after_change(&mut self) {
+        if let Some(worker) = &mut self.worker {
+            worker.invalidate();
+        }
+        self.pending = None;
+        self.provisional = None;
+        if let Some(worker) = &mut self.worker {
+            worker.protect(None);
+        }
+        self.proof_failure = None;
+        self.proof_notice = None;
         self.revision += 1;
+        self.edit_request = None;
         let previous_selection = self.selection.and_then(|s| self.describe(s)).map(|i| (i.feature, i.title));
         self.sync();
+        self.retain_proved_revision();
         self.refresh_display();
+        if !self.has_model_failure() {
+            self.shown_revision = self.revision;
+        }
         self.restore_selection(previous_selection);
     }
 
@@ -1394,21 +2065,43 @@ impl Document {
     fn sync(&mut self) {
         let m = &self.model;
         let active = m.active_count();
+        let pending_from = if m.is_dirty() {
+            self.last_proved.as_ref().map_or(0, |proved| {
+                proved
+                    .model
+                    .features()
+                    .iter()
+                    .zip(m.features())
+                    .position(|(before, after)| {
+                        before.id != after.id || before.kind != after.kind || before.suppressed != after.suppressed
+                    })
+                    .unwrap_or(proved.model.features().len().min(m.features().len()))
+            })
+        } else {
+            usize::MAX
+        };
         self.rollback = (active < m.features().len()).then_some(active);
         let names: HashMap<model::FeatureId, String> = m.features().iter().map(|f| (f.id, f.name.clone())).collect();
         self.features = m
             .features()
             .iter()
-            .map(|f| {
+            .enumerate()
+            .map(|(index, f)| {
                 let status = m.status(f.id).cloned().unwrap_or(model::FeatureStatus::RolledBack);
-                let inactive = matches!(status, model::FeatureStatus::Suppressed | model::FeatureStatus::RolledBack);
+                let inactive = f.suppressed || index >= active;
                 Feature {
                     id: app_id(f.id),
                     name: f.name.clone(),
                     kind: FeatureKind::from_model(&f.kind),
-                    status: view_status(&f.kind, status, &names),
+                    status: if index >= pending_from && index < active && !inactive {
+                        self.proof_failure
+                            .as_ref()
+                            .map_or(FeatureStatus::Pending, |message| FeatureStatus::Error(message.clone()))
+                    } else {
+                        view_status(&f.kind, status, &names)
+                    },
                     suppressed: f.suppressed,
-                    body: if inactive { None } else { m.body_after(f.id) },
+                    body: if inactive || index >= pending_from { None } else { m.body_after(f.id) },
                     plane: m.built_sketch(f.id).map(|b| b.plane),
                     via_assistant: f.via_assistant,
                 }
@@ -1428,8 +2121,10 @@ impl Document {
             return;
         }
         let model = &self.model;
-        self.quality.retain(|b| model.keeps(b));
-        self.recent.retain(|s| model.keeps(s.body));
+        let proved = self.last_proved.as_ref();
+        let keeps = |body| model.keeps(body) || proved.is_some_and(|p| p.model.keeps(body));
+        self.quality.retain(keeps);
+        self.recent.retain(|s| keeps(s.body));
         if self.headless {
             // Drop the earlier display, so `show` makes the current one.
             self.shown = None;
@@ -1561,6 +2256,11 @@ impl Document {
     /// Returns true while the viewport should keep repainting: the mesh changed, or the
     /// worker still owes a level.
     pub fn update_display(&mut self, projection: &Projection, dt_s: f32) -> bool {
+        // Display levels wait for a proved part. A pending proof's worker wakes the
+        // interface itself, so waiting here draws nothing.
+        if self.model.is_dirty() || self.provisional.is_some() || self.proof_failure.is_some() {
+            return false;
+        }
         let Some((level, mesh)) = self.quality.update(projection, dt_s) else {
             return self.quality.pending();
         };
@@ -1608,35 +2308,7 @@ impl Document {
     /// made it. Face names come from the model's persistent names (caps, sides
     /// of sketch entities, walls, blends); edges are numbered per feature.
     fn name_entities(&mut self, body: BodyId, topology: &Topology) {
-        let labels: HashMap<FaceId, model::FaceLabel> =
-            self.model.face_labels(body).into_iter().filter_map(|(id, l)| Some((id, l?))).collect();
-        let mut unnamed = 0;
-        self.faces = topology
-            .faces
-            .iter()
-            .map(|f| {
-                let (feature, label) = match labels.get(&f.id) {
-                    Some(l) => (app_id(l.feature), l.part.clone()),
-                    None => {
-                        unnamed += 1;
-                        (0, format!("Face {unnamed}"))
-                    }
-                };
-                NamedFace { id: f.id, feature, label, surface: f.surface, area: f.area, centroid: kv(f.centroid) }
-            })
-            .collect();
-        let makers: HashMap<EdgeId, Option<model::FeatureId>> = self.model.edge_features(body).into_iter().collect();
-        let mut counters: HashMap<FeatureId, u32> = HashMap::new();
-        self.edges = topology
-            .edges
-            .iter()
-            .map(|e| {
-                let feature = makers.get(&e.id).copied().flatten().map(app_id).unwrap_or(0);
-                let n = counters.entry(feature).or_default();
-                *n += 1;
-                NamedEdge { id: e.id, feature, label: format!("Edge {n}"), length: e.length, midpoint: kv(e.midpoint) }
-            })
-            .collect();
+        (self.faces, self.edges) = named_entities(&self.model, body, topology);
     }
 
     /// Kernel ids change on every rebuild, so a selection is carried across a
@@ -1881,12 +2553,18 @@ impl Document {
 
     /// A persistent reference to an edge of the part, for fillets and chamfers.
     pub fn edge_ref(&self, edge: EdgeId) -> Option<EdgeRef> {
+        if !self.current_exact_display() {
+            return None;
+        }
         self.model.edge_ref(edge).ok()
     }
 
     /// A persistent reference to a planar face of the part, for sketching on it. A piece
     /// of a split face names the plane all its pieces share.
     pub fn face_ref(&self, face: FaceId) -> Option<FaceRef> {
+        if !self.current_exact_display() {
+            return None;
+        }
         let nf = self.faces.iter().find(|f| f.id == face)?;
         if nf.surface != SurfaceKind::Plane {
             return None;
@@ -1896,11 +2574,17 @@ impl Document {
 
     /// A persistent reference to any face of the part, for drafts and end faces.
     pub fn any_face_ref(&self, face: FaceId) -> Option<FaceRef> {
+        if !self.current_exact_display() {
+            return None;
+        }
         self.model.face_ref(face).ok()
     }
 
     /// The sketch plane on a planar face of the displayed body.
     pub fn face_plane(&self, face: FaceId) -> Option<Plane> {
+        if !self.current_exact_display() {
+            return None;
+        }
         let body = self.display_body()?;
         let topology = self.kernel().topology(body).ok()?;
         let info = topology.face(face)?;
@@ -1908,11 +2592,17 @@ impl Document {
     }
 
     pub fn mass_properties(&self, id: FeatureId) -> Option<soliddraft_kernel_api::MassProperties> {
+        if !self.current_exact_display() {
+            return None;
+        }
         let body = self.feature(id)?.body?;
         self.kernel().mass_properties(body).ok()
     }
 
     pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
+        if let Some(mesh) = self.provisional_mesh() {
+            return mesh.bounds();
+        }
         let mut acc: Option<(Vec3, Vec3)> = None;
         for m in self.meshes.values() {
             if let Some((lo, hi)) = m.bounds() {
@@ -1931,19 +2621,28 @@ impl Document {
 
     /// The entity behind a pick id from the id buffer.
     pub fn pick(&self, pick: u32) -> Option<PickEntry> {
-        self.picks.get(pick.checked_sub(1)? as usize).copied()
+        let picks = self.provisional.as_ref().map_or(self.picks.as_slice(), |view| view.display.picks());
+        let entry = picks.get(pick.checked_sub(1)? as usize).copied()?;
+        (self.provisional.is_none() || matches!(entry, PickEntry::Face(_, _))).then_some(entry)
     }
 
     /// The pick id of a selected face, for the shader's highlight.
     pub fn pick_of_face(&self, face: FaceId) -> Option<u32> {
-        self.picks.iter().position(|p| matches!(p, PickEntry::Face(_, f) if *f == face)).map(|i| i as u32 + 1)
+        let picks = self.provisional.as_ref().map_or(self.picks.as_slice(), |view| view.display.picks());
+        picks.iter().position(|p| matches!(p, PickEntry::Face(_, f) if *f == face)).map(|i| i as u32 + 1)
     }
 
     pub fn pick_of_edge(&self, edge: EdgeId) -> Option<u32> {
+        if self.provisional.is_some() {
+            return None;
+        }
         self.picks.iter().position(|p| matches!(p, PickEntry::Edge(_, e) if *e == edge)).map(|i| i as u32 + 1)
     }
 
     pub fn vertex_position(&self, key: VertexKey) -> Option<Vec3> {
+        if self.provisional.is_some() {
+            return None;
+        }
         self.picks.iter().find_map(|p| match p {
             PickEntry::Vertex(k, pos) if *k == key => Some(*pos),
             _ => None,
@@ -1959,6 +2658,19 @@ impl Document {
     }
 
     pub fn describe(&self, sel: Selection) -> Option<EntityInfo> {
+        if self.provisional.is_some() && matches!(sel, Selection::Edge(_) | Selection::Vertex(_)) {
+            return None;
+        }
+        if let Some(view) = &self.provisional
+            && let Selection::Face(face) = sel
+        {
+            let (feature, label, _) = view.display.face(face)?;
+            return Some(EntityInfo {
+                title: label.into(),
+                feature: Some(feature),
+                details: vec![("State".into(), "Revision-bound preview · proof pending".into())],
+            });
+        }
         match sel {
             Selection::Body => {
                 self.display_body()?;
@@ -2061,6 +2773,7 @@ impl Document {
                     }
                     FeatureStatus::Inactive => details.push(("State".to_owned(), "Rolled back".to_owned())),
                     FeatureStatus::Ok => {}
+                    FeatureStatus::Pending => details.push(("State".into(), "Proof pending".into())),
                 }
                 Some(EntityInfo { title: f.name.clone(), feature: Some(id), details })
             }
@@ -2109,6 +2822,109 @@ impl Document {
             }
         }
     }
+}
+
+fn named_entities(model: &model::Document, body: BodyId, topology: &Topology) -> (Vec<NamedFace>, Vec<NamedEdge>) {
+    let labels: HashMap<FaceId, model::FaceLabel> =
+        model.face_labels(body).into_iter().filter_map(|(id, label)| Some((id, label?))).collect();
+    let mut unnamed = 0;
+    let faces = topology
+        .faces
+        .iter()
+        .map(|face| {
+            let (feature, label) = match labels.get(&face.id) {
+                Some(label) => (app_id(label.feature), label.part.clone()),
+                None => {
+                    unnamed += 1;
+                    (0, format!("Face {unnamed}"))
+                }
+            };
+            NamedFace {
+                id: face.id,
+                feature,
+                label,
+                surface: face.surface,
+                area: face.area,
+                centroid: kv(face.centroid),
+            }
+        })
+        .collect();
+    let makers: HashMap<EdgeId, Option<model::FeatureId>> = model.edge_features(body).into_iter().collect();
+    let mut counters: HashMap<FeatureId, u32> = HashMap::new();
+    let edges = topology
+        .edges
+        .iter()
+        .map(|edge| {
+            let feature = makers.get(&edge.id).copied().flatten().map(app_id).unwrap_or(0);
+            let number = counters.entry(feature).or_default();
+            *number += 1;
+            NamedEdge {
+                id: edge.id,
+                feature,
+                label: format!("Edge {number}"),
+                length: edge.length,
+                midpoint: kv(edge.midpoint),
+            }
+        })
+        .collect();
+    (faces, edges)
+}
+
+pub(crate) fn ready_display(
+    model: &model::Document,
+    level: soliddraft_tessellation::Level,
+) -> Result<Option<ReadyDisplay>, String> {
+    let Some(body) = model.body() else { return Ok(None) };
+    let kernel = model.kernel();
+    let topology = kernel.topology(body).map_err(|error| error.to_string())?;
+    let params =
+        *soliddraft_tessellation::Levels::new(&model.settings().viewport, topology.bbox.diagonal()).params(level);
+    let kernel_mesh = kernel.preview(body, &params).map_err(|error| error.to_string())?;
+    let edges = edge_polylines(kernel.as_ref(), body, &params);
+    let (faces, named_edges) = named_entities(model, body, &topology);
+    let makers = faces.iter().map(|face| (face.id, face.feature)).collect();
+    let feature = model
+        .features()
+        .iter()
+        .rev()
+        .find(|feature| {
+            !matches!(
+                model.status(feature.id),
+                Some(model::FeatureStatus::Suppressed | model::FeatureStatus::RolledBack)
+            ) && model.body_after(feature.id).is_some()
+        })
+        .map(|feature| app_id(feature.id))
+        .unwrap_or(0);
+    let mut picks = Vec::new();
+    let mesh = Arc::new(display_mesh(feature, &kernel_mesh, &edges, &topology, &makers, &mut picks));
+    Ok(Some(ReadyDisplay { body, params, mesh, picks, faces, edges: named_edges, topology, kernel_mesh }))
+}
+
+pub(crate) fn construction_view(
+    display: soliddraft_kernel_api::ConstructionMesh,
+    model: &model::Document,
+) -> Result<ConstructionView, String> {
+    let mut faces = Vec::with_capacity(display.faces.len());
+    let mut picks = Vec::with_capacity(display.faces.len());
+    let mut face_picks = HashMap::new();
+    let mut makers = HashMap::new();
+    for face in display.faces {
+        let (origin, feature) = face
+            .origins
+            .iter()
+            .find_map(|origin| {
+                let feature = model::feature_of_tag(origin.tag.as_str())?;
+                model.feature(feature)?;
+                Some((origin, app_id(feature)))
+            })
+            .ok_or("a construction face has no feature origin in this revision")?;
+        let label = format!("{:?}", origin.role);
+        picks.push(PickEntry::Face(feature, face.id));
+        face_picks.insert(face.id, picks.len() as u32);
+        makers.insert(face.id, feature);
+        faces.push(ConstructionFace { id: face.id, feature, label, origins: face.origins });
+    }
+    Ok(ConstructionView { mesh: Arc::new(display_faces(&display.mesh, &face_picks, &makers)), picks, faces })
 }
 
 /// A hole's depth and tip for people: "through", "12 mm, 118° tip".
@@ -2231,6 +3047,24 @@ fn edge_polylines(kernel: &dyn Kernel, body: BodyId, params: &TessellationParams
     })
 }
 
+fn display_faces(mesh: &Mesh, face_picks: &HashMap<FaceId, u32>, makers: &HashMap<FaceId, FeatureId>) -> DisplayMesh {
+    let mut out = DisplayMesh::default();
+    for (index, triangle) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
+        let face = mesh.triangle_faces.get(index).copied().unwrap_or(FaceId::from_raw(0));
+        let pick = face_picks.get(&face).copied().unwrap_or(0);
+        let maker = makers.get(&face).map(|feature| *feature as u32).unwrap_or(0);
+        for &vertex in triangle {
+            let next = out.positions.len() as u32;
+            out.positions.push(Vec3::from(mesh.positions[vertex as usize]));
+            out.normals.push(Vec3::from(mesh.normals[vertex as usize]));
+            out.face_picks.push(pick);
+            out.face_features.push(maker);
+            out.indices.push(next);
+        }
+    }
+    out
+}
+
 /// Builds the display mesh and registers its faces, edges and corners as picks.
 /// `feature` 0 marks a preview whose picks are discarded.
 fn display_mesh(
@@ -2241,26 +3075,12 @@ fn display_mesh(
     makers: &HashMap<FaceId, FeatureId>,
     picks: &mut Vec<PickEntry>,
 ) -> DisplayMesh {
-    let mut out = DisplayMesh::default();
     let mut face_pick: HashMap<FaceId, u32> = HashMap::new();
     for f in &topology.faces {
         picks.push(PickEntry::Face(feature, f.id));
         face_pick.insert(f.id, picks.len() as u32);
     }
-    // Unshare vertices so each carries its face.
-    for (t, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
-        let face = mesh.triangle_faces.get(t).copied().unwrap_or(FaceId::from_raw(0));
-        let pick = face_pick.get(&face).copied().unwrap_or(0);
-        let maker = makers.get(&face).map(|f| *f as u32).unwrap_or(0);
-        for &i in tri {
-            let base = out.positions.len() as u32;
-            out.positions.push(Vec3::from(mesh.positions[i as usize]));
-            out.normals.push(Vec3::from(mesh.normals[i as usize]));
-            out.face_picks.push(pick);
-            out.face_features.push(maker);
-            out.indices.push(base);
-        }
-    }
+    let mut out = display_faces(mesh, &face_pick, makers);
     // Edges in topology order, as segment pairs. A seam, where a closed face meets
     // itself, is not an edge anyone draws or picks.
     let lines: HashMap<EdgeId, &EdgePolyline> = polylines.iter().map(|l| (l.edge, l)).collect();

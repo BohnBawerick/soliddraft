@@ -152,12 +152,22 @@ fn dimension_field(ui: &mut egui::Ui, state: &mut AppState, id: FeatureId, kind:
     if r.changed() {
         if r.dragged() || r.drag_started() {
             state.push(AppAction::DragDimension(DragStep::Move(value)));
-        } else if let Some(command) = crate::drag::edit_command(id, dimension.with(kind, value)) {
+        } else if value != applied
+            && let Some(command) = crate::drag::edit_command(id, dimension.with(kind, value))
+        {
             state.push(AppAction::Command(command));
         }
     }
     if r.drag_stopped() {
         state.push(AppAction::DragDimension(DragStep::Finish));
+    }
+    if let Some(drag) = &state.drag_preview
+        && drag.feature() == id
+    {
+        let (message, failed) = drag.label();
+        ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
+    } else if let Some((message, failed)) = state.doc.proof_message() {
+        ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
     }
 }
 

@@ -190,6 +190,8 @@ impl Bench {
             meshes: (0, Vec::new()),
             ghost: None,
             preview: None,
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: self.pick.clone(),
             assembly: Some(AssemblyFrame {
                 scene: self.scene.clone(),
@@ -279,6 +281,8 @@ fn empty_frame(size: [u32; 2], pick: Arc<Mutex<PickSample>>) -> FrameInput {
         meshes: (0, Vec::new()),
         ghost: None,
         preview: None,
+        preview_pickable: false,
+        pick_revision: None,
         pick_out: pick,
         assembly: None,
     }

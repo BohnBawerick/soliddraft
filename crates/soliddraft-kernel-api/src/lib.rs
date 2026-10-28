@@ -27,12 +27,14 @@ pub mod contract;
 #[cfg(feature = "counting")]
 pub mod counting;
 pub mod drawing;
+mod edit;
 mod geometry;
 mod history;
 mod ids;
 mod import;
 mod profile;
 
+pub use edit::{ConstructionEdit, ConstructionFace, ConstructionMesh, ProofWork, ScalarEdit, ScalarParameter};
 pub use geometry::{Aabb, Plane, Point2, Vec3};
 pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, HolePart, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
@@ -713,6 +715,26 @@ pub trait Kernel: Send + Sync {
     /// The default returns `tessellate`.
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.tessellate(body, params)
+    }
+
+    /// Prepares exact-proof work when no early representation is requested.
+    /// Nested rebuild operations receive the synchronous rebuild's allowances.
+    fn reserve_proof_work(&self) -> KernelResult<Box<dyn ProofWork>> {
+        Err(KernelError::Unsupported("reserved background proof is unavailable in this backend".into()))
+    }
+
+    /// Builds a definition-native display before rebuilding the exact model.
+    /// Edits name existing operation tags in `body`. Construction has its own
+    /// reserved allowance and exact proof keeps the synchronous rebuild's
+    /// allowances. No provisional face id is an exact handle.
+    /// The default explicitly refuses this early representation.
+    fn construction_edit(
+        &self,
+        _body: BodyId,
+        _edits: &[ScalarEdit],
+        _params: &TessellationParams,
+    ) -> KernelResult<ConstructionEdit> {
+        Err(KernelError::Unsupported("definition-native construction preview is unavailable in this backend".into()))
     }
 
     /// [`preview`](Self::preview) once per entry of `levels`, in order, as one call, the

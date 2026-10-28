@@ -595,6 +595,9 @@ impl AppState {
 
     /// A body drawn in place of the document's while a feature is previewed.
     pub fn preview_body(&self) -> Option<Arc<DisplayMesh>> {
+        if let Some(mesh) = self.doc.provisional_mesh() {
+            return Some(mesh);
+        }
         if let Some(d) = &self.drag_preview {
             return d.mesh();
         }
@@ -602,6 +605,32 @@ impl AppState {
             Some(e) => e.preview.result.clone(),
             None => self.chat.preview.as_ref().and_then(|(_, p)| p.result.clone()),
         }
+    }
+
+    /// Controls must not call a transient edit or an outstanding proof rebuilt.
+    pub fn edit_status(&self) -> Option<(&'static str, NoteKind)> {
+        if let Some(drag) = &self.drag_preview {
+            return Some(if matches!(drag.shown(), crate::drag::Shown::Failed { .. }) {
+                ("Edit failed", NoteKind::Error)
+            } else if drag.pending() {
+                ("Proof pending", NoteKind::Info)
+            } else {
+                ("Preview", NoteKind::Info)
+            });
+        }
+        self.doc.proof_pending().then_some(("Proof pending", NoteKind::Info))
+    }
+
+    /// Exports only the committed revision. A live dimension edit cannot export
+    /// the preceding body as if it represented the value currently requested.
+    pub fn export_part(&self, format: soliddraft_exchange::Format) -> Result<soliddraft_exchange::Export, String> {
+        if self.drag_preview.is_some() {
+            return Err("Finish or cancel the dimension edit before exporting".into());
+        }
+        if self.doc.proof_pending() || self.doc.proof_message().is_some_and(|(_, failed)| failed) {
+            return Err("The requested revision has not passed proof".into());
+        }
+        self.doc.model().export(format)
     }
 
     /// Runs one step of a dimension drag. Only the final value reaches the document, as
@@ -612,14 +641,17 @@ impl AppState {
                 if self.editor.is_some() || self.sketch.is_some() {
                     return;
                 }
-                match DragPreview::start(&self.doc, feature, dimension) {
+                if let Some(previous) = self.drag_preview.take() {
+                    previous.cancel(&mut self.doc);
+                }
+                match DragPreview::start(&mut self.doc, feature, dimension) {
                     Ok(d) => self.drag_preview = Some(d),
                     Err(e) => self.note(e, NoteKind::Error),
                 }
             }
             DragStep::Move(value) => {
                 if let Some(d) = self.drag_preview.as_mut() {
-                    d.request(value);
+                    d.request(value, &mut self.doc);
                 }
             }
             DragStep::Finish => {
@@ -628,6 +660,9 @@ impl AppState {
                 match d.finish(&mut self.doc) {
                     Finish::Applied { value } => {
                         self.note(format!("{what} {} mm", crate::document::fmt_mm(value)), NoteKind::Ok)
+                    }
+                    Finish::Pending { value } => {
+                        self.note(format!("{what} {} mm requested", crate::document::fmt_mm(value)), NoteKind::Info)
                     }
                     Finish::Failed { value, message } | Finish::Refused { value, message } => self.note(
                         format!("{what} {} mm did not build: {message}", crate::document::fmt_mm(value)),
@@ -638,7 +673,8 @@ impl AppState {
                 }
             }
             DragStep::Cancel => {
-                if self.drag_preview.take().is_some() {
+                if let Some(drag) = self.drag_preview.take() {
+                    drag.cancel(&mut self.doc);
                     self.note("Drag cancelled", NoteKind::Info);
                 }
             }
@@ -649,13 +685,15 @@ impl AppState {
     /// it, such as by an undo, an assistant command or a new selection, ends with nothing
     /// applied. Returns true while the drag waits for an answer.
     pub fn poll_drag(&mut self) -> bool {
-        let Some(d) = self.drag_preview.as_mut() else { return false };
+        let Some(d) = self.drag_preview.as_mut() else {
+            return self.doc.poll_proof();
+        };
         if !d.is_current(&self.doc) {
-            self.drag_preview = None;
+            self.drag_preview.take().expect("active drag").cancel(&mut self.doc);
             self.note("The part changed during the drag; nothing applied", NoteKind::Info);
-            return false;
+            return self.doc.poll_proof();
         }
-        d.poll();
+        d.poll(&mut self.doc);
         d.pending()
     }
 

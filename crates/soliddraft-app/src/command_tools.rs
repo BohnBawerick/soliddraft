@@ -1396,7 +1396,10 @@ fn run_marked(doc: &mut Document, lines: &[Line]) -> Result<Vec<FeatureId>, Stri
 
 /// Previously requested properties; inspection must not start a measurement.
 fn cached_body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassProperties> {
-    doc.kernel().cached_mass_properties(doc.display_body()?)
+    if !doc.proof_state().current_proved_model() {
+        return None;
+    }
+    doc.kernel().cached_mass_properties(doc.model().body()?)
 }
 
 /// An independent proposal copy sharing the part's immutable bodies and meshes. It makes
@@ -1408,6 +1411,7 @@ fn scratch_copy(doc: &Document) -> Document {
 fn status_text(doc: &Document, id: FeatureId) -> String {
     match doc.feature(id).map(|f| (&f.status, f.suppressed)) {
         Some((FeatureStatus::Ok, _)) => "ok".into(),
+        Some((FeatureStatus::Pending, _)) => "proof pending".into(),
         Some((FeatureStatus::Error(e), _)) => format!("error: {e}"),
         Some((FeatureStatus::NeedsRepair(items), _)) => format!(
             "needs repair: {} no longer resolve{}",
@@ -2017,10 +2021,13 @@ impl CommandTools<'_> {
     pub fn summary(&self) -> Value {
         let doc = &*self.doc;
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
-        let mass = cached_body_mass(doc);
+        let proof = doc.proof_state();
+        let current = proof.current_proved_display();
+        let mass = if current { cached_body_mass(doc) } else { None };
         json!({
             "part": doc.name,
             "units": "mm",
+            "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {
                 let mut v = params_json(doc, &f.kind);
@@ -2035,8 +2042,8 @@ impl CommandTools<'_> {
                 "bounding_box": { "min": vec3(lo), "max": vec3(hi) },
                 "volume_mm3": mass.map(|m| round(m.volume)),
                 "area_mm2": mass.map(|m| round(m.area)),
-                "faces": doc.faces.len(),
-                "edges": doc.edges.len(),
+                "faces": current.then_some(doc.faces.len()),
+                "edges": current.then_some(doc.edges.len()),
             },
             "selection": doc.selection.map(|s| selection_json(doc, s)).unwrap_or(Value::Null),
             "pending_proposals": self.book.proposals.iter().filter(|p| p.pending())

@@ -75,13 +75,7 @@ impl Ids {
             // An origin whose role the interface cannot express is left out, never guessed.
             let mut named = Vec::new();
             for o in &origins {
-                let known = parents.iter().find_map(|p| p.named.iter().find_map(|(c, n)| (c == o).then_some(n)));
-                let Some(n) = known.cloned().or_else(|| {
-                    Some(soliddraft_kernel_api::Origin {
-                        tag: tags.get(o.step.as_str())?.clone(),
-                        role: face_role(&o.role, parents)?,
-                    })
-                }) else {
+                let Some(n) = named_origin(o, parents, tags) else {
                     continue;
                 };
                 if !ids.named.iter().any(|(c, _)| c == o) {
@@ -182,6 +176,23 @@ fn changes<I: Copy + Ord>(
     }
     out.created = new.into_iter().filter(|n| !children.contains(n)).collect();
     out
+}
+
+pub(super) fn named_origin(
+    origin: &Origin,
+    parents: &[&Ids],
+    tags: &BTreeMap<String, OpTag>,
+) -> Option<soliddraft_kernel_api::Origin> {
+    parents
+        .iter()
+        .find_map(|parent| parent.named.iter().find_map(|(source, named)| (source == origin).then_some(named)))
+        .cloned()
+        .or_else(|| {
+            Some(soliddraft_kernel_api::Origin {
+                tag: tags.get(origin.step.as_str())?.clone(),
+                role: face_role(&origin.role, parents)?,
+            })
+        })
 }
 
 /// The interface's role for a Catallax role, when the interface has one.
@@ -428,7 +439,7 @@ pub(super) fn topology(app: &IncrementalApplicationBody, ids: &Ids, proven: bool
 }
 
 pub(super) fn mesh(mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationParams) -> Mesh {
-    let mut out = triangles(&mesh.positions, &mesh.triangles, ids);
+    let mut out = triangles(&mesh.positions, mesh.triangles.iter().map(|t| (t.vertices, ids.faces[&t.face])));
     if params.curve_angle_deg > 0.0 {
         out.unavailable_controls.push(
             "curve_angle_deg: Catallax bounds facet normals (surface_angle_deg) and chords, not the turn along an edge"
@@ -448,10 +459,13 @@ pub(super) fn mesh(mesh: &catallax_mesh::Mesh, ids: &Ids, params: &TessellationP
 
 /// An unproved preview for the screen, with no claimed bound on any control.
 pub(super) fn preview(mesh: &catallax_mesh::PreviewMesh, ids: &Ids) -> Mesh {
-    Mesh { unproved: true, ..triangles(&mesh.positions, &mesh.triangles, ids) }
+    Mesh {
+        unproved: true,
+        ..triangles(&mesh.positions, mesh.triangles.iter().map(|t| (t.vertices, ids.faces[&t.face])))
+    }
 }
 
-fn triangles(positions: &[[f64; 3]], triangles: &[catallax_mesh::Triangle], ids: &Ids) -> Mesh {
+pub(super) fn triangles(positions: &[[f64; 3]], triangles: impl IntoIterator<Item = ([usize; 3], FaceId)>) -> Mesh {
     let mut out = Mesh::default();
     // Shading normals are display data, never a proof, so they come from the facets in
     // f64: each face's vertex takes the area-weighted sum of its triangles' normals.
@@ -459,11 +473,11 @@ fn triangles(positions: &[[f64; 3]], triangles: &[catallax_mesh::Triangle], ids:
     // within a face and kept apart across faces, so sharp edges stay sharp.
     let mut vertices = BTreeMap::new();
     let mut sums: Vec<Vec3> = Vec::new();
-    for triangle in triangles {
-        let points = triangle.vertices.map(|v| Vec3::from(positions[v]));
+    for (triangle, face) in triangles {
+        let points = triangle.map(|v| Vec3::from(positions[v]));
         let facet = (points[1] - points[0]).cross(points[2] - points[0]);
-        for (vertex, point) in triangle.vertices.into_iter().zip(points) {
-            let index = *vertices.entry((triangle.face, vertex)).or_insert_with(|| {
+        for (vertex, point) in triangle.into_iter().zip(points) {
+            let index = *vertices.entry((face, vertex)).or_insert_with(|| {
                 out.positions.push([point.x as f32, point.y as f32, point.z as f32]);
                 sums.push(Vec3::default());
                 out.positions.len() as u32 - 1
@@ -471,7 +485,7 @@ fn triangles(positions: &[[f64; 3]], triangles: &[catallax_mesh::Triangle], ids:
             sums[index as usize] = sums[index as usize] + facet;
             out.indices.push(index);
         }
-        out.triangle_faces.push(ids.faces[&triangle.face]);
+        out.triangle_faces.push(face);
     }
     out.normals = sums
         .into_iter()

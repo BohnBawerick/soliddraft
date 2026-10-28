@@ -3,11 +3,9 @@
 //! double-click edits, F2 or a slow second click renames, drag reorders,
 //! right-click offers the rest.
 
-use crate::document::{
-    AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane, fmt_mm,
-};
+use crate::document::{AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane};
 use crate::icons::{self, Icon};
-use crate::state::{AppAction, AppState, EditorParams, Rename};
+use crate::state::{AppAction, AppState, EditorParams, NoteKind, Rename};
 use crate::theme;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
@@ -40,7 +38,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     );
     let errors = state.doc.error_count();
     let repairs = state.doc.repair_count();
-    let (status, color) = if errors == 0 && repairs == 0 {
+    let (status, color) = if let Some((message, kind)) = state.edit_status() {
+        (message.to_owned(), if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() })
+    } else if errors == 0 && repairs == 0 {
         ("Rebuilt · OK".to_owned(), theme::ok())
     } else if errors > 0 {
         (format!("{errors} error{}", if errors == 1 { "" } else { "s" }), theme::error())
@@ -171,6 +171,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 FeatureKind::Lattice(_) => Icon::LinearPattern,
             };
             let child = f.kind.sketch().and_then(|s| state.doc.feature(s));
+            let (sub, status) = match &state.drag_preview {
+                Some(drag) if drag.feature() == f.id => {
+                    let (message, failed) = drag.label();
+                    let status = if failed { FeatureStatus::Error(message.clone()) } else { FeatureStatus::Pending };
+                    (message, status)
+                }
+                _ if f.status == FeatureStatus::Pending => {
+                    (format!("{} · proof pending", f.summary()), f.status.clone())
+                }
+                _ if matches!(f.status, FeatureStatus::Error(_)) => {
+                    (format!("Failed · {}", f.summary()), f.status.clone())
+                }
+                _ => (f.summary(), f.status.clone()),
+            };
             items.push(RowItem {
                 id: f.id,
                 index: i,
@@ -178,12 +192,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 chevron: child.map(|_| state.expanded.contains(&f.id)),
                 icon,
                 name: f.name.clone(),
-                // A dragged dimension shows as a preview until the drag applies it.
-                sub: match &state.drag_preview {
-                    Some(d) if d.feature() == f.id => format!("Preview {} mm", fmt_mm(d.value())),
-                    _ => f.summary(),
-                },
-                status: f.status.clone(),
+                sub,
+                status,
                 suppressed: f.suppressed,
                 via_assistant: f.via_assistant,
                 is_sketch: f.is_sketch(),

@@ -79,6 +79,9 @@ impl DisplayMode {
     }
 }
 
+/// Existing document identity, display version and retained body; never sent to the GPU.
+pub type PickRevision = (soliddraft_document::DocumentId, u64, Option<BodyId>);
+
 /// Window of the id buffer around the cursor, read back from the GPU.
 #[derive(Clone, Debug, Default)]
 pub struct PickSample {
@@ -88,6 +91,7 @@ pub struct PickSample {
     /// Texels: occurrence (0 for the open part) and entity.
     pub data: Vec<[u32; 2]>,
     pub serial: u64,
+    pub revision: Option<PickRevision>,
 }
 
 impl PickSample {
@@ -135,8 +139,11 @@ pub struct FrameInput {
     pub meshes: (u64, Vec<(BodyId, Arc<DisplayMesh>)>),
     /// Added or removed material, with whether it removes.
     pub ghost: Option<(Arc<DisplayMesh>, bool)>,
-    /// Drawn instead of the document bodies when set; picking still uses the bodies.
+    /// Drawn instead of the document bodies when set.
     pub preview: Option<Arc<DisplayMesh>>,
+    /// Only revision-bound application previews participate in picking.
+    pub preview_pickable: bool,
+    pub pick_revision: Option<PickRevision>,
     pub pick_out: Arc<Mutex<PickSample>>,
     /// An assembly to draw with the part, if one is open.
     pub assembly: Option<AssemblyFrame>,
@@ -379,6 +386,7 @@ struct Readback {
     ready: bool,
     origin: [u32; 2],
     serial: u64,
+    revision: Option<PickRevision>,
 }
 
 struct Layouts {
@@ -1007,7 +1015,10 @@ impl ViewportRenderer {
         self.ensure_targets(device, input.size_px);
 
         let (version, meshes) = &input.meshes;
-        if *version != self.mesh_version || self.bodies.len() != meshes.len() {
+        if *version != self.mesh_version
+            || self.bodies.len() != meshes.len()
+            || meshes.iter().any(|(id, _)| !self.bodies.contains_key(id))
+        {
             self.bodies = meshes.iter().map(|(id, m)| (*id, self.upload_body(device, m, 0))).collect();
             self.mesh_version = *version;
         }
@@ -1040,7 +1051,7 @@ impl ViewportRenderer {
         let show_faces = self.display != DisplayMode::Wireframe;
         let show_edges = self.display != DisplayMode::Shaded;
         let preview_key = self.preview.as_ref().map_or(0, |(p, _)| *p);
-        // The preview stands in for the document bodies in the colour pass only.
+        // Construction previews replace the colour and revision-bound pick geometry.
         let shown: Vec<&GpuBody> = match self.preview.as_ref().map(|(_, b)| b) {
             Some(p) => vec![p],
             None => self.bodies.values().collect(),
@@ -1110,9 +1121,9 @@ impl ViewportRenderer {
 
         // Pump map callbacks and publish a finished readback before issuing a new one.
         let _ = device.poll(wgpu::PollType::Poll);
-        let (pending, ready, origin, serial) = {
+        let (pending, ready, origin, serial, revision) = {
             let rb = self.readback.lock().unwrap();
-            (rb.pending, rb.ready, rb.origin, rb.serial)
+            (rb.pending, rb.ready, rb.origin, rb.serial, rb.revision)
         };
         if ready {
             {
@@ -1124,12 +1135,17 @@ impl ViewportRenderer {
                 out.height = PICK_ROWS;
                 out.data = data;
                 out.serial = serial;
+                out.revision = revision;
             }
             self.pick_buffer.unmap();
             let mut rb = self.readback.lock().unwrap();
             rb.ready = false;
             rb.pending = false;
         }
+        let pick_bodies = || {
+            let preview = self.preview.as_ref().filter(|_| input.preview_pickable).map(|(_, body)| body);
+            preview.into_iter().chain(self.bodies.values().filter(move |_| preview.is_none()))
+        };
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("viewport") });
         self.assembly.prepare(device, queue, &mut encoder, input.assembly.as_ref(), input.size_px, input.cursor_px);
@@ -1297,15 +1313,17 @@ impl ViewportRenderer {
             pass.set_bind_group(0, &self.globals_bind_group, &[]);
             pass.set_bind_group(2, &targets.frame_bind_group, &[]);
             pass.set_pipeline(&self.id_face_pipeline);
-            draw_faces(&mut pass, &mut self.bodies.values(), true);
-            pass.set_pipeline(&self.id_edge_pipeline);
-            draw_lines(&mut pass, &mut self.bodies.values());
-            pass.set_pipeline(&self.id_vertex_pipeline);
-            for body in self.bodies.values() {
-                if body.point_count > 0 {
-                    pass.set_bind_group(1, &body.bind_group, &[]);
-                    pass.set_vertex_buffer(0, body.points.slice(..));
-                    pass.draw(0..6, 0..body.point_count);
+            draw_faces(&mut pass, &mut pick_bodies(), true);
+            if !input.preview_pickable || self.preview.is_none() {
+                pass.set_pipeline(&self.id_edge_pipeline);
+                draw_lines(&mut pass, &mut self.bodies.values());
+                pass.set_pipeline(&self.id_vertex_pipeline);
+                for body in self.bodies.values() {
+                    if body.point_count > 0 {
+                        pass.set_bind_group(1, &body.bind_group, &[]);
+                        pass.set_vertex_buffer(0, body.points.slice(..));
+                        pass.draw(0..6, 0..body.point_count);
+                    }
                 }
             }
             self.assembly.draw_ids(&mut pass);
@@ -1345,6 +1363,7 @@ impl ViewportRenderer {
                 rb.ready = false;
                 rb.origin = origin;
                 rb.serial = self.frame;
+                rb.revision = input.pick_revision;
             }
             let state = self.readback.clone();
             self.pick_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {

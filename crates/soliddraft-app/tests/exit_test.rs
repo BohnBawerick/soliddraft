@@ -79,6 +79,16 @@ fn look_from(harness: &mut App<'_>, yaw: f32, pitch: f32) {
 /// Lets camera moves and the one-frame pick lag settle.
 fn settle(harness: &mut App<'_>) {
     harness.run_steps(30);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while harness.state().state.doc.proof_pending() {
+        assert!(std::time::Instant::now() < deadline, "the part proof did not settle");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        // Draw only the frames the app asks for, as a window's event loop would.
+        if harness.ctx.has_requested_repaint() {
+            harness.run_steps(1);
+        }
+    }
+    harness.run_steps(1);
 }
 
 fn click_at(harness: &mut App<'_>, pos: Pos2) {

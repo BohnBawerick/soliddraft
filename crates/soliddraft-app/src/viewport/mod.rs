@@ -53,9 +53,6 @@ pub struct Overlay<'a> {
     pub sketch: Option<&'a mut SketchSession>,
     /// A closed sketch to show quietly on its plane.
     pub passive_sketch: Option<(Plane, &'a Sketch)>,
-    /// What a drag preview shows, painted over the top of the viewport, and whether it
-    /// reports a failure.
-    pub preview_label: Option<(String, bool)>,
 }
 
 pub struct ViewportState {
@@ -124,7 +121,11 @@ impl ViewportState {
         selection: Option<Selection>,
         hover_label: Option<&str>,
     ) -> ViewportEvents {
-        let Overlay { ghost, preview, sketch, passive_sketch, preview_label } = overlay;
+        let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
+        let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
+        let provisional = doc.provisional_mesh();
+        let preview_pickable =
+            preview.as_ref().zip(provisional.as_ref()).is_some_and(|(shown, bound)| Arc::ptr_eq(shown, bound));
         let sketching = sketch.is_some();
         let mut events = ViewportEvents::default();
         let rect = ui.available_rect_before_wrap();
@@ -144,7 +145,7 @@ impl ViewportState {
         self.hover_point = None;
         if let (Some(px), Some(pos)) = (cursor_px, hover_pos) {
             let sample = self.pick.lock().unwrap();
-            self.hover = decode_pick(&sample, px[0], px[1]);
+            self.hover = (sample.revision == pick_revision).then(|| decode_pick(&sample, px[0], px[1])).flatten();
             drop(sample);
             if let Some(picked) = self.hover {
                 let (o, d) = self.camera.ray(pos, rect);
@@ -185,6 +186,8 @@ impl ViewportState {
         };
         input.ghost = ghost;
         input.preview = preview;
+        input.preview_pickable = preview_pickable;
+        input.pick_revision = pick_revision;
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
 
         let painter = ui.painter().with_clip_rect(rect);
@@ -226,9 +229,6 @@ impl ViewportState {
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
         self.paint_pills(ui, rect, hover_label);
-        if let Some((label, failed)) = preview_label {
-            paint_preview_label(ui, rect, &label, failed);
-        }
         events
     }
 
@@ -300,6 +300,8 @@ impl ViewportState {
             meshes: (NO_PART, Vec::new()),
             ghost: None,
             preview: None,
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: self.pick.clone(),
             assembly: None,
         }
@@ -582,17 +584,6 @@ impl ViewportState {
         painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
         painter.galley(r.center() - galley.size() / 2.0, galley, color);
     }
-}
-
-/// Says over the top of the viewport that the body shown is a preview, not the part.
-fn paint_preview_label(ui: &egui::Ui, rect: Rect, label: &str, failed: bool) {
-    let color = if failed { theme::error() } else { theme::accent() };
-    let painter = ui.painter();
-    let galley = painter.layout_no_wrap(label.to_owned(), theme::font(11.5), color);
-    let size = galley.size() + vec2(18.0, 7.0);
-    let r = Rect::from_min_size(pos2(rect.center().x - size.x / 2.0, rect.top() + 52.0), size);
-    painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, color), StrokeKind::Inside);
-    painter.galley(r.center() - galley.size() / 2.0, galley, color);
 }
 
 enum HudItem {

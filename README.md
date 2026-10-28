@@ -45,7 +45,7 @@ SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and
 Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/needs-catallax.md) for the limits of the current application entry.
 
 - The desktop app, with its ribbon, feature tree, property panel, command line, assistant session and wgpu viewport.
-- Dragging a selected feature's depth previews the rebuilt part off the interface thread and applies the final value as one undo step.
+- Desktop depth, fillet-radius and chamfer-distance edits separate construction display from exact proof. Supported construction charts produce selectable provisional faces before proof finishes; one drag is one undo step. Pending or failed input cannot export, and a failed edit restores the whole last proved part while its feature stays red with a reason.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
 - Extrudes and cuts, blind, through all, up to the next boundary or up to a planar face; booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
 - Holes on a planar face, blind or through, with flat or drill-point tips, counterbores and countersinks at any angle, including the standard 118° tip and 82°, 90° and 100° countersinks. A countersink or drill point cannot yet go into a body that has another cylinder; see [the backend gaps](docs/needs-catallax.md).
@@ -57,7 +57,7 @@ Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
 - A WebAssembly build that runs the app and Catallax in one browser module.
 
-Waiting commands stay visible and disabled with a tooltip naming their Catallax stage. Existing parts rebuild up to a waiting feature, mark it with a rebuild error and pass the preceding body through unchanged.
+Waiting commands stay visible and disabled with a tooltip naming their Catallax stage. Opening a part with a waiting feature rebuilds its available prefix and marks the feature with an error; that prefix is not a proved whole part and cannot export.
 
 | Waiting feature | Catallax stage |
 |---|---|
@@ -89,7 +89,7 @@ Modelling starts with a sketch: pick a plane in the tree or click a planar face,
 
 ## Running in a browser
 
-The app also runs in a web browser as WebAssembly. A small server serves it and holds the assistant's API key. See `docs/web.md`.
+The app also runs in a web browser as WebAssembly. A small server serves it and holds the assistant's API key. The browser shares the revision and export guards, but construction and exact proof still run on its interface thread: the desktop's responsive-worker behaviour is not a browser capability claim. See `docs/web.md`.
 
 ## The assistant
 
