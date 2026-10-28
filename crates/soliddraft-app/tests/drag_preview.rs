@@ -83,6 +83,17 @@ fn settle(state: &mut AppState) {
     }
 }
 
+/// Polls while an exact proof is held until `shown` is true. Construction runs beside
+/// its proof, so the early display can arrive after the proof reaches the hold.
+fn poll_until(state: &mut AppState, shown: impl Fn(&AppState) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while !shown(state) {
+        assert!(Instant::now() < deadline, "the construction display never arrived while its proof was held");
+        state.poll_drag();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 fn start(state: &mut AppState, feature: FeatureId) {
     state.drag_dimension(DragStep::Start { feature, dimension: Dimension::Depth });
     assert!(state.drag_preview.is_some(), "the drag started");
@@ -319,6 +330,7 @@ fn late_success_never_displays_a_superseded_value_or_enables_export() {
     kernel.wait_held();
     state.drag_dimension(DragStep::Move(18.0));
     kernel.release_into_hold(18.0);
+    poll_until(&mut state, |state| shown_value(state) == Some(18.0));
     assert!(state.poll_drag());
     assert_eq!(shown_value(&state), Some(18.0), "the newer construction is visible while its proof is held");
     assert!(matches!(state.drag_preview.as_ref().unwrap().shown(), Shown::Result(result) if !result.proved));
@@ -428,6 +440,7 @@ fn pending_edits_undo_and_redo_ignore_an_older_committed_failure() {
     let current = state.doc.revision();
     assert!(state.export_part(soliddraft_exchange::Format::Step).is_err());
     kernel.release_into_hold(18.0);
+    poll_until(&mut state, |state| state.doc.displayed_revision() == current);
     assert!(state.poll_drag());
     assert_eq!(state.doc.error_count(), 0);
     assert!(state.doc.proof_pending());

@@ -2023,6 +2023,7 @@ impl eframe::App for SolidDraftApp {
     fn ui(&mut self, root: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = &root.ctx().clone();
         log::debug!("ui frame {}", self.frame);
+        self.state.doc.set_repaint(ctx);
         let dt = ctx.input(|i| i.unstable_dt) * 1000.0;
         self.state.frame_ms = if self.state.frame_ms == 0.0 { dt } else { self.state.frame_ms * 0.9 + dt * 0.1 };
         self.shortcuts(ctx);
@@ -2049,8 +2050,9 @@ impl eframe::App for SolidDraftApp {
         if let Some(e) = self.state.editor.as_mut() {
             e.refresh(&self.state.doc);
         }
-        // The answers arrive between frames; look again soon while one is owed.
-        if self.state.poll_drag() {
+        // Native workers wake the context when they answer. In the browser the work
+        // itself runs in these frames, so keep drawing while an answer is owed.
+        if self.state.poll_drag() && cfg!(target_arch = "wasm32") {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Hover info is derived from the viewport's last pick so every panel sees the same name.

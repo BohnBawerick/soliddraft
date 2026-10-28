@@ -83,7 +83,10 @@ fn settle(harness: &mut App<'_>) {
     while harness.state().state.doc.proof_pending() {
         assert!(std::time::Instant::now() < deadline, "the part proof did not settle");
         std::thread::sleep(std::time::Duration::from_millis(10));
-        harness.run_steps(1);
+        // Draw only the frames the app asks for, as a window's event loop would.
+        if harness.ctx.has_requested_repaint() {
+            harness.run_steps(1);
+        }
     }
     harness.run_steps(1);
 }

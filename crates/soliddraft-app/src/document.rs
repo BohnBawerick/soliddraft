@@ -1149,6 +1149,8 @@ pub struct Document {
     model: model::Document,
     last_proved: Option<ProvedRevision>,
     worker: Option<crate::drag::Worker>,
+    /// Woken when a background answer arrives; see [`Document::set_repaint`].
+    repaint: Option<egui::Context>,
     pending: Option<PendingBuild>,
     provisional: Option<ProvisionalShown>,
     proof_failure: Option<String>,
@@ -1196,6 +1198,7 @@ impl Document {
             model,
             last_proved: None,
             worker: None,
+            repaint: None,
             pending: None,
             provisional: None,
             proof_failure: None,
@@ -1243,6 +1246,7 @@ impl Document {
                 model: proved.model.clone(),
             }),
             worker: None,
+            repaint: self.repaint.clone(),
             pending: None,
             provisional: None,
             proof_failure: None,
@@ -1352,8 +1356,15 @@ impl Document {
         self.proof_notice.as_deref().map(|message| (message, false))
     }
 
+    /// Background proof answers wake `ctx` instead of waiting for a polled frame.
+    pub fn set_repaint(&mut self, ctx: &egui::Context) {
+        if self.repaint.is_none() {
+            self.repaint = Some(ctx.clone());
+        }
+    }
+
     pub(crate) fn take_worker(&mut self) -> Result<crate::drag::Worker, String> {
-        self.worker.take().map_or_else(crate::drag::Worker::new, Ok)
+        self.worker.take().map_or_else(|| crate::drag::Worker::new(self.repaint.clone()), Ok)
     }
 
     pub(crate) fn return_worker(&mut self, mut worker: crate::drag::Worker) {
@@ -1427,8 +1438,10 @@ impl Document {
             return;
         }
         match answer.kind {
-            crate::drag::AnswerKind::Construction(Ok(display)) => pending.candidate = Some(display),
-            crate::drag::AnswerKind::Construction(Err(_)) => {}
+            crate::drag::AnswerKind::Construction(Ok(display)) if pending.completed.is_none() => {
+                pending.candidate = Some(display);
+            }
+            crate::drag::AnswerKind::Construction(_) => {}
             crate::drag::AnswerKind::Proved(result) => pending.completed = Some(result),
         }
     }
@@ -2243,8 +2256,10 @@ impl Document {
     /// Returns true while the viewport should keep repainting: the mesh changed, or the
     /// worker still owes a level.
     pub fn update_display(&mut self, projection: &Projection, dt_s: f32) -> bool {
+        // Display levels wait for a proved part. A pending proof's worker wakes the
+        // interface itself, so waiting here draws nothing.
         if self.model.is_dirty() || self.provisional.is_some() || self.proof_failure.is_some() {
-            return self.pending.is_some();
+            return false;
         }
         let Some((level, mesh)) = self.quality.update(projection, dt_s) else {
             return self.quality.pending();

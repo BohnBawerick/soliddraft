@@ -25,7 +25,7 @@ use crate::document::{
     CandidateDisplay, Command, DisplayMesh, Document, EndKind, FeatureId, FeatureKind, FeatureStatus, ReadyDisplay,
     Selection, ViewToken, construction_view, fmt_mm, ready_display,
 };
-use soliddraft_kernel_api::{KernelError, ProofWork, TessellationParams};
+use soliddraft_kernel_api::{ProofWork, TessellationParams};
 use soliddraft_model as model;
 use std::sync::{
     Arc,
@@ -311,6 +311,10 @@ impl DragPreview {
                 doc.hold_proof_answer(answer);
                 continue;
             }
+            // The early display runs beside the exact proof and may answer after it.
+            if self.proof_request == answer.request && matches!(answer.kind, AnswerKind::Construction(_)) {
+                continue;
+            }
             match answer.kind {
                 AnswerKind::Construction(Ok(candidate)) => {
                     self.shown = Shown::Result(Intermediate {
@@ -480,46 +484,68 @@ struct ProofTask {
     allowance: Box<dyn ProofWork>,
 }
 
-fn prepare(queued: Queued, answered: &mpsc::Sender<Answer>) -> Result<Option<ProofTask>, ()> {
+/// An early display of one request, built beside that request's exact proof.
+struct ConstructionTask {
+    request: u64,
+    baseline: Arc<model::Document>,
+    edits: Vec<soliddraft_kernel_api::ScalarEdit>,
+    params: TessellationParams,
+    model: model::Document,
+}
+
+/// Sends answers and wakes the interface, which draws no frames while it only waits.
+#[derive(Clone)]
+struct Answered {
+    sender: mpsc::Sender<Answer>,
+    repaint: Option<egui::Context>,
+}
+
+impl Answered {
+    fn send(&self, answer: Answer) -> Result<(), ()> {
+        self.sender.send(answer).map_err(|_| ())?;
+        if let Some(ctx) = &self.repaint {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+}
+
+/// Applies a request's edit and reserves its exact proof. Neither builds anything,
+/// so the proof starts without waiting for the early display.
+fn prepare(queued: Queued) -> Result<(ProofTask, Option<ConstructionTask>), Answer> {
     let Queued { request, job: Job { source, edit, baseline, params, level } } = queued;
+    let refused = |message: String| Answer { request, kind: AnswerKind::Proved(Err(message)) };
     let mut model = Arc::try_unwrap(source).unwrap_or_else(|source| source.fork());
     if let Some(edit) = edit {
-        let changed = crate::document::scalar_draft_command(&model, edit)
-            .and_then(|command| model.execute_deferred(command).map(|_| ()).map_err(|error| error.to_string()));
-        if let Err(message) = changed {
-            answered.send(Answer { request, kind: AnswerKind::Proved(Err(message)) }).map_err(|_| ())?;
-            return Ok(None);
-        }
+        crate::document::scalar_draft_command(&model, edit)
+            .and_then(|command| model.execute_deferred(command).map(|_| ()).map_err(|error| error.to_string()))
+            .map_err(refused)?;
     }
-    let kernel = model.kernel();
-    let body = baseline.as_ref().and_then(|baseline| baseline.body());
-    let edits = baseline.as_ref().and_then(|baseline| crate::document::scalar_edits(baseline, &model));
-    let allowance = match (edits.as_deref(), body) {
-        (Some(edits), Some(body)) if !edits.is_empty() => match kernel.construction_edit(body, edits, &params) {
-            Ok(preview) => {
-                let candidate = preview
-                    .display
-                    .map_err(|error| error.to_string())
-                    .and_then(|display| construction_view(display, &model))
-                    .map(|view| CandidateDisplay::Construction(Arc::new(view)));
-                answered.send(Answer { request, kind: AnswerKind::Construction(candidate) }).map_err(|_| ())?;
-                Ok(preview.proof)
-            }
-            Err(KernelError::Unsupported(message)) => {
-                answered.send(Answer { request, kind: AnswerKind::Construction(Err(message)) }).map_err(|_| ())?;
-                kernel.reserve_proof_work()
-            }
-            Err(error) => Err(error),
-        },
-        _ => kernel.reserve_proof_work(),
+    // No operation budget is active on the worker, so this is the same per-build
+    // allowance that a construction request reserves for its proof.
+    let allowance = model.kernel().reserve_proof_work().map_err(|error| refused(error.to_string()))?;
+    let construction = baseline.and_then(|baseline| {
+        let edits = crate::document::scalar_edits(&baseline, &model).filter(|edits| !edits.is_empty())?;
+        baseline.body()?;
+        Some(ConstructionTask { request, baseline, edits, params, model: model.fork() })
+    });
+    Ok((ProofTask { request, model, level, allowance }, construction))
+}
+
+fn construct(task: ConstructionTask, answered: &Answered) -> Result<(), ()> {
+    let ConstructionTask { request, baseline, edits, params, model } = task;
+    let Some(body) = baseline.body() else {
+        return Ok(());
     };
-    match allowance {
-        Ok(allowance) => Ok(Some(ProofTask { request, model, level, allowance })),
-        Err(error) => {
-            answered.send(Answer { request, kind: AnswerKind::Proved(Err(error.to_string())) }).map_err(|_| ())?;
-            Ok(None)
-        }
-    }
+    // The exact proof already holds its own allowance; this request's is dropped unused.
+    let candidate = model
+        .kernel()
+        .construction_edit(body, &edits, &params)
+        .and_then(|preview| preview.display)
+        .map_err(|error| error.to_string())
+        .and_then(|display| construction_view(display, &model))
+        .map(|view| CandidateDisplay::Construction(Arc::new(view)));
+    answered.send(Answer { request, kind: AnswerKind::Construction(candidate) })
 }
 
 /// A feature that shapes the body did not build. A sketch that did not build blocks
@@ -580,8 +606,19 @@ fn next_work<T>(pending: &mut Vec<T>, newest: u64, protected: u64, key: impl Fn(
     Some(pending.swap_remove(index))
 }
 
+/// The oldest wanted work. Early displays keep request order, so a committed
+/// request's display is ready before a newer transient request replaces it.
+fn oldest_work<T>(pending: &mut Vec<T>, newest: u64, protected: u64, key: impl Fn(&T) -> u64) -> Option<T> {
+    pending.retain(|work| {
+        let request = key(work);
+        request == newest || request == protected
+    });
+    (!pending.is_empty()).then(|| pending.remove(0))
+}
+
 /// One scheduler, with independent construction and exact jobs. A long proof
-/// cannot hold the next edit's construction preview behind it.
+/// cannot hold the next edit's construction preview behind it, and a slow
+/// construction preview cannot hold its own proof behind it.
 pub(crate) struct Worker {
     answers: mpsc::Receiver<Answer>,
     newest: Arc<AtomicU64>,
@@ -590,27 +627,33 @@ pub(crate) struct Worker {
     #[cfg(not(target_arch = "wasm32"))]
     jobs: mpsc::Sender<Queued>,
     #[cfg(target_arch = "wasm32")]
-    answered: mpsc::Sender<Answer>,
+    answered: Answered,
     #[cfg(target_arch = "wasm32")]
     queued: Vec<Queued>,
     #[cfg(target_arch = "wasm32")]
     proof: Vec<ProofTask>,
     #[cfg(target_arch = "wasm32")]
+    construction: Vec<ConstructionTask>,
+    #[cfg(target_arch = "wasm32")]
     previous: Option<Arc<model::Document>>,
 }
 
 impl Worker {
-    pub(crate) fn new() -> Result<Self, String> {
-        let (answered, answers) = mpsc::channel();
+    /// `repaint` is woken after each answer, so the interface need not poll for one.
+    pub(crate) fn new(repaint: Option<egui::Context>) -> Result<Self, String> {
+        let (sender, answers) = mpsc::channel();
+        let answered = Answered { sender, repaint };
         let newest = Arc::new(AtomicU64::new(0));
         let protected = Arc::new(AtomicU64::new(0));
         #[cfg(not(target_arch = "wasm32"))]
         {
             let (jobs, queue) = mpsc::channel::<Queued>();
             let (proofs, proof_queue) = mpsc::channel::<ProofTask>();
+            let (constructions, construction_queue) = mpsc::channel::<ConstructionTask>();
             let current = newest.clone();
             let retained = protected.clone();
             let finished = answered.clone();
+            let refusals = answered.clone();
             std::thread::Builder::new()
                 .name("edit-proof".into())
                 .spawn(move || {
@@ -656,35 +699,55 @@ impl Worker {
                     let mut pending = Vec::new();
                     loop {
                         if pending.is_empty() {
-                            match queue.recv() {
-                                Ok(job) => pending.push(job),
+                            match construction_queue.recv() {
+                                Ok(task) => pending.push(task),
                                 Err(_) => break,
                             }
                         }
-                        pending.extend(queue.try_iter());
-                        let Some(queued) = next_work(
+                        pending.extend(construction_queue.try_iter());
+                        let Some(task) = oldest_work(
                             &mut pending,
                             current.load(Ordering::Acquire),
                             retained.load(Ordering::Acquire),
-                            |job| job.request,
+                            |task| task.request,
                         ) else {
                             continue;
                         };
-                        if !wanted(queued.request, &current, &retained) {
+                        if !wanted(task.request, &current, &retained) {
                             continue;
                         }
-                        match prepare(queued, &answered) {
-                            Ok(Some(task)) => {
-                                if proofs.send(task).is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(None) => {}
-                            Err(()) => break,
+                        if construct(task, &answered).is_err() {
+                            break;
                         }
                     }
                 })
                 .map_err(|error| format!("cannot start edit construction: {error}"))?;
+            let current = newest.clone();
+            let retained = protected.clone();
+            std::thread::Builder::new()
+                .name("edit-prepare".into())
+                .spawn(move || {
+                    for queued in queue {
+                        if !wanted(queued.request, &current, &retained) {
+                            continue;
+                        }
+                        match prepare(queued) {
+                            Ok((proof, construction)) => {
+                                if proofs.send(proof).is_err()
+                                    || construction.is_some_and(|task| constructions.send(task).is_err())
+                                {
+                                    break;
+                                }
+                            }
+                            Err(answer) => {
+                                if refusals.send(answer).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                })
+                .map_err(|error| format!("cannot start edit preparation: {error}"))?;
             Ok(Self { answers, newest, protected, request: 0, jobs })
         }
         #[cfg(target_arch = "wasm32")]
@@ -696,6 +759,7 @@ impl Worker {
             answered,
             queued: Vec::new(),
             proof: Vec::new(),
+            construction: Vec::new(),
             previous: None,
         })
     }
@@ -736,9 +800,22 @@ impl Worker {
                 self.protected.load(Ordering::Acquire),
                 |job| job.request,
             ) {
-                if let Ok(Some(task)) = prepare(queued, &self.answered) {
-                    self.proof.push(task);
+                match prepare(queued) {
+                    Ok((proof, construction)) => {
+                        self.proof.push(proof);
+                        self.construction.extend(construction);
+                    }
+                    Err(answer) => {
+                        let _ = self.answered.send(answer);
+                    }
                 }
+            } else if let Some(task) = oldest_work(
+                &mut self.construction,
+                self.newest.load(Ordering::Acquire),
+                self.protected.load(Ordering::Acquire),
+                |task| task.request,
+            ) {
+                let _ = construct(task, &self.answered);
             } else if let Some(task) = next_work(
                 &mut self.proof,
                 self.newest.load(Ordering::Acquire),

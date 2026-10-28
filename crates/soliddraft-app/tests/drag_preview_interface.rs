@@ -48,7 +48,10 @@ fn settle_document(harness: &mut App<'_>) {
     while harness.state().state.doc.proof_pending() {
         assert!(Instant::now() < deadline, "the current document proof never answered");
         std::thread::sleep(Duration::from_millis(10));
-        harness.run_steps(1);
+        // Draw only the frames the app asks for, as a window's event loop would.
+        if harness.ctx.has_requested_repaint() {
+            harness.run_steps(1);
+        }
     }
 }
 
@@ -112,7 +115,10 @@ fn dragging_the_depth_field_previews_and_applies_one_undo_step() {
     {
         assert!(Instant::now() < deadline, "the changed shape was held behind exact proof");
         std::thread::sleep(Duration::from_millis(10));
-        harness.run_steps(1);
+        // Draw only the frames the app asks for, as a window's event loop would.
+        if harness.ctx.has_requested_repaint() {
+            harness.run_steps(1);
+        }
     }
     let dragged = harness.state().state.drag_preview.as_ref().map(|d| d.value()).expect("still dragging");
     assert!(dragged > 10.0);
