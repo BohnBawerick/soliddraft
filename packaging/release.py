@@ -164,6 +164,18 @@ def source_revisions():
     return revision, kernel
 
 
+def known_gap_notes():
+    policy = json.loads((ROOT / "ci/known-over-budget.json").read_text())
+    steps = {}
+    for entry in policy["steps"]:
+        steps.setdefault(entry["scenario"], []).append(f"{entry['step']} ({entry['tool']})")
+    lines = ["## Known gaps", "",
+             "These application steps take longer than the 1,000 ms feature click budget. "
+             "The release accepts each one only up to 120% of its recorded time; "
+             f"this is not a claim of meeting the budget. Follow-up: {policy['follow_up']}.", ""]
+    return lines + [f"- {scenario}: steps {', '.join(numbers)}." for scenario, numbers in steps.items()] + [""]
+
+
 def notes(pulls, previous):
     current = formats("HEAD")
     old = formats(previous) if previous else {}
@@ -178,7 +190,10 @@ def notes(pulls, previous):
     for kind, value in current.items():
         change = f"changed from {old[kind]}" if kind in old and old[kind] != value else "unchanged" if old else "first release"
         lines.append(f"- {kind}: `{value}` ({change}).")
-    lines += ["", "Files keep the `.dwprt`, `.dwasm` and `.dwdrw` extensions.", "",
+    lines += ["", "Files keep the `.dwprt`, `.dwasm` and `.dwdrw` extensions. "
+              "Assemblies open from inside the application; installers register no `.dwasm` file association.", ""]
+    lines += known_gap_notes()
+    lines += [
               "## Installation and verification", "",
               "Unsigned downloads trigger Windows SmartScreen and macOS Gatekeeper warnings. "
               "Signing is enabled only when the release credentials are configured. "

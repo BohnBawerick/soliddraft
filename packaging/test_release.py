@@ -76,5 +76,23 @@ class ReleaseSourceTests(unittest.TestCase):
                     release.check_source("v0.1.0")
 
 
+
+class KnownGapNotesTests(unittest.TestCase):
+    def test_lists_every_known_gap_by_scenario(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ci").mkdir()
+            (root / "ci/known-over-budget.json").write_text(
+                '{"format": "soliddraft-known-over-budget/1", "follow_up": "https://example.invalid/27", '
+                '"steps": [{"scenario": "bracket", "step": 19, "tool": "edit_extrude", "last_measured_ms": 1}, '
+                '{"scenario": "drawing", "step": 24, "tool": "edit_extrude", "last_measured_ms": 1}, '
+                '{"scenario": "drawing", "step": 35, "tool": "edit_extrude", "last_measured_ms": 1}]}')
+            with patch.object(release, "ROOT", root):
+                text = "\n".join(release.known_gap_notes())
+        self.assertIn("## Known gaps", text)
+        self.assertIn("- bracket: steps 19 (edit_extrude).", text)
+        self.assertIn("- drawing: steps 24 (edit_extrude), 35 (edit_extrude).", text)
+        self.assertIn("https://example.invalid/27", text)
+
 if __name__ == "__main__":
     unittest.main()

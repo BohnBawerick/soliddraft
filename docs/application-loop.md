@@ -405,10 +405,13 @@ this change does not alter geometric proofs or mesh accuracy to make SVG pass.
 The strict command-class limits remain 100 ms for stock primitives, 500 ms for
 booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
 progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
-eleven known gaps in `ci/known-over-budget.json` record the measured times for
-reference steps 16, 17, 18, 25 and 30, and bracket steps 14, 16, 18, 19, 22 and 25.
-The records identify the local work-PC Linux runner and the calibration run;
-hosted-VM times are not substituted for that machine's baselines.
+thirteen known gaps in `ci/known-over-budget.json` record the measured times for
+reference steps 16, 17, 18, 25 and 30, bracket steps 14, 16, 18, 19, 22 and 25, and
+drawing plate-edit steps 24 and 35.
+The reference and bracket records identify the local work-PC Linux runner and the
+calibration run; hosted-VM times are not substituted for that machine's baselines.
+The drawing records were added for the 0.1.0 release from the hosted ubuntu-latest
+run named in the file, because the scenario has only run on hosted runners.
 Bracket step 16 records 1,189.068388 ms, with a 1,426.8820656 ms regression limit.
 An over-budget listed step is accepted only up to 120% of its recorded time;
 anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
