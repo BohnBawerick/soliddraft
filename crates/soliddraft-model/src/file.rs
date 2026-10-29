@@ -452,3 +452,6 @@ impl Document {
             "undo":self.undo, "redo":self.redo, "backend":self.kernel.backend()})
     }
 }
+
+#[allow(unused_imports)]
+use crate::Command;
