@@ -1,0 +1,33 @@
+{
+  "format": "soliddraft-gate-cases/1",
+  "registry": ["select", "lint", "kernel", "test-linux"],
+  "cases": [
+    {"id": "G01-all-selected-succeed", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped", "test-linux": "success"},
+     "pass": true, "names": []},
+    {"id": "G02-selected-job-skipped", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped", "test-linux": "skipped"},
+     "pass": false, "names": ["test-linux"]},
+    {"id": "G03-selected-job-absent", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped"},
+     "pass": false, "names": ["test-linux"]},
+    {"id": "G04-selected-job-cancelled", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped", "test-linux": "cancelled"},
+     "pass": false, "names": ["test-linux"]},
+    {"id": "G05-selected-job-failed", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped", "test-linux": "failure"},
+     "pass": false, "names": ["test-linux"]},
+    {"id": "G06-unregistered-job", "base_registry": null, "retired": [], "selected": ["lint", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "skipped", "test-linux": "success", "surprise": "success"},
+     "pass": false, "names": ["surprise"]},
+    {"id": "G07-selector-failed", "base_registry": null, "retired": [], "selected": null,
+     "needs": {"select": "failure", "lint": "skipped", "kernel": "skipped", "test-linux": "skipped"},
+     "pass": false, "names": ["select"]},
+    {"id": "G08-job-dropped-from-candidate", "base_registry": ["select", "lint", "kernel", "test-linux", "web"], "retired": [], "selected": ["lint", "kernel", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "success", "test-linux": "success"},
+     "pass": false, "names": ["web"]},
+    {"id": "G09-job-retired-explicitly", "base_registry": ["select", "lint", "kernel", "test-linux", "web"], "retired": [{"job": "web", "reason": "planted test retirement"}], "selected": ["lint", "kernel", "test-linux"],
+     "needs": {"select": "success", "lint": "success", "kernel": "success", "test-linux": "success"},
+     "pass": true, "names": ["web"]}
+  ]
+}

@@ -407,6 +407,17 @@
           "equals": 0
         }
       ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {"feature": "Boss-Extrude2", "depth": 0, "flip": false},
+      "label": "refused zero depth",
+      "refused": "depth must be greater than 0",
+      "checks": [
+        {"pointer": "/measurement/volume_mm3", "approx": 162110.17672705388, "tolerance": 0.005},
+        {"pointer": "/revision", "same_as_step": 25},
+        {"pointer": "/summary/features", "same_as_step": 25}
+      ]
     }
   ]
 }
