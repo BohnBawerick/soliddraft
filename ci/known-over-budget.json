@@ -1,7 +1,7 @@
 {
   "format": "soliddraft-known-over-budget/1",
   "follow_up": "https://github.com/BohnBawerick/soliddraft/issues/27",
-  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these thirteen gaps are accepted up to 120 percent of their recorded time. The two drawing steps were added for the 0.1.0 release and were measured on the hosted ubuntu-latest runner in https://github.com/BohnBawerick/soliddraft/actions/runs/40823628229. Across six sampled hosted runs, step 24 took 1755 to 2590 ms and step 35 took 1587 to 2209 ms: 1755 to 2427 and 1587 to 2159 on main at the earlier kernel pin, 2571 to 2590 and 2182 to 2209 at Catallax 6142450b",
+  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these fourteen gaps are accepted up to 120 percent of their recorded time. The two drawing steps were added for the 0.1.0 release and were measured on the hosted ubuntu-latest runner in https://github.com/BohnBawerick/soliddraft/actions/runs/40823628229. Across six sampled hosted runs, step 24 took 1755 to 2590 ms and step 35 took 1587 to 2209 ms: 1755 to 2427 and 1587 to 2159 on main at the earlier kernel pin, 2571 to 2590 and 2182 to 2209 at Catallax 6142450b",
   "measured_run": "https://github.com/BohnBawerick/soliddraft/actions/runs/40167997912",
   "measured_on": "local work-PC Linux x64 runner, ci-linux-local",
   "steps": [
@@ -16,6 +16,7 @@
     {"scenario": "bracket", "step": 19, "tool": "edit_extrude", "last_measured_ms": 2929.871620},
     {"scenario": "bracket", "step": 22, "tool": "edit_cut", "last_measured_ms": 1452.985577},
     {"scenario": "bracket", "step": 25, "tool": "rollback", "last_measured_ms": 3223.575548},
+    {"scenario": "bracket", "step": 27, "tool": "edit_dimension", "last_measured_ms": 2381.346},
     {"scenario": "drawing", "step": 24, "tool": "edit_extrude", "last_measured_ms": 2571.201994},
     {"scenario": "drawing", "step": 35, "tool": "edit_extrude", "last_measured_ms": 2182.117028}
   ]
