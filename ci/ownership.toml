@@ -1,0 +1,358 @@
+# Slice ownership. Reserved paths are created by their consuming slices.
+
+[[areas]]
+name = "app.app_tools"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app_tools.rs"]
+module = ["app_tools"]
+
+[[areas]]
+name = "app.assembly"
+owner = "V4"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/assembly.rs"]
+module = ["assembly"]
+
+[[areas]]
+name = "app.chat"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/chat.rs"]
+module = ["chat"]
+
+[[areas]]
+name = "app.command_line"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/command_line.rs"]
+module = ["command_line"]
+
+[[areas]]
+name = "app.command_tools"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/command_tools.rs"]
+module = ["command_tools"]
+
+[[areas]]
+name = "app.commands"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/commands.rs"]
+module = ["commands"]
+
+[[areas]]
+name = "app.display_quality"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/display_quality.rs"]
+module = ["display_quality"]
+
+[[areas]]
+name = "app.document"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/document.rs"]
+module = ["document"]
+
+[[areas]]
+name = "app.drag"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/drag.rs"]
+module = ["drag"]
+
+[[areas]]
+name = "app.drawing"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/drawing/"]
+module = ["drawing"]
+
+[[areas]]
+name = "app.file"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/file.rs"]
+module = ["file"]
+
+[[areas]]
+name = "app.icons"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/icons.rs"]
+module = ["icons"]
+
+[[areas]]
+name = "app.journal"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/journal.rs"]
+module = ["journal"]
+
+[[areas]]
+name = "app.journal_browser"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/journal_browser.rs"]
+module = ["journal_browser"]
+
+[[areas]]
+name = "app.lib"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/lib.rs"]
+module = []
+
+[[areas]]
+name = "app.locations"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/locations.rs"]
+module = ["locations"]
+
+[[areas]]
+name = "app.main"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/main.rs"]
+module = ["main"]
+
+[[areas]]
+name = "app.palette"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/palette.rs"]
+module = ["palette"]
+
+[[areas]]
+name = "app.panels"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/panels.rs"]
+module = ["panels"]
+
+[[areas]]
+name = "app.platform"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/platform.rs"]
+module = ["platform"]
+
+[[areas]]
+name = "app.properties"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/properties.rs"]
+module = ["properties"]
+
+[[areas]]
+name = "app.recovery"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/recovery.rs"]
+module = ["recovery"]
+
+[[areas]]
+name = "app.ribbon"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/ribbon.rs"]
+module = ["ribbon"]
+
+[[areas]]
+name = "app.settings"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/settings.rs"]
+module = ["settings"]
+
+[[areas]]
+name = "app.sketch_tools"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/sketch_tools.rs"]
+module = ["sketch_tools"]
+
+[[areas]]
+name = "app.sketcher"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/sketcher.rs"]
+module = ["sketcher"]
+
+[[areas]]
+name = "app.state"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/state.rs"]
+module = ["state"]
+
+[[areas]]
+name = "app.theme"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/theme.rs"]
+module = ["theme"]
+
+[[areas]]
+name = "app.tree"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/tree.rs"]
+module = ["tree"]
+
+[[areas]]
+name = "app.viewport"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/viewport/"]
+module = ["viewport"]
+
+[[areas]]
+name = "app.web"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/web.rs"]
+module = ["web"]
+
+[[areas]]
+name = "model.commands"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/command.rs"]
+module = ["command"]
+
+[[areas]]
+name = "model.display"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/display.rs"]
+module = ["display"]
+
+[[areas]]
+name = "model.document"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/document.rs"]
+module = ["document"]
+
+[[areas]]
+name = "model.exact"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/exact.rs"]
+module = ["exact"]
+
+[[areas]]
+name = "model.feature"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/feature.rs"]
+module = ["feature"]
+
+[[areas]]
+name = "model.persistence"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/file.rs"]
+module = ["file"]
+
+[[areas]]
+name = "model.lib"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/lib.rs"]
+module = []
+
+[[areas]]
+name = "model.materials"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/materials.rs"]
+module = ["materials"]
+
+[[areas]]
+name = "model.cache"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/rebuild.rs"]
+module = ["rebuild"]
+
+[[areas]]
+name = "model.reference"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/reference.rs"]
+module = ["reference"]
+
+[[areas]]
+name = "app.facade"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app/mod.rs"]
+module = ["app"]
+
+[[areas]]
+name = "app.workspace"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app/workspace.rs"]
+module = ["app", "workspace"]
+
+[[areas]]
+name = "app.dispatch"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app/dispatch.rs"]
+module = ["app", "dispatch"]
+
+[[areas]]
+name = "app.presentation"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app/presentation/mod.rs"]
+module = ["app", "presentation"]
+
+[[areas]]
+name = "app.docks"
+owner = "V4"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/app/presentation/docks.rs"]
+module = ["app", "presentation", "docks"]
+
+[[areas]]
+name = "model.evaluate"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/evaluate.rs"]
+module = ["evaluate"]
+
+[[areas]]
+name = "v2.measure"
+owner = "V2"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/measure/"]
+module = ["measure"]
+
+[[areas]]
+name = "v3.configs"
+owner = "V3"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/configs/"]
+module = ["configs"]
+
+[[areas]]
+name = "v3.grid"
+owner = "V3"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/grid/"]
+module = ["grid"]
+
+[[areas]]
+name = "v4.tabs"
+owner = "V4"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/tabs/"]
+module = ["tabs"]

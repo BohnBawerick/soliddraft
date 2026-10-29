@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use soliddraft_kernel_api::{BodyId, Kernel};
 
-use crate::document::Built;
+use crate::evaluate::Built;
 use crate::feature::{Feature, FeatureId};
 
 /// The default budget for kept builds, in bytes.

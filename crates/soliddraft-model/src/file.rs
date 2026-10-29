@@ -429,3 +429,26 @@ fn strip_labels(v: &mut Value) {
         _ => {}
     }
 }
+
+impl Document {
+    /// Restores a journal's starting part without reading any user file.
+    pub fn from_journal_state(state: &serde_json::Value, kernel: Arc<dyn Kernel>) -> Result<Self, String> {
+        if state["backend"] != serde_json::to_value(kernel.backend()).map_err(|e| e.to_string())? {
+            return Err("journal kernel backend or version differs from this build".into());
+        }
+        let mut doc = Self::from_part_json_unbuilt(&state["part"].to_string(), kernel).map_err(|e| e.to_string())?;
+        doc.id = serde_json::from_value(state["id"].clone()).map_err(|e| e.to_string())?;
+        doc.settings = serde_json::from_value(state["settings"].clone()).map_err(|e| e.to_string())?;
+        doc.undo = serde_json::from_value(state["undo"].clone()).map_err(|e| e.to_string())?;
+        doc.redo = serde_json::from_value(state["redo"].clone()).map_err(|e| e.to_string())?;
+        doc.rebuild();
+        Ok(doc)
+    }
+
+    /// Authored state and history for a portable journal baseline or file input.
+    /// No display caches, kernel handles or measurements are included.
+    pub fn journal_state(&self) -> serde_json::Value {
+        serde_json::json!({"part":self.truth(), "id":self.id, "settings":self.settings,
+            "undo":self.undo, "redo":self.redo, "backend":self.kernel.backend()})
+    }
+}
