@@ -26,7 +26,7 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "e3a7f71ce05c742690a496353fc58cf1c89ec0e1";
+pub const CATALLAX_REVISION: &str = "6142450b05b4f79e86e2f14afdb29f290f3cee5a";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
