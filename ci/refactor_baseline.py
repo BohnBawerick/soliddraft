@@ -17,12 +17,14 @@ def at_base(base):
     if git('status', '--porcelain'):
         raise RuntimeError('Commit or stash changes before comparing the base')
     head = git('rev-parse', 'HEAD')
-    branch = git('symbolic-ref', '--short', '-q', 'HEAD')
+    branch = subprocess.run(['git', '-C', str(ROOT), 'symbolic-ref', '--short', '-q', 'HEAD'],
+                            capture_output=True, text=True).stdout.strip()
     subprocess.run(['git', '-C', str(ROOT), 'switch', '--detach', base], check=True)
     try:
         yield
     finally:
-        subprocess.run(['git', '-C', str(ROOT), 'switch', branch or head], check=True)
+        target = [branch] if branch else ['--detach', head]
+        subprocess.run(['git', '-C', str(ROOT), 'switch', *target], check=True)
 
 
 def cargo(*args):
