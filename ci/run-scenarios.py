@@ -370,6 +370,7 @@ class Client:
             self.process.kill()
             self.process.wait()
             raise RuntimeError("MCP did not exit after EOF")
+        self.process.stdout.close()
         if status:
             raise RuntimeError(f"MCP exited {status}")
 
@@ -385,15 +386,18 @@ def at(value, pointer):
     return value
 
 
-def check(value, spec):
+def check(value, spec, previous=None):
     try:
         actual = at(value, spec["pointer"])
-        comparisons = [key for key in ("equals", "approx", "minimum", "contains") if key in spec]
+        comparisons = [key for key in ("equals", "approx", "minimum", "contains", "same_as_step") if key in spec]
         if len(comparisons) != 1:
             raise ValueError("a check needs exactly one comparison")
         kind = comparisons[0]
         expected = spec[kind]
-        if kind == "equals":
+        if kind == "same_as_step":
+            expected = at(previous[expected], spec["pointer"])
+            passed = actual == expected
+        elif kind == "equals":
             passed = actual == expected
         elif kind == "approx":
             passed = math.isclose(actual, expected, rel_tol=0, abs_tol=spec.get("tolerance", 0.001))
@@ -505,6 +509,8 @@ def run(args):
     write(args.out / "scenario.json", scenario)
     pin = pinned_revision()
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "catallax_revision": pin,
+              "soliddraft_revision": subprocess.check_output(
+                  ["git", "-C", str(pathlib.Path(__file__).resolve().parent.parent), "rev-parse", "HEAD"], text=True).strip(),
               "steps": [], "pass": False,
               "strict_pass": False}
     client = None
@@ -520,6 +526,7 @@ def run(args):
             raise RuntimeError("MCP initialization version mismatch")
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         known = {}
+        previous = {}
         # GPU preparation runs once, outside every click.
         response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
         if response.get("isError"):
@@ -692,7 +699,8 @@ def run(args):
                     if reason is not None:
                         measurement = None
                 evidence = {**command, "measurement": measurement}
-            checks.extend(check(evidence, spec) for spec in step.get("checks", []))
+            checks.extend(check(evidence, spec, previous) for spec in step.get("checks", []))
+            previous[number] = evidence
             checks.extend(output_files(substitute(step.get("files", []), args.out),
                                        substitute(step.get("absent", []), args.out)))
             # Exports run after the click is timed, as a user's separate request would.

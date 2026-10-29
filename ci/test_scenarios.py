@@ -513,6 +513,12 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertFalse(checks["Catallax backend is the pinned revision"]["pass"])
         self.assertFalse(report["pass"])
 
+    def test_result_names_the_app_revision(self):
+        report, _ = self.run_step("ok")
+        import subprocess
+        expected = subprocess.check_output(["git", "-C", str(FAKE.parent.parent), "rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(report["soliddraft_revision"], expected)
+
     def test_result_names_the_pinned_revision(self):
         report, checks = self.run_step("ok")
         self.assertEqual(report["catallax_revision"], scenarios.pinned_revision())
@@ -522,6 +528,15 @@ class RunnerEndToEnd(unittest.TestCase):
         report, checks = self.run_step("ok", measure=True)
         self.assertTrue(checks["measurement answers this request"]["pass"])
         self.assertEqual(report["steps"][0]["intervals"]["measurement"]["gate_ms"], 2000)
+
+
+class CrossStepChecks(unittest.TestCase):
+    def test_same_as_step_requires_an_equal_existing_prior_value(self):
+        spec = {"pointer": "/revision", "same_as_step": 25}
+        self.assertTrue(scenarios.check({"revision": 7}, spec, {25: {"revision": 7}})["pass"])
+        self.assertFalse(scenarios.check({"revision": 8}, spec, {25: {"revision": 7}})["pass"])
+        self.assertFalse(scenarios.check({"revision": 7}, spec, {})["pass"])
+        self.assertFalse(scenarios.check({"revision": 7}, {**spec, "same_as_step": 26}, {25: {"revision": 7}})["pass"])
 
 
 class Trends(unittest.TestCase):

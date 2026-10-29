@@ -1,0 +1,22 @@
+{
+  "format": "soliddraft-check-registry/1",
+  "jobs": {
+    "select": "select",
+    "lint": "lint",
+    "kernel": "kernel",
+    "step-opencascade": "step-opencascade",
+    "test-linux": "test-linux",
+    "test-macos": "test-macos",
+    "test-windows": "test-windows",
+    "web": "web",
+    "msrv": "msrv",
+    "interactive-linux": "interactive-linux",
+    "interactive-macos": "interactive-macos",
+    "application-loop": "application-loop",
+    "package-linux": "packaging",
+    "package-windows": "packaging",
+    "package-macos": "packaging",
+    "package-web": "packaging"
+  },
+  "retired": []
+}
