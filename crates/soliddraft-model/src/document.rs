@@ -25,12 +25,6 @@ use crate::reference::{
     self, EdgeRef, FaceRef, Generator, NameMap, NamedFace, NamingError, ReferenceSlot, RepairNeeded, RepairReason, View,
 };
 
-/// How far an extrusion from a sketch on a face of the part starts behind that face, so
-/// the tool overlaps the part instead of touching it along a coplanar face. Only where
-/// that changes nothing: a boss growing out of the face starts inside the material, a
-/// cut going into the face starts in the air. A reversed boss or cut starts on the face.
-pub const FACE_OVERLAP: f64 = 0.01;
-
 /// The state of a feature after the last rebuild.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeatureStatus {
@@ -914,13 +908,9 @@ impl Document {
             Err(err) => return Built::failed(current, format!("the built-in profile has no closed region: {err}")),
         };
         let dir = if e.reverse { -sk.plane.normal } else { sk.plane.normal };
-        // Behind the face is material for a boss along the normal and air for a cut
-        // against it; only there is starting behind the face harmless. An extrusion up
-        // to a boundary starts on the face, since starting in material stops at its exit.
-        let away = (e.operation == ExtrudeOp::Boss) != e.reverse;
-        let limited = matches!(e.end, EndCondition::UpToNext | EndCondition::UpToFace { .. });
-        let back = if sk.on_face && away && !limited { FACE_OVERLAP } else { 0.0 };
-        let start = sk.plane.with_origin(sk.plane.origin - dir * back);
+        // The tool starts exactly on its sketch plane, also on a face of the part; the
+        // kernel's coplanar Boolean rules decide the shared face.
+        let start = sk.plane;
         let limit = match &e.end {
             EndCondition::UpToNext => Some(ExtrudeLimit::UpToNext),
             EndCondition::UpToFace { face } => {
@@ -941,7 +931,7 @@ impl Document {
             return Built::failed(current, "an extrusion up to the next face needs a body");
         }
         let distance = match e.end {
-            EndCondition::Blind { depth } if depth.is_finite() && depth > 0.0 => depth + back,
+            EndCondition::Blind { depth } if depth.is_finite() && depth > 0.0 => depth,
             EndCondition::Blind { depth } => {
                 return Built::failed(current, format!("depth must be positive, got {depth}"));
             }
@@ -964,7 +954,7 @@ impl Document {
                         (corner - start.origin).dot(dir)
                     })
                     .fold(f64::NEG_INFINITY, f64::max);
-                if reach <= back + 1e-9 {
+                if reach <= 1e-9 {
                     return Built::failed(current, "the body lies entirely behind the sketch plane");
                 }
                 reach + 1.0 + 0.01 * bbox.diagonal()
