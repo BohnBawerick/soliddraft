@@ -819,3 +819,69 @@ fn check_entry(problems: Vec<soliddraft_materials::Problem>) -> Result<(), Comma
         None => Ok(()),
     }
 }
+
+impl Document {
+    /// Runs the canonical part commands accepted by MCP and journal replay.
+    pub fn run_journal_command(&mut self, input: serde_json::Value) -> Result<(), String> {
+        let parse = |key: &str| input.get(key).cloned().ok_or_else(|| format!("missing {key}"));
+        match input["op"].as_str().unwrap_or_default() {
+            "execute" => self
+                .execute(serde_json::from_value(parse("command")?).map_err(|e| e.to_string())?)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "execute_deferred" => self
+                .execute_deferred(serde_json::from_value(parse("command")?).map_err(|e| e.to_string())?)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "undo_deferred" => self.undo_deferred().map(|_| ()).map_err(|e| e.to_string()),
+            "redo_deferred" => self.redo_deferred().map(|_| ()).map_err(|e| e.to_string()),
+            "rebuild" => {
+                self.rebuild();
+                Ok(())
+            }
+            "undo" => self.undo().map(|_| ()).map_err(|e| e.to_string()),
+            "redo" => self.redo().map(|_| ()).map_err(|e| e.to_string()),
+            "rollback" => {
+                self.set_rollback(serde_json::from_value(parse("before")?).map_err(|e| e.to_string())?);
+                Ok(())
+            }
+            "settings" => self.set_settings(serde_json::from_value(parse("settings")?).map_err(|e| e.to_string())?),
+            "group_undo" => {
+                self.group_undo(
+                    input["depth"].as_u64().ok_or("missing depth")? as usize,
+                    input["label"].as_str().ok_or("missing label")?,
+                );
+                Ok(())
+            }
+            "abandon" => {
+                self.abandon(input["depth"].as_u64().ok_or("missing depth")? as usize).map_err(|e| e.to_string())
+            }
+            _ => Err("unknown part journal command".into()),
+        }
+    }
+
+    /// Registers this part for a drawing command that reads it.
+    pub fn journal_key(&self) -> Option<u64> {
+        if let Some(id) = &self.journal {
+            soliddraft_document::journal::register(id, "part", || self.journal_state());
+            Some(id.key())
+        } else {
+            None
+        }
+    }
+
+    /// Registers the starting part once and records an application command before it runs.
+    /// Scratch forks do not journal speculative edits.
+    pub fn journal_command(
+        &self,
+        command: impl FnOnce() -> serde_json::Value,
+    ) -> soliddraft_document::journal::CommandGuard {
+        use soliddraft_document::journal;
+        if let Some(id) = &self.journal {
+            journal::register(id, "part", || self.journal_state());
+            journal::begin(id, command)
+        } else {
+            journal::disabled()
+        }
+    }
+}
