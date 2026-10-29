@@ -3,7 +3,6 @@
   "jobs": {
     "select": "select",
     "lint": "lint",
-    "kernel": "kernel",
     "step-opencascade": "step-opencascade",
     "test-linux": "test-linux",
     "test-macos": "test-macos",
