@@ -1,0 +1,178 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "boss-on-face",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              -15,
+              10
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 5,
+        "flip": false
+      },
+      "label": "boss from the top face, half over the y=-15 edge",
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -21,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 9
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude2 · Wall of circle 1",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              -21,
+              12
+            ],
+            "diameter": 2
+          }
+        ]
+      },
+      "refused": "is not planar, so it cannot carry a sketch",
+      "label": "sketch on the boss's cylindrical wall is refused",
+      "checks": [
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 9
+        },
+        {
+          "pointer": "/summary/features/3/name",
+          "equals": "Boss-Extrude2"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/boss-on-face.dwprt"
+      },
+      "files": [
+        "{bundle}/boss-on-face.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/boss-on-face.dwprt"
+      },
+      "label": "reopen the boss",
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -21,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 9
+        }
+      ],
+      "export": [
+        "step"
+      ]
+    }
+  ]
+}
