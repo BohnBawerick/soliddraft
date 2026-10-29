@@ -434,9 +434,21 @@ pub struct ShellFeature {
 }
 
 /// The final lattice stage. It reads the whole finished body, so it references nothing.
-/// Export relaxes only these two numbers, and both are saved with the feature.
+/// Cell, density and output settings are saved with the feature.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LatticeFeature {
+    /// Missing in legacy files, which keep their earlier body visible until configured.
+    #[serde(default)]
+    pub cell: Option<soliddraft_kernel_api::LatticeCell>,
+    /// Cubic cell edge length, in millimetres.
+    #[serde(default)]
+    pub cell_size_mm: Option<f64>,
+    /// Density expressed as a constant beam radius, in millimetres.
+    #[serde(default)]
+    pub radius_mm: Option<f64>,
+    /// Grid fixed to the part origin and axes.
+    #[serde(default)]
+    pub frame: soliddraft_kernel_api::LatticeFrame,
     /// Accuracy the lattice is proven to, in millimetres.
     pub accuracy_mm: f64,
     /// The smallest detail the lattice keeps, in millimetres.
@@ -445,7 +457,14 @@ pub struct LatticeFeature {
 
 impl Default for LatticeFeature {
     fn default() -> Self {
-        LatticeFeature { accuracy_mm: 0.1, min_detail_mm: 0.5 }
+        LatticeFeature {
+            cell: Some(soliddraft_kernel_api::LatticeCell::Cubic),
+            cell_size_mm: Some(5.0),
+            radius_mm: Some(1.0),
+            frame: soliddraft_kernel_api::LatticeFrame::Part,
+            accuracy_mm: 0.1,
+            min_detail_mm: 0.5,
+        }
     }
 }
 

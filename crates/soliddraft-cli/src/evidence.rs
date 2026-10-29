@@ -153,6 +153,9 @@ impl<'a> Evidence<'a> {
         let root = self.directory.as_ref().ok_or("scenario view requires --bundle")?;
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
+        if doc.model().active_lattice().is_some() {
+            return Err("drawings of field parts are coming soon".into());
+        }
         let body = doc.display_body().ok_or("part has no displayed solid")?;
         // The live hidden-line view stands for a drawing view on screen, so it reads the preview.
         let spec = soliddraft_kernel_api::drawing::ViewSpec {

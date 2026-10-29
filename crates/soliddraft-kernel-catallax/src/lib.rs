@@ -11,6 +11,7 @@ mod drawing_queries;
 mod edge_control;
 mod frames;
 mod identity;
+mod lattice;
 mod native;
 mod shell;
 mod step;
@@ -26,7 +27,7 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "6142450b05b4f79e86e2f14afdb29f290f3cee5a";
+pub const CATALLAX_REVISION: &str = "86f724c3c190e6abdfd1be38930d2c4707fbd271";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -39,6 +40,7 @@ pub struct CatallaxKernel {
 struct State {
     next: u64,
     bodies: BTreeMap<BodyId, Stored>,
+    fields: BTreeMap<BodyId, Arc<lattice::Field>>,
     capture: bool,
     questions: Vec<Value>,
 }
@@ -219,8 +221,11 @@ impl CatallaxKernel {
             "questions":questions}))
     }
 
-    /// The legacy recipe that actually constructed a body's current geometry.
+    /// The retained definition: a native Catallax recipe for fields, a legacy recipe for B-reps.
     pub fn body_recipe(&self, body: BodyId) -> KernelResult<Value> {
+        if let Some(field) = self.field(body)? {
+            return Ok(field.recipe());
+        }
         let state = self.state()?;
         let stored = state.get(body)?;
         Ok(json!({"format":"soliddraft-recipe/1", "name":"SolidDraft",
@@ -758,8 +763,19 @@ impl Kernel for CatallaxKernel {
         })
     }
 
+    fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
+        self.observe("lattice", || self.build_field(tag, body, params))
+    }
+
+    fn export_field_stl(&self, body: BodyId) -> KernelResult<FieldExport> {
+        self.observe("export_field_stl", || self.field(body)?.ok_or(KernelError::UnknownBody(body))?.export())
+    }
+
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.observe("tessellate", || {
+            if self.field(body)?.is_some() {
+                return Err(KernelError::Unsupported("field meshes require labelled certified export".into()));
+            }
             let solid = self.solid(body)?;
             let options = options(params)?;
             let mesh = solid.display(&options, "tessellate")?;
@@ -776,6 +792,9 @@ impl Kernel for CatallaxKernel {
 
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
         self.observe("tessellate_edges", || {
+            if self.field(body)?.is_some() {
+                return Ok(vec![]);
+            }
             let solid = self.solid(body)?;
             let mesh = solid.display(&options(params)?, "tessellate_edges")?;
             Ok(mesh
@@ -804,6 +823,9 @@ impl Kernel for CatallaxKernel {
 
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.observe("preview", || {
+            if let Some(field) = self.field(body)? {
+                return Ok(field.preview());
+            }
             let solid = self.solid(body)?;
             // Where Catallax cannot sample a preview, the screen shows the certified mesh.
             let preview = solid.preview(&options(params)?, "preview")?;
@@ -819,6 +841,9 @@ impl Kernel for CatallaxKernel {
 
     fn preview_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
         self.observe("preview_edges", || {
+            if self.field(body)?.is_some() {
+                return Ok(vec![]);
+            }
             let solid = self.solid(body)?;
             let preview = solid.preview(&options(params)?, "preview_edges")?;
             let Some(mesh) = preview.as_ref() else {
@@ -886,6 +911,9 @@ impl Kernel for CatallaxKernel {
 
     fn topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.observe("topology", || {
+            if let Some(field) = self.field(body)? {
+                return Ok(field.topology());
+            }
             let solid = self.solid(body)?;
             // Topology uses the original certified display, independent of later mesh requests.
             solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids, false)).clone()
@@ -904,13 +932,20 @@ impl Kernel for CatallaxKernel {
     }
 
     fn release(&self, body: BodyId) -> KernelResult<()> {
-        self.observe("release", || self.state()?.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body)))
+        self.observe("release", || {
+            let mut state = self.state()?;
+            state.fields.remove(&body);
+            state.bodies.remove(&body).map(|_| ()).ok_or(KernelError::UnknownBody(body))
+        })
     }
 
     /// The recipe text, the history, the certified display mesh, the cached meshes and
     /// previews, plus a fixed allowance per B-rep face and edge of every body the build kept.
     /// Catallax does not report its model's size, so the allowance is an estimate.
     fn retained_bytes(&self, body: BodyId) -> KernelResult<u64> {
+        if let Some(field) = self.field(body)? {
+            return Ok(field.retained_bytes());
+        }
         const FACE: usize = 2048;
         const EDGE: usize = 512;
         let mesh_bytes = |m: &catallax_mesh::Mesh| {

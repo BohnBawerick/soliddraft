@@ -210,9 +210,68 @@ pub struct Draft {
     pub angle_deg: f64,
 }
 
-/// Parameters of the final lattice stage. Export relaxes only these two numbers.
+/// The supported lattice cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LatticeCell {
+    /// Axis-aligned cubic beams.
+    Cubic,
+}
+
+/// The lattice grid is fixed to the part origin and axes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LatticeFrame {
+    /// The part frame, with a node at its origin.
+    #[default]
+    Part,
+}
+
+/// A certified, labelled field file and its proof report.
+#[derive(Clone, Debug)]
+pub struct FieldExport {
+    /// The labelled binary STL.
+    pub bytes: Vec<u8>,
+    /// The proof attached to those bytes.
+    pub report: FieldReport,
+}
+
+/// Proof and approximation metadata of a field mesh.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FieldReport {
+    /// Field meshes approximate the native field.
+    pub approximate: bool,
+    /// Native export route.
+    pub route: String,
+    /// Exact rational requested accuracy in millimetres.
+    pub requested_accuracy_mm: String,
+    /// Proven two-sided bound, including file rounding.
+    pub deviation_bound_mm: f64,
+    /// Closed, oppositely paired surface.
+    pub closed: bool,
+    /// One connected component.
+    pub connected: bool,
+    /// Number of components.
+    pub components: usize,
+    /// Written triangles.
+    pub triangles: usize,
+    /// Shared vertices.
+    pub vertices: usize,
+    /// SHA-256 of the labelled file.
+    pub sha256: String,
+}
+
+/// Parameters of the final lattice stage.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Lattice {
+    /// Cell type.
+    pub cell: LatticeCell,
+    /// Cubic cell edge length in millimetres.
+    pub cell_size_mm: f64,
+    /// Constant beam radius in millimetres.
+    pub radius_mm: f64,
+    /// Fixed part frame.
+    pub frame: LatticeFrame,
     /// Accuracy the lattice is proven to, in millimetres.
     pub accuracy_mm: f64,
     /// The smallest detail the lattice keeps, in millimetres.
@@ -685,15 +744,20 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("draft".into()))
     }
 
-    /// Turns a finished solid into its lattice. The result must be closed,
-    /// non-self-intersecting and connected, or the call fails.
+    /// Compiles a terminal lattice and its unproved display. Labelled export certifies
+    /// closedness, connectivity and the requested two-sided distance bound.
     fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
         let _ = (tag, body, params);
-        Err(KernelError::Unsupported("lattice: the pinned Catallax revision has no lattice entry point yet".into()))
+        Err(KernelError::Unsupported("lattice".into()))
     }
 
-    /// Triangulates a body, within the requested controls the backend can guarantee.
-    /// Exports and proven results use it; the screen uses [`preview`](Self::preview).
+    /// Certifies an active field and writes its labelled STL.
+    fn export_field_stl(&self, body: BodyId) -> KernelResult<FieldExport> {
+        let _ = body;
+        Err(KernelError::Unsupported("labelled field export".into()))
+    }
+
+    /// Triangulates a body within its supported controls. The screen uses [`preview`](Self::preview).
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh>;
 
     /// Triangulates a body once per entry of `levels`, in order, as one call. Each mesh

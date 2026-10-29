@@ -681,7 +681,7 @@ impl Feature {
             FeatureKind::Draft(d) => format!("{}°", fmt_mm(d.angle)),
             FeatureKind::Shell(s) => format!("{} mm wall", fmt_mm(s.thickness)),
             FeatureKind::ImportStep(i) => i.source_name.clone(),
-            FeatureKind::Lattice(l) => format!("±{} mm", fmt_mm(l.accuracy_mm)),
+            FeatureKind::Lattice(l) => format!("unproved preview · ±{} mm", fmt_mm(l.accuracy_mm)),
         }
     }
 
@@ -2600,6 +2600,10 @@ impl Document {
     }
 
     pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
+        if self.model.active_lattice().is_some() {
+            let bounds = self.kernel().topology(self.display_body()?).ok()?.bbox;
+            return Some((kv(bounds.min), kv(bounds.max)));
+        }
         if let Some(mesh) = self.provisional_mesh() {
             return mesh.bounds();
         }

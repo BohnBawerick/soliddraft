@@ -172,6 +172,20 @@ pub enum Line {
         /// Unite the reflection with the original.
         keep_original: bool,
     },
+    /// Replaces the finished body with a terminal cubic lattice.
+    Lattice { cell: soliddraft_kernel_api::LatticeCell, cell_size: f64, radius: f64, accuracy: f64, min_detail: f64 },
+    /// Edits only the supplied lattice settings.
+    EditLattice {
+        feature: String,
+        #[serde(default)]
+        cell_size: Option<f64>,
+        #[serde(default)]
+        radius: Option<f64>,
+        #[serde(default)]
+        accuracy: Option<f64>,
+        #[serde(default)]
+        min_detail: Option<f64>,
+    },
     /// Hollows the part, leaving named faces open.
     Shell {
         /// Faces left open; empty requests a closed shell.
@@ -491,6 +505,26 @@ pub fn mirror_params() -> Vec<(&'static str, Value)> {
         ("plane", string("`top`, `front`, `right`, or a planar face's name")),
         ("keep_original", boolean("true unites the reflection with the original")),
     ]
+}
+
+/// The `lattice` verb's parameters.
+pub fn lattice_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("cell", constant("cubic")),
+        ("cell_size", number("Cell size in millimetres")),
+        ("radius", number("Density as beam radius in millimetres")),
+        ("accuracy", number("Certified export accuracy in millimetres")),
+        ("min_detail", number("Minimum preserved detail in millimetres")),
+    ]
+}
+
+/// The `edit_lattice` verb's parameters.
+pub fn edit_lattice_params() -> Vec<(&'static str, Value)> {
+    let mut params = vec![feature_param()];
+    params.extend(
+        lattice_params().into_iter().filter(|(key, _)| *key != "cell").map(|(key, value)| (key, optional(value))),
+    );
+    params
 }
 
 /// The `shell` verb's parameters.
@@ -1073,6 +1107,37 @@ impl Line {
                     soliddraft_model::MirrorFeature { plane: plane_ref(doc, plane)?, keep_original: *keep_original };
                 run.apply(doc, Command::AddFeature(FeatureKind::Mirror(mirror)))?;
             }
+            Line::Lattice { cell, cell_size, radius, accuracy, min_detail } => {
+                let lattice = soliddraft_model::LatticeFeature {
+                    cell: Some(*cell),
+                    cell_size_mm: Some(positive("cell size", *cell_size)?),
+                    radius_mm: Some(positive("density", *radius)?),
+                    accuracy_mm: *accuracy,
+                    min_detail_mm: *min_detail,
+                    ..Default::default()
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Lattice(lattice)))?;
+            }
+            Line::EditLattice { feature, cell_size, radius, accuracy, min_detail } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Lattice(mut lattice)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a lattice"));
+                };
+                lattice.cell = Some(soliddraft_kernel_api::LatticeCell::Cubic);
+                if let Some(v) = cell_size {
+                    lattice.cell_size_mm = Some(positive("cell size", *v)?);
+                }
+                if let Some(v) = radius {
+                    lattice.radius_mm = Some(positive("density", *v)?);
+                }
+                if let Some(v) = accuracy {
+                    lattice.accuracy_mm = *v;
+                }
+                if let Some(v) = min_detail {
+                    lattice.min_detail_mm = *v;
+                }
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Lattice(lattice) })?;
+            }
             Line::Shell { open_faces, thickness } => {
                 let shell = soliddraft_model::ShellFeature {
                     open_faces: open_faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
@@ -1223,6 +1288,8 @@ impl Line {
             Line::CircularPattern { .. } => "circular_pattern",
             Line::Mirror { .. } => "mirror",
             Line::Draft { .. } => "draft",
+            Line::Lattice { .. } => "lattice",
+            Line::EditLattice { .. } => "edit_lattice",
             Line::Shell { .. } => "shell",
             Line::EditShell { .. } => "edit_shell",
             Line::EditHole { .. } => "edit_hole",
@@ -1323,6 +1390,10 @@ impl Line {
             Line::Mirror { plane, keep_original } => {
                 ("Mirror".into(), format!("in {plane}{}", if *keep_original { ", keeping the original" } else { "" }))
             }
+            Line::Lattice { cell_size, radius, .. } => {
+                ("Lattice".into(), format!("Cubic cell {} mm, beam radius {} mm", fmt_mm(*cell_size), fmt_mm(*radius)))
+            }
+            Line::EditLattice { feature, .. } => (format!("Edit {feature}"), "Change lattice settings".into()),
             Line::Shell { open_faces, thickness } => (
                 "Shell".into(),
                 format!(
@@ -2007,7 +2078,9 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
             "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,
         }),
         FeatureKind::Lattice(l) => json!({
-            "type": "lattice", "accuracy_mm": l.accuracy_mm, "min_detail_mm": l.min_detail_mm,
+            "type": "lattice", "cell": l.cell, "cell_size_mm": l.cell_size_mm, "radius_mm": l.radius_mm,
+            "frame": l.frame, "accuracy_mm": l.accuracy_mm, "min_detail_mm": l.min_detail_mm,
+            "display": "unproved preview",
         }),
         FeatureKind::ImportStep(i) => json!({
             "type": "import_step", "source_name": i.source_name, "sha256": i.sha256,
@@ -2023,7 +2096,7 @@ impl CommandTools<'_> {
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
         let proof = doc.proof_state();
         let current = proof.current_proved_display();
-        let mass = if current { cached_body_mass(doc) } else { None };
+        let mass = if current && doc.model().active_lattice().is_none() { cached_body_mass(doc) } else { None };
         json!({
             "part": doc.name,
             "units": "mm",

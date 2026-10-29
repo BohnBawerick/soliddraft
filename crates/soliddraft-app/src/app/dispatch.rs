@@ -331,6 +331,10 @@ impl SolidDraftApp {
                 );
                 self.state.doc.selection = None;
             }
+            AppAction::StartLattice => {
+                self.open_editor(None, EditorParams::Lattice(soliddraft_model::LatticeFeature::default()));
+                self.state.doc.selection = None;
+            }
             AppAction::StartShell => {
                 let open_faces = match self.state.doc.selection {
                     Some(Selection::Face(face)) => self.state.doc.any_face_ref(face).into_iter().collect(),
@@ -392,7 +396,7 @@ impl SolidDraftApp {
                     // An import has no editor; its repair questions have their own dialog.
                     FeatureKind::ImportStep(_) => return,
                     // The lattice's controls arrive with its editor slice.
-                    FeatureKind::Lattice(_) => return,
+                    FeatureKind::Lattice(l) => EditorParams::Lattice(*l),
                 };
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(None));
@@ -432,6 +436,10 @@ impl SolidDraftApp {
                     (target, EditorParams::Mirror(m)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Mirror(m) },
                         None => Command::AddFeature(FeatureKind::Mirror(m)),
+                    },
+                    (target, EditorParams::Lattice(l)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Lattice(l) },
+                        None => Command::AddFeature(FeatureKind::Lattice(l)),
                     },
                     (target, EditorParams::Shell(s)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Shell(s) },

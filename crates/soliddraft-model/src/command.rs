@@ -284,6 +284,11 @@ impl Document {
         self.features.iter().find(|f| f.kind.is_lattice()).map(|f| f.id)
     }
 
+    /// The enabled lattice above the rollback bar, including a failed build.
+    pub fn active_lattice(&self) -> Option<&Feature> {
+        self.features.iter().take(self.active_count()).find(|f| f.kind.is_lattice() && !f.suppressed)
+    }
+
     /// Puts the rollback bar above the lattice so the user is back at the last CAD
     /// feature. The lattice and its settings stay in the tree and are not built until
     /// the bar rolls forward.
@@ -470,6 +475,12 @@ impl Document {
             }
             FeatureKind::Draft(d) if !(d.angle.is_finite() && d.angle.abs() < 90.0 && d.angle != 0.0) => {
                 Err(CommandError::Invalid(format!("draft angle must be between -90 and 90 and not 0, got {}", d.angle)))
+            }
+            FeatureKind::Lattice(l)
+                if l.cell_size_mm.is_some_and(|v| !v.is_finite() || v <= 0.0)
+                    || l.radius_mm.is_some_and(|v| !v.is_finite() || v <= 0.0) =>
+            {
+                Err(CommandError::Invalid("lattice cell size and density must be finite and positive".into()))
             }
             FeatureKind::Lattice(l)
                 if !(l.accuracy_mm.is_finite()

@@ -198,6 +198,12 @@ impl ViewportState {
             events.actions = crate::sketcher::run(ui, session, doc, &self.camera, rect, &response);
             ui.ctx().request_repaint();
         }
+        if doc.model().active_lattice().is_some_and(|f| doc.model().status(f.id).is_some_and(|s| s.is_ok())) {
+            ui.put(
+                Rect::from_min_size(rect.left_top() + vec2(12.0, 12.0), vec2(160.0, 24.0)),
+                egui::Label::new(egui::RichText::new("unproved preview").color(theme::muted())),
+            );
+        }
         self.paint_origin_axes(&painter, doc, rect);
         self.paint_highlights(&painter, doc, selection, rect);
         // A selected body shows the dimensions that build it. A click on one keeps the

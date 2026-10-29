@@ -97,6 +97,8 @@ pub enum Report {
     Step(StepReport),
     /// A mesh, with its chord height.
     Mesh(MeshReport),
+    /// A certified field approximation with a labelled file.
+    FieldMesh(soliddraft_kernel_api::FieldReport),
 }
 
 impl Report {
@@ -112,6 +114,9 @@ impl Report {
                     s += "; over the requested tolerance";
                 }
                 s
+            }
+            Report::FieldMesh(r) => {
+                format!("{} triangles; approximate field mesh, proven within {} mm", r.triangles, r.deviation_bound_mm)
             }
             Report::Mesh(r) => {
                 let mut s = format!("{} triangles; within {} mm of the exact part", r.triangles, r.chord_height);

@@ -1,6 +1,6 @@
 # Part export
 
-SolidDraft exports a part as STEP AP242, STL, 3MF or OBJ. The code is the `soliddraft-exchange` crate. The kernel call is `Kernel::export_step`, described in [kernel-bridge.md](kernel-bridge.md). Every export returns the file and a report of how far the file may lie from the exact part.
+SolidDraft exports B-rep parts as STEP AP242, STL, 3MF or OBJ. The code is the `soliddraft-exchange` crate. The kernel call is `Kernel::export_step`, described in [kernel-bridge.md](kernel-bridge.md). Every export returns the file and a report of how far the file may lie from the exact part.
 
 ## Formats
 
@@ -24,6 +24,10 @@ The mesh report says whether the welded mesh is closed: every edge joins exactly
 Binary STL headers never start with `solid` in any case, because some readers then take the file for ASCII STL. 3MF packages carry a fixed timestamp, so the same mesh always gives the same bytes.
 
 OBJ writes the part name in an `o` record and the source face IDs in `g face_<id>` groups, following Catallax's OBJ convention. It writes the existing display mesh through the same kernel boundary as STL and 3MF, without rebuilding a Catallax mesh just to call its writer. Per-face vertices and `vn` records preserve sharp-face normals. Coordinates round-trip to the display mesh's 32-bit values, and triangles retain their outward winding. A comment records the chord height in millimetres. OBJ has no standard unit field, so the header states millimetres. Control characters in the part name become spaces to keep the name on one line. As with STL and 3MF, triangles collapsed to repeated positions are dropped.
+
+## Terminal lattices
+
+An active lattice exports only as binary STL, through the native field stage. The stage certifies one closed, connected surface at the lattice feature's accuracy and minimum detail settings. Its `catallax-print-stl/1` header records the field route, exact requested accuracy, caps and proven distance bound. The `field_mesh` JSON report marks the result approximate and includes the bound, topology verdict, mesh counts and file SHA-256. The viewport remains an unproved preview. STEP, OBJ and 3MF are refused while the lattice is active. Returning before the lattice restores ordinary B-rep export.
 
 ## Refusals
 

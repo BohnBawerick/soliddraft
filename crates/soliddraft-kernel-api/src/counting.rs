@@ -121,6 +121,15 @@ impl Kernel for Counting {
         self.inner.draft(tag, body, faces, params)
     }
 
+    fn lattice(&self, tag: &OpTag, body: BodyId, params: &crate::Lattice) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.lattice(tag, body, params)
+    }
+
+    fn export_field_stl(&self, body: BodyId) -> KernelResult<crate::FieldExport> {
+        self.inner.export_field_stl(body)
+    }
+
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.note(Work::Mesh(body));
         self.inner.tessellate(body, params)

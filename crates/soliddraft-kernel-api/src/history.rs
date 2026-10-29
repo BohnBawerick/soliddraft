@@ -47,6 +47,8 @@ pub enum OpKind {
     Mirror,
     /// `draft`.
     Draft,
+    /// Terminal field lattice.
+    Lattice,
 }
 
 impl OpKind {
@@ -67,6 +69,7 @@ impl OpKind {
             OpKind::Pattern => "pattern",
             OpKind::Mirror => "mirror",
             OpKind::Draft => "draft",
+            OpKind::Lattice => "lattice",
         }
     }
 }

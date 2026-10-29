@@ -1,6 +1,6 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `6142450b05b4f79e86e2f14afdb29f290f3cee5a`. It builds through `catallax-app`; no Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `86f724c3c190e6abdfd1be38930d2c4707fbd271`. B-rep construction uses `catallax-app`; terminal lattices use `catallax-field::lattice_stage`. No Catallax code is copied into SolidDraft.
 
 Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
 For a new solid, the adapter merges operand and read-only context recipes, selects the

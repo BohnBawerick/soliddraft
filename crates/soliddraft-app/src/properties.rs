@@ -311,6 +311,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         ),
         Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
         Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
+        Some(EditorParams::Lattice(_)) => (state.editor.as_ref().unwrap().title(), Icon::LinearPattern),
         Some(EditorParams::Shell(_)) => (state.editor.as_ref().unwrap().title(), Icon::Shell),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
         Some(EditorParams::Repair { .. }) => ("Repair references".to_owned(), Icon::Repair),
@@ -632,6 +633,35 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 ui.checkbox(&mut m.keep_original, "Keep the original");
                 if let Some(err) = &editor.error {
                     error_row(ui, err);
+                }
+            }
+            EditorParams::Lattice(l) => {
+                theme::section_label(ui, "Cubic lattice");
+                hint(ui, "Grid at the part origin. Unproved preview; export certifies the mesh.");
+                for (label, value) in [("Cell size", &mut l.cell_size_mm), ("Density (beam radius)", &mut l.radius_mm)]
+                {
+                    let v = value.get_or_insert(0.0);
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        let response = ui.add(egui::DragValue::new(v).speed(0.1).suffix(" mm"));
+                        response.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
+                        });
+                    });
+                }
+                for (label, v) in [("Accuracy", &mut l.accuracy_mm), ("Minimum detail", &mut l.min_detail_mm)] {
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        let response = ui.add(egui::DragValue::new(v).speed(0.01).suffix(" mm"));
+                        response.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
+                        });
+                    });
+                }
+                l.cell = Some(soliddraft_kernel_api::LatticeCell::Cubic);
+                ui.label("unproved preview");
+                if let Some(error) = &editor.error {
+                    error_row(ui, error);
                 }
             }
             EditorParams::Shell(s) => {

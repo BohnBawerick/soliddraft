@@ -2,12 +2,14 @@
 """Drive the installed application's MCP and CLI, retaining evidence on failure."""
 
 import argparse
+import hashlib
 import json
 import math
 import pathlib
 import queue
 import re
 import statistics
+import struct
 import subprocess
 import sys
 import threading
@@ -389,7 +391,7 @@ def at(value, pointer):
 def check(value, spec, previous=None):
     try:
         actual = at(value, spec["pointer"])
-        comparisons = [key for key in ("equals", "approx", "minimum", "contains", "same_as_step") if key in spec]
+        comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "contains", "same_as_step") if key in spec]
         if len(comparisons) != 1:
             raise ValueError("a check needs exactly one comparison")
         kind = comparisons[0]
@@ -403,6 +405,10 @@ def check(value, spec, previous=None):
             passed = math.isclose(actual, expected, rel_tol=0, abs_tol=spec.get("tolerance", 0.001))
         elif kind == "minimum":
             passed = actual >= expected
+        elif kind == "maximum":
+            passed = actual <= expected
+        elif kind == "length":
+            passed = isinstance(actual, list) and len(actual) == expected
         else:
             passed = expected in actual
         return {"check": spec, "actual": actual, "pass": passed}
@@ -459,6 +465,46 @@ def cli(binary, arguments, directory, label, timeout):
     return {"check": label, "command": [binary, *map(str, arguments)], "exit": result.returncode,
             "elapsed_ms": (time.perf_counter_ns() - start) / 1_000_000,
             "pass": result.returncode == 0}
+
+
+def export_check(args, directory, spec, previous):
+    extension = spec["format"]
+    path = directory / f"part.{extension}"
+    label = f"export-{extension}"
+    exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json", "--out", path],
+                   directory, label, args.timeout)
+    if "refused" in spec:
+        exported["pass"] = (exported["exit"] != 0 and not path.exists() and
+                            spec["refused"] in (directory / f"{label}.stderr").read_text())
+        return exported
+    if not exported["pass"]:
+        return exported
+    try:
+        value = json.loads((directory / f"{label}.stdout").read_text())
+        exported["report"] = value["report"]
+        exported["checks"] = [check(value, rule) for rule in spec.get("checks", [])]
+        exported["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if "same_export_as" in spec:
+            expected = previous.get((spec["same_export_as"], extension))
+            exported["checks"].append({"check": "same exported bytes", "expected": expected,
+                                       "pass": expected is not None and expected == exported["sha256"]})
+        if "oracle" in spec:
+            oracle = spec["oracle"]
+            checker = pathlib.Path(__file__).with_name("check-lattice-stl.py")
+            command = [str(checker), str(path), "--box", *map(str, oracle["box"]),
+                       "--cell", str(oracle["cell"]), "--radius", str(oracle["radius"]),
+                       "--accuracy", oracle["accuracy"], "--euler", str(oracle["euler"])]
+            result = cli(sys.executable, command, directory, f"{label}-oracle", args.timeout)
+            exported["checks"].append(result)
+            # The report must describe precisely the bytes the oracle checked.
+            bound = struct.unpack_from("<d", path.read_bytes(), 68)[0]
+            exported["checks"].append({"check": "export report matches labelled file",
+                "pass": value["report"].get("deviation_bound_mm") == bound and
+                        value["report"].get("sha256") == exported["sha256"]})
+        exported["pass"] = all(c["pass"] for c in exported["checks"])
+    except (KeyError, TypeError, ValueError, OSError, struct.error) as error:
+        exported.update({"pass": False, "error": str(error)})
+    return exported
 
 
 def replay_question(verifier, question, directory, timeout):
@@ -563,6 +609,7 @@ def run(args):
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         known = {}
         previous = {}
+        exports = {}
         # GPU preparation runs once, outside every click.
         response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
         if response.get("isError"):
@@ -602,6 +649,11 @@ def run(args):
                                "pass": False})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
             checks.append(backend_pinned(command, pin))
+            if step.get("refused") and number > 1 and step["tool"] == "sketch":
+                before = previous[number - 1]["summary"]
+                checks.append({"check": "refused CAD preserves features and undo", "pass":
+                    before["features"] == command["summary"]["features"] and
+                    before.get("undo") == command["summary"].get("undo")})
             if step.get("refused"):
                 # An application refusal, such as an export the drawing's previews cannot
                 # certify: the tool refuses with this text and no kernel replay applies.
@@ -678,28 +730,33 @@ def run(args):
                 started = time.perf_counter_ns()
                 viewed = wait(client, entry, "scenario_view", {})
                 view_ms = (time.perf_counter_ns() - started) / 1_000_000
-                checks.append({"check": "live hidden-line view", "response": viewed,
-                               "pass": not viewed.get("isError")})
-                view_latency = drawing_view_timing(
-                    view_ms, json.loads((directory / "view.kernel.json").read_text()))
-                entry["drawing_view"] = view_latency
-                checks.append(view_latency)
-                write(directory / "view.timing.json", view_latency)
-                print(json.dumps({"step": number, "tool": "scenario_view", "timing": view_latency}), flush=True)
-                if not view_latency["pass"]:
-                    print(f"::error::Drawing-view step {number} took {view_ms:.3f} ms; "
-                          f"budget is {DRAWING_VIEW_BUDGET_MS} ms", flush=True)
-                entry["intervals"]["view"] = {"elapsed_ms": view_ms, "budget_ms": DRAWING_VIEW_BUDGET_MS,
-                                              "verdict": verdict(view_latency)}
-                if not viewed.get("isError"):
-                    view = json.loads((directory / "view.json").read_text())
-                    reason = answers(number, command, view)
-                    checks.append({"check": "view answers this request", "reason": reason, "pass": reason is None})
-                    checks.append({"check": "live Catallax hidden-line view", "actual": view,
-                                   "pass": view["backend"]["name"] == "catallax" and view["live_document"]
-                                           and view["method"] == "mesh"})
-                checks.append({"check": "SVG contains curves",
-                               "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
+                if step.get("view") == "unavailable":
+                    checks.append({"check": "field drawing unavailable", "response": viewed,
+                                   "pass": bool(viewed.get("isError")) and
+                                   "drawings of field parts are coming soon" in json.dumps(viewed)})
+                else:
+                    checks.append({"check": "live hidden-line view", "response": viewed,
+                                   "pass": not viewed.get("isError")})
+                    view_latency = drawing_view_timing(
+                        view_ms, json.loads((directory / "view.kernel.json").read_text()))
+                    entry["drawing_view"] = view_latency
+                    checks.append(view_latency)
+                    write(directory / "view.timing.json", view_latency)
+                    print(json.dumps({"step": number, "tool": "scenario_view", "timing": view_latency}), flush=True)
+                    if not view_latency["pass"]:
+                        print(f"::error::Drawing-view step {number} took {view_ms:.3f} ms; "
+                              f"budget is {DRAWING_VIEW_BUDGET_MS} ms", flush=True)
+                    entry["intervals"]["view"] = {"elapsed_ms": view_ms, "budget_ms": DRAWING_VIEW_BUDGET_MS,
+                                                  "verdict": verdict(view_latency)}
+                    if not viewed.get("isError"):
+                        view = json.loads((directory / "view.json").read_text())
+                        reason = answers(number, command, view)
+                        checks.append({"check": "view answers this request", "reason": reason, "pass": reason is None})
+                        checks.append({"check": "live Catallax hidden-line view", "actual": view,
+                                       "pass": view["backend"]["name"] == "catallax" and view["live_document"]
+                                               and view["method"] == "mesh"})
+                    checks.append({"check": "SVG contains curves",
+                                   "pass": (directory / "view.svg").exists() and "<path " in (directory / "view.svg").read_text()})
             if step.get("drawing"):
                 drawing = cli(args.soliddraft, ["draw", directory / "part.dwprt", "--template", "iso-a3",
                     "--out", directory / "drawing.dwdrw", "--out", directory / "drawing.svg", "--kernel-log", directory / "drawing.kernel.json", "--json"], directory, "drawing", args.timeout)
@@ -749,13 +806,14 @@ def run(args):
             if "checked_step_export" in step:
                 checks.extend(checked_step_export(args.soliddraft,
                     substitute(step["checked_step_export"], args.out), directory, evidence, args.timeout))
-            for extension in step.get("export", []):
-                exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
-                    "--out", directory / f"part.{extension}"], directory, f"export-{extension}", args.timeout)
+            specifications = [{"format": f} for f in step.get("export", [])] + step.get("exports", [])
+            for export_spec in specifications:
+                extension = export_spec["format"]
+                exported = export_check(args, directory, export_spec, exports)
                 entry["intervals"].setdefault("export", {})[extension] = {"elapsed_ms": exported["elapsed_ms"]}
-                if exported["pass"]:
-                    exported["report"] = json.loads((directory / f"export-{extension}.stdout").read_text())["report"]
                 checks.append(exported)
+                if exported["pass"] and "label" in step and "sha256" in exported:
+                    exports[(step["label"], extension)] = exported["sha256"]
             entry["pass"] = all(c["pass"] for c in checks)
             write(directory / "checks.json", entry)
             write(args.out / "result.json", report)

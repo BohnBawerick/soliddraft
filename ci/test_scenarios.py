@@ -7,6 +7,7 @@ import io
 import json
 import os
 import pathlib
+import struct
 import tempfile
 import unittest
 from unittest import mock
@@ -411,8 +412,9 @@ FAKE = pathlib.Path(__file__).with_name("fake_mcp_server.py")
 class RunnerEndToEnd(unittest.TestCase):
     """The real run() against a synthetic MCP server, so the click ends where a user sees it."""
 
-    def run_step(self, mode, measure=False, timeout=5, strict=False, known=None):
+    def run_step(self, mode, measure=False, timeout=5, strict=False, known=None, extra=None):
         step = {"tool": "extrude", "arguments": {}}
+        step.update(extra or {})
         if measure:
             step["checks"] = [{"pointer": "/measurement/volume_mm3", "approx": 1.0}]
         with tempfile.TemporaryDirectory() as directory:
@@ -435,6 +437,25 @@ class RunnerEndToEnd(unittest.TestCase):
                   if isinstance(c["check"], str)}
         self.code = code
         return report, checks
+
+    def test_only_the_declared_field_view_refusal_is_accepted(self):
+        for mode, declared, expected in [("field-view", True, True), ("field-view", False, False),
+                                         ("wrong-view-error", True, False), ("ok", True, False)]:
+            with self.subTest(mode=mode, declared=declared):
+                report, _ = self.run_step(mode, extra={"view": "unavailable"} if declared else {})
+                self.assertEqual(report["pass"], expected)
+
+    def test_export_report_checks_and_refusals_run_through_the_cli(self):
+        exports = [{"format": "stl", "checks": [{"pointer": "/report/deviation_bound_mm", "maximum": 0.1}]}]
+        report, _ = self.run_step("ok", extra={"exports": exports})
+        self.assertTrue(report["pass"])
+        exports[0]["checks"][0]["maximum"] = 0.01
+        report, _ = self.run_step("ok", extra={"exports": exports})
+        self.assertFalse(report["pass"])
+        for mode, expected in [("export-refused", True), ("export-refused-written", False),
+                               ("export-refused-wrong", False), ("ok", False)]:
+            report, _ = self.run_step(mode, extra={"exports": [{"format": "step", "refused": "field parts export as meshes"}]})
+            self.assertEqual(report["pass"], expected, mode)
 
     def test_a_visible_selectable_edit_ends_the_click(self):
         report, checks = self.run_step("ok")
@@ -562,6 +583,43 @@ class RunnerEndToEnd(unittest.TestCase):
         report, checks = self.run_step("ok", measure=True)
         self.assertTrue(checks["measurement answers this request"]["pass"])
         self.assertEqual(report["steps"][0]["intervals"]["measurement"]["gate_ms"], 2000)
+
+
+class FieldExportChecks(unittest.TestCase):
+    def test_same_export_requires_a_known_matching_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            spec = {"format": "stl", "same_export_as": "density edit"}
+            first = scenarios.export_check(args, directory, {"format": "stl"}, {})
+            for digest, expected in [(first["sha256"], True), ("wrong", False), (None, False)]:
+                result = scenarios.export_check(args, directory, spec, {("density edit", "stl"): digest})
+                self.assertEqual(result["pass"], expected)
+
+    def test_oracle_failure_and_report_mismatch_fail_the_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            real_cli = scenarios.cli
+            def fake_oracle(binary, arguments, output, label, timeout):
+                if label.endswith("-oracle"):
+                    data = bytearray((directory / "part.stl").read_bytes())
+                    struct.pack_into("<d", data, 68, self.bound)
+                    (directory / "part.stl").write_bytes(data)
+                    (directory / f"{label}.stdout").write_text(json.dumps({"bound_mm": self.bound}))
+                    return {"check": label, "pass": self.oracle_pass}
+                return real_cli(binary, arguments, output, label, timeout)
+            spec = {"format": "stl", "oracle": {"box": [0, 0, 0, 1, 1, 1], "cell": 5,
+                    "radius": 1, "accuracy": "1/10", "euler": 2}}
+            for self.oracle_pass, self.bound, expected in [(True, 0.1, True), (False, 0.1, False), (True, 0.2, False)]:
+                with mock.patch.object(scenarios, "cli", side_effect=fake_oracle):
+                    self.assertEqual(scenarios.export_check(args, directory, spec, {})["pass"], expected)
+
+    def test_length_and_maximum_fail_closed(self):
+        self.assertTrue(scenarios.check([1, 2], {"pointer": "", "length": 2})["pass"])
+        self.assertFalse(scenarios.check([1], {"pointer": "", "length": 2})["pass"])
+        self.assertFalse(scenarios.check("ab", {"pointer": "", "length": 2})["pass"])
+        self.assertFalse(scenarios.check(None, {"pointer": "", "maximum": 0.1})["pass"])
 
 
 class CrossStepChecks(unittest.TestCase):
