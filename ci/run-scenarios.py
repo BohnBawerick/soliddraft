@@ -472,6 +472,42 @@ def replay_question(verifier, question, directory, timeout):
     return result
 
 
+def same_geometry(binary, directory, previous_directory, timeout):
+    result = {"check": "same geometry as step", "pass": False, "info": []}
+    hashes = []
+    for folder in (previous_directory, directory):
+        info = cli(binary, ["doc", "info", folder / "part.dwprt", "--json"],
+                   folder, "geometry-info", timeout)
+        result["info"].append(info)
+        if not info["pass"]:
+            return result
+        hashes.append(json.loads((folder / "geometry-info.stdout").read_text()).get("geometry_hash"))
+    result.update({"expected": hashes[0], "actual": hashes[1],
+                   "pass": isinstance(hashes[0], str) and bool(hashes[0]) and hashes[0] == hashes[1]})
+    return result
+
+
+def checked_step_export(binary, part, directory, evidence, timeout):
+    exported = cli(binary, ["export", part, "--json", "--out", directory / "part.step"],
+                   directory, "checked-step-export", timeout)
+    checks = [exported]
+    if not exported["pass"]:
+        return checks
+    report = json.loads((directory / "checked-step-export.stdout").read_text())["report"]
+    checks.append({"check": "one within-tolerance STEP solid", "report": report,
+                   "pass": report.get("kind") == "step" and report.get("within_tolerance") is True
+                           and report.get("solids") == 1})
+    write(directory / "step-report.json", {"report": report, "body": {
+        "faces": evidence["summary"]["body"]["faces"],
+        "volume": evidence["measurement"]["volume_mm3"],
+        "area": evidence["measurement"]["area_mm2"],
+    }})
+    checks.extend(output_files([directory / "part.step"]))
+    checks.append(cli(sys.executable, [pathlib.Path(__file__).with_name("check-step.py"),
+        directory / "part.step", directory / "step-report.json"], directory, "check-step", timeout))
+    return checks
+
+
 def timings(steps):
     """Labelled steps' click times, such as a feature's build and edit."""
     return [{"label": s["label"], "tool": s["tool"], "elapsed_ms": s.get("timing", {}).get("elapsed_ms"),
@@ -701,9 +737,18 @@ def run(args):
                 evidence = {**command, "measurement": measurement}
             checks.extend(check(evidence, spec, previous) for spec in step.get("checks", []))
             previous[number] = evidence
+            if "same_geometry_as_step" in step:
+                earlier = step["same_geometry_as_step"]
+                if isinstance(earlier, bool) or not isinstance(earlier, int) or not 1 <= earlier < number:
+                    raise ValueError("same_geometry_as_step must name an earlier step")
+                checks.append(same_geometry(args.soliddraft, directory,
+                    args.out / "commands" / f"{earlier:04}", args.timeout))
             checks.extend(output_files(substitute(step.get("files", []), args.out),
                                        substitute(step.get("absent", []), args.out)))
             # Exports run after the click is timed, as a user's separate request would.
+            if "checked_step_export" in step:
+                checks.extend(checked_step_export(args.soliddraft,
+                    substitute(step["checked_step_export"], args.out), directory, evidence, args.timeout))
             for extension in step.get("export", []):
                 exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
                     "--out", directory / f"part.{extension}"], directory, f"export-{extension}", args.timeout)

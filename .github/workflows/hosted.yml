@@ -373,6 +373,7 @@ jobs:
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
+      - run: python3 -m pip install cadquery-ocp==7.9.3.1.1
       - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
       - name: Build the release application used for click budgets
         run: cargo build --release --locked -p soliddraft-cli

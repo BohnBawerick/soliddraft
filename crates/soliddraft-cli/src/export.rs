@@ -163,11 +163,11 @@ mod tests {
     fn over_tolerance_step_leaves_every_destination_untouched() {
         let dir = std::env::temp_dir().join(format!("soliddraft-export-refusal-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let first = dir.join("first.step");
+        let first = dir.join("first.stl");
         let second = dir.join("second.step");
         let a = Args {
             input: "unused.json".into(),
-            outputs: vec![(first.clone(), Format::Step), (second.clone(), Format::Step)],
+            outputs: vec![(first.clone(), Format::Stl), (second.clone(), Format::Step)],
             json: true,
         };
         let step = |within_tolerance| Export {
@@ -186,9 +186,20 @@ mod tests {
                 warnings: Vec::new(),
             }),
         };
-        let exports = [step(true), step(false)];
+        let mesh = Export {
+            bytes: b"mesh must not be published".to_vec(),
+            report: Report::Mesh(soliddraft_exchange::MeshReport {
+                triangles: 12,
+                vertices: 8,
+                chord_height: 0.01,
+                closed: true,
+                unavailable_controls: Vec::new(),
+            }),
+        };
+        let exports = [mesh, step(false)];
         let error = publish(&a, &exports).unwrap_err();
         assert!(error.contains("second.step"));
+        assert!(error.contains("0.001"));
         assert!(error.contains("exceeds the requested tolerance"));
         assert!(!first.exists());
         assert!(!second.exists());
@@ -200,6 +211,8 @@ mod tests {
         assert_eq!(std::fs::read(&second).unwrap(), b"existing second");
 
         // A fully accepted batch still publishes the exact bytes it was given.
+        let first = dir.join("first.step");
+        let a = Args { outputs: vec![(first.clone(), Format::Step), (second.clone(), Format::Step)], ..a };
         let accepted = [step(true), step(true)];
         publish(&a, &accepted).unwrap();
         assert_eq!(std::fs::read(&first).unwrap(), accepted[0].bytes);
