@@ -2,6 +2,16 @@
   "format": "soliddraft-scenario-inventory/1",
   "scenarios": [
     {
+      "id": "boss-on-face",
+      "file": "ci/scenarios/boss-on-face.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
       "id": "bracket",
       "file": "ci/scenarios/bracket.json",
       "acceptance": true,
