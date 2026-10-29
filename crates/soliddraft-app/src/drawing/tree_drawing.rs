@@ -43,17 +43,17 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let painter = ui.painter();
     let inner = Rect::from_min_max(pos2(rect.left() + 4.0, rect.top()), pos2(rect.right() - 4.0, rect.bottom()));
     if spec.selected {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::SELECTION_BG);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::selection_bg());
     } else if resp.hovered() {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::HOVER);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::hover());
     }
     let x0 = rect.left() + 10.0 + spec.indent as f32 * 18.0;
     let ink = if spec.selected {
-        theme::SELECTION_INK
+        theme::selection_ink()
     } else if spec.dim {
-        theme::MUTED
+        theme::muted()
     } else {
-        theme::INK
+        theme::ink()
     };
     if let Some(open) = spec.chevron {
         let icon = if open { Icon::ChevronDown } else { Icon::ChevronRight };
@@ -61,7 +61,7 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             icon,
             Rect::from_center_size(pos2(x0 + 4.0, rect.center().y), vec2(11.0, 11.0)),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     icons::paint(painter, spec.icon, Rect::from_center_size(pos2(x0 + 20.0, rect.center().y), vec2(15.0, 15.0)), ink);
@@ -74,14 +74,14 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             Align2::LEFT_CENTER,
             spec.sub,
             theme::font(11.0),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     let dot_colour = match spec.dot {
         Dot::None => None,
-        Dot::Ok => Some(theme::OK),
-        Dot::Warn => Some(theme::WARN),
-        Dot::Error => Some(theme::ERROR),
+        Dot::Ok => Some(theme::ok()),
+        Dot::Warn => Some(theme::warn()),
+        Dot::Error => Some(theme::error()),
     };
     if let Some(c) = dot_colour {
         painter.circle_filled(pos2(rect.right() - 14.0, rect.center().y), 3.5, c);
@@ -101,18 +101,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
     let dangling = s.doc.dangling_count();
     let changed = s.doc.attention_count() - dangling;
     let (status, colour) = if let Some(marker) = s.marker() {
         marker
     } else if dangling > 0 {
-        (format!("{dangling} dangling"), theme::ERROR)
+        (format!("{dangling} dangling"), theme::error())
     } else if changed > 0 {
-        (format!("{changed} changed"), theme::WARN)
+        (format!("{changed} changed"), theme::warn())
     } else {
-        (format!("Up to date · rev {}", s.doc.drawing.model.pinned.short()), theme::OK)
+        (format!("Up to date · rev {}", s.doc.drawing.model.pinned.short()), theme::ok())
     };
     ui.painter().text(
         pos2(head.right() - 12.0, head.center().y),
@@ -121,7 +121,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         theme::font_medium(11.0),
         colour,
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
 
     let mut actions: Vec<DrawingAction> = Vec::new();
     let selection = s.selection;
@@ -179,9 +179,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 },
             );
             if let Some(colour) = match &state {
-                LinkState::Missing => Some(theme::ERROR),
-                LinkState::Newer { .. } => Some(theme::WARN),
-                _ if s.doc.is_stale() => Some(theme::WARN),
+                LinkState::Missing => Some(theme::error()),
+                LinkState::Newer { .. } => Some(theme::warn()),
+                _ if s.doc.is_stale() => Some(theme::warn()),
                 _ => None,
             } {
                 let glyph = Rect::from_center_size(pos2(r.rect.right() - 34.0, r.rect.center().y), vec2(14.0, 14.0));

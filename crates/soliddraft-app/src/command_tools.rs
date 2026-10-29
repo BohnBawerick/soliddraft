@@ -172,6 +172,13 @@ pub enum Line {
         /// Unite the reflection with the original.
         keep_original: bool,
     },
+    /// Hollows the part, leaving named faces open.
+    Shell {
+        /// Faces left open; empty requests a closed shell.
+        open_faces: Vec<String>,
+        /// Positive wall thickness, mm.
+        thickness: f64,
+    },
     /// Tilts faces about a neutral plane.
     Draft {
         /// Face names.
@@ -259,6 +266,13 @@ pub enum Line {
         feature: String,
         /// Unite the reflection with the original.
         keep_original: bool,
+    },
+    /// Changes a shell's wall thickness, retaining its openings.
+    EditShell {
+        /// The shell feature's name.
+        feature: String,
+        /// Positive wall thickness, mm.
+        thickness: f64,
     },
     /// Changes a draft's angle.
     EditDraft {
@@ -477,6 +491,19 @@ pub fn mirror_params() -> Vec<(&'static str, Value)> {
         ("plane", string("`top`, `front`, `right`, or a planar face's name")),
         ("keep_original", boolean("true unites the reflection with the original")),
     ]
+}
+
+/// The `shell` verb's parameters.
+pub fn shell_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("open_faces", array(string("A face name"), "Faces left open; empty for a closed shell")),
+        ("thickness", number("Wall thickness, mm, greater than 0")),
+    ]
+}
+
+/// The `edit_shell` verb's parameters.
+pub fn edit_shell_params() -> Vec<(&'static str, Value)> {
+    vec![feature_param(), ("thickness", number("Wall thickness, mm, greater than 0"))]
 }
 
 /// The `draft` verb's parameters.
@@ -1046,6 +1073,13 @@ impl Line {
                     soliddraft_model::MirrorFeature { plane: plane_ref(doc, plane)?, keep_original: *keep_original };
                 run.apply(doc, Command::AddFeature(FeatureKind::Mirror(mirror)))?;
             }
+            Line::Shell { open_faces, thickness } => {
+                let shell = soliddraft_model::ShellFeature {
+                    open_faces: open_faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
+                    thickness: positive("wall thickness", *thickness)?,
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Shell(shell)))?;
+            }
             Line::Draft { faces, neutral, angle, reverse } => {
                 let draft = soliddraft_model::DraftFeature {
                     faces: faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
@@ -1125,6 +1159,14 @@ impl Line {
                 m.keep_original = *keep_original;
                 run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Mirror(m) })?;
             }
+            Line::EditShell { feature, thickness } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Shell(mut shell)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a shell"));
+                };
+                shell.thickness = positive("wall thickness", *thickness)?;
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Shell(shell) })?;
+            }
             Line::EditDraft { feature, angle } => {
                 let id = feature_by_name(doc, feature)?;
                 let Some(FeatureKind::Draft(mut d)) = doc.feature(id).map(|f| f.kind.clone()) else {
@@ -1181,6 +1223,8 @@ impl Line {
             Line::CircularPattern { .. } => "circular_pattern",
             Line::Mirror { .. } => "mirror",
             Line::Draft { .. } => "draft",
+            Line::Shell { .. } => "shell",
+            Line::EditShell { .. } => "edit_shell",
             Line::EditHole { .. } => "edit_hole",
             Line::EditPattern { .. } => "edit_pattern",
             Line::EditMirror { .. } => "edit_mirror",
@@ -1279,6 +1323,17 @@ impl Line {
             Line::Mirror { plane, keep_original } => {
                 ("Mirror".into(), format!("in {plane}{}", if *keep_original { ", keeping the original" } else { "" }))
             }
+            Line::Shell { open_faces, thickness } => (
+                "Shell".into(),
+                format!(
+                    "{} mm wall, {}",
+                    fmt_mm(*thickness),
+                    if open_faces.is_empty() { "closed".into() } else { format!("open at {}", open_faces.join(", ")) }
+                ),
+            ),
+            Line::EditShell { feature, thickness } => {
+                (format!("Edit {feature}"), format!("{} mm wall", fmt_mm(*thickness)))
+            }
             Line::Draft { faces, neutral, angle, .. } => {
                 ("Draft".into(), format!("{}° on {} about {neutral}", fmt_mm(*angle), faces.join(", ")))
             }
@@ -1341,7 +1396,10 @@ fn run_marked(doc: &mut Document, lines: &[Line]) -> Result<Vec<FeatureId>, Stri
 
 /// Previously requested properties; inspection must not start a measurement.
 fn cached_body_mass(doc: &Document) -> Option<soliddraft_kernel_api::MassProperties> {
-    doc.kernel().cached_mass_properties(doc.display_body()?)
+    if !doc.proof_state().current_proved_model() {
+        return None;
+    }
+    doc.kernel().cached_mass_properties(doc.model().body()?)
 }
 
 /// An independent proposal copy sharing the part's immutable bodies and meshes. It makes
@@ -1353,6 +1411,7 @@ fn scratch_copy(doc: &Document) -> Document {
 fn status_text(doc: &Document, id: FeatureId) -> String {
     match doc.feature(id).map(|f| (&f.status, f.suppressed)) {
         Some((FeatureStatus::Ok, _)) => "ok".into(),
+        Some((FeatureStatus::Pending, _)) => "proof pending".into(),
         Some((FeatureStatus::Error(e), _)) => format!("error: {e}"),
         Some((FeatureStatus::NeedsRepair(items), _)) => format!(
             "needs repair: {} no longer resolve{}",
@@ -1705,6 +1764,9 @@ pub fn find_entity(doc: &Document, name: &str) -> Option<Selection> {
     if let Some(f) = doc.features.iter().find(|f| f.name == name) {
         return Some(Selection::Feature(f.id));
     }
+    if name.eq_ignore_ascii_case(crate::document::BODY_NAME) {
+        return doc.display_body().map(|_| Selection::Body);
+    }
     if let Some(face) = face_by_name(doc, name) {
         return Some(Selection::Face(face));
     }
@@ -1726,6 +1788,10 @@ fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>>
     let f32s = |v: soliddraft_kernel_api::Vec3| Vec3::new(v.x as f32, v.y as f32, v.z as f32);
     let measured = || doc.display_body().map(|body| doc.kernel().measured_topology(body)).transpose();
     Ok(match sel {
+        Selection::Body => match doc.display_body() {
+            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
+            None => None,
+        },
         Selection::Feature(id) => match doc.feature(id).and_then(|f| f.body) {
             Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
             None => None,
@@ -1839,6 +1905,7 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
     }
     v["name"] = info.title.into();
     v["kind"] = match sel {
+        Selection::Body => "body",
         Selection::Feature(_) => "feature",
         Selection::Face(_) => "face",
         Selection::Edge(_) => "edge",
@@ -1931,9 +1998,20 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
         FeatureKind::Mirror(m) => {
             json!({ "type": "mirror", "plane": plane_ref_label(&m.plane), "keep_original": m.keep_original })
         }
+        FeatureKind::Shell(s) => json!({
+            "type": "shell", "open_faces": s.open_faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
+            "thickness": s.thickness,
+        }),
         FeatureKind::Draft(d) => json!({
             "type": "draft", "faces": d.faces.iter().map(|f| f.label.clone()).collect::<Vec<_>>(),
             "neutral": plane_ref_label(&d.neutral), "angle": d.angle, "reverse": d.reverse,
+        }),
+        FeatureKind::Lattice(l) => json!({
+            "type": "lattice", "accuracy_mm": l.accuracy_mm, "min_detail_mm": l.min_detail_mm,
+        }),
+        FeatureKind::ImportStep(i) => json!({
+            "type": "import_step", "source_name": i.source_name, "sha256": i.sha256,
+            "bytes": i.source.len(), "decisions": i.decisions,
         }),
     }
 }
@@ -1943,10 +2021,13 @@ impl CommandTools<'_> {
     pub fn summary(&self) -> Value {
         let doc = &*self.doc;
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
-        let mass = cached_body_mass(doc);
+        let proof = doc.proof_state();
+        let current = proof.current_proved_display();
+        let mass = if current { cached_body_mass(doc) } else { None };
         json!({
             "part": doc.name,
             "units": "mm",
+            "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {
                 let mut v = params_json(doc, &f.kind);
@@ -1961,8 +2042,8 @@ impl CommandTools<'_> {
                 "bounding_box": { "min": vec3(lo), "max": vec3(hi) },
                 "volume_mm3": mass.map(|m| round(m.volume)),
                 "area_mm2": mass.map(|m| round(m.area)),
-                "faces": doc.faces.len(),
-                "edges": doc.edges.len(),
+                "faces": current.then_some(doc.faces.len()),
+                "edges": current.then_some(doc.edges.len()),
             },
             "selection": doc.selection.map(|s| selection_json(doc, s)).unwrap_or(Value::Null),
             "pending_proposals": self.book.proposals.iter().filter(|p| p.pending())

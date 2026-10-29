@@ -1,0 +1,810 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "drawing",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              60,
+              45,
+              0
+            ],
+            "width": 120,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 108000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              45,
+              0
+            ],
+            "width": 10,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 60,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 153000,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              0
+            ],
+            "diameter": 24
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch3",
+        "depth": 30,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 162047.7868423386,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              0
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch4",
+        "through_all": false,
+        "depth": 40,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 158654.86677646163,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              25,
+              23,
+              0
+            ],
+            "diameter": 9
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch5",
+        "through_all": false,
+        "depth": 12,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 158018.69426410968,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              25,
+              67,
+              0
+            ],
+            "diameter": 9
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch6",
+        "through_all": false,
+        "depth": 12,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 157382.52175175777,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              115,
+              23,
+              0
+            ],
+            "diameter": 9
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch7",
+        "through_all": false,
+        "depth": 12,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 156746.34923940583,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              115,
+              67,
+              0
+            ],
+            "diameter": 9
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch8",
+        "through_all": false,
+        "depth": 12,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 156110.17672705388,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "right",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              45,
+              31
+            ],
+            "width": 40,
+            "height": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch9",
+        "through_all": false,
+        "depth": 12,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151310.17672705388,
+          "tolerance": 0.005
+        }
+      ],
+      "label": "slot cut"
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/bracket.dwprt"
+      }
+    },
+    {
+      "tool": "make_drawing",
+      "arguments": {
+        "template": "iso-a3"
+      },
+      "label": "make drawing",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/name",
+          "equals": "Front view"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/1/name",
+          "equals": "Top view"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/2/name",
+          "equals": "Left view"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/3/name",
+          "equals": "Isometric view"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/preview",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/part",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/0/accuracy/polygon",
+          "minimum": 1
+        }
+      ]
+    },
+    {
+      "tool": "drawing_section",
+      "arguments": {
+        "view": "Front view",
+        "through": [
+          70,
+          45,
+          0
+        ],
+        "direction": "vertical",
+        "flip": false
+      },
+      "label": "section",
+      "checks": [
+        {
+          "pointer": "/result/placed",
+          "equals": "Section A-A"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/kind",
+          "equals": "section"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/parent",
+          "equals": "Front view"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/curves",
+          "minimum": 4
+        }
+      ]
+    },
+    {
+      "tool": "drawing_model_items",
+      "arguments": {},
+      "label": "model items",
+      "checks": [
+        {
+          "pointer": "/result/done",
+          "contains": "imported"
+        },
+        {
+          "pointer": "/summary/drawing/changed",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/active",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 12,
+        "flip": false
+      },
+      "label": "plate edit",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/previous",
+          "equals": "10"
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/now",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/name",
+          "equals": "12"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 169696.46003293848,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/drawing/changed",
+          "equals": []
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151310.17672705388,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/now",
+          "equals": "12"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 169696.46003293848,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/bracket.dwprt"
+      }
+    },
+    {
+      "tool": "drawing_save",
+      "arguments": {
+        "path": "{bundle}/bracket.dwdrw"
+      },
+      "checks": [
+        {
+          "pointer": "/result/saved",
+          "contains": "bracket.dwdrw"
+        }
+      ]
+    },
+    {
+      "tool": "drawing_export_svg",
+      "arguments": {
+        "path": "{bundle}/bracket.svg"
+      },
+      "label": "svg export",
+      "checks": [
+        {
+          "pointer": "/result/views",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/redrawn_from_certified_mesh",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
+        }
+      ],
+      "files": [
+        "{bundle}/bracket.svg"
+      ]
+    },
+    {
+      "tool": "drawing_export_pdf",
+      "arguments": {
+        "path": "{bundle}/bracket.pdf"
+      },
+      "label": "pdf export",
+      "checks": [
+        {
+          "pointer": "/result/views",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/redrawn_from_certified_mesh",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
+        }
+      ],
+      "files": [
+        "{bundle}/bracket.pdf"
+      ]
+    },
+    {
+      "tool": "drawing_export_dxf",
+      "arguments": {
+        "path": "{bundle}/bracket.dxf"
+      },
+      "label": "dxf export",
+      "checks": [
+        {
+          "pointer": "/result/views",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/redrawn_from_certified_mesh",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
+        }
+      ],
+      "files": [
+        "{bundle}/bracket.dxf"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/bracket.dwdrw"
+      },
+      "label": "reopen drawing",
+      "checks": [
+        {
+          "pointer": "/result/done",
+          "contains": "5 views"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/name",
+          "equals": "Section A-A"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/kind",
+          "equals": "section"
+        },
+        {
+          "pointer": "/summary/drawing/part",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/now",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "label": "rebuild after reopen",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        },
+        {
+          "pointer": "/result/done",
+          "contains": "0 dangling"
+        }
+      ]
+    },
+    {
+      "tool": "drawing_auto_update",
+      "arguments": {
+        "on": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/drawing/automatic_update",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 11,
+        "flip": false
+      },
+      "label": "plate edit without update",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/part",
+          "contains": "newer"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 160503.3183799962,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "drawing_export_svg",
+      "arguments": {
+        "path": "{bundle}/stale.svg"
+      },
+      "label": "export of a stale preview",
+      "refused": "unproved preview",
+      "absent": [
+        "{bundle}/stale.svg"
+      ]
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "label": "rebuild",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/views/4/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/dangling",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/previous",
+          "equals": "10"
+        },
+        {
+          "pointer": "/summary/drawing/changed/0/now",
+          "equals": "11"
+        }
+      ]
+    },
+    {
+      "tool": "drawing_export_svg",
+      "arguments": {
+        "path": "{bundle}/rebuilt.svg"
+      },
+      "label": "svg export after rebuild",
+      "checks": [
+        {
+          "pointer": "/result/views",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/redrawn_from_certified_mesh",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/accuracy/exact",
+          "minimum": 1
+        },
+        {
+          "pointer": "/result/accuracy/polygon",
+          "minimum": 1
+        }
+      ],
+      "files": [
+        "{bundle}/rebuilt.svg"
+      ]
+    }
+  ]
+}

@@ -193,9 +193,26 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     let drawing = s.drawing();
     assert_eq!(drawing["active"], true, "{drawing}");
     let views = drawing["sheets"][0]["views"].as_array().unwrap().clone();
+    for v in &views {
+        let (exact, polygon) = (v["accuracy"]["exact"].as_u64().unwrap(), v["accuracy"]["polygon"].as_u64().unwrap());
+        assert_eq!(exact + polygon, v["curves"].as_u64().unwrap(), "every curve carries one label: {v}");
+    }
+    assert!(views.iter().any(|v| v["accuracy"]["exact"].as_u64() > Some(0)), "whole lines stay exact: {drawing}");
     let name = |v: &Value| v["name"].as_str().unwrap().to_owned();
     let child = views.iter().find(|v| v["aligned"] == true).map(name).expect("an aligned projected view");
     let first = name(&views[0]);
+    let section = s.call(
+        "drawing_section",
+        json!({ "view": first, "through": [70, 45, 0], "direction": "vertical", "flip": false }),
+    );
+    assert_eq!(section["placed"], "Section A-A", "{section}");
+    let placed = &section["drawing"]["sheets"][0]["views"][views.len()];
+    assert_eq!(placed["kind"], "section", "{placed}");
+    assert_eq!(
+        (placed["parent"].as_str(), placed["preview"].as_bool(), placed["up_to_date"].as_bool()),
+        (Some(first.as_str()), Some(true), Some(true)),
+        "{placed}"
+    );
     s.call("drawing_hidden_lines", json!({ "view": first, "shown": false }));
     s.call("drawing_tangent_edges", json!({ "view": first, "tangent": "visible" }));
     s.call("drawing_crop", json!({ "view": first, "crop": [-30, -30, 30, 30] }));
@@ -225,8 +242,17 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
         [("drawing_export_pdf", "sheet.pdf"), ("drawing_export_dxf", "sheet.dxf"), ("drawing_export_svg", "sheet.svg")]
     {
         let path = s.path(file);
-        s.call(tool, json!({ "path": path }));
+        let written = s.call(tool, json!({ "path": path }));
         assert!(dir.join(file).is_file(), "{tool} wrote no {file}");
+        let exact = written["accuracy"]["exact"].as_u64().unwrap();
+        let polygon = written["accuracy"]["polygon"].as_u64().unwrap();
+        // The PDF writes every sheet; the others write the active sheet, which is the
+        // added empty one here.
+        if written["views"].as_u64().unwrap() > 0 {
+            assert!(exact > 0 && polygon > 0, "{tool} reports what it wrote as exact and as polygon: {written}");
+        } else {
+            assert_eq!((exact, polygon), (0, 0), "{tool} wrote no view: {written}");
+        }
     }
     let (part, copy) = (s.path("part.dwprt"), s.path("copy.dwprt"));
     s.call("drawing_repair_reference", json!({ "path": part }));
@@ -237,6 +263,12 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     let reopened = s.drawing();
     assert_eq!(reopened["sheets"].as_array().unwrap().len(), 2, "the saved drawing has the added sheet: {reopened}");
     s.call("drawing_close", json!({}));
+    s.call("new_part", json!({}));
+    assert!(s.state.doc.features.is_empty());
+    s.call("sketch", json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}));
+    s.call("extrude", json!({"sketch":"Sketch1","depth":12,"flip":false}));
+    s.call("shell", json!({"open_faces":["Boss-Extrude1 · End cap"],"thickness":2}));
+    s.call("edit_shell", json!({"feature":"Shell1","thickness":1.5}));
     s.call("new_part", json!({}));
     assert!(s.state.doc.features.is_empty());
     // Revolve on a fresh part exercises both verbs without changing the bracket.

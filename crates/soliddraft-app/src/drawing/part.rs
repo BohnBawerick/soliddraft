@@ -1,6 +1,6 @@
-//! The open part as the drawing sees it: its displayed body as a `soliddraft-drawing`
-//! [`Part`], named through the part's own persistent references, with the words the
-//! interface uses for its entities, its hole callouts and its feature dimensions.
+//! The current proved part as a `soliddraft-drawing` [`Part`], named through its
+//! persistent references, with the interface's entity names, hole callouts and
+//! feature dimensions.
 
 use crate::document::{Document, FeatureKind};
 use soliddraft_drawing::library::{self, Symbols};
@@ -13,7 +13,7 @@ use soliddraft_drawing::{
 use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Kernel, Point2, Topology, Vec3};
 use std::sync::Arc;
 
-/// The part's displayed body with what the drawing needs to know about it.
+/// The current proved body and the definitions that produced it.
 pub struct PartContext<'a> {
     pub doc: &'a Document,
     pub kernel: Arc<dyn Kernel>,
@@ -27,9 +27,12 @@ pub struct PartContext<'a> {
 }
 
 impl<'a> PartContext<'a> {
-    /// The context for the part's displayed body, or `None` without a body.
+    /// The current proved part, or `None` while its revision is unproved or without a body.
     pub fn new(doc: &'a Document) -> Option<PartContext<'a>> {
-        let body = doc.display_body()?;
+        if !doc.proof_state().current_proved_model() {
+            return None;
+        }
+        let body = doc.model().body()?;
         let kernel = doc.kernel().clone();
         let topology = kernel.topology(body).ok()?;
         Some(PartContext {

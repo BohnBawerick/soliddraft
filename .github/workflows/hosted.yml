@@ -115,6 +115,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter for rendered workspace tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$RUNNER_TEMP/soliddraft-runtime"
+          chmod 700 "$RUNNER_TEMP/soliddraft-runtime"
+          echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/soliddraft-runtime" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
       - run: cargo test --workspace --all-features --locked --no-fail-fast
 
   # Catallax is compiled into the application WebAssembly module.
@@ -195,6 +204,7 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test shell_tool -- --nocapture
       - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
       - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
       - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture
@@ -269,19 +279,23 @@ jobs:
                   {"shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30}]})
               call("extrude", {"sketch": "Sketch1", "depth": 10, "flip": False})
               directory = root / "commands/0002"
-              for name in ("part.dwprt", "part.json", "recipe.json"):
-                  (directory / name).unlink()
+              # The command's evidence is written after its click, so nothing is saved yet.
+              saved = ("part.dwprt", "part.json", "recipe.json")
+              assert not any((directory / name).exists() for name in saved), sorted(directory.iterdir())
               call("scenario_display", {})
               assert (directory / "viewport.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
               assert not (directory / "view.svg").exists()
               display_log = json.loads((directory / "display.kernel.json").read_text())
               assert all(call["operation"] != "view_curves" for call in display_log["calls"]), display_log
+              call("scenario_evidence", {})
+              for name in saved:
+                  (directory / name).unlink()
               call("scenario_view", {})
               assert "<path " in (directory / "view.svg").read_text()
               view_log = json.loads((directory / "view.kernel.json").read_text())
               assert all(call["operation"] not in {"extrude", "boolean", "create_body_from_profile"}
                   for call in display_log["calls"] + view_log["calls"]), (display_log, view_log)
-              print("Viewport and hidden-line SVG captured separately after deleting every saved input; no reconstruction calls.")
+              print("Viewport captured before any saved input existed, hidden-line SVG after deleting them; no reconstruction calls.")
           finally:
               client.close()
               scenarios.write(root / "protocol.json", client.transcript)
@@ -332,8 +346,9 @@ jobs:
               for step in report["steps"]:
                   timing = step.get("timing")
                   if timing:
+                      budget = "none" if timing["budget_ms"] is None else timing["budget_ms"]
                       rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
-                          f"{timing['elapsed_ms']:.3f} | {timing['budget_ms']} | {timing['status']} |")
+                          f"{timing['elapsed_ms']:.3f} | {budget} | {timing['status']} |")
                   view = step.get("drawing_view")
                   if view:
                       views.append(f"| {report['name']} | {step['number']} | {view['elapsed_ms']:.3f} | "

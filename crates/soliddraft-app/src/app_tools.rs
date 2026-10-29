@@ -19,16 +19,19 @@ use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_document::DocKind;
 use soliddraft_drawing::display::annotation_name;
 use soliddraft_drawing::export::Format as SheetFormat;
-use soliddraft_drawing::project::view_label;
+use soliddraft_drawing::measure::value_text;
+use soliddraft_drawing::project::{self, view_label};
 use soliddraft_drawing::{
-    AnnotationId, Boundary, Command as DrawingCommand, Drawing, HiddenLines, SHEET, TangentEdges, ViewDisplay, ViewId,
+    AnnotationId, AnnotationKind, AnnotationState, Boundary, Command as DrawingCommand, Drawing, HiddenLines,
+    PartIndex, SHEET, TangentEdges, ViewDisplay, ViewId, ViewKind, derived,
 };
 use soliddraft_exchange::Format as ExportFormat;
-use soliddraft_kernel_api::Point2;
+use soliddraft_kernel_api::{Point2, Vec3};
 
 use crate::command_tools::{CommandTools, Surface, tool_specs};
 use crate::document::{Command, Document};
 use crate::drawing::document::DrawingDoc;
+use crate::drawing::part::PartContext;
 use crate::drawing::reference::LinkState;
 use crate::drawing::{self, DrawingSession, NewDrawing};
 use crate::state::AppState;
@@ -144,6 +147,22 @@ pub fn crop_params() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// The `drawing_section` tool's parameters.
+pub fn section_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("view", any_of(view_schema("The view to cut"))),
+        (
+            "through",
+            array(number("mm"), "A model point [x, y, z] the cutting plane passes through, such as a hole's centre"),
+        ),
+        (
+            "direction",
+            one_of(&["horizontal", "vertical"], "The cutting line's direction across the view, on the sheet"),
+        ),
+        ("flip", boolean("true looks the other way along the cutting plane")),
+    ]
+}
+
 /// The `drawing_auto_update` tool's parameters.
 pub fn auto_update_params() -> Vec<(&'static str, Value)> {
     vec![("on", boolean("true rebuilds the drawing after every change of the open part"))]
@@ -199,6 +218,23 @@ impl AppTools<'_> {
     /// What `model_summary` says: the part, and the open drawing.
     pub fn summary(&mut self) -> Value {
         let mut v = self.part().summary();
+        let mut proof = self.state.doc.proof_state();
+        if let Some(drag) = &self.state.drag_preview
+            && let Some(request) = drag.current_request()
+        {
+            proof.requested_edit = Some(request);
+            proof.displayed_edit = proof.displayed_edit.or_else(|| drag.displayed_request());
+            proof.proved_edit = drag.proved_request();
+            proof.transient = true;
+            proof.pending = drag.pending();
+            proof.failed = matches!(drag.shown(), crate::drag::Shown::Failed { .. });
+        }
+        v["edit_state"] = serde_json::json!(proof);
+        if proof.transient {
+            for key in ["volume_mm3", "area_mm2", "faces", "edges"] {
+                v["body"][key] = Value::Null;
+            }
+        }
         if let Some(d) = drawing_json(self.state) {
             v["drawing"] = d;
         }
@@ -233,6 +269,7 @@ impl AppTools<'_> {
             "drawing_hidden_lines" => self.hidden_lines(input),
             "drawing_tangent_edges" => self.tangent_edges(input),
             "drawing_crop" => self.crop(input),
+            "drawing_section" => self.section(input),
             "drawing_rebuild" => self.rebuild(),
             "drawing_replace_model" => self.repoint(input, true),
             "drawing_repair_reference" => self.repoint(input, false),
@@ -337,7 +374,7 @@ impl AppTools<'_> {
         if doc.display_body().is_none() {
             return Err("the part has no body to export".into());
         }
-        let out = doc.model().export(format)?;
+        let out = self.state.export_part(format)?;
         crate::platform::write_file(&path, &out.bytes)?;
         Ok(json!({ "exported": path, "report": out.report.summary() }))
     }
@@ -446,6 +483,54 @@ impl AppTools<'_> {
         self.command(DrawingCommand::SetViewCrop { view, crop })
     }
 
+    /// Section: cuts a view along a horizontal or vertical line through a model point
+    /// and places the section in line with it, as the canvas tool does after its two
+    /// clicks. The section is drawn from the open part, which must be the drawing's.
+    fn section(&mut self, input: &Value) -> Result<Value, String> {
+        let (parent, name) = self.view(input)?;
+        let n: Vec<f64> = input["through"].as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+        let [x, y, z] = n[..] else {
+            return Err("through is a model point: three numbers [x, y, z]".into());
+        };
+        if !n.iter().all(|v| v.is_finite()) {
+            return Err("through must be three finite numbers".into());
+        }
+        let horizontal = match input["direction"].as_str().unwrap_or_default() {
+            "horizontal" => true,
+            "vertical" => false,
+            other => return Err(format!("the direction is horizontal or vertical, not `{other}`")),
+        };
+        let flip = input["flip"].as_bool().unwrap_or(false);
+        if !drawing::part_is_model(self.state) {
+            return Err("The open part is not the one this drawing shows".into());
+        }
+        let st = &mut *self.state;
+        let ctx = PartContext::new(&st.doc).ok_or("The part has no body; extrude something first")?;
+        let session = st.drawing.session.as_mut().ok_or_else(|| NO_DRAWING.to_owned())?;
+        if matches!(session.doc.drawing.view(parent).map(|v| &v.kind), Some(ViewKind::Detail { .. })) {
+            return Err(format!("`{name}` is a detail view and cannot be sectioned; cut its parent"));
+        }
+        let sheet = project::sheet_of(&session.doc.drawing, parent).ok_or(NO_DRAWING)?;
+        let part = ctx.part();
+        let index = PartIndex::build(&part).map_err(|e| e.to_string())?;
+        let drawing = &session.doc.drawing;
+        let line = derived::cutting_line(drawing, &part, &index, parent, Vec3::new(x, y, z), horizontal)
+            .map_err(|e| format!("Section: {e}"))?;
+        let (view, vctx) = derived::new_section(drawing, &part, &index, sheet, parent, line, flip, None)
+            .map_err(|e| format!("Section: {e}"))?;
+        let id = view.id;
+        session.doc.remember(id, &vctx.projected);
+        drawing::run_command(self.state, DrawingCommand::PlaceView { sheet, view })?;
+        let placed = self
+            .session()?
+            .doc
+            .drawing
+            .sheet_of(id)
+            .and_then(|s| s.view(id).map(|v| view_label(s, v)))
+            .unwrap_or_default();
+        Ok(json!({ "placed": placed, "id": id.0, "drawing": drawing_json(self.state) }))
+    }
+
     /// Rebuild: opens the drawing's part when it is not the open part, then brings the
     /// views to its revision.
     fn rebuild(&mut self) -> Result<Value, String> {
@@ -495,10 +580,16 @@ impl AppTools<'_> {
         if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case(format.extension())) {
             return Err(format!("the path must end in .{}", format.extension()));
         }
-        let part = drawing::part::PartContext::new(&self.state.doc);
+        let part = PartContext::new(&self.state.doc);
         let s = self.state.drawing.session.as_mut().ok_or_else(|| NO_DRAWING.to_owned())?;
-        drawing::write_sheet(s, part.as_ref(), format, &path)?;
-        Ok(json!({ "exported": path }))
+        let written = drawing::write_sheet(s, part.as_ref(), format, &path)?;
+        Ok(json!({
+            "exported": path,
+            "views": written.views,
+            "redrawn_from_certified_mesh": written.redrawn,
+            "revision": written.revision.short(),
+            "accuracy": written.accuracy,
+        }))
     }
 
     fn save_drawing(&mut self, input: &Value) -> Result<Value, String> {
@@ -579,12 +670,22 @@ fn find_view(drawing: &Drawing, wanted: &Value) -> Result<(ViewId, String), Stri
     }
 }
 
+/// The serde tag of a view kind or annotation body: "section", "dimension".
+fn kind_name<T: serde::Serialize>(kind: &T) -> Value {
+    serde_json::to_value(kind).ok().and_then(|v| v.get("type").cloned()).unwrap_or(Value::Null)
+}
+
 /// The open drawing as agents read it: its sheets with their views and annotations by
-/// name, and how it stands against the part.
+/// name, and how it stands against the part. Each view says whether its line work is at
+/// the pinned revision and whether it is a screen preview; each annotation says whether
+/// its references resolve and what it measures now, and the lists of changed and
+/// dangling annotations repeat what the Needs attention panel shows.
 fn drawing_json(state: &AppState) -> Option<Value> {
     let s = state.drawing.session.as_ref()?;
     let d = &s.doc.drawing;
     let style = s.doc.style();
+    let pinned = d.model.pinned.as_str();
+    let (mut changed, mut dangling) = (Vec::new(), Vec::new());
     let sheets: Vec<Value> = d
         .sheets
         .iter()
@@ -597,6 +698,7 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                     json!({
                         "id": v.id.0,
                         "name": view_label(sheet, v),
+                        "kind": kind_name(&v.kind),
                         "parent": v.parent().and_then(name_of),
                         "parent_id": v.parent().map(|p| p.0),
                         "aligned": v.alignment.is_some(),
@@ -607,6 +709,11 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                             TangentEdges::Visible => "visible",
                         },
                         "cropped": v.crop.is_some(),
+                        "excluded_from_update": v.excluded_from_update,
+                        "up_to_date": v.excluded_from_update || v.geometry.source_digest == pinned,
+                        "preview": v.geometry.unproved,
+                        "curves": v.geometry.curves.len(),
+                        "accuracy": v.geometry.accuracy(),
                     })
                 })
                 .collect();
@@ -616,7 +723,37 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                 .map(|a| {
                     let view = if a.view == SHEET { Some("sheet".to_owned()) } else { name_of(a.view) };
                     let view_id = (a.view != SHEET).then_some(a.view.0);
-                    json!({ "id": a.id.0, "name": annotation_name(a, style), "view": view, "view_id": view_id })
+                    let name = annotation_name(a, style);
+                    let value = match &a.body {
+                        AnnotationKind::Dimension(dim) => Some(value_text(dim)),
+                        AnnotationKind::DimensionSet(set) => Some(set.values_text()),
+                        AnnotationKind::HoleCallout { text } => Some(text.clone()),
+                        _ => None,
+                    };
+                    let references: Vec<&str> = a.anchors.iter().map(|anchor| anchor.entity.role.as_str()).collect();
+                    let (state, previous, cause) = match &a.state {
+                        AnnotationState::Ok => ("ok", None, None),
+                        AnnotationState::Changed { previous } => {
+                            changed.push(json!({ "id": a.id.0, "name": name, "previous": previous, "now": value }));
+                            ("changed", Some(previous.clone()), None)
+                        }
+                        AnnotationState::Dangling { cause, .. } => {
+                            dangling.push(json!({ "id": a.id.0, "name": name, "cause": cause }));
+                            ("dangling", None, Some(cause.clone()))
+                        }
+                    };
+                    json!({
+                        "id": a.id.0,
+                        "name": name,
+                        "kind": kind_name(&a.body),
+                        "view": view,
+                        "view_id": view_id,
+                        "value": value,
+                        "references": references,
+                        "state": state,
+                        "previous": previous,
+                        "cause": cause,
+                    })
                 })
                 .collect();
             json!({ "name": sheet.name, "views": views, "annotations": annotations })
@@ -636,6 +773,11 @@ fn drawing_json(state: &AppState) -> Option<Value> {
         "sheet": s.sheet().name,
         "sheets": sheets,
         "up_to_date": s.is_up_to_date(),
+        "pinned_revision": d.model.pinned.short(),
+        "part_revision": s.doc.seen_digest.short(),
+        "views_match_pin": d.views_match_pin(),
+        "changed": changed,
+        "dangling": dangling,
         "part": part,
         "automatic_update": d.settings.automatic_update,
         "undo": s.doc.undo_label(),

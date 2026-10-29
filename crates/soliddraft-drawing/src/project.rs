@@ -31,8 +31,8 @@ use crate::ids::{AnnotationId, ViewId};
 use crate::part::{Entity, Part, PartIndex, Resolution, round};
 use crate::sheet::{Projection, Sheet};
 use crate::view::{
-    Boundary, BrokenOut, Curve2, CurveKind, FoldDirection, Polygon, View, ViewDisplay, ViewGeometry, ViewKind,
-    ViewScale,
+    Accuracy, Boundary, BrokenOut, Curve2, CurveKind, FoldDirection, Polygon, View, ViewDisplay, ViewGeometry,
+    ViewKind, ViewScale,
 };
 use crate::{Drawing, DrawingError};
 
@@ -732,7 +732,7 @@ pub fn project(index: &PartIndex, curves: &ViewCurves, xf: &ViewTransform, diges
                 model_radius: *radius,
             });
         }
-        out.push(Curve2 { path, source, visible: c.visible, kind, tangent: c.smooth });
+        out.push(Curve2 { path, source, visible: c.visible, kind, tangent: c.smooth, accuracy: accuracy_of(&c.curve) });
     }
     let [x0, y0, x1, y1] = curves.bbox_2d;
     let (lo, hi) = (
@@ -894,6 +894,18 @@ fn source_ref(index: &PartIndex, c: &ViewCurve) -> (EntityRef, CurveKind) {
 /// Chord tolerance on the sheet for curves that are neither lines nor arcs.
 const SHEET_CHORD_MM: f64 = 0.01;
 
+/// Whether a kernel curve is the model's own curve or a polyline from its mesh.
+///
+/// The kernel keeps a whole line or an untrimmed circle after polygon visibility and
+/// answers a polyline for everything else; a NURBS curve is sampled on the sheet, so it
+/// is labelled by what the path holds, not by what the model has.
+pub fn accuracy_of(curve: &Curve3) -> Accuracy {
+    match curve {
+        Curve3::Line { .. } | Curve3::Arc { .. } | Curve3::Circle { .. } => Accuracy::Exact,
+        Curve3::Polyline { .. } | Curve3::Nurbs { .. } => Accuracy::Polygon,
+    }
+}
+
 /// A model curve as a path in view millimetres.
 pub fn path_of(curve: &Curve3, xf: &ViewTransform) -> BezPath {
     let mut path = BezPath::new();
@@ -1038,6 +1050,19 @@ mod tests {
         assert!(same(d, bottom.direction) && same(u, bottom.up));
         let (d, _) = fold(&front, FoldDirection::UpRight, Projection::ThirdAngle);
         assert!(same(d, frame(StandardView::Isometric).direction), "up and right of front is the isometric");
+    }
+
+    #[test]
+    fn lines_arcs_and_circles_are_exact_and_mesh_polylines_are_polygon() {
+        let a = Vec3::ZERO;
+        let b = Vec3::new(10.0, 0.0, 0.0);
+        assert_eq!(accuracy_of(&Curve3::Line { a, b }), Accuracy::Exact);
+        assert_eq!(accuracy_of(&Curve3::Circle { center: a, normal: Vec3::Z, radius: 5.0 }), Accuracy::Exact);
+        let arc =
+            Curve3::Arc { center: a, normal: Vec3::Z, x_axis: Vec3::X, radius: 5.0, start_deg: 0.0, end_deg: 90.0 };
+        assert_eq!(accuracy_of(&arc), Accuracy::Exact);
+        assert_eq!(accuracy_of(&Curve3::Polyline { points: vec![a, b] }), Accuracy::Polygon);
+        assert_eq!(Accuracy::default(), Accuracy::Polygon, "a file without the label makes the weaker claim");
     }
 
     #[test]

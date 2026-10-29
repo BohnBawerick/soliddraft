@@ -34,7 +34,7 @@ Help fund SolidDraft and Catallax through [GitHub Sponsors](https://github.com/s
 
 ## What it is
 
-A SolidWorks-style desktop CAD app: a feature tree on the left, an AI assistant on the right, a ribbon of commands on top and a 3D viewport in the middle.
+A SolidWorks-style desktop CAD app: a feature tree on the left, a ribbon of commands on top, a 3D viewport in the middle, and a command line along the bottom that opens an AI assistant session.
 
 SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and will run only on it. They are one project in two repositories: SolidDraft is the CAD application and Catallax is its kernel. The desktop, browser and command-line application run on Catallax. See the [project website](https://kernel.zigrawbohnbawerick.org/) and the [roadmap](docs/roadmap.md).
 
@@ -44,29 +44,30 @@ SolidDraft is built for [Catallax](https://github.com/BohnBawerick/catallax) and
 
 Work in progress. SolidDraft runs only on Catallax. See [the backend gaps](docs/needs-catallax.md) for the limits of the current application entry.
 
-- The desktop app, with its ribbon, feature tree, property panel, assistant panel and wgpu viewport.
-- Dragging a selected feature's depth previews the rebuilt part off the interface thread and applies the final value as one undo step.
+- The desktop app, with its ribbon, feature tree, property panel, command line, assistant session and wgpu viewport.
+- Desktop depth, fillet-radius and chamfer-distance edits separate construction display from exact proof. Supported construction charts produce selectable provisional faces before proof finishes; one drag is one undo step. Pending or failed input cannot export, and a failed edit restores the whole last proved part while its feature stays red with a reason.
 - Sketching on a plane or a planar face with line, rectangle, circle, arc and slot tools, with relations and dimensions.
 - Extrudes and cuts, blind, through all, up to the next boundary or up to a planar face; booleans and rational-frame revolves through the kernel and recipe runner. The revolve ribbon command still waits for its application editor. Persistent references, undo and redo, feature tree editing and part files work.
 - Holes on a planar face, blind or through, with flat or drill-point tips, counterbores and countersinks at any angle, including the standard 118° tip and 82°, 90° and 100° countersinks. A countersink or drill point cannot yet go into a body that has another cylinder; see [the backend gaps](docs/needs-catallax.md).
 - Linear and circular patterns and mirrors of the part's body.
+- Analytic planar shells with selected open faces, editable wall thickness and persistent inner-wall names. See [shell coverage and evidence](docs/l08-shell-tool.md).
 - Fillets and equal-distance chamfers between planes and between planes and cylinders, and drafts of planar faces and cylinders parallel to the pull.
-- Drawings use Catallax meshes for polygon hidden-line removal. Plane sections on screen are cut from the same meshes; an exported section subtracts a half-space through a Catallax boolean. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works. Exact silhouettes and some curve conversions remain pending.
+- Drawings use Catallax meshes for polygon hidden-line removal. Plane sections on screen are cut from the same meshes; an exported section subtracts a half-space through a Catallax boolean. ISO and ANSI sheets, aligned views, dimensions and annotations keep their formats. Output to drawing files, SVG, PDF and DXF works, and every exported view curve says whether it is the model's exact line or circle or a mesh polyline. Exact silhouettes and some curve conversions remain pending.
 - The assistant, connected to Claude: it reads the part, proposes changes as cards you preview, apply and undo. The same commands are open to outside agents over MCP.
 - A headless command line that replays recipes, rebuilds parts, renders hidden-line views and makes drawings.
 - A WebAssembly build that runs the app and Catallax in one browser module.
 
-Waiting commands stay visible and disabled with a tooltip naming their Catallax stage. Existing parts rebuild up to a waiting feature, mark it with a rebuild error and pass the preceding body through unchanged.
+Waiting commands stay visible and disabled with a tooltip naming their Catallax stage. Opening a part with a waiting feature rebuilds its available prefix and marks the feature with an error; that prefix is not a proved whole part and cannot export.
 
 | Waiting feature | Catallax stage |
 |---|---|
-| Shell, offset and thicken | 3 |
+| Offset and thicken; unsupported shell envelopes | 3 |
 | Up to a curved face (Catallax covers bare stock targets only) | 3 |
 | Other fillets | 4 |
 | Sweep and loft; spline, ellipse and text profiles | 5 |
 | STEP import | 6 |
 
-Parts export as STEP AP242 with Catallax's proven deviation, and as STL and 3MF from Catallax's meshes, from File > Export or `soliddraft export`; see [part export](docs/exchange.md). IGES import and export, surfacing and sheet metal are not available. Assemblies are in progress. The [roadmap](docs/roadmap.md) orders the remaining work.
+Parts export as STEP AP242 with Catallax's proven deviation, and as STL and 3MF from Catallax's meshes, from File > Export or `soliddraft export`; see [part export](docs/exchange.md). IGES import and export, surfacing and sheet metal are not available. In the desktop app an assembly opens in a tab beside the part: File > New assembly or Make assembly from part, insert parts from a file dialog or by dropping their files on the window, place each by typing its position and rotation, then save and reopen it; see [assemblies](docs/assemblies.md#in-the-app). Mates come next. The [roadmap](docs/roadmap.md) orders the remaining work.
 
 ## Building
 
@@ -88,7 +89,7 @@ Modelling starts with a sketch: pick a plane in the tree or click a planar face,
 
 ## Running in a browser
 
-The app also runs in a web browser as WebAssembly. A small server serves it and holds the assistant's API key. See `docs/web.md`.
+The app also runs in a web browser as WebAssembly. A small server serves it and holds the assistant's API key. The browser shares the revision and export guards, but construction and exact proof still run on its interface thread: the desktop's responsive-worker behaviour is not a browser capability claim. See `docs/web.md`.
 
 ## The assistant
 
@@ -98,7 +99,7 @@ The assistant needs an Anthropic API key, from `ANTHROPIC_API_KEY` or the OS key
 printf %s "$KEY" | cargo run --release -p soliddraft-cli -- key set
 ```
 
-Without a key the app runs and the chat panel says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio, and `soliddraft run` runs the same commands from a shell or a script. See `docs/assistant.md`. Agent scenarios, per-command evidence bundles and windowless viewport captures are described in [the application loop](docs/application-loop.md).
+Without a key the app runs and the assistant session says the assistant is off. `--mcp [PORT]` serves the open part to MCP clients such as Claude Code; `soliddraft mcp` serves a headless part over stdio, and `soliddraft run` runs the same commands from a shell or a script. See `docs/assistant.md`. Agent scenarios, per-command evidence bundles and windowless viewport captures are described in [the application loop](docs/application-loop.md).
 
 ## Command line
 

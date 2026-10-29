@@ -309,6 +309,9 @@ pub struct AssemblyRenderer {
     multi_draw: bool,
     active: bool,
     culling: bool,
+    /// The scene last drawn. Held weakly, so its address is not reused by another while
+    /// it is compared.
+    scene: std::sync::Weak<Mutex<Scene>>,
     /// What the last frame drew.
     pub stats: AssemblyStats,
 }
@@ -548,6 +551,7 @@ impl AssemblyRenderer {
             multi_draw,
             active: false,
             culling: false,
+            scene: std::sync::Weak::new(),
             stats: AssemblyStats::default(),
         }
     }
@@ -592,6 +596,11 @@ impl AssemblyRenderer {
             self.active = false;
             return;
         };
+        // Another assembly: what was uploaded for the last one goes.
+        if !std::sync::Weak::ptr_eq(&self.scene, &Arc::downgrade(&frame.scene)) {
+            self.clear(device);
+            self.scene = Arc::downgrade(&frame.scene);
+        }
         self.active = true;
         let mut uploaded = 0u64;
         let mut draws_changed = false;

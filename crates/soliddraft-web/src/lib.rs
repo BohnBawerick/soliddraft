@@ -1,8 +1,9 @@
 //! The web build of SolidDraft: the app compiled to WebAssembly and drawn into the page's
 //! canvas. `trunk build` in this directory makes it; docs/web.md has the rest.
 //!
-//! Add `?demo` to the page's address to start with the sample part, and `?preset=fast`,
-//! `studio` or `realistic` to start in that look.
+//! Add `?demo` to the page's address to start with the sample part, `?preset=fast`,
+//! `studio` or `realistic` to start in that look, and `?theme=dark` for the dark
+//! interface.
 
 #![cfg(target_arch = "wasm32")]
 
@@ -30,6 +31,8 @@ pub fn start() {
         .split(['?', '&'])
         .find_map(|p| p.strip_prefix("preset="))
         .and_then(soliddraft_app::viewport::look::Preset::parse);
+    let theme =
+        query.split(['?', '&']).find_map(|p| p.strip_prefix("theme=")).and_then(soliddraft_app::theme::Mode::parse);
     wasm_bindgen_futures::spawn_local(async move {
         if let Err(error) = soliddraft_app::journal_browser::start().await {
             show_status(&format!("SolidDraft could not start its command journal: {error}"));
@@ -41,7 +44,7 @@ pub fn start() {
                 eframe::WebOptions::default(),
                 Box::new(move |cc| {
                     let doc = if demo { soliddraft_app::demo_document() } else { soliddraft_app::new_document() };
-                    let automation = Automation { connect_assistant: true, preset, ..Default::default() };
+                    let automation = Automation { connect_assistant: true, preset, theme, ..Default::default() };
                     Ok(Box::new(SolidDraftApp::new(cc, doc, automation)))
                 }),
             )

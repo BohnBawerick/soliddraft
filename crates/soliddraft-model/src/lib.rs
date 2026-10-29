@@ -37,8 +37,8 @@ pub use command::{Command, CommandError, Executed};
 pub use document::{BuiltSketch, Document, FACE_OVERLAP, FaceLabel, FeatureStatus, feature_of_tag, plane_on_face};
 pub use feature::{
     BlendFeature, BuiltinShape, DatumPlane, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId,
-    FeatureKind, HoleFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource, RevolveFeature,
-    SketchFeature, SketchPlane,
+    FeatureKind, HoleFeature, ImportStepFeature, LatticeFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef,
+    ProfileSource, RevolveFeature, ShellFeature, SketchFeature, SketchPlane, sha256_hex,
 };
 pub use file::FileError;
 pub use materials::{

@@ -156,7 +156,7 @@ fn take_pending(s: &mut DrawingSession, pending: PendingDerived, push: &mut impl
 
 /// The preview stroke of a line being drawn.
 fn preview_stroke() -> Stroke {
-    Stroke::new(1.5, theme::ACCENT)
+    Stroke::new(1.5, theme::accent())
 }
 
 /// The derived-view tools: section, detail, auxiliary, crop and broken-out.
@@ -206,14 +206,14 @@ fn paint_draft(s: &DrawingSession, sheet2: &Sheet2<'_>, pointer: Option<Point2>)
             if let Some(line) = cut_line(s, view, *start, s.draft.horizontal) {
                 painter.extend(egui::Shape::dashed_line(&[at(line[0]), at(line[1])], stroke, 8.0, 3.0));
             }
-            painter.circle_filled(at(*start), 4.0, theme::ACCENT);
+            painter.circle_filled(at(*start), 4.0, theme::accent());
         }
         (DrawingTool::Detail, [centre]) if !s.draft.profile => {
             if let Some(q) = pv {
                 let r = ((q.u - centre.u).hypot(q.v - centre.v) * f64::from(s.camera.ppm)) as f32;
                 painter.circle_stroke(at(*centre), r.max(1.0), stroke);
             }
-            painter.circle_filled(at(*centre), 4.0, theme::ACCENT);
+            painter.circle_filled(at(*centre), 4.0, theme::accent());
         }
         (DrawingTool::Detail, pts) if s.draft.profile && !pts.is_empty() => {
             let mut poly: Vec<egui::Pos2> = pts.iter().map(|q| at(*q)).collect();
@@ -222,10 +222,10 @@ fn paint_draft(s: &DrawingSession, sheet2: &Sheet2<'_>, pointer: Option<Point2>)
             }
             painter.add(egui::Shape::line(poly, stroke));
             for q in pts {
-                painter.circle_filled(at(*q), 3.5, theme::ACCENT);
+                painter.circle_filled(at(*q), 3.5, theme::accent());
             }
             if pts.len() >= 3 {
-                painter.circle_stroke(at(pts[0]), 7.0, Stroke::new(1.0, theme::ACCENT));
+                painter.circle_stroke(at(pts[0]), 7.0, Stroke::new(1.0, theme::accent()));
             }
         }
         (DrawingTool::Crop, [a]) => {
@@ -238,14 +238,14 @@ fn paint_draft(s: &DrawingSession, sheet2: &Sheet2<'_>, pointer: Option<Point2>)
                     3.0,
                 ));
             }
-            painter.circle_filled(at(*a), 4.0, theme::ACCENT);
+            painter.circle_filled(at(*a), 4.0, theme::accent());
         }
         (DrawingTool::BrokenOut, [centre]) => {
             if let Some(q) = pv {
                 let r = ((q.u - centre.u).hypot(q.v - centre.v) * f64::from(s.camera.ppm)) as f32;
                 painter.circle_stroke(at(*centre), r.max(1.0), stroke);
             }
-            painter.circle_filled(at(*centre), 4.0, theme::ACCENT);
+            painter.circle_filled(at(*centre), 4.0, theme::accent());
         }
         _ => {}
     }
@@ -278,7 +278,7 @@ fn place_pending(
     if let (Some(al), Some(pv)) = (pending.view.alignment, &parent) {
         let [x0, y0, x1, y1] = project::view_bounds(pv);
         let child = pending.view.position;
-        let stroke = Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.8));
+        let stroke = Stroke::new(1.0, theme::accent().gamma_multiply(0.8));
         let lines: Vec<(Point2, Point2)> = match al.axis {
             AlignAxis::Horizontal => {
                 let (a, b) = if child.u > pv.position.u { (x1, child.u + 40.0) } else { (child.u - 40.0, x0) };
@@ -741,13 +741,13 @@ pub(super) fn set_tool(
     {
         for (i, a) in s.draft.anchors.iter().enumerate() {
             let at = sheet2.s(Point2::new(a.cached.u + v.position.u, a.cached.v + v.position.v));
-            sheet2.painter.circle_filled(at, 4.5, theme::ACCENT);
+            sheet2.painter.circle_filled(at, 4.5, theme::accent());
             sheet2.painter.text(
                 at + vec2(6.0, -6.0),
                 egui::Align2::LEFT_BOTTOM,
                 if i == 0 { "0".to_owned() } else { i.to_string() },
                 theme::font_medium(11.0),
-                theme::ACCENT,
+                theme::accent(),
             );
         }
     }
@@ -858,7 +858,7 @@ pub(super) fn symbol_tool(
     if let (Some(view), Some(anchor)) = (s.draft.view, s.draft.anchors.first().cloned()) {
         let Some(v) = s.doc.drawing.view(view) else { return };
         let at = sheet2.s(Point2::new(anchor.cached.u + v.position.u, anchor.cached.v + v.position.v));
-        sheet2.painter.circle_filled(at, 4.5, theme::ACCENT);
+        sheet2.painter.circle_filled(at, 4.5, theme::accent());
         let a = symbol_annotation(s, view, vec![anchor], to_view(s, view, p));
         ghost_annotation(s, sheet2, lctx, &a);
         if clicked {

@@ -16,6 +16,7 @@
 //! in table order.
 
 use crate::app_tools as app;
+use crate::assembly::AssemblyAction;
 use crate::command_tools as tools;
 use crate::document::{Command, Selection};
 use crate::drawing::{DrawingAction, DrawingSel, DrawingSession, DrawingTab, DrawingTool, LinkState, PlaceKind};
@@ -44,18 +45,26 @@ pub enum Tab {
     Part(RibbonTab),
     /// A tab of the drawing's ribbon.
     Drawing(DrawingTab),
+    /// The assembly's ribbon, which has one tab.
+    Assembly,
 }
 
 impl Tab {
-    /// Every tab, the part's then the drawing's.
+    /// Every tab, the part's, then the drawing's, then the assembly's.
     pub fn all() -> Vec<Tab> {
-        RibbonTab::ALL.into_iter().map(Tab::Part).chain(DrawingTab::ALL.into_iter().map(Tab::Drawing)).collect()
+        RibbonTab::ALL
+            .into_iter()
+            .map(Tab::Part)
+            .chain(DrawingTab::ALL.into_iter().map(Tab::Drawing))
+            .chain([Tab::Assembly])
+            .collect()
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Tab::Part(t) => t.label(),
             Tab::Drawing(t) => t.label(),
+            Tab::Assembly => "Assembly",
         }
     }
 }
@@ -88,6 +97,7 @@ pub fn panels(tab: Tab) -> &'static [&'static str] {
         Tab::Drawing(D::Sheet) => &["Edit", "Sheet", "Format", "Export"],
         Tab::Drawing(D::View) => &["Zoom", "Sheet", "Documents", "Panels"],
         Tab::Drawing(D::Assistant) => &["Chat", "Drawing"],
+        Tab::Assembly => &["Edit", "Component", "File", "View"],
     }
 }
 
@@ -96,6 +106,8 @@ pub fn panels(tab: Tab) -> &'static [&'static str] {
 pub enum Workspace {
     Part,
     Drawing,
+    Assembly,
+    /// Every workspace.
     Both,
 }
 
@@ -103,8 +115,9 @@ impl Workspace {
     /// Whether a command of this workspace works in a context.
     pub fn applies(self, c: Context) -> bool {
         match self {
-            Workspace::Part => !c.drawing,
+            Workspace::Part => !c.drawing && !c.assembly,
             Workspace::Drawing => c.drawing,
+            Workspace::Assembly => c.assembly,
             Workspace::Both => true,
         }
     }
@@ -147,22 +160,33 @@ pub enum Scope {
     /// The drawing workspace while a section or auxiliary view is being placed. Wins over
     /// [`Scope::Drawing`].
     Placing,
+    /// The assembly workspace.
+    Assembly,
 }
 
 impl Scope {
-    pub const ALL: [Scope; 7] =
-        [Scope::App, Scope::Part, Scope::Model, Scope::Edge, Scope::Sketch, Scope::Drawing, Scope::Placing];
+    pub const ALL: [Scope; 8] = [
+        Scope::App,
+        Scope::Part,
+        Scope::Model,
+        Scope::Edge,
+        Scope::Sketch,
+        Scope::Drawing,
+        Scope::Placing,
+        Scope::Assembly,
+    ];
 
     /// Whether the scope applies in a context.
     pub fn applies(self, c: Context) -> bool {
         match self {
             Scope::App => true,
-            Scope::Part => !c.drawing,
-            Scope::Model => !c.drawing && !c.sketch,
-            Scope::Edge => !c.drawing && !c.sketch && c.edge,
-            Scope::Sketch => !c.drawing && c.sketch,
+            Scope::Part => c.part(),
+            Scope::Model => c.part() && !c.sketch,
+            Scope::Edge => c.part() && !c.sketch && c.edge,
+            Scope::Sketch => c.part() && c.sketch,
             Scope::Drawing => c.drawing,
             Scope::Placing => c.drawing && c.placing,
+            Scope::Assembly => c.assembly,
         }
     }
 
@@ -186,6 +210,7 @@ impl Scope {
             Scope::Sketch => "In a sketch",
             Scope::Drawing => "In a drawing",
             Scope::Placing => "Placing a section or auxiliary view",
+            Scope::Assembly => "In an assembly",
         }
     }
 }
@@ -201,6 +226,8 @@ pub struct Context {
     pub edge: bool,
     /// A section or auxiliary view is being placed in the drawing.
     pub placing: bool,
+    /// The assembly workspace is active.
+    pub assembly: bool,
 }
 
 impl Context {
@@ -211,12 +238,19 @@ impl Context {
             for sketch in [false, true] {
                 for edge in [false, true] {
                     for placing in [false, true] {
-                        all.push(Context { drawing, sketch, edge, placing });
+                        all.push(Context { drawing, sketch, edge, placing, assembly: false });
                     }
                 }
             }
         }
+        // One workspace is active at a time.
+        all.push(Context { assembly: true, ..Context::default() });
         all
+    }
+
+    /// The part workspace is active.
+    pub fn part(self) -> bool {
+        !self.drawing && !self.assembly
     }
 
     pub fn of(state: &AppState) -> Self {
@@ -226,6 +260,7 @@ impl Context {
             edge: has_body(state) && matches!(state.doc.selection, Some(Selection::Edge(_))),
             placing: session(state)
                 .is_some_and(|d| matches!(d.tool, DrawingTool::Section { .. } | DrawingTool::Auxiliary)),
+            assembly: state.assembly.is_active(),
         }
     }
 }
@@ -407,6 +442,13 @@ const CANVAS: &str = "It picks a tool of the drawing canvas, which places views 
 const CANVAS_STEP: &str = "It steers the drawing canvas tool in use, which only the window has";
 const SHEET_VIEW: &str = "It changes how the drawing canvas shows the sheet, which only the window has";
 const PANEL: &str = "It selects what the property panel edits; the panel's fields have no form without the window yet";
+const ASSEMBLY: &str = "It works on the assembly open in the window; soliddraft asm makes, places and saves assembly \
+                        files without it";
+
+/// Why an assembly command is off in the browser build, whose loader has no threads.
+fn desktop_only(_: &AppState) -> Option<String> {
+    cfg!(target_arch = "wasm32").then(|| "Assemblies open in the desktop app".to_owned())
+}
 
 impl CommandSpec {
     fn new(id: &'static str, label: &'static str, icon: Icon, doc: &'static str) -> Self {
@@ -450,6 +492,13 @@ impl CommandSpec {
 
     fn both(mut self) -> Self {
         self.workspace = Workspace::Both;
+        self
+    }
+
+    /// An assembly command: enabled while an assembly is open and active.
+    fn assembly(mut self) -> Self {
+        self.workspace = Workspace::Assembly;
+        self.enabled = |s| s.assembly.is_active();
         self
     }
 
@@ -526,7 +575,6 @@ impl CommandSpec {
     /// Commands whose geometry is waiting for Catallax, in roadmap section 6 order.
     pub fn catallax_wait(&self) -> Option<&'static str> {
         match self.id {
-            "shell" => Some("Arrives with Catallax stage 3"),
             "sweep" | "loft" => Some("Arrives with Catallax stage 5"),
             _ => None,
         }
@@ -781,6 +829,9 @@ fn drawing_tool_is(s: &AppState, f: fn(&DrawingTool) -> bool) -> bool {
 
 /// The drawing's undo stack when the drawing is active, the part's otherwise.
 fn undo_labels(s: &AppState) -> (Option<String>, Option<String>) {
+    if let Some(a) = s.assembly.session.as_ref().filter(|_| s.assembly.is_active()) {
+        return (a.doc.undo_label().map(str::to_owned), a.doc.redo_label().map(str::to_owned));
+    }
     match session(s).filter(|_| s.drawing.is_active()) {
         Some(d) => (d.doc.undo_label().map(str::to_owned), d.doc.redo_label().map(str::to_owned)),
         None => (s.doc.undo_label().map(str::to_owned), s.doc.redo_label().map(str::to_owned)),
@@ -799,6 +850,15 @@ macro_rules! drawing_tool {
 
 fn has_body(s: &AppState) -> bool {
     s.doc.display_body().is_some()
+}
+
+fn can_export(s: &AppState) -> bool {
+    s.drag_preview.is_none()
+        && !s.doc.proof_pending()
+        && !s.doc.proof_message().is_some_and(|(_, failed)| failed)
+        && s.doc.error_count() == 0
+        && s.doc.repair_count() == 0
+        && has_body(s)
 }
 
 fn editing(s: &AppState, f: fn(&EditorParams) -> bool) -> bool {
@@ -870,6 +930,7 @@ fn registry() -> Vec<CommandSpec> {
             .on(DrawingTab::Views, "Edit", Small)
             .on(DrawingTab::Annotate, "Edit", Small)
             .on(DrawingTab::Sheet, "Edit", Small)
+            .on(Tab::Assembly, "Edit", Small)
             .key(Scope::App, ctrl, Key::Z)
             .run(|_| AppAction::Undo)
             .when(|s| undo_labels(s).0.is_some())
@@ -877,7 +938,7 @@ fn registry() -> Vec<CommandSpec> {
             .agents(
                 Agents::Mcp,
                 "Whatever made it, as the Edit menu does: the drawing's step while the drawing is the active \
-                 document, the part's otherwise.",
+                 document, the assembly's while the assembly is, the part's otherwise.",
                 Vec::new,
             )
 .undo(Undo::Moves),
@@ -888,6 +949,7 @@ fn registry() -> Vec<CommandSpec> {
             .on(DrawingTab::Views, "Edit", Small)
             .on(DrawingTab::Annotate, "Edit", Small)
             .on(DrawingTab::Sheet, "Edit", Small)
+            .on(Tab::Assembly, "Edit", Small)
             .key(Scope::App, ctrl, Key::Y)
             .key(Scope::App, ctrl_shift, Key::Z)
             .run(|_| AppAction::Redo)
@@ -1074,7 +1136,13 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Verb, "", tools::chamfer_params)
 .undo(Undo::Step),
         cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
-            .on(Features, "Finish", Small),
+            .on(Features, "Finish", Small)
+            .run(|_| AppAction::StartShell)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Shell(_))))
+            .hint(|s| (!has_body(s)).then(|| "Shell needs a body".into()))
+            .agents(Agents::Verb, "Selected faces are left open. An empty list makes a closed shell.", tools::shell_params)
+            .undo(Undo::Step),
         cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle about a neutral plane")
             .on(Features, "Finish", Small)
             .run(|_| AppAction::StartDraft)
@@ -1250,12 +1318,20 @@ fn registry() -> Vec<CommandSpec> {
             .both()
             .on(View, "Orientation", Large)
             .on(DrawingTab::View, "Zoom", Large)
+            .on(Tab::Assembly, "View", Large)
             .key(Scope::Part, none, Key::Z)
             .key(Scope::Drawing, none, Key::Z)
             .key(Scope::Drawing, none, Key::F)
-            .run(
-                |s| if s.drawing.is_active() { AppAction::Drawing(DrawingAction::ZoomFit) } else { AppAction::ZoomFit },
-            )
+            .key(Scope::Assembly, none, Key::Z)
+            .run(|s| {
+                if s.assembly.is_active() {
+                    AppAction::Assembly(AssemblyAction::ZoomFit)
+                } else if s.drawing.is_active() {
+                    AppAction::Drawing(DrawingAction::ZoomFit)
+                } else {
+                    AppAction::ZoomFit
+                }
+            })
 .app_only(CAMERA),
         cmd("view_front", "Front", Icon::Plane, "Front view")
             .on(View, "Orientation", Small)
@@ -1312,6 +1388,14 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::SetPreset(Preset::Realistic))
             .lit(|s| s.viewport.preset == Preset::Realistic)
 .app_only(LOOK),
+        cmd("theme_light", "Light theme", Icon::Display, "Light chrome and panels; saved in the settings")
+            .run(|_| AppAction::SetTheme(crate::theme::Mode::Light))
+            .lit(|_| crate::theme::mode() == crate::theme::Mode::Light)
+.app_only(LOOK),
+        cmd("theme_dark", "Dark theme", Icon::Display, "Dark chrome and panels; saved in the settings")
+            .run(|_| AppAction::SetTheme(crate::theme::Mode::Dark))
+            .lit(|_| crate::theme::mode() == crate::theme::Mode::Dark)
+.app_only(LOOK),
         cmd("orthographic", "Orthographic", Icon::OnPlane, "Toggle perspective and orthographic projection")
             .on(View, "Projection", Large)
             .run(|_| AppAction::ToggleProjection)
@@ -1326,13 +1410,18 @@ fn registry() -> Vec<CommandSpec> {
             .lit(|s| s.layout.tree.shown)
             .label_now(|s| s.drawing.is_active().then(|| "Drawing tree".to_owned()))
 .app_only(PANELS),
-        cmd("toggle_assistant", "Assistant", Icon::Chat, "Show or hide the assistant")
-            .both()
-            .on(View, "Panels", Large)
-            .on(DrawingTab::View, "Panels", Large)
-            .key_anytime(Scope::App, Modifiers::SHIFT, Key::F9)
-            .run(|_| AppAction::TogglePanel(Side::Assistant))
-            .lit(|s| s.layout.assistant.shown)
+        cmd(
+            crate::command_line::AI_COMMAND,
+            "AI session",
+            Icon::Chat,
+            "Open or close the assistant session above the command line",
+        )
+        .both()
+        .on(View, "Panels", Large)
+        .on(DrawingTab::View, "Panels", Large)
+        .key_anytime(Scope::App, Modifiers::SHIFT, Key::F9)
+        .run(|_| AppAction::ToggleSession)
+        .lit(|s| s.command_line.session_open)
 .app_only(PANELS),
         cmd("reset_layout", "Reset layout", Icon::Config, "Restore the default panel layout")
             .both()
@@ -1362,21 +1451,51 @@ fn registry() -> Vec<CommandSpec> {
             .key(Scope::Part, ctrl_shift, Key::S)
             .run(|_| AppAction::SaveAs(None))
 .agents(Agents::Mcp, "Saves the part to the file, as save does.", tools::part_path_params),
+        // Assemblies. `soliddraft asm` does the same to assembly files from the command line.
+        cmd("new_assembly", "New assembly", Icon::Tree, "Start a new, empty assembly in a tab beside the part")
+            .both()
+            .run(|_| AppAction::Assembly(AssemblyAction::New))
+            .when(|_| !cfg!(target_arch = "wasm32"))
+            .hint(desktop_only)
+            .app_only(ASSEMBLY),
+        cmd("make_assembly", "Make assembly", Icon::Tree, "Start an assembly that places this part, saving the part first")
+            .run(|_| AppAction::Assembly(AssemblyAction::FromPart))
+            .when(|s| has_body(s) && !cfg!(target_arch = "wasm32"))
+            .hint(desktop_only)
+            .app_only(ASSEMBLY),
+        cmd("insert_component", "Insert component", Icon::Import, "Place a part or an assembly file in the assembly")
+            .assembly()
+            .on(Tab::Assembly, "Component", Large)
+            .key(Scope::Assembly, ctrl, Key::I)
+            .run(|_| AppAction::Assembly(AssemblyAction::Insert(None)))
+            .app_only(ASSEMBLY),
+        cmd("assembly_save", "Save assembly", Icon::Save, "Save the assembly with copies of the parts it shows")
+            .assembly()
+            .on(Tab::Assembly, "File", Small)
+            .key(Scope::Assembly, ctrl, Key::S)
+            .run(|_| AppAction::Assembly(AssemblyAction::Save(None)))
+            .app_only(ASSEMBLY),
+        cmd("assembly_save_as", "Save assembly as", Icon::Save, "Save the assembly under a new name")
+            .assembly()
+            .on(Tab::Assembly, "File", Small)
+            .key(Scope::Assembly, ctrl_shift, Key::S)
+            .run(|_| AppAction::Assembly(AssemblyAction::SaveAs))
+            .app_only(ASSEMBLY),
         cmd("export_step", "STEP", Icon::Save, "Export the part as STEP AP242, with its proven deviation")
             .run(|_| AppAction::Export { format: ExportFormat::Step, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the deviation report.", app::step_path_params),
         cmd("export_stl", "STL", Icon::Save, "Export the part's mesh as binary STL at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::Stl, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::stl_path_params),
         cmd("export_3mf", "3MF", Icon::Save, "Export the part's mesh as 3MF at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::ThreeMf, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::three_mf_path_params),
         cmd("export_obj", "OBJ", Icon::Save, "Export the part's mesh as OBJ at the export tolerance")
             .run(|_| AppAction::Export { format: ExportFormat::Obj, path: None })
-            .when(has_body)
+            .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::obj_path_params),
         cmd("quit", "Quit", Icon::Close, "Quit SolidDraft")
             .both()
@@ -1487,6 +1606,9 @@ fn registry() -> Vec<CommandSpec> {
             tools::edit_mirror_params,
         )
         .undo(Undo::Step),
+        cmd("edit_shell", "Edit shell", Icon::Shell, "Change a shell's wall thickness")
+            .agents(Agents::Verb, "The openings are retained; everything after it rebuilds.", tools::edit_shell_params)
+            .undo(Undo::Step),
         cmd("edit_draft", "Edit draft", Icon::Draft, "Change a draft's angle").agents(
             Agents::Verb,
             "Everything after it rebuilds.",
@@ -1606,7 +1728,14 @@ fn drawing_registry() -> Vec<CommandSpec> {
         )
         .on(Views, "Derived", Large)
         .key(Scope::Drawing, none, Key::S)
-.app_only(CANVAS),
+.agents(
+            Agents::Mcp,
+            "A cutting line through a model point across the view, horizontal or vertical on the sheet. The section \
+             is placed in line with the view on the side the sheet's projection angle puts it, with the drawing's \
+             next letter. The open part must be the drawing's.",
+            app::section_params,
+        )
+        .undo(Undo::Step),
         drawing_tool!(
             "drawing_detail", "Detail", Icon::Search, "Circle or profile a region of a view and place it magnified",
             DrawingTool::Detail => DrawingTool::Detail
@@ -2009,7 +2138,7 @@ mod tests {
     #[test]
     fn waiting_commands_stay_visible_disabled_and_name_their_stages() {
         let state = AppState::new(crate::demo_document());
-        for (id, stages) in [("shell", &[3][..]), ("sweep", &[5][..]), ("loft", &[5][..])] {
+        for (id, stages) in [("sweep", &[5][..]), ("loft", &[5][..])] {
             let command = get(id).unwrap();
             assert!(!command.ribbon.is_empty(), "{id}");
             assert!((command.shown)(&state), "{id}");
@@ -2085,7 +2214,7 @@ mod tests {
         for c in all() {
             for k in &c.keys {
                 let ctrl = k.modifiers.command || k.modifiers.ctrl;
-                let panel_key = matches!(c.id, "toggle_tree" | "toggle_assistant");
+                let panel_key = c.id == "toggle_tree" || c.id == crate::command_line::AI_COMMAND;
                 assert_eq!(k.fires_while_typing(), ctrl || panel_key, "{} {}", c.id, k.text());
             }
         }
@@ -2097,7 +2226,7 @@ mod tests {
         let pos = |id: &str, m: Modifiers| order.iter().position(|(c, k)| c.id == id && k.modifiers == m).unwrap();
         assert!(pos("save_as", Modifiers::COMMAND | Modifiers::SHIFT) < pos("save", Modifiers::COMMAND));
         assert!(pos("redo", Modifiers::COMMAND | Modifiers::SHIFT) < pos("undo", Modifiers::COMMAND));
-        assert!(pos("toggle_assistant", Modifiers::SHIFT) < pos("toggle_tree", Modifiers::NONE));
+        assert!(pos(crate::command_line::AI_COMMAND, Modifiers::SHIFT) < pos("toggle_tree", Modifiers::NONE));
         let edge = bindings(Context { edge: true, ..Default::default() });
         let at = |id: &str| edge.iter().position(|(c, _)| c.id == id).unwrap();
         assert!(at("fillet") < at("view_front"), "with an edge selected, F is Fillet");
@@ -2138,7 +2267,7 @@ mod tests {
         };
         assert_eq!(drawing(DrawingTab::Views, "Edit"), ["undo", "redo"]);
         assert_eq!(drawing(DrawingTab::View, "Zoom"), ["zoom_fit", "drawing_zoom_in", "drawing_zoom_out"]);
-        assert_eq!(drawing(DrawingTab::View, "Panels"), ["toggle_tree", "toggle_assistant"]);
+        assert_eq!(drawing(DrawingTab::View, "Panels"), ["toggle_tree", crate::command_line::AI_COMMAND]);
         assert_eq!(drawing(DrawingTab::Assistant, "Chat"), ["ask", "drawing_explain"]);
     }
 
@@ -2205,7 +2334,7 @@ mod tests {
         assert_eq!(text("delete"), "Del");
         assert_eq!(text("rename"), "F2");
         assert_eq!(text("ask"), "/");
-        assert_eq!(text("toggle_assistant"), "Shift+F9");
+        assert_eq!(text(crate::command_line::AI_COMMAND), "Shift+F9");
         assert_eq!(text("shortcuts"), "?");
     }
 }

@@ -31,16 +31,16 @@ fn header(ui: &mut egui::Ui, icon: Icon, title: &str) -> Rect {
         ui.painter(),
         icon,
         Rect::from_center_size(pos2(head.left() + 20.0, head.center().y), vec2(16.0, 16.0)),
-        theme::INK,
+        theme::ink(),
     );
     ui.painter().text(
         pos2(head.left() + 34.0, head.center().y),
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     head
 }
 
@@ -48,9 +48,9 @@ fn small_button(ui: &mut egui::Ui, rect: Rect, icon: Icon, tip: &str, primary: b
     let resp = ui.interact(rect, ui.id().with(("pm_btn", tip)), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     let (bg, fg) = if primary {
-        (if resp.hovered() { theme::ACCENT.gamma_multiply(0.9) } else { theme::ACCENT }, egui::Color32::WHITE)
+        (if resp.hovered() { theme::accent().gamma_multiply(0.9) } else { theme::accent() }, theme::on_accent())
     } else {
-        (if resp.hovered() { theme::LINE } else { theme::HOVER }, theme::INK)
+        (if resp.hovered() { theme::line() } else { theme::hover() }, theme::ink())
     };
     ui.painter().rect_filled(rect, CornerRadius::same(5), bg);
     icons::paint(ui.painter(), icon, rect.shrink(4.0), fg);
@@ -78,8 +78,8 @@ fn ok_cancel(ui: &mut egui::Ui, head: Rect, ok_tip: &str, cancel_tip: &str) -> (
 
 fn field_frame() -> egui::Frame {
     egui::Frame::new()
-        .fill(theme::FIELD_BG)
-        .stroke(Stroke::new(1.0, theme::LINE))
+        .fill(theme::field_bg())
+        .stroke(Stroke::new(1.0, theme::line()))
         .corner_radius(CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(8, 3))
 }
@@ -126,7 +126,7 @@ fn unit_value(
                 });
                 response = Some(r);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(unit).size(11.0).italics().color(theme::MUTED));
+                    ui.label(egui::RichText::new(unit).size(11.0).italics().color(theme::muted()));
                 });
             });
         });
@@ -152,12 +152,22 @@ fn dimension_field(ui: &mut egui::Ui, state: &mut AppState, id: FeatureId, kind:
     if r.changed() {
         if r.dragged() || r.drag_started() {
             state.push(AppAction::DragDimension(DragStep::Move(value)));
-        } else if let Some(command) = crate::drag::edit_command(id, dimension.with(kind, value)) {
+        } else if value != applied
+            && let Some(command) = crate::drag::edit_command(id, dimension.with(kind, value))
+        {
             state.push(AppAction::Command(command));
         }
     }
     if r.drag_stopped() {
         state.push(AppAction::DragDimension(DragStep::Finish));
+    }
+    if let Some(drag) = &state.drag_preview
+        && drag.feature() == id
+    {
+        let (message, failed) = drag.label();
+        ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
+    } else if let Some((message, failed)) = state.doc.proof_message() {
+        ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
     }
 }
 
@@ -190,13 +200,13 @@ fn end_combo(ui: &mut egui::Ui, id: &str, end: &mut EndKind, cut: bool, up_to: b
 
 fn pick_prompt(ui: &mut egui::Ui, text: &str) {
     egui::Frame::new()
-        .fill(theme::FIELD_BG)
-        .stroke(Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.6)))
+        .fill(theme::field_bg())
+        .stroke(Stroke::new(1.0, theme::accent().gamma_multiply(0.6)))
         .corner_radius(CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(8, 6))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(egui::RichText::new(text).size(11.5).color(theme::ACCENT));
+            ui.label(egui::RichText::new(text).size(11.5).color(theme::accent()));
         });
 }
 
@@ -210,7 +220,7 @@ fn picked_face(ui: &mut egui::Ui, face: Option<&crate::document::FaceRef>) {
 }
 
 fn coord(ui: &mut egui::Ui, id: &str, label: &str, value: &mut f64) {
-    ui.label(egui::RichText::new(label).size(11.0).color(theme::MUTED));
+    ui.label(egui::RichText::new(label).size(11.0).color(theme::muted()));
     let r = ui.add(egui::DragValue::new(value).speed(0.5).range(-100_000.0..=100_000.0).fixed_decimals(2));
     r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{id} value")));
 }
@@ -275,15 +285,15 @@ fn section_gap(ui: &mut egui::Ui) {
 }
 
 fn hint(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(11.0).color(theme::MUTED));
+    ui.label(egui::RichText::new(text).size(11.0).color(theme::muted()));
 }
 
 fn error_row(ui: &mut egui::Ui, err: &str) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-        icons::paint(ui.painter(), Icon::Warning, r, theme::ERROR);
-        ui.label(egui::RichText::new(err).size(11.5).color(theme::ERROR));
+        icons::paint(ui.painter(), Icon::Warning, r, theme::error());
+        ui.label(egui::RichText::new(err).size(11.5).color(theme::error()));
     });
 }
 
@@ -301,6 +311,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         ),
         Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
         Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
+        Some(EditorParams::Shell(_)) => (state.editor.as_ref().unwrap().title(), Icon::Shell),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
         Some(EditorParams::Repair { .. }) => ("Repair references".to_owned(), Icon::Repair),
         None => return,
@@ -363,7 +374,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                             .unwrap_or("Sketch".into());
                         ui.horizontal(|ui| {
                             let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                            icons::paint(ui.painter(), Icon::Sketch, r, theme::INK);
+                            icons::paint(ui.painter(), Icon::Sketch, r, theme::ink());
                             ui.label(egui::RichText::new(name).size(12.0));
                         });
                     }
@@ -431,7 +442,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                     .unwrap_or("Sketch".into());
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                    icons::paint(ui.painter(), Icon::Sketch, r, theme::INK);
+                    icons::paint(ui.painter(), Icon::Sketch, r, theme::ink());
                     ui.label(egui::RichText::new(name).size(12.0));
                 });
                 section_gap(ui);
@@ -461,14 +472,14 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 let edges = editor.edges().to_vec();
                 if edges.is_empty() {
                     egui::Frame::new()
-                        .fill(theme::FIELD_BG)
-                        .stroke(Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.6)))
+                        .fill(theme::field_bg())
+                        .stroke(Stroke::new(1.0, theme::accent().gamma_multiply(0.6)))
                         .corner_radius(CornerRadius::same(6))
                         .inner_margin(egui::Margin::symmetric(8, 6))
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.label(
-                                egui::RichText::new("Click edges in the viewport").size(11.5).color(theme::ACCENT),
+                                egui::RichText::new("Click edges in the viewport").size(11.5).color(theme::accent()),
                             );
                         });
                 }
@@ -476,7 +487,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 for (i, e) in edges.iter().enumerate() {
                     ui.horizontal(|ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
-                        icons::paint(ui.painter(), Icon::Axis, r, theme::INK);
+                        icons::paint(ui.painter(), Icon::Axis, r, theme::ink());
                         ui.label(egui::RichText::new(&e.label).size(12.0));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
@@ -517,7 +528,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 let mut remove = None;
                 for (i, p) in h.points.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(format!("{}", i + 1)).size(12.0).color(theme::MUTED));
+                        ui.label(egui::RichText::new(format!("{}", i + 1)).size(12.0).color(theme::muted()));
                         coord(ui, &format!("hole_u{i}"), "u", &mut p.u);
                         coord(ui, &format!("hole_v{i}"), "v", &mut p.v);
                         if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
@@ -623,6 +634,35 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                     error_row(ui, err);
                 }
             }
+            EditorParams::Shell(s) => {
+                theme::section_label(ui, "Open faces");
+                pick_prompt(ui, "Click faces to open; leave empty for a closed shell");
+                let mut remove = None;
+                for (i, face) in s.open_faces.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&face.label).size(12.0));
+                        if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+                if let Some(i) = remove {
+                    s.open_faces.remove(i);
+                }
+                section_gap(ui);
+                // Keep the user's typed value: invalid walls must be reported, not
+                // silently clamped to the generic positive dimension-field range.
+                ui.horizontal(|ui| {
+                    ui.label("Wall thickness");
+                    let response = ui.add(egui::DragValue::new(&mut s.thickness).speed(0.1).suffix(" mm"));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Wall thickness value")
+                    });
+                });
+                if let Some(error) = &editor.error {
+                    error_row(ui, error);
+                }
+            }
             EditorParams::Draft(d) => {
                 theme::section_label(ui, "Faces to draft");
                 if d.faces.is_empty() {
@@ -676,8 +716,8 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                     let is_active = *active == i;
                     let picked = chosen.get(i).and_then(|c| c.as_ref()).map(|c| c.label().to_owned());
                     let frame = egui::Frame::new()
-                        .fill(if is_active { theme::ACCENT_SOFT } else { theme::PANEL })
-                        .stroke(Stroke::new(1.0, if is_active { theme::ACCENT } else { theme::LINE }))
+                        .fill(if is_active { theme::accent_soft() } else { theme::panel() })
+                        .stroke(Stroke::new(1.0, if is_active { theme::accent() } else { theme::line() }))
                         .corner_radius(CornerRadius::same(6))
                         .inner_margin(egui::Margin::symmetric(8, 5));
                     let resp = frame
@@ -689,14 +729,14 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                                     crate::document::RefKind::Edge => Icon::Axis,
                                     crate::document::RefKind::Face => Icon::Plane,
                                 };
-                                icons::paint(ui.painter(), icon, r, theme::MUTED);
+                                icons::paint(ui.painter(), icon, r, theme::muted());
                                 ui.label(
-                                    egui::RichText::new(&item.label).size(12.0).strikethrough().color(theme::MUTED),
+                                    egui::RichText::new(&item.label).size(12.0).strikethrough().color(theme::muted()),
                                 );
                             });
                             match &picked {
                                 Some(l) => {
-                                    ui.label(egui::RichText::new(format!("→ {l}")).size(12.0).color(theme::OK));
+                                    ui.label(egui::RichText::new(format!("→ {l}")).size(12.0).color(theme::ok()));
                                 }
                                 None => {
                                     ui.label(
@@ -710,9 +750,9 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                                         })
                                         .size(11.5)
                                         .color(if is_active {
-                                            theme::ACCENT
+                                            theme::accent()
                                         } else {
-                                            theme::MUTED
+                                            theme::muted()
                                         }),
                                     );
                                 }
@@ -761,13 +801,13 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
         egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
             // Status.
             let (color, label) = match &s.sketch.status {
-                crate::sketch::SolveStatus::Empty => (theme::MUTED, "Empty".to_owned()),
-                crate::sketch::SolveStatus::UnderDefined => (theme::ACCENT, "Under defined".to_owned()),
-                crate::sketch::SolveStatus::FullyDefined => (theme::OK, "Fully defined".to_owned()),
+                crate::sketch::SolveStatus::Empty => (theme::muted(), "Empty".to_owned()),
+                crate::sketch::SolveStatus::UnderDefined => (theme::accent(), "Under defined".to_owned()),
+                crate::sketch::SolveStatus::FullyDefined => (theme::ok(), "Fully defined".to_owned()),
                 crate::sketch::SolveStatus::OverDefined { conflicting } => {
-                    (theme::ERROR, format!("Over defined ({} conflicting)", conflicting.len()))
+                    (theme::error(), format!("Over defined ({} conflicting)", conflicting.len()))
                 }
-                crate::sketch::SolveStatus::Failed(e) => (theme::ERROR, format!("Solver failed: {e}")),
+                crate::sketch::SolveStatus::Failed(e) => (theme::error(), format!("Solver failed: {e}")),
             };
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
@@ -834,11 +874,16 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
                     });
                     let on = s.tool == tool;
                     if on {
-                        ui.painter().rect_filled(r, CornerRadius::same(6), theme::SELECTION_BG);
+                        ui.painter().rect_filled(r, CornerRadius::same(6), theme::selection_bg());
                     } else if resp.hovered() {
-                        ui.painter().rect_filled(r, CornerRadius::same(6), theme::HOVER);
+                        ui.painter().rect_filled(r, CornerRadius::same(6), theme::hover());
                     }
-                    icons::paint(ui.painter(), icon, r.shrink(6.0), if on { theme::SELECTION_INK } else { theme::INK });
+                    icons::paint(
+                        ui.painter(),
+                        icon,
+                        r.shrink(6.0),
+                        if on { theme::selection_ink() } else { theme::ink() },
+                    );
                     if resp.on_hover_text(tip).clicked() {
                         s.set_tool(tool);
                     }
@@ -871,9 +916,9 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
                                 };
                                 ui.horizontal(|ui| {
                                     ui.label(egui::RichText::new(format!("{} {}", e.kind_name(), e.id)).size(12.0));
-                                    ui.label(egui::RichText::new(detail).size(11.5).color(theme::MUTED));
+                                    ui.label(egui::RichText::new(detail).size(11.5).color(theme::muted()));
                                     if e.construction {
-                                        ui.label(egui::RichText::new("construction").size(10.5).color(theme::MUTED));
+                                        ui.label(egui::RichText::new("construction").size(10.5).color(theme::muted()));
                                     }
                                 });
                             }
@@ -939,7 +984,7 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
                         {
                             toggle_construction = true;
                         }
-                        if ui.button(egui::RichText::new("Delete").color(theme::ERROR)).clicked() {
+                        if ui.button(egui::RichText::new("Delete").color(theme::error())).clicked() {
                             delete_entities = true;
                         }
                     });
@@ -1045,10 +1090,10 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         ui.add_space(30.0);
         ui.vertical_centered(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
-            icons::paint(ui.painter(), Icon::Views, r, theme::LINE.gamma_multiply(1.4));
+            icons::paint(ui.painter(), Icon::Views, r, theme::line().gamma_multiply(1.4));
             ui.add_space(4.0);
-            ui.label(egui::RichText::new("Nothing selected").family(theme::medium()).color(theme::MUTED));
-            ui.label(egui::RichText::new("Click a face, edge, vertex or a tree row.").size(11.0).color(theme::MUTED));
+            ui.label(egui::RichText::new("Nothing selected").family(theme::medium()).color(theme::muted()));
+            ui.label(egui::RichText::new("Click a face, edge, vertex or a tree row.").size(11.0).color(theme::muted()));
         });
         return;
     };
@@ -1064,7 +1109,11 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::Pattern(_))) => Icon::LinearPattern,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Mirror(_))) => Icon::Mirror,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Draft(_))) => Icon::Draft,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Shell(_))) => Icon::Shell,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::ImportStep(_))) => Icon::Import,
+        (Selection::Feature(_), Some(crate::document::FeatureKind::Lattice(_))) => Icon::LinearPattern,
         (Selection::Feature(_), _) => Icon::Extrude,
+        (Selection::Body, _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,
         (Selection::Vertex(_), _) => Icon::Point,
@@ -1086,6 +1135,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
     let is_planar_face = matches!(sel, Selection::Face(f) if state.doc.named_face(f).is_some_and(|nf| nf.surface == soliddraft_kernel_api::SurfaceKind::Plane));
     egui::Frame::new().inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
         let kind = match sel {
+            Selection::Body => "Body",
             Selection::Feature(_) => "Feature",
             Selection::Face(_) => "Face",
             Selection::Edge(_) => "Edge",
@@ -1094,11 +1144,11 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         theme::section_label(ui, kind);
         egui::Grid::new("props").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
             for (k, v) in &info.details {
-                ui.label(egui::RichText::new(k).size(12.0).color(theme::MUTED));
+                ui.label(egui::RichText::new(k).size(12.0).color(theme::muted()));
                 let color = match k.as_str() {
-                    "Error" => theme::ERROR,
-                    "Needs repair" => theme::WARN,
-                    _ => theme::INK,
+                    "Error" => theme::error(),
+                    "Needs repair" => theme::warn(),
+                    _ => theme::ink(),
                 };
                 ui.add(egui::Label::new(egui::RichText::new(v).size(12.0).color(color)).wrap());
                 ui.end_row();
@@ -1114,15 +1164,15 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         {
             ui.add_space(8.0);
             egui::Frame::new()
-                .fill(egui::Color32::from_rgb(0xfd, 0xf4, 0xe3))
-                .stroke(Stroke::new(1.0, theme::WARN.gamma_multiply(0.6)))
+                .fill(theme::warn_soft())
+                .stroke(Stroke::new(1.0, theme::warn().gamma_multiply(0.6)))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(egui::Margin::symmetric(8, 6))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                        icons::paint(ui.painter(), Icon::Warning, r, theme::WARN);
+                        icons::paint(ui.painter(), Icon::Warning, r, theme::warn());
                         ui.label(
                             egui::RichText::new(format!(
                                 "{} reference{} could not be found after the rebuild. The feature was skipped.",
@@ -1130,11 +1180,11 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                                 if items.len() == 1 { "" } else { "s" }
                             ))
                             .size(11.5)
-                            .color(theme::INK),
+                            .color(theme::ink()),
                         );
                     });
                     ui.add_space(4.0);
-                    if ui.add(egui::Button::new("Repair…").fill(theme::WARN).stroke(Stroke::NONE)).clicked() {
+                    if ui.add(egui::Button::new("Repair…").fill(theme::warn()).stroke(Stroke::NONE)).clicked() {
                         state.push(AppAction::StartRepair(id));
                     }
                 });
@@ -1154,7 +1204,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                 if ui.button(if suppressed { "Unsuppress" } else { "Suppress" }).clicked() {
                     state.push(AppAction::Command(Command::Suppress { id, suppressed: !suppressed }));
                 }
-                if ui.button(egui::RichText::new("Delete").color(theme::ERROR)).clicked() {
+                if ui.button(egui::RichText::new("Delete").color(theme::error())).clicked() {
                     state.push(AppAction::Command(Command::DeleteFeature(id)));
                 }
             }
@@ -1183,6 +1233,15 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                 }
             }
             Selection::Vertex(_) => {}
+            Selection::Body => {
+                ui.label(
+                    egui::RichText::new(
+                        "The viewport shows every dimension that builds the body. Double-click one to edit it.",
+                    )
+                    .size(11.0)
+                    .color(theme::muted()),
+                );
+            }
         });
         let _ = fmt_mm(0.0);
     });

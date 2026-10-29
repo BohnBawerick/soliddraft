@@ -187,6 +187,68 @@ class DrawingViewBudgets(unittest.TestCase):
         self.assertEqual(view["work"]["display"], 5)
         self.assertEqual(view["work"]["measurement"], 2)
 
+    def test_each_view_an_edit_regenerates_keeps_the_ceiling(self):
+        limit = scenarios.DRAWING_VIEW_BUDGET_MS
+        calls = [Latency.call("extrude", 300), Latency.call("view_curves", limit),
+                 Latency.call("section_view", 200), Latency.call("view_curves", 50, nested=True),
+                 Latency.call("view_curves", 5000, foreground=False)]
+        result = scenarios.drawing_view_calls({"calls": calls})
+        self.assertTrue(result["pass"])
+        self.assertEqual([v["operation"] for v in result["views"]], ["view_curves", "section_view"])
+        self.assertEqual(result["slowest_ms"], limit)
+        over = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]})
+        self.assertFalse(over["pass"])
+        self.assertEqual(over["class"], "drawing-view")
+        recorded = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]}, gated=False)
+        self.assertTrue(recorded["pass"], "an output's certified views are recorded, not gated")
+        self.assertIsNone(recorded["budget_ms"])
+        self.assertEqual(recorded["slowest_ms"], limit + 0.001)
+        self.assertTrue(scenarios.drawing_view_calls({"calls": []})["pass"], "no view regenerated")
+        with self.assertRaises(ValueError):
+            scenarios.drawing_view_calls({"calls": [Latency.call("view_curves", None)]})
+        call = Latency.call("view_curves", 1)
+        del call["on_capture_thread"]
+        with self.assertRaises(KeyError):
+            scenarios.drawing_view_calls({"calls": [call]})
+
+
+class Outputs(unittest.TestCase):
+    def test_a_drawing_export_records_its_wait_without_a_click_budget(self):
+        for tool in ("drawing_export_svg", "drawing_export_pdf", "drawing_export_dxf"):
+            with self.subTest(tool=tool):
+                self.assertEqual(scenarios.budget(tool), "output")
+                latency = scenarios.timing(tool, [Latency.segment(12_345)])
+                self.assertTrue(latency["pass"])
+                self.assertIsNone(latency["budget_ms"])
+                self.assertEqual(latency["elapsed_ms"], 12_345)
+                verdict = scenarios.accept_latency("drawing", 3, tool, latency, {})
+                self.assertEqual((verdict["pass"], verdict["within_budget"], verdict["status"]), (True, None, "output"))
+                self.assertEqual(verdict["verdict"], "output", "neither a strict pass nor a known gap")
+        self.assertEqual(scenarios.budget("drawing_save"), "feature", "a save keeps the feature click budget")
+        self.assertEqual(scenarios.budget("make_drawing"), "feature")
+
+    def test_an_output_cannot_be_listed_as_a_known_gap(self):
+        latency = scenarios.timing("drawing_export_svg", [Latency.segment(10)])
+        known = {("drawing", 3): {"scenario": "drawing", "step": 3, "tool": "drawing_export_svg",
+                                  "last_measured_ms": 10}}
+        verdict = scenarios.accept_latency("drawing", 3, "drawing_export_svg", latency, known)
+        self.assertFalse(verdict["pass"])
+        self.assertEqual(verdict["status"], "invalid-known-over-budget")
+        self.assertEqual(verdict["verdict"], "fail")
+
+    def test_output_files_must_exist_and_hold_bytes(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            full = pathlib.Path(folder, "sheet.svg")
+            full.write_text("<svg/>")
+            empty = pathlib.Path(folder, "empty.dxf")
+            empty.write_text("")
+            missing = str(pathlib.Path(folder, "missing.pdf"))
+            checks = scenarios.output_files([str(full), str(empty), missing], absent=[missing, str(empty)])
+            self.assertEqual([c["pass"] for c in checks], [True, False, False, True, False])
+            self.assertEqual(checks[0]["bytes"], 6)
+            self.assertIsNone(checks[2]["bytes"])
+
 
 class KnownBudgets(unittest.TestCase):
     known = {("bracket", 6): {"scenario": "bracket", "step": 6, "tool": "extrude",
@@ -347,6 +409,32 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertEqual(interval["ends"], "visible selectable edit")
         self.assertEqual(interval["verdict"], "strict-pass")
 
+    def test_a_display_without_its_evidence_fails_the_step(self):
+        report, checks = self.run_step("lost-display")
+        self.assertFalse(checks["display evidence written"]["pass"])
+        self.assertIn("display.json", checks["display evidence written"]["reason"])
+        self.assertNotEqual(report["steps"][0]["intervals"]["preview"]["ends"], "command reply, no solid to show")
+        self.assertFalse(report["steps"][0]["pass"])
+        self.assertFalse(report["pass"])
+
+    def test_a_display_that_reports_no_solid_ends_the_click_at_the_reply(self):
+        report, checks = self.run_step("no-solid", strict=True)
+        self.assertNotIn("click ends at a visible selectable edit", checks)
+        self.assertNotIn("live hidden-line view", checks)
+        self.assertEqual(report["steps"][0]["intervals"]["preview"]["ends"], "command reply, no solid to show")
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 0)
+
+    def test_a_stale_or_failed_no_solid_reply_cannot_skip_the_display(self):
+        for mode, reason in (("stale-no-solid", "stale"), ("failed-no-solid", "failed")):
+            with self.subTest(mode=mode):
+                report, checks = self.run_step(mode)
+                self.assertFalse(checks["no-solid reply answers this request"]["pass"])
+                self.assertIn(reason, checks["no-solid reply answers this request"]["reason"])
+                self.assertNotEqual(report["steps"][0]["intervals"]["preview"]["ends"],
+                                    "command reply, no solid to show")
+                self.assertFalse(report["pass"])
+
     def test_early_command_reply_cannot_pass(self):
         report, checks = self.run_step("early")
         self.assertFalse(checks["click ends at a visible selectable edit"]["pass"])
@@ -403,6 +491,13 @@ class RunnerEndToEnd(unittest.TestCase):
             report, _ = self.run_step("slow-click", strict=strict)
             self.assertFalse(report["pass"])
             self.assertEqual(self.code, 1)
+
+    def test_writing_the_command_evidence_is_not_part_of_the_click(self):
+        report, checks = self.run_step("slow-evidence", strict=True)
+        self.assertLess(report["steps"][0]["intervals"]["preview"]["elapsed_ms"], 1000)
+        self.assertTrue(checks["click ends at a visible selectable edit"]["pass"])
+        self.assertTrue(report["strict_pass"])
+        self.assertEqual(self.code, 0)
 
     def test_strict_release_path_accepts_a_run_that_met_every_budget(self):
         report, _ = self.run_step("ok", strict=True)

@@ -73,6 +73,9 @@ impl Offscreen {
             pixels_per_point: 1.0,
             display: Default::default(),
             preset: Default::default(),
+            // Pictures are kept in files and shown in previews, so they take the
+            // light backdrop whatever mode the window is in.
+            backdrop: [crate::theme::LIGHT.viewport_top, crate::theme::LIGHT.viewport_bottom],
             hover_id: 0,
             selected_id: 0,
             selected_feature: 0,
@@ -80,7 +83,9 @@ impl Offscreen {
             cursor_px: None,
             meshes: (self.uploads, doc.meshes.iter().map(|(b, m)| (*b, m.clone())).collect()),
             ghost: None,
-            preview: None,
+            preview: doc.provisional_mesh(),
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: Arc::new(Mutex::new(Default::default())),
             assembly: None,
         };

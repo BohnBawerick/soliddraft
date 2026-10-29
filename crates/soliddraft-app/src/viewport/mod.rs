@@ -3,13 +3,14 @@
 
 pub mod assembly;
 pub mod camera;
+pub mod dimensions;
 pub mod environment;
 pub mod look;
 pub mod offscreen;
 pub mod pick;
 pub mod render;
 
-use crate::document::{DisplayMesh, Document, Selection};
+use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
@@ -32,7 +33,15 @@ pub struct ViewportEvents {
     pub toggle_projection: bool,
     /// Actions the sketcher raised.
     pub actions: Vec<AppAction>,
+    /// For an assembly: the id-buffer texel under the cursor, from the last readback.
+    pub hover_texel: Option<[u32; 2]>,
+    /// For an assembly: a primary click happened, with the texel under the cursor.
+    pub clicked_texel: Option<Option<[u32; 2]>>,
 }
+
+/// The part meshes version an assembly frame hands the renderer: none, so the part's
+/// are uploaded again when its tab comes back.
+const NO_PART: u64 = u64::MAX - 1;
 
 /// What the viewport draws besides the document this frame.
 pub struct Overlay<'a> {
@@ -44,9 +53,6 @@ pub struct Overlay<'a> {
     pub sketch: Option<&'a mut SketchSession>,
     /// A closed sketch to show quietly on its plane.
     pub passive_sketch: Option<(Plane, &'a Sketch)>,
-    /// What a drag preview shows, painted over the top of the viewport, and whether it
-    /// reports a failure.
-    pub preview_label: Option<(String, bool)>,
 }
 
 pub struct ViewportState {
@@ -56,6 +62,8 @@ pub struct ViewportState {
     pub hover: Option<Picked>,
     pub hover_point: Option<Vec3>,
     pub rect: Rect,
+    /// The dimensions a selected body showed last frame.
+    pub dimensions: Vec<dimensions::ShownDimension>,
     pick: Arc<Mutex<PickSample>>,
     cube_hover: Option<StandardView>,
 }
@@ -69,6 +77,7 @@ impl Default for ViewportState {
             hover: None,
             hover_point: None,
             rect: Rect::NOTHING,
+            dimensions: Vec::new(),
             pick: Arc::new(Mutex::new(PickSample::default())),
             cube_hover: None,
         }
@@ -112,7 +121,11 @@ impl ViewportState {
         selection: Option<Selection>,
         hover_label: Option<&str>,
     ) -> ViewportEvents {
-        let Overlay { ghost, preview, sketch, passive_sketch, preview_label } = overlay;
+        let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
+        let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
+        let provisional = doc.provisional_mesh();
+        let preview_pickable =
+            preview.as_ref().zip(provisional.as_ref()).is_some_and(|(shown, bound)| Arc::ptr_eq(shown, bound));
         let sketching = sketch.is_some();
         let mut events = ViewportEvents::default();
         let rect = ui.available_rect_before_wrap();
@@ -120,37 +133,7 @@ impl ViewportState {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "3D viewport"));
         let ppp = ui.ctx().pixels_per_point();
-        let aspect = rect.width() / rect.height().max(1.0);
-
-        let dt = ui.input(|i| i.stable_dt).min(0.1);
-        if self.camera.tick(dt) {
-            ui.ctx().request_repaint();
-        }
-
-        // Navigation: left drag orbits, right or middle drag pans, wheel zooms toward the cursor.
-        let shift = ui.input(|i| i.modifiers.shift);
-        let delta = response.drag_delta();
-        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
-            self.camera.orbit(delta.x, delta.y);
-        } else if response.dragged_by(egui::PointerButton::Secondary)
-            || response.dragged_by(egui::PointerButton::Middle)
-            || (response.dragged_by(egui::PointerButton::Primary) && shift)
-        {
-            self.camera.pan(delta.x, delta.y, rect.height());
-        }
-        if response.hovered() {
-            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = (scroll * 0.0025).exp() * pinch;
-            if (factor - 1.0).abs() > 1e-5 {
-                let ndc = response.hover_pos().map(|p| {
-                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
-                });
-                self.camera.zoom(factor, ndc, aspect);
-            }
-        }
-        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-        }
+        self.navigate(ui, &response, rect, sketching);
 
         // Hover pick from the last id-buffer readback. The readback lags one
         // frame, so keep repainting briefly while the pointer rests on the view.
@@ -162,7 +145,7 @@ impl ViewportState {
         self.hover_point = None;
         if let (Some(px), Some(pos)) = (cursor_px, hover_pos) {
             let sample = self.pick.lock().unwrap();
-            self.hover = decode_pick(&sample, px[0], px[1]);
+            self.hover = (sample.revision == pick_revision).then(|| decode_pick(&sample, px[0], px[1])).flatten();
             drop(sample);
             if let Some(picked) = self.hover {
                 let (o, d) = self.camera.ray(pos, rect);
@@ -192,51 +175,169 @@ impl ViewportState {
             Some(Selection::Feature(id)) if sketch.is_none() => id as u32,
             _ => 0,
         };
-        let selected_body = None;
-        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
-        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-            rect,
-            ViewportCallback(FrameInput {
-                view: self.camera.view(),
-                proj: self.camera.projection(aspect),
-                eye: self.camera.eye(),
-                basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
-                orthographic: self.camera.orthographic,
-                distance: self.camera.distance,
-                size_px,
-                pixels_per_point: ppp,
-                display: self.display,
-                preset: self.preset,
-                hover_id,
-                selected_id,
-                selected_feature,
-                selected_body,
-                cursor_px,
-                meshes,
-                ghost,
-                preview,
-                pick_out: self.pick.clone(),
-                assembly: None,
-            }),
-        ));
+        let mut input = self.frame_input(rect, ppp, cursor_px);
+        input.meshes = meshes;
+        input.hover_id = hover_id;
+        input.selected_id = selected_id;
+        input.selected_feature = selected_feature;
+        input.selected_body = match selection {
+            Some(Selection::Body) => doc.display_body(),
+            _ => None,
+        };
+        input.ghost = ghost;
+        input.preview = preview;
+        input.preview_pickable = preview_pickable;
+        input.pick_revision = pick_revision;
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
 
         let painter = ui.painter().with_clip_rect(rect);
         if let Some((plane, sk)) = passive_sketch {
-            crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::MUTED.gamma_multiply(0.9));
+            crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::muted().gamma_multiply(0.9));
         }
         if let Some(session) = sketch {
             events.actions = crate::sketcher::run(ui, session, doc, &self.camera, rect, &response);
             ui.ctx().request_repaint();
         }
+        self.paint_origin_axes(&painter, doc, rect);
         self.paint_highlights(&painter, doc, selection, rect);
+        // A selected body shows the dimensions that build it. A click on one keeps the
+        // body selected and a double-click edits it; a double-click on the part selects
+        // the body.
+        let pointer = response.hover_pos();
+        let dims = if selection == Some(Selection::Body) && !sketching {
+            dimensions::paint(&painter, &self.camera, rect, doc, pointer)
+        } else {
+            Vec::new()
+        };
+        if let Some(d) = pointer.and_then(|p| dims.iter().find(|d| d.rect.contains(p))) {
+            events.clicked = None;
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            if response.double_clicked_by(egui::PointerButton::Primary) {
+                events.actions.push(AppAction::EditDimension(d.target));
+            }
+            response.clone().on_hover_text_at_pointer(format!("{} · double-click to edit", d.tip));
+        } else if response.double_clicked_by(egui::PointerButton::Primary)
+            && !sketching
+            && self.hover.is_some()
+            && doc.display_body().is_some()
+        {
+            events.clicked = None;
+            events.actions.push(AppAction::Select(Some(Selection::Body)));
+        }
+        self.dimensions = dims;
         self.paint_triad(&painter, rect);
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
         self.paint_pills(ui, rect, hover_label);
-        if let Some((label, failed)) = preview_label {
-            paint_preview_label(ui, rect, &label, failed);
-        }
         events
+    }
+
+    /// Shows an assembly with the part's camera controls, heads-up toolbar and view cube:
+    /// `frame`'s scene in place of the part's meshes, with the camera filled in here. The
+    /// events carry the id-buffer texels under the cursor for `Scene::decode`.
+    pub fn show_assembly(
+        &mut self,
+        ui: &mut egui::Ui,
+        mut frame: assembly::AssemblyFrame,
+        hover_label: Option<&str>,
+    ) -> ViewportEvents {
+        let mut events = ViewportEvents::default();
+        let rect = ui.available_rect_before_wrap();
+        self.rect = rect;
+        let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Assembly viewport"));
+        let ppp = ui.ctx().pixels_per_point();
+        self.navigate(ui, &response, rect, false);
+        let hover_pos = if response.hovered() && !response.dragged() { response.hover_pos() } else { None };
+        let cursor_px = hover_pos
+            .map(|p| [((p.x - rect.left()) * ppp).max(0.0) as u32, ((p.y - rect.top()) * ppp).max(0.0) as u32]);
+        self.hover = None;
+        self.hover_point = None;
+        if let Some(px) = cursor_px {
+            events.hover_texel = self.pick.lock().unwrap().texel(px[0], px[1]).filter(|t| t[0] != 0);
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        if response.clicked_by(egui::PointerButton::Primary) {
+            events.clicked_texel = Some(events.hover_texel);
+        }
+        let aspect = rect.width() / rect.height().max(1.0);
+        frame.view_proj = (self.camera.projection(aspect) * self.camera.view()).as_dmat4();
+        frame.eye = self.camera.eye().as_dvec3();
+        let mut input = self.frame_input(rect, ppp, cursor_px);
+        input.assembly = Some(frame);
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
+        let painter = ui.painter().with_clip_rect(rect);
+        self.paint_triad(&painter, rect);
+        self.paint_hud(ui, rect, &mut events);
+        self.paint_view_cube(ui, rect, &mut events);
+        let label = hover_label.unwrap_or("Hover a component");
+        self.paint_pills(ui, rect, Some(label));
+        events
+    }
+
+    /// What every frame hands the renderer from the camera and the look, with nothing in
+    /// the scene yet.
+    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
+        FrameInput {
+            view: self.camera.view(),
+            proj: self.camera.projection(aspect),
+            eye: self.camera.eye(),
+            basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
+            orthographic: self.camera.orthographic,
+            distance: self.camera.distance,
+            size_px,
+            pixels_per_point: ppp,
+            display: self.display,
+            preset: self.preset,
+            backdrop: theme::viewport_backdrop(),
+            hover_id: 0,
+            selected_id: 0,
+            selected_feature: 0,
+            selected_body: None,
+            cursor_px,
+            meshes: (NO_PART, Vec::new()),
+            ghost: None,
+            preview: None,
+            preview_pickable: false,
+            pick_revision: None,
+            pick_out: self.pick.clone(),
+            assembly: None,
+        }
+    }
+
+    /// Left drag orbits, right or middle drag (or Shift with the left) pans, the wheel
+    /// zooms toward the cursor. In a sketch the left button belongs to the sketcher.
+    fn navigate(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect, sketching: bool) {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        if self.camera.tick(dt) {
+            ui.ctx().request_repaint();
+        }
+        let shift = ui.input(|i| i.modifiers.shift);
+        let delta = response.drag_delta();
+        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
+            self.camera.orbit(delta.x, delta.y);
+        } else if response.dragged_by(egui::PointerButton::Secondary)
+            || response.dragged_by(egui::PointerButton::Middle)
+            || (response.dragged_by(egui::PointerButton::Primary) && shift)
+        {
+            self.camera.pan(delta.x, delta.y, rect.height());
+        }
+        if response.hovered() {
+            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
+            let factor = (scroll * 0.0025).exp() * pinch;
+            if (factor - 1.0).abs() > 1e-5 {
+                let ndc = response.hover_pos().map(|p| {
+                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
+                });
+                self.camera.zoom(factor, ndc, aspect);
+            }
+        }
+        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
     }
 
     fn paint_highlights(&self, painter: &egui::Painter, doc: &Document, selection: Option<Selection>, rect: Rect) {
@@ -267,23 +368,59 @@ impl ViewportState {
             _ => None,
         };
         if let Some(p) = selected_edge {
-            draw_edge(p, Stroke::new(2.5, theme::ACCENT));
+            draw_edge(p, Stroke::new(2.5, theme::accent()));
         }
         if let Some(pos) = selected_vertex {
-            draw_vertex(pos, 5.0, theme::ACCENT);
+            draw_vertex(pos, 5.0, theme::accent());
         }
         match self.hover {
             Some(Picked::Edge(p)) if selected_edge != Some(p) => {
-                draw_edge(p, Stroke::new(2.0, theme::ACCENT.gamma_multiply(0.7)))
+                draw_edge(p, Stroke::new(2.0, theme::accent().gamma_multiply(0.7)))
             }
             Some(Picked::Vertex(p)) => {
                 if let Some(pos) = pick::vertex_position(doc, p)
                     && selected_vertex != Some(pos)
                 {
-                    draw_vertex(pos, 4.5, theme::ACCENT.gamma_multiply(0.7));
+                    draw_vertex(pos, 4.5, theme::accent().gamma_multiply(0.7));
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The origin axes through the part origin, reaching past the body on both sides.
+    /// The positive half is solid and labelled; the negative half is fainter.
+    fn paint_origin_axes(&self, painter: &egui::Painter, doc: &Document, rect: Rect) {
+        let reach = match doc.bounds() {
+            Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
+            None => self.camera.distance * 0.25,
+        };
+        let Some(o) = self.camera.project(Vec3::ZERO, rect) else { return };
+        // Labels stay inside the view, so an axis that runs off the edge is still named.
+        let inside = rect.shrink(10.0);
+        for axis in AxisKind::ALL {
+            let color = theme::axis_color(axis);
+            let dir = axis.direction();
+            if let Some(tail) = self.camera.project(-dir * reach, rect) {
+                painter.line_segment([tail, o], Stroke::new(1.0, color.gamma_multiply(0.45)));
+            }
+            let Some(tip) = self.camera.project(dir * reach, rect) else { continue };
+            painter.line_segment([o, tip], Stroke::new(1.5, color.gamma_multiply(0.85)));
+            // An axis seen end-on projects to a point: no line to label.
+            let along = tip - o;
+            if along.length() > 12.0 && inside.contains(o) {
+                let end = tip + along.normalized() * 8.0;
+                let t = last_inside(o, end, inside);
+                // At the edge the label moves beside the line instead of covering it.
+                let beside = if t < 1.0 { along.normalized().rot90() * 9.0 } else { vec2(0.0, 0.0) };
+                painter.text(
+                    o + (end - o) * t + beside,
+                    Align2::CENTER_CENTER,
+                    &axis.label()[..1],
+                    theme::font_semibold(10.0),
+                    color,
+                );
+            }
         }
     }
 
@@ -291,11 +428,7 @@ impl ViewportState {
     fn paint_triad(&self, painter: &egui::Painter, rect: Rect) {
         let origin = pos2(rect.left() + 34.0, rect.bottom() - 46.0);
         let view = self.camera.view();
-        let axes = [
-            (Vec3::X, Color32::from_rgb(0xd6, 0x45, 0x45), "X"),
-            (Vec3::Y, Color32::from_rgb(0x2e, 0x9e, 0x5b), "Y"),
-            (Vec3::Z, Color32::from_rgb(0x1f, 0x5f, 0xd0), "Z"),
-        ];
+        let axes = [(Vec3::X, theme::axis_x(), "X"), (Vec3::Y, theme::axis_y(), "Y"), (Vec3::Z, theme::axis_z(), "Z")];
         let mut items: Vec<(f32, Pos2, Color32, &str)> = axes
             .iter()
             .map(|(a, c, l)| {
@@ -331,7 +464,7 @@ impl ViewportState {
             hud,
             CornerRadius::same(9),
             theme::hud_bg(),
-            Stroke::new(1.0, theme::LINE),
+            Stroke::new(1.0, theme::line()),
             StrokeKind::Inside,
         );
         let mut x = hud.left() + 5.0;
@@ -341,7 +474,7 @@ impl ViewportState {
             x += w;
             match item {
                 HudItem::Sep => {
-                    ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0, theme::LINE));
+                    ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0, theme::line()));
                     continue;
                 }
                 HudItem::Icon(icon, tip) | HudItem::IconText(icon, tip) => {
@@ -409,19 +542,15 @@ impl ViewportState {
                 hovered = Some(*sv);
             }
             let shade = 0.82 + 0.18 * facing.clamp(0.0, 1.0);
-            let base = if is_hover {
-                theme::SELECTION_BG
-            } else {
-                Color32::from_rgb((248.0 * shade) as u8, (249.0 * shade) as u8, (251.0 * shade) as u8)
-            };
+            let base = if is_hover { theme::selection_bg() } else { theme::chip().gamma_multiply(shade) };
             painter.add(egui::Shape::convex_polygon(
                 poly.clone(),
                 base,
-                Stroke::new(1.0, theme::LINE.gamma_multiply(1.2)),
+                Stroke::new(1.0, theme::line().gamma_multiply(1.2)),
             ));
             let c = poly.iter().fold(Vec2::ZERO, |a, p| a + p.to_vec2()) / 4.0;
             let alpha = (facing.clamp(0.0, 1.0) * 1.6).min(1.0);
-            let col = if is_hover { theme::SELECTION_INK } else { theme::MUTED.gamma_multiply(alpha) };
+            let col = if is_hover { theme::selection_ink() } else { theme::muted().gamma_multiply(alpha) };
             let font = theme::font_semibold(6.5 + 1.5 * facing.clamp(0.0, 1.0));
             painter.text(c.to_pos2(), Align2::CENTER_CENTER, label, font, col);
         }
@@ -439,33 +568,22 @@ impl ViewportState {
         let text =
             format!("mm · {} · {} · {} · {}", self.camera.view_name, self.display.label(), self.preset.label(), proj);
         let painter = ui.painter();
-        let galley = painter.layout_no_wrap(text, theme::font(11.0), theme::MUTED);
+        let galley = painter.layout_no_wrap(text, theme::font(11.0), theme::muted());
         let size = galley.size() + vec2(18.0, 7.0);
         let r = Rect::from_min_size(pos2(rect.left() + 82.0, rect.bottom() - 12.0 - size.y), size);
-        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
-        painter.galley(r.center() - galley.size() / 2.0, galley, theme::MUTED);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
+        painter.galley(r.center() - galley.size() / 2.0, galley, theme::muted());
 
         let (label, color) = match hover_label {
-            Some(l) => (l.to_owned(), theme::INK),
-            None => ("Hover a face, edge or vertex".to_owned(), theme::MUTED),
+            Some(l) => (l.to_owned(), theme::ink()),
+            None => ("Hover a face, edge or vertex".to_owned(), theme::muted()),
         };
         let galley = painter.layout_no_wrap(label, theme::font(11.0), color);
         let size = galley.size() + vec2(18.0, 7.0);
         let r = Rect::from_min_size(pos2(rect.right() - 14.0 - size.x, rect.bottom() - 12.0 - size.y), size);
-        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::LINE), StrokeKind::Inside);
+        painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
         painter.galley(r.center() - galley.size() / 2.0, galley, color);
     }
-}
-
-/// Says over the top of the viewport that the body shown is a preview, not the part.
-fn paint_preview_label(ui: &egui::Ui, rect: Rect, label: &str, failed: bool) {
-    let color = if failed { theme::ERROR } else { theme::ACCENT };
-    let painter = ui.painter();
-    let galley = painter.layout_no_wrap(label.to_owned(), theme::font(11.5), color);
-    let size = galley.size() + vec2(18.0, 7.0);
-    let r = Rect::from_min_size(pos2(rect.center().x - size.x / 2.0, rect.top() + 52.0), size);
-    painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, color), StrokeKind::Inside);
-    painter.galley(r.center() - galley.size() / 2.0, galley, color);
 }
 
 enum HudItem {
@@ -498,9 +616,9 @@ fn hud_button(
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
     let painter = ui.painter();
     if enabled && resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::same(6), theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::same(6), theme::hover());
     }
-    let color = if enabled { theme::INK } else { theme::MUTED.gamma_multiply(0.5) };
+    let color = if enabled { theme::ink() } else { theme::muted().gamma_multiply(0.5) };
     draw(painter, color);
     resp.on_hover_text(tip)
 }
@@ -550,4 +668,19 @@ fn decode_pick(sample: &PickSample, cx: u32, cy: u32) -> Option<Picked> {
         return Picked::decode(v);
     }
     sample.at(cx, cy).and_then(Picked::decode)
+}
+
+/// How far along the segment from `a`, which is inside `rect`, to `b` it stays inside,
+/// from 0 to 1.
+fn last_inside(a: Pos2, b: Pos2, rect: Rect) -> f32 {
+    let d = b - a;
+    let mut t: f32 = 1.0;
+    for (start, delta, lo, hi) in [(a.x, d.x, rect.left(), rect.right()), (a.y, d.y, rect.top(), rect.bottom())] {
+        if delta > 0.0 {
+            t = t.min((hi - start) / delta);
+        } else if delta < 0.0 {
+            t = t.min((lo - start) / delta);
+        }
+    }
+    t.max(0.0)
 }

@@ -193,6 +193,12 @@ pub enum CommandError {
     /// The sketch rejected an edit.
     #[error("sketch: {0}")]
     Sketch(String),
+    /// A CAD feature would come after the lattice, which is always last.
+    #[error("{0} is the lattice stage and must stay last; return before the lattice to change the part")]
+    AfterLattice(FeatureId),
+    /// A lattice would not be the single last feature.
+    #[error("the lattice must be the only lattice and the last feature")]
+    LatticeNotLast,
     /// Nothing to undo or redo.
     #[error("nothing to {0}")]
     Empty(&'static str),
@@ -271,6 +277,19 @@ impl Document {
             self.redo.clear();
             Ok(Executed { created: applied.created, label: applied.label })
         })())
+    }
+
+    /// The terminal lattice feature, if the part has one.
+    pub fn lattice(&self) -> Option<FeatureId> {
+        self.features.iter().find(|f| f.kind.is_lattice()).map(|f| f.id)
+    }
+
+    /// Puts the rollback bar above the lattice so the user is back at the last CAD
+    /// feature. The lattice and its settings stay in the tree and are not built until
+    /// the bar rolls forward.
+    pub fn return_before_lattice(&mut self) -> Result<Executed, CommandError> {
+        let id = self.lattice().ok_or_else(|| CommandError::Invalid("the part has no lattice".into()))?;
+        self.execute(Command::RollTo { before: Some(id) })
     }
 
     /// Reverts the last command. Returns its label.
@@ -408,6 +427,18 @@ impl Document {
         Ok(())
     }
 
+    /// Checks that a lattice is the only one and the last feature, so no CAD follows it.
+    pub(crate) fn check_lattice_last(features: &[Feature]) -> Result<(), CommandError> {
+        let Some(first) = features.iter().position(|f| f.kind.is_lattice()) else { return Ok(()) };
+        if features.iter().filter(|f| f.kind.is_lattice()).count() > 1 {
+            return Err(CommandError::LatticeNotLast);
+        }
+        if first + 1 < features.len() {
+            return Err(CommandError::AfterLattice(features[first].id));
+        }
+        Ok(())
+    }
+
     fn check_kind(kind: &FeatureKind) -> Result<(), CommandError> {
         match kind {
             FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) if !(b.size.is_finite() && b.size > 0.0) => {
@@ -431,12 +462,30 @@ impl Document {
                 }
                 _ => Ok(()),
             },
+            FeatureKind::Shell(s) if !(s.thickness.is_finite() && s.thickness > 0.0) => {
+                Err(CommandError::Invalid("shell thickness must be finite and positive".into()))
+            }
             FeatureKind::Draft(d) if d.faces.is_empty() => {
                 Err(CommandError::Invalid("a draft needs at least one face".into()))
             }
             FeatureKind::Draft(d) if !(d.angle.is_finite() && d.angle.abs() < 90.0 && d.angle != 0.0) => {
                 Err(CommandError::Invalid(format!("draft angle must be between -90 and 90 and not 0, got {}", d.angle)))
             }
+            FeatureKind::Lattice(l)
+                if !(l.accuracy_mm.is_finite()
+                    && l.accuracy_mm > 0.0
+                    && l.min_detail_mm.is_finite()
+                    && l.min_detail_mm > 0.0) =>
+            {
+                Err(CommandError::Invalid("lattice accuracy and minimum detail must be positive".into()))
+            }
+            FeatureKind::ImportStep(i) if i.source.is_empty() => {
+                Err(CommandError::Invalid("the imported file is empty".into()))
+            }
+            FeatureKind::ImportStep(i) if !i.hash_matches() => {
+                Err(CommandError::Invalid("the imported file does not match its sha256".into()))
+            }
+            FeatureKind::ImportStep(i) => i.kernel_decisions().map(drop).map_err(CommandError::Invalid),
             _ => Ok(()),
         }
     }
@@ -461,6 +510,7 @@ impl Document {
         let mut next = self.features.clone();
         next.insert(position, feature.clone());
         Self::check_order(&next)?;
+        Self::check_lattice_last(&next)?;
         self.next_id = self.next_id.max(feature.id.0 + 1);
         self.features = next;
         self.touch(position);
@@ -503,6 +553,9 @@ impl Document {
                 let i = self.index(id)?;
                 let mut next = self.features.clone();
                 let old = std::mem::replace(&mut next[i].kind, kind.clone());
+                if old.is_lattice() != kind.is_lattice() {
+                    return Err(CommandError::Invalid("a feature cannot change into or out of a lattice".into()));
+                }
                 Self::check_order(&next)?;
                 let label = format!("edit {}", next[i].name);
                 self.features = next;
@@ -594,6 +647,7 @@ impl Document {
                 let label = format!("move {} to position {}", f.name, position + 1);
                 next.insert(position, f);
                 Self::check_order(&next)?;
+                Self::check_lattice_last(&next)?;
                 self.features = next;
                 self.touch(from.min(position));
                 Ok(Applied {

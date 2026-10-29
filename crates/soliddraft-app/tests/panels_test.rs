@@ -1,7 +1,8 @@
-//! The side areas, driven through egui_kittest against the real wgpu pipeline:
-//! F9 and Shift+F9 hide the feature tree and the assistant, the strips bring
-//! them back, the inner edge drags to a new width, the choices come back in the
-//! next run, and the drawing workspace behaves the same. Frames are written to
+//! The side area, driven through egui_kittest against the real wgpu pipeline: F9
+//! hides the feature tree, the strip brings it back, the inner edge drags to a new
+//! width, the choices come back in the next run, and the drawing workspace behaves
+//! the same. The assistant has no side area: the viewport runs to the window's right
+//! edge, and Shift+F9 opens the session along the bottom instead. Frames are written to
 //! `target/panels-test/` for review.
 //!
 //! Skips itself when no GPU adapter is available (plain CI runners).
@@ -14,6 +15,7 @@ use soliddraft_app::document::Selection;
 use soliddraft_app::drawing::DrawingAction;
 use soliddraft_app::panels::{Layout, STRIP_WIDTH, Side};
 use soliddraft_app::state::AppAction;
+use soliddraft_app::theme;
 use std::path::PathBuf;
 
 fn gpu_available() -> bool {
@@ -64,7 +66,6 @@ fn viewport_rect(harness: &App<'_>) -> Rect {
 fn drag_edge(harness: &mut App<'_>, side: Side, dx: f32) {
     let edge_x = match side {
         Side::Tree => viewport_rect(harness).left() - 1.0,
-        Side::Assistant => viewport_rect(harness).right() + 1.0,
     };
     // Well above the tree/properties split, so the panel edge is the only handle there.
     let y = viewport_rect(harness).top() + 80.0;
@@ -110,6 +111,9 @@ fn side_areas_toggle_resize_and_come_back_next_run() {
     assert_eq!(layout(&harness), Layout::default());
     let full = viewport_rect(&harness);
     assert!((full.left() - Side::Tree.default_width()).abs() < 2.0, "tree at its default width: {full:?}");
+    assert!(full.right() >= 1440.0 - 1.0, "nothing right of the viewport: {full:?}");
+    let bottom = 900.0 - theme::STATUS_HEIGHT - theme::COMMAND_LINE_HEIGHT;
+    assert!((full.bottom() - bottom).abs() < 3.0, "the command line sits under the viewport: {full:?}");
     save(&mut harness, "p01-default");
 
     // A selection made before hiding the tree is still there when it comes back.
@@ -129,58 +133,48 @@ fn side_areas_toggle_resize_and_come_back_next_run() {
     assert_eq!(viewport_rect(&harness), full);
     assert_eq!(harness.state().state.doc.selection, Some(Selection::Feature(plate)));
 
-    // Shift+F9 hides the assistant; asking the assistant brings it back.
+    // Shift+F9 opens the session along the bottom; the viewport keeps its width.
     harness.key_press_modifiers(Modifiers::SHIFT, Key::F9);
     settle(&mut harness);
-    assert!(!layout(&harness).assistant.shown);
-    assert!(viewport_rect(&harness).right() >= 1440.0 - STRIP_WIDTH - 2.0);
-    save(&mut harness, "p03-assistant-hidden");
-    harness.key_press(Key::Slash);
+    assert!(harness.state().state.command_line.session_open);
+    let short = viewport_rect(&harness);
+    assert_eq!((short.left(), short.right()), (full.left(), full.right()));
+    assert!(short.bottom() < full.bottom() - 100.0, "the session takes height, not width: {short:?}");
+    save(&mut harness, "p03-session-open");
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::F9);
     settle(&mut harness);
-    assert!(layout(&harness).assistant.shown);
+    assert!(!harness.state().state.command_line.session_open);
     assert_eq!(viewport_rect(&harness), full);
 
-    // Dragging the inner edges resizes both, within their range.
+    // Dragging the inner edge resizes the tree, within its range.
     let tree_before = layout(&harness).tree.width;
     drag_edge(&mut harness, Side::Tree, 120.0);
     let tree_after = layout(&harness).tree.width;
     assert!((tree_after - (tree_before + 120.0)).abs() < 3.0, "tree {tree_before} -> {tree_after}");
     assert!((viewport_rect(&harness).left() - tree_after).abs() < 2.0);
-    let assistant_before = layout(&harness).assistant.width;
-    drag_edge(&mut harness, Side::Assistant, -2000.0);
-    let assistant_after = layout(&harness).assistant.width;
-    assert!(assistant_after > assistant_before);
-    let cap = Layout { tree: layout(&harness).tree, ..Layout::default() }.max_width(Side::Assistant, 1440.0);
-    assert!((assistant_after - cap).abs() < 3.0, "assistant stops at its maximum: {assistant_after} vs {cap}");
+    drag_edge(&mut harness, Side::Tree, 2000.0);
+    let cap = layout(&harness).max_width(Side::Tree, 1440.0);
+    assert!((layout(&harness).tree.width - cap).abs() < 3.0, "the tree stops at its maximum");
     assert!(viewport_rect(&harness).width() >= soliddraft_app::panels::VIEWPORT_MIN_WIDTH - 2.0);
-    drag_edge(&mut harness, Side::Assistant, assistant_after - Side::Assistant.min_width());
-    assert!((layout(&harness).assistant.width - Side::Assistant.min_width()).abs() < 3.0);
-    // Past the minimum the drag hides the area; the strip brings it back at the width it had.
-    drag_edge(&mut harness, Side::Assistant, 2000.0);
-    assert!(!layout(&harness).assistant.shown);
-    harness.get_by_label("Show the assistant").click();
-    settle(&mut harness);
-    assert!(layout(&harness).assistant.shown);
-    assert!((layout(&harness).assistant.width - Side::Assistant.min_width()).abs() < 3.0);
-    drag_edge(&mut harness, Side::Assistant, -(assistant_before - Side::Assistant.min_width()));
-    assert!((layout(&harness).assistant.width - assistant_before).abs() < 3.0);
+    let back = tree_after - layout(&harness).tree.width;
+    drag_edge(&mut harness, Side::Tree, back);
+    assert!((layout(&harness).tree.width - tree_after).abs() < 3.0);
     save(&mut harness, "p04-resized");
 
     // The file holds what the user chose, and the next run starts from it.
-    harness.key_press_modifiers(Modifiers::SHIFT, Key::F9);
+    harness.key_press(Key::F9);
     settle(&mut harness);
     let chosen = layout(&harness);
-    assert!(!chosen.assistant.shown);
+    assert!(!chosen.tree.shown);
     assert_eq!(soliddraft_app::settings::layout(), chosen);
     drop(harness);
     let mut again = self::harness();
     settle(&mut again);
     assert_eq!(layout(&again), chosen);
-    assert!((viewport_rect(&again).left() - chosen.tree.width).abs() < 2.0);
-    assert!(viewport_rect(&again).right() >= 1440.0 - STRIP_WIDTH - 2.0);
+    assert!(viewport_rect(&again).left() <= STRIP_WIDTH + 2.0);
     save(&mut again, "p05-next-run");
 
-    // Reset panel layout shows both again at their default widths.
+    // Reset panel layout shows the tree again at its default width.
     again.state_mut().state.push(AppAction::ResetLayout);
     settle(&mut again);
     assert_eq!(layout(&again), Layout::default());
@@ -217,11 +211,11 @@ fn the_drawing_workspace_toggles_the_same_areas() {
 
     harness.key_press_modifiers(Modifiers::SHIFT, Key::F9);
     settle(&mut harness);
-    assert!(!layout(&harness).assistant.shown);
-    harness.get_by_label("Show the assistant").click();
-    settle(&mut harness);
-    assert!(layout(&harness).assistant.shown);
+    assert!(harness.state().state.command_line.session_open, "Shift+F9 opens the session in the drawing too");
     assert!(harness.state().state.drawing.is_active());
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::F9);
+    settle(&mut harness);
+    assert!(!harness.state().state.command_line.session_open);
 
     // Back on the part, the drawing tab is still there.
     harness.state_mut().state.push(AppAction::Drawing(DrawingAction::ShowPart));

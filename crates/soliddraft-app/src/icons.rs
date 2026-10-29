@@ -21,6 +21,7 @@ pub enum Icon {
     Chamfer,
     Shell,
     Draft,
+    Import,
     LinearPattern,
     CircularPattern,
     Mirror,
@@ -207,6 +208,11 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
         Icon::Draft => {
             g.closed(p, &[(5.0, 3.0), (11.0, 3.0), (13.5, 13.0), (2.5, 13.0)]);
             g.line(p, &[(8.0, 1.5), (8.0, 14.5)]);
+        }
+        Icon::Import => {
+            g.line(p, &[(2.5, 9.0), (2.5, 13.5), (13.5, 13.5), (13.5, 9.0)]);
+            g.line(p, &[(8.0, 2.0), (8.0, 10.0)]);
+            g.line(p, &[(5.0, 7.0), (8.0, 10.0), (11.0, 7.0)]);
         }
         Icon::LinearPattern => {
             for (x, y) in [(2.5, 2.5), (9.0, 2.5), (2.5, 9.0), (9.0, 9.0)] {

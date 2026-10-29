@@ -27,14 +27,22 @@ pub mod contract;
 #[cfg(feature = "counting")]
 pub mod counting;
 pub mod drawing;
+mod edit;
 mod geometry;
 mod history;
 mod ids;
+mod import;
 mod profile;
 
+pub use edit::{ConstructionEdit, ConstructionFace, ConstructionMesh, ProofWork, ScalarEdit, ScalarParameter};
 pub use geometry::{Aabb, Plane, Point2, Vec3};
 pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, HolePart, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
+pub use import::{
+    Approval, DecimalBounds, Decision, Disposition, ImportOptions, ImportStepRequest, ImportStepResult, ImportedBody,
+    PROPOSALS_FORMAT, Proposal, ProposalSet, REPAIR_FORMAT, RepairChange, RepairDerivative, RepairRecord, RepairSource,
+    question_id, question_index,
+};
 pub use profile::{Loop, PROFILE_JOIN_TOLERANCE, Profile, ProfileError, Segment};
 
 use serde::{Deserialize, Serialize};
@@ -200,6 +208,15 @@ pub struct Draft {
     pub neutral_normal: Vec3,
     /// Draft angle in degrees, in (-90, 90).
     pub angle_deg: f64,
+}
+
+/// Parameters of the final lattice stage. Export relaxes only these two numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Lattice {
+    /// Accuracy the lattice is proven to, in millimetres.
+    pub accuracy_mm: f64,
+    /// The smallest detail the lattice keeps, in millimetres.
+    pub min_detail_mm: f64,
 }
 
 /// Where an extrusion stops when it is not a fixed distance.
@@ -668,6 +685,13 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("draft".into()))
     }
 
+    /// Turns a finished solid into its lattice. The result must be closed,
+    /// non-self-intersecting and connected, or the call fails.
+    fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
+        let _ = (tag, body, params);
+        Err(KernelError::Unsupported("lattice: the pinned Catallax revision has no lattice entry point yet".into()))
+    }
+
     /// Triangulates a body, within the requested controls the backend can guarantee.
     /// Exports and proven results use it; the screen uses [`preview`](Self::preview).
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh>;
@@ -691,6 +715,26 @@ pub trait Kernel: Send + Sync {
     /// The default returns `tessellate`.
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.tessellate(body, params)
+    }
+
+    /// Prepares exact-proof work when no early representation is requested.
+    /// Nested rebuild operations receive the synchronous rebuild's allowances.
+    fn reserve_proof_work(&self) -> KernelResult<Box<dyn ProofWork>> {
+        Err(KernelError::Unsupported("reserved background proof is unavailable in this backend".into()))
+    }
+
+    /// Builds a definition-native display before rebuilding the exact model.
+    /// Edits name existing operation tags in `body`. Construction has its own
+    /// reserved allowance and exact proof keeps the synchronous rebuild's
+    /// allowances. No provisional face id is an exact handle.
+    /// The default explicitly refuses this early representation.
+    fn construction_edit(
+        &self,
+        _body: BodyId,
+        _edits: &[ScalarEdit],
+        _params: &TessellationParams,
+    ) -> KernelResult<ConstructionEdit> {
+        Err(KernelError::Unsupported("definition-native construction preview is unavailable in this backend".into()))
     }
 
     /// [`preview`](Self::preview) once per entry of `levels`, in order, as one call, the
@@ -800,6 +844,21 @@ pub trait Kernel: Send + Sync {
     }
 
     // Exchange.
+
+    /// Measures an imported STEP file and classifies every gap, moving no geometry. The
+    /// default reports `Unsupported`.
+    fn propose_import(&self, source: &[u8], options: &ImportOptions) -> KernelResult<ProposalSet> {
+        let _ = (source, options);
+        Err(KernelError::Unsupported("propose_import".into()))
+    }
+
+    /// Reads a STEP file as a body: automatic repairs and accepted decisions applied, a
+    /// declined proposal leaving the file's own geometry. The default reports
+    /// `Unsupported`.
+    fn import_step(&self, tag: &OpTag, request: &ImportStepRequest<'_>) -> KernelResult<ImportStepResult> {
+        let _ = (tag, request);
+        Err(KernelError::Unsupported("import_step".into()))
+    }
 
     /// Writes a solid as a STEP AP242 file, with a proven bound on the distance between
     /// the written and the exact geometry. A bound over `options.tolerance` is reported,

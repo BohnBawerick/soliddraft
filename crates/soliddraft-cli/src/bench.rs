@@ -181,6 +181,7 @@ impl Bench {
             pixels_per_point: 1.0,
             display: DisplayMode::Shaded,
             preset: Preset::default(),
+            backdrop: soliddraft_app::theme::viewport_backdrop(),
             hover_id: 0,
             selected_id: 0,
             selected_feature: 0,
@@ -189,6 +190,8 @@ impl Bench {
             meshes: (0, Vec::new()),
             ghost: None,
             preview: None,
+            preview_pickable: false,
+            pick_revision: None,
             pick_out: self.pick.clone(),
             assembly: Some(AssemblyFrame {
                 scene: self.scene.clone(),
@@ -269,6 +272,7 @@ fn empty_frame(size: [u32; 2], pick: Arc<Mutex<PickSample>>) -> FrameInput {
         pixels_per_point: 1.0,
         display: DisplayMode::Shaded,
         preset: Preset::default(),
+        backdrop: soliddraft_app::theme::viewport_backdrop(),
         hover_id: 0,
         selected_id: 0,
         selected_feature: 0,
@@ -277,6 +281,8 @@ fn empty_frame(size: [u32; 2], pick: Arc<Mutex<PickSample>>) -> FrameInput {
         meshes: (0, Vec::new()),
         ghost: None,
         preview: None,
+        preview_pickable: false,
+        pick_revision: None,
         pick_out: pick,
         assembly: None,
     }

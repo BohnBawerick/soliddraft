@@ -1,4 +1,4 @@
-//! The eframe application: menu bar, ribbon, docked panels, status bar,
+//! The eframe application: menu bar, ribbon, docked panels, command line, status bar,
 //! keyboard shortcuts and the action loop.
 
 use crate::commands;
@@ -11,9 +11,10 @@ use crate::panels::{self, Layout, Side};
 use crate::state::{AppAction, AppState, EditorParams, ExitInto, FeatureEditor, NoteKind, SketchSession};
 use crate::theme;
 use crate::viewport::Overlay;
+use crate::viewport::dimensions::DimensionTarget;
 use crate::viewport::look::{Preset, Tier};
 use crate::viewport::render::{DisplayMode, Picked, ViewportRenderer};
-use crate::{assistant, file, properties, ribbon, tree};
+use crate::{file, properties, ribbon, tree};
 use egui::{Align2, CornerRadius, Key, Rect, Sense, Stroke, pos2, vec2};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use std::path::PathBuf;
@@ -25,9 +26,10 @@ pub enum Tab {
     Tree,
     Properties,
     Viewport,
-    Assistant,
     /// The drawing document, opened beside the part by Make drawing.
     Drawing,
+    /// The assembly document, opened beside the part by New assembly or Open.
+    Assembly,
 }
 
 impl Tab {
@@ -36,13 +38,13 @@ impl Tab {
             Tab::Tree => "Feature tree",
             Tab::Properties => "Properties",
             Tab::Viewport => "Part",
-            Tab::Assistant => "Assistant",
             Tab::Drawing => "Drawing",
+            Tab::Assembly => "Assembly",
         }
     }
 }
 
-/// The middle: the part, and the drawing tab beside it once one is open.
+/// The middle: the part, and the drawing and assembly tabs beside it once open.
 fn center_dock() -> DockState<Tab> {
     DockState::new(vec![Tab::Viewport])
 }
@@ -52,11 +54,6 @@ fn tree_dock() -> DockState<Tab> {
     let mut dock = DockState::new(vec![Tab::Tree]);
     dock.main_surface_mut().split_below(NodeIndex::root(), 0.46, vec![Tab::Properties]);
     dock
-}
-
-/// The right side area: the assistant.
-fn assistant_dock() -> DockState<Tab> {
-    DockState::new(vec![Tab::Assistant])
 }
 
 /// A dock area in the app's style, without the buttons the shell does not use.
@@ -73,7 +70,8 @@ fn show_dock(ui: &mut egui::Ui, dock: &mut DockState<Tab>, id: egui::Id, panels:
 }
 
 /// The strip a hidden side area leaves at its edge: a chevron pointing into the
-/// window and the title set on end. Returns true when clicked.
+/// window and the title set on end, reading bottom to top like the tab of a collapsed
+/// task pane. Returns true when clicked.
 fn strip(ui: &mut egui::Ui, side: Side, title: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click());
     let label = format!("Show the {}", side.name());
@@ -81,24 +79,16 @@ fn strip(ui: &mut egui::Ui, side: Side, title: &str) -> bool {
     let resp = resp.on_hover_text(format!("{label} ({})", side.shortcut()));
     let painter = ui.painter();
     if resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::ZERO, theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::ZERO, theme::hover());
     }
-    let color = if resp.hovered() { theme::INK } else { theme::MUTED };
-    let icon = match side {
-        Side::Tree => Icon::ChevronRight,
-        Side::Assistant => Icon::ChevronLeft,
-    };
+    let color = if resp.hovered() { theme::ink() } else { theme::muted() };
     let icon_rect = Rect::from_center_size(pos2(rect.center().x, rect.top() + 16.0), vec2(14.0, 14.0));
-    icons::paint(painter, icon, icon_rect, color);
+    icons::paint(painter, Icon::ChevronRight, icon_rect, color);
     let galley = painter.layout_no_wrap(title.to_owned(), theme::font_medium(12.0), color);
     let (w, h) = (galley.size().x, galley.size().y);
-    // The text turns about its top-left corner: the left strip reads bottom to top,
-    // the right one top to bottom, like the tabs of a collapsed task pane.
-    let (pos, angle) = match side {
-        Side::Tree => (pos2(rect.center().x - h / 2.0, rect.top() + 34.0 + w), -std::f32::consts::FRAC_PI_2),
-        Side::Assistant => (pos2(rect.center().x + h / 2.0, rect.top() + 34.0), std::f32::consts::FRAC_PI_2),
-    };
-    painter.add(egui::epaint::TextShape::new(pos, galley, color).with_angle(angle));
+    // The text turns about its top-left corner.
+    let pos = pos2(rect.center().x - h / 2.0, rect.top() + 34.0 + w);
+    painter.add(egui::epaint::TextShape::new(pos, galley, color).with_angle(-std::f32::consts::FRAC_PI_2));
     resp.clicked()
 }
 
@@ -116,7 +106,12 @@ impl TabViewer for Panels<'_> {
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
         let text = match tab {
             Tab::Viewport => self.state.doc.name.clone(),
+            Tab::Tree if self.state.assembly.is_active() => "Assembly tree".to_owned(),
             Tab::Tree if self.state.drawing.is_active() => "Drawing tree".to_owned(),
+            Tab::Assembly => match self.state.assembly.session.as_ref() {
+                Some(s) => s.title(),
+                None => "Assembly".to_owned(),
+            },
             Tab::Drawing => match self.state.drawing.session.as_ref() {
                 // A dot marks a drawing with stale views or unresolved annotations.
                 Some(s) if s.has_issues() => format!("{} •", s.title()),
@@ -131,6 +126,9 @@ impl TabViewer for Panels<'_> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
         ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
         match tab {
+            Tab::Tree if self.state.assembly.is_active() => crate::assembly::tree(ui, self.state),
+            Tab::Properties if self.state.assembly.is_active() => crate::assembly::properties(ui, self.state),
+            Tab::Assembly => crate::assembly::viewport(ui, self.state),
             Tab::Tree if self.state.drawing.is_active() => crate::drawing::tree_drawing::show(ui, self.state),
             Tab::Tree => tree::show(ui, self.state),
             Tab::Properties if self.state.drawing.new.is_some() && !self.state.drawing.is_active() => {
@@ -140,7 +138,6 @@ impl TabViewer for Panels<'_> {
                 crate::drawing::properties_drawing::show(ui, self.state)
             }
             Tab::Properties => properties::show(ui, self.state),
-            Tab::Assistant => assistant::show(ui, self.state),
             Tab::Drawing => crate::drawing::canvas::show(ui, self.state),
             Tab::Viewport => {
                 let st = &mut *self.state;
@@ -157,9 +154,7 @@ impl TabViewer for Panels<'_> {
                 } else {
                     None
                 };
-                let preview_label = st.drag_preview.as_ref().map(|d| d.label());
-                let overlay =
-                    Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive, preview_label };
+                let overlay = Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref());
                 let (dt, ppp) = ui.input(|i| (i.stable_dt.min(0.1), i.pixels_per_point));
                 if st.doc.update_display(&st.viewport.projection(ppp), dt) {
@@ -189,13 +184,17 @@ impl TabViewer for Panels<'_> {
     }
 
     fn is_closeable(&self, tab: &Tab) -> bool {
-        matches!(tab, Tab::Drawing)
+        matches!(tab, Tab::Drawing | Tab::Assembly)
     }
 
     fn on_close(&mut self, tab: &mut Tab) -> egui_dock::tab_viewer::OnCloseResponse {
         if matches!(tab, Tab::Drawing) {
             self.state.drawing.session = None;
             self.state.drawing.active = false;
+        }
+        if matches!(tab, Tab::Assembly) {
+            self.state.assembly.session = None;
+            self.state.assembly.active = false;
         }
         egui_dock::tab_viewer::OnCloseResponse::Close
     }
@@ -223,6 +222,8 @@ pub struct Automation {
     pub mcp_port: Option<u16>,
     /// Start in this render look instead of the default from the settings.
     pub preset: Option<Preset>,
+    /// Start light or dark instead of the appearance from the settings.
+    pub theme: Option<theme::Mode>,
 }
 
 struct Bench {
@@ -238,9 +239,10 @@ pub struct SolidDraftApp {
     /// The middle dock: the part and the drawing.
     dock: DockState<Tab>,
     tree_dock: DockState<Tab>,
-    assistant_dock: DockState<Tab>,
     /// The panel layout as last written to disk.
     saved_layout: Layout,
+    /// The command line's chips and session height as last written to disk.
+    saved_bar: crate::command_line::BarSettings,
     saved_commands: crate::commands::History,
     automation: Automation,
     frame: u64,
@@ -255,7 +257,7 @@ pub struct SolidDraftApp {
 
 impl SolidDraftApp {
     pub fn new(cc: &eframe::CreationContext<'_>, doc: Document, automation: Automation) -> Self {
-        theme::install(&cc.egui_ctx);
+        theme::install(&cc.egui_ctx, automation.theme.unwrap_or_else(|| crate::settings::appearance().theme));
         if let Some(rs) = cc.wgpu_render_state.as_ref() {
             let tier = Tier::of(rs.adapter.get_info().backend);
             let renderer = ViewportRenderer::new(&rs.device, &rs.queue, rs.target_format, tier);
@@ -296,11 +298,11 @@ impl SolidDraftApp {
         });
         Self {
             saved_layout: state.layout,
+            saved_bar: state.command_line.settings.clone(),
             saved_commands: state.commands.clone(),
             state,
             dock: center_dock(),
             tree_dock: tree_dock(),
-            assistant_dock: assistant_dock(),
             automation,
             frame: 0,
             bench,
@@ -449,18 +451,18 @@ impl SolidDraftApp {
             ui.spacing_mut().item_spacing.x = 2.0;
             let (brand, _) = ui.allocate_exact_size(vec2(96.0, theme::MENU_HEIGHT), Sense::hover());
             let sq = Rect::from_center_size(pos2(brand.left() + 14.0, brand.center().y), vec2(15.0, 15.0));
-            ui.painter().rect_filled(sq, CornerRadius::same(4), theme::ACCENT);
+            ui.painter().rect_filled(sq, CornerRadius::same(4), theme::accent());
             ui.painter().rect_filled(
                 Rect::from_min_max(sq.min + vec2(5.0, 5.0), sq.max),
                 CornerRadius { nw: 0, ne: 0, sw: 0, se: 4 },
-                theme::ACCENT.lerp_to_gamma(egui::Color32::from_rgb(0x49, 0xb3, 0xff), 0.7),
+                theme::accent().lerp_to_gamma(egui::Color32::from_rgb(0x49, 0xb3, 0xff), 0.7),
             );
             ui.painter().text(
                 pos2(brand.left() + 27.0, brand.center().y),
                 Align2::LEFT_CENTER,
                 "SolidDraft",
                 theme::font_semibold(13.0),
-                theme::INK,
+                theme::ink(),
             );
             ui.add_space(6.0);
 
@@ -468,6 +470,8 @@ impl SolidDraftApp {
                 menu_command(ui, st, "new_part", "New part");
                 menu_command(ui, st, "open", "Open…");
                 menu_command(ui, st, "make_drawing", "New drawing from part…");
+                menu_command(ui, st, "new_assembly", "New assembly");
+                menu_command(ui, st, "make_assembly", "Make assembly from part");
                 ui.menu_button("Open recent", |ui| {
                     if st.recent.is_empty() {
                         ui.add_enabled(false, egui::Button::new("No recent files"));
@@ -486,8 +490,14 @@ impl SolidDraftApp {
                     }
                 });
                 ui.separator();
-                menu_command(ui, st, "save", "Save");
-                menu_command(ui, st, "save_as", "Save as…");
+                if st.assembly.is_active() {
+                    menu_command(ui, st, "assembly_save", "Save assembly");
+                    menu_command(ui, st, "assembly_save_as", "Save assembly as…");
+                    menu_command(ui, st, "insert_component", "Insert component…");
+                } else {
+                    menu_command(ui, st, "save", "Save");
+                    menu_command(ui, st, "save_as", "Save as…");
+                }
                 ui.menu_button("Export", |ui| {
                     menu_command(ui, st, "export_step", "STEP AP242…");
                     menu_command(ui, st, "export_stl", "STL…");
@@ -517,8 +527,12 @@ impl SolidDraftApp {
                 };
                 menu_command(ui, st, "drawing_rebuild", &rebuild);
                 ui.separator();
-                let undo = st.doc.undo_label().map(|l| format!("Undo {l}")).unwrap_or("Undo".into());
-                let redo = st.doc.redo_label().map(|l| format!("Redo {l}")).unwrap_or("Redo".into());
+                let labels = match st.assembly.session.as_ref().filter(|_| st.assembly.is_active()) {
+                    Some(a) => (a.doc.undo_label(), a.doc.redo_label()),
+                    None => (st.doc.undo_label(), st.doc.redo_label()),
+                };
+                let undo = labels.0.map(|l| format!("Undo {l}")).unwrap_or("Undo".into());
+                let redo = labels.1.map(|l| format!("Redo {l}")).unwrap_or("Redo".into());
                 menu_command(ui, st, "undo", &undo);
                 menu_command(ui, st, "redo", &redo);
                 ui.separator();
@@ -562,6 +576,13 @@ impl SolidDraftApp {
                     }
                 }
                 ui.separator();
+                for m in theme::Mode::ALL {
+                    if ui.radio(theme::mode() == m, format!("{} theme", m.label())).clicked() {
+                        st.push(AppAction::SetTheme(m));
+                        ui.close();
+                    }
+                }
+                ui.separator();
                 for side in Side::ALL {
                     let shown = st.layout.panel(side).shown;
                     if ui.add(egui::Button::selectable(shown, side.title()).shortcut_text(side.shortcut())).clicked() {
@@ -597,15 +618,15 @@ impl SolidDraftApp {
             // Command search.
             let search_w = 270.0_f32.min(ui.available_width() - 180.0).max(120.0);
             let frame = egui::Frame::new()
-                .fill(theme::PANEL)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .fill(theme::panel())
+                .stroke(Stroke::new(1.0, theme::line()))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(egui::Margin::symmetric(6, 1));
             let inner = frame.show(ui, |ui| {
                 ui.set_width(search_w);
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
-                    icons::paint(ui.painter(), Icon::Search, r, theme::MUTED);
+                    icons::paint(ui.painter(), Icon::Search, r, theme::muted());
                     ui.add(
                         egui::TextEdit::singleline(&mut st.search)
                             .hint_text("Search commands and features")
@@ -627,7 +648,7 @@ impl SolidDraftApp {
                     None => format!("{}.{}", st.doc.name, file::EXTENSION),
                 };
                 let text = if st.doc.dirty { format!("{name} •") } else { name };
-                ui.label(egui::RichText::new(text).size(12.0).color(theme::MUTED)).on_hover_text(
+                ui.label(egui::RichText::new(text).size(12.0).color(theme::muted())).on_hover_text(
                     st.doc.path.as_ref().map(|p| p.display().to_string()).unwrap_or("Not saved yet".into()),
                 );
             });
@@ -635,6 +656,10 @@ impl SolidDraftApp {
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
+        if self.state.assembly.is_active() {
+            crate::assembly::status_bar(ui, &mut self.state);
+            return;
+        }
         if self.state.drawing.is_active() {
             crate::drawing::status_bar(ui, &mut self.state);
             return;
@@ -645,31 +670,38 @@ impl SolidDraftApp {
             ui.add_space(4.0);
             let errors = st.doc.error_count();
             let repairs = st.doc.repair_count();
-            if errors == 0 && repairs == 0 {
-                ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::OK));
+            if let Some((message, kind)) = st.edit_status() {
+                ui.label(
+                    egui::RichText::new(message)
+                        .family(theme::semibold())
+                        .size(11.5)
+                        .color(if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() }),
+                );
+            } else if errors == 0 && repairs == 0 {
+                ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::ok()));
             } else if errors > 0 {
                 ui.label(
                     egui::RichText::new(format!("{errors} rebuild error{}", if errors == 1 { "" } else { "s" }))
                         .family(theme::semibold())
                         .size(11.5)
-                        .color(theme::ERROR),
+                        .color(theme::error()),
                 );
             } else {
                 ui.label(
                     egui::RichText::new(format!("{repairs} feature{} to repair", if repairs == 1 { "" } else { "s" }))
                         .family(theme::semibold())
                         .size(11.5)
-                        .color(theme::WARN),
+                        .color(theme::warn()),
                 );
             }
             let n = st.doc.features.len();
             ui.label(
                 egui::RichText::new(format!("{n} feature{}", if n == 1 { "" } else { "s" }))
                     .size(11.5)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             ui.label(
-                egui::RichText::new(format!("{} triangles", st.doc.triangle_count())).size(11.5).color(theme::MUTED),
+                egui::RichText::new(format!("{} triangles", st.doc.triangle_count())).size(11.5).color(theme::muted()),
             );
             let mode = match (&st.sketch, &st.editor) {
                 (Some(s), _) => {
@@ -679,14 +711,14 @@ impl SolidDraftApp {
                 (None, Some(e)) => format!("Editing {}", e.title()),
                 _ => "Editing part".to_owned(),
             };
-            ui.label(egui::RichText::new(mode).size(11.5).color(theme::MUTED));
+            ui.label(egui::RichText::new(mode).size(11.5).color(theme::muted()));
             if let Some(note) = &st.note
                 && note.at.elapsed() < Duration::from_secs(6)
             {
                 let color = match note.kind {
-                    NoteKind::Info => theme::MUTED,
-                    NoteKind::Ok => theme::OK,
-                    NoteKind::Error => theme::ERROR,
+                    NoteKind::Info => theme::muted(),
+                    NoteKind::Ok => theme::ok(),
+                    NoteKind::Error => theme::error(),
                 };
                 ui.label(egui::RichText::new(&note.text).size(11.5).color(color));
             }
@@ -697,8 +729,8 @@ impl SolidDraftApp {
                     (None, Some(p)) => format!("x {:.1}   y {:.1}   z {:.1} mm", p.x, p.y, p.z),
                     _ => "mm".to_owned(),
                 };
-                ui.label(egui::RichText::new(coords).size(11.5).color(theme::MUTED));
-                ui.label(egui::RichText::new(format!("{:.1} ms", st.frame_ms)).size(11.5).color(theme::MUTED))
+                ui.label(egui::RichText::new(coords).size(11.5).color(theme::muted()));
+                ui.label(egui::RichText::new(format!("{:.1} ms", st.frame_ms)).size(11.5).color(theme::muted()))
                     .on_hover_text("Frame time, smoothed");
             });
         });
@@ -790,16 +822,23 @@ impl SolidDraftApp {
     fn apply(&mut self, ctx: &egui::Context, action: AppAction) {
         match action {
             AppAction::Command(cmd) => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 // A sketch edit from the sketcher must not close the editor state.
                 let is_sketch_edit = matches!(cmd, Command::EditSketch { .. });
-                match self.state.doc.apply(cmd) {
+                match self.state.doc.apply_interactive(cmd) {
                     Ok(Some(id)) => {
                         self.state.doc.selection = Some(Selection::Feature(id));
                         self.state.note("Feature added", NoteKind::Ok);
                     }
                     Ok(None) => {
                         if !is_sketch_edit {
-                            self.state.note("Rebuilt", NoteKind::Ok);
+                            if self.state.doc.proof_pending() {
+                                self.state.note("Edit requested", NoteKind::Info);
+                            } else {
+                                self.state.note("Rebuilt", NoteKind::Ok);
+                            }
                         }
                     }
                     Err(e) => self.state.note(e, NoteKind::Error),
@@ -812,18 +851,38 @@ impl SolidDraftApp {
             AppAction::Redo if self.state.drawing.is_active() => {
                 self.apply(ctx, AppAction::Drawing(crate::drawing::DrawingAction::Redo));
             }
+            AppAction::Undo if self.state.assembly.is_active() => {
+                self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Undo));
+            }
+            AppAction::Redo if self.state.assembly.is_active() => {
+                self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Redo));
+            }
             AppAction::Drawing(a) => crate::drawing::apply(&mut self.state, &mut self.dock, ctx, a),
+            AppAction::Assembly(crate::assembly::AssemblyAction::FromPart) => {
+                // The assembly references the part's file, so the part is saved first.
+                if self.state.doc.dirty || self.state.doc.path.is_none() {
+                    self.apply(ctx, AppAction::Save);
+                }
+                crate::assembly::apply(&mut self.state, &mut self.dock, crate::assembly::AssemblyAction::FromPart);
+            }
+            AppAction::Assembly(a) => crate::assembly::apply(&mut self.state, &mut self.dock, a),
             AppAction::Undo => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 self.close_editor();
-                match self.state.doc.undo() {
+                match self.state.doc.undo_interactive() {
                     Ok(l) => self.state.note(format!("Undid {l}"), NoteKind::Info),
                     Err(e) => self.state.note(e, NoteKind::Error),
                 }
                 self.sync_sketch_session();
             }
             AppAction::Redo => {
+                if let Some(drag) = self.state.drag_preview.take() {
+                    drag.cancel(&mut self.state.doc);
+                }
                 self.close_editor();
-                match self.state.doc.redo() {
+                match self.state.doc.redo_interactive() {
                     Ok(l) => self.state.note(format!("Redid {l}"), NoteKind::Info),
                     Err(e) => self.state.note(e, NoteKind::Error),
                 }
@@ -992,6 +1051,17 @@ impl SolidDraftApp {
                 );
                 self.state.doc.selection = None;
             }
+            AppAction::StartShell => {
+                let open_faces = match self.state.doc.selection {
+                    Some(Selection::Face(face)) => self.state.doc.any_face_ref(face).into_iter().collect(),
+                    _ => Vec::new(),
+                };
+                self.open_editor(
+                    None,
+                    EditorParams::Shell(soliddraft_model::ShellFeature { open_faces, thickness: 2.0 }),
+                );
+                self.state.doc.selection = None;
+            }
             AppAction::StartDraft => {
                 let faces = match self.state.doc.selection {
                     Some(Selection::Face(f)) => self.state.doc.any_face_ref(f).into_iter().collect(),
@@ -1031,6 +1101,7 @@ impl SolidDraftApp {
                     }),
                     FeatureKind::Pattern(p) => EditorParams::Pattern(p.clone()),
                     FeatureKind::Mirror(m) => EditorParams::Mirror(m.clone()),
+                    FeatureKind::Shell(s) => EditorParams::Shell(s.clone()),
                     FeatureKind::Draft(d) => EditorParams::Draft(DraftParams {
                         faces: d.faces.clone(),
                         neutral: d.neutral.clone(),
@@ -1038,6 +1109,10 @@ impl SolidDraftApp {
                         reverse: d.reverse,
                         picking_neutral: false,
                     }),
+                    // An import has no editor; its repair questions have their own dialog.
+                    FeatureKind::ImportStep(_) => return,
+                    // The lattice's controls arrive with its editor slice.
+                    FeatureKind::Lattice(_) => return,
                 };
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(None));
@@ -1078,6 +1153,10 @@ impl SolidDraftApp {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Mirror(m) },
                         None => Command::AddFeature(FeatureKind::Mirror(m)),
                     },
+                    (target, EditorParams::Shell(s)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Shell(s) },
+                        None => Command::AddFeature(FeatureKind::Shell(s)),
+                    },
                     (target, EditorParams::Draft(d)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Draft(d.to_model()) },
                         None => Command::AddFeature(FeatureKind::Draft(d.to_model())),
@@ -1115,6 +1194,23 @@ impl SolidDraftApp {
                 self.close_editor();
             }
             AppAction::DragDimension(step) => self.state.drag_dimension(step),
+            AppAction::EditDimension(target) => match target {
+                DimensionTarget::Feature(id) => self.apply(ctx, AppAction::EditFeature(id)),
+                DimensionTarget::Sketch { sketch, constraint } => {
+                    self.apply(ctx, AppAction::EditSketch(sketch));
+                    // The sketch opens with the value editor on the dimension, as a
+                    // double-click on it inside the sketch does.
+                    if let Some(s) = self.state.sketch.as_mut().filter(|s| s.feature == sketch)
+                        && let Some(value) = s.sketch.constraint(constraint).and_then(|c| c.value())
+                    {
+                        s.dim_edit = Some(crate::state::DimEdit {
+                            constraint,
+                            text: crate::sketch::fmt_value(value),
+                            focus: true,
+                        });
+                    }
+                }
+            },
             AppAction::Select(sel) => {
                 // Editors that collect picks take the click instead of selecting.
                 if let Some(e) = self.state.editor.as_mut() {
@@ -1142,6 +1238,16 @@ impl SolidDraftApp {
                             match self.state.doc.face_ref(f) {
                                 Some(face) => m.plane = soliddraft_model::PlaneRef::Face { face },
                                 None => e.error = Some("Mirror in a planar face or a reference plane".into()),
+                            }
+                            return;
+                        }
+                        (EditorParams::Shell(s), Some(Selection::Face(f))) => {
+                            if let Some(reference) = self.state.doc.any_face_ref(f) {
+                                if let Some(i) = s.open_faces.iter().position(|face| face == &reference) {
+                                    s.open_faces.remove(i);
+                                } else {
+                                    s.open_faces.push(reference);
+                                }
                             }
                             return;
                         }
@@ -1311,6 +1417,12 @@ impl SolidDraftApp {
                 }
                 viewport.preset = p;
             }
+            AppAction::SetTheme(mode) => {
+                theme::set_mode(ctx, mode);
+                if let Err(e) = crate::settings::save_appearance(&crate::settings::Appearance { theme: mode }) {
+                    log::warn!("cannot save the appearance: {e}");
+                }
+            }
             AppAction::ToggleProjection => {
                 self.state.viewport.camera.orthographic = !self.state.viewport.camera.orthographic
             }
@@ -1324,13 +1436,12 @@ impl SolidDraftApp {
             }
             AppAction::UndoProposal(id) => self.state.undo_proposal(&id),
             AppAction::DiscardProposal(id) => self.state.discard_proposal(&id),
-            AppAction::FocusChat => {
-                self.state.layout.assistant.shown = true;
-                self.state.chat.focus_requested = true;
-            }
+            AppAction::FocusChat => self.state.command_line.open_session(),
+            AppAction::ToggleSession => self.state.command_line.toggle_session(),
             AppAction::SendChat => self.state.send_chat(),
             AppAction::StopChat => self.state.stop_chat(),
             AppAction::Ask(text) => {
+                self.state.command_line.open_session();
                 self.state.chat.draft = text;
                 self.state.send_chat();
             }
@@ -1361,7 +1472,7 @@ impl SolidDraftApp {
                         self.apply(ctx, AppAction::Drawing(crate::drawing::DrawingAction::OpenFile(path)));
                     }
                     Some(soliddraft_document::DocKind::Assembly) => {
-                        self.state.note("Assemblies arrive in a later phase", NoteKind::Error);
+                        self.apply(ctx, AppAction::Assembly(crate::assembly::AssemblyAction::Open(path)));
                     }
                     _ => {
                         let opened = file::open(&path, self.state.doc.kernel().clone(), Some(self.state.doc.model()));
@@ -1401,7 +1512,7 @@ impl SolidDraftApp {
                     crate::platform::save_path(&title, format.name(), format.extension(), &name)
                 });
                 let Some(path) = path else { return };
-                let exported = self.state.doc.model().export(format);
+                let exported = self.state.export_part(format);
                 match exported.and_then(|out| crate::platform::write_file(&path, &out.bytes).map(|()| out.report)) {
                     Ok(report) => {
                         let kind = match &report {
@@ -1420,18 +1531,23 @@ impl SolidDraftApp {
             }
             AppAction::ResetLayout => {
                 let drawing_open = self.dock.find_tab(&Tab::Drawing).is_some();
+                let assembly_open = self.dock.find_tab(&Tab::Assembly).is_some();
                 self.dock = center_dock();
                 if drawing_open {
                     self.dock.push_to_focused_leaf(Tab::Drawing);
                 }
+                if assembly_open {
+                    self.dock.push_to_focused_leaf(Tab::Assembly);
+                }
                 self.tree_dock = tree_dock();
-                self.assistant_dock = assistant_dock();
                 self.state.layout = Layout::default();
-                // Forget the widths egui kept, so the defaults apply again.
+                self.state.command_line.settings.session_height = crate::command_line::SESSION_DEFAULT_HEIGHT;
+                // Forget the sizes egui kept, so the defaults apply again.
                 ctx.data_mut(|d| {
                     for side in Side::ALL {
                         d.remove::<egui::PanelState>(side.panel_id());
                     }
+                    d.remove::<egui::PanelState>(crate::command_line::session_id());
                 });
             }
             AppAction::TogglePanel(side) => self.state.layout.toggle(side),
@@ -1500,14 +1616,13 @@ impl SolidDraftApp {
         }
     }
 
-    /// One side area: a resizable panel while shown, a strip with its title while
+    /// The side area: a resizable panel while shown, a strip with its title while
     /// hidden. Dragging the edge past the minimum hides it; clicking the strip,
     /// dragging it outward or double-clicking the edge shows it again.
     fn side_panel(&mut self, root: &mut egui::Ui, side: Side, window_width: f32) {
-        let frame = egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::ZERO);
+        let frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         let make = |id: egui::Id| match side {
             Side::Tree => egui::Panel::left(id),
-            Side::Assistant => egui::Panel::right(id),
         };
         let collapsed = make(side.strip_id()).resizable(true).exact_size(panels::STRIP_WIDTH).frame(frame);
         let expanded = make(side.panel_id())
@@ -1523,7 +1638,6 @@ impl SolidDraftApp {
         let mut open_requested = false;
         let dock = match side {
             Side::Tree => &mut self.tree_dock,
-            Side::Assistant => &mut self.assistant_dock,
         };
         let mut panels = Panels { state: &mut self.state };
         egui::Panel::show_switched(root, &mut shown, collapsed, expanded, |ui, expanded| {
@@ -1564,7 +1678,7 @@ impl SolidDraftApp {
                             env!("CARGO_PKG_VERSION"),
                             st.doc.backend_name()
                         ))
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                     );
                 },
             );
@@ -1612,7 +1726,7 @@ impl SolidDraftApp {
                                 Some((KeySource::Keychain(_), masked)) => format!("{masked} in the OS keychain"),
                                 None => "No key".into(),
                             };
-                            ui.label(egui::RichText::new(text).color(theme::MUTED));
+                            ui.label(egui::RichText::new(text).color(theme::muted()));
                             if ui
                                 .add_enabled(row.in_keychain, egui::Button::new("Delete"))
                                 .on_hover_text("Remove the key from the OS keychain")
@@ -1650,7 +1764,7 @@ impl SolidDraftApp {
                         if soliddraft_assistant::environment::var(var).is_some_and(|v| !v.trim().is_empty()) {
                             ui.label(
                                 egui::RichText::new(format!("{var} or its legacy alias overrides this setting."))
-                                    .color(theme::MUTED),
+                                    .color(theme::muted()),
                             );
                         }
                     }
@@ -1787,7 +1901,7 @@ fn shortcuts_grid(ui: &mut egui::Ui) {
             if rows.is_empty() {
                 continue;
             }
-            ui.label(egui::RichText::new(scope.label()).family(theme::semibold()).color(theme::MUTED));
+            ui.label(egui::RichText::new(scope.label()).family(theme::semibold()).color(theme::muted()));
             ui.end_row();
             for (keys, doc) in rows {
                 ui.label(egui::RichText::new(keys).family(theme::semibold()));
@@ -1795,7 +1909,7 @@ fn shortcuts_grid(ui: &mut egui::Ui) {
                 ui.end_row();
             }
         }
-        ui.label(egui::RichText::new("Mouse").family(theme::semibold()).color(theme::MUTED));
+        ui.label(egui::RichText::new("Mouse").family(theme::semibold()).color(theme::muted()));
         ui.end_row();
         for (k, v) in [
             ("Left drag", "Orbit (outside a sketch)"),
@@ -1839,7 +1953,7 @@ fn search_popup(ui: &mut egui::Ui, st: &mut AppState, anchor: &egui::Response) {
     egui::Popup::from_response(anchor).id(egui::Id::new("search_popup")).open(true).show(|ui| {
         ui.set_min_width(anchor.rect.width());
         if entries.is_empty() {
-            ui.label(egui::RichText::new("No matching command").color(theme::MUTED));
+            ui.label(egui::RichText::new("No matching command").color(theme::muted()));
         }
         for (i, (name, keys, enabled, _)) in entries.iter().enumerate() {
             let r =
@@ -1864,6 +1978,22 @@ pub fn open_at_start(app: &mut SolidDraftApp, path: PathBuf) {
 }
 
 impl SolidDraftApp {
+    /// Hands the open assembly the coarse and fine levels the GPU asked for, which its
+    /// loader brings in the background.
+    fn request_assembly_levels(&mut self) {
+        let (Some(rs), Some(s)) = (self.render_state.as_ref(), self.state.assembly.session.as_mut()) else { return };
+        if !self.frame.is_multiple_of(15) {
+            return;
+        }
+        let wanted = match rs.renderer.write().callback_resources.get_mut::<ViewportRenderer>() {
+            Some(r) => r.take_assembly_wanted(),
+            None => return,
+        };
+        if !wanted.is_empty() {
+            s.doc.request_levels(&wanted);
+        }
+    }
+
     /// Hands autosave the documents as this frame left them, notes any copy that failed,
     /// and wakes the app when the next copy is due.
     fn autosave(&mut self, ctx: &egui::Context) {
@@ -1893,10 +2023,22 @@ impl eframe::App for SolidDraftApp {
     fn ui(&mut self, root: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = &root.ctx().clone();
         log::debug!("ui frame {}", self.frame);
+        self.state.doc.set_repaint(ctx);
         let dt = ctx.input(|i| i.unstable_dt) * 1000.0;
         self.state.frame_ms = if self.state.frame_ms == 0.0 { dt } else { self.state.frame_ms * 0.9 + dt * 0.1 };
         self.shortcuts(ctx);
         crate::drawing::frame(&mut self.state, &mut self.dock);
+        crate::assembly::frame(&mut self.state, &mut self.dock, ctx);
+        // The browser hands over a dropped file's name only, not a path to read.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dropped: Vec<PathBuf> =
+                ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
+            if !dropped.is_empty() {
+                crate::assembly::dropped(&mut self.state, dropped);
+            }
+        }
+        self.request_assembly_levels();
         self.state.poll_assistant();
         self.state.service_mcp();
         // In the browser an opened file arrives as an upload, frames after the request.
@@ -1908,8 +2050,9 @@ impl eframe::App for SolidDraftApp {
         if let Some(e) = self.state.editor.as_mut() {
             e.refresh(&self.state.doc);
         }
-        // The answers arrive between frames; look again soon while one is owed.
-        if self.state.poll_drag() {
+        // Native workers wake the context when they answer. In the browser the work
+        // itself runs in these frames, so keep drawing while an answer is owed.
+        if self.state.poll_drag() && cfg!(target_arch = "wasm32") {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Hover info is derived from the viewport's last pick so every panel sees the same name.
@@ -1921,10 +2064,12 @@ impl eframe::App for SolidDraftApp {
             .and_then(|sel| self.state.doc.describe(sel));
         self.state.hover_point = self.state.viewport.hover_point;
 
-        let panel_frame = egui::Frame::new().fill(theme::PANEL).inner_margin(egui::Margin::ZERO);
+        // The menu and status bars are chrome; the ribbon paints its own strip and body.
+        let chrome_frame = egui::Frame::new().fill(theme::chrome()).inner_margin(egui::Margin::ZERO);
+        let panel_frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         egui::Panel::top("menu")
             .exact_size(theme::MENU_HEIGHT)
-            .frame(panel_frame)
+            .frame(chrome_frame)
             .show_separator_line(true)
             .show(root, |ui| self.menu_bar(ui));
         egui::Panel::top("ribbon")
@@ -1934,13 +2079,13 @@ impl eframe::App for SolidDraftApp {
             .show(root, |ui| ribbon::show(ui, &mut self.state));
         egui::Panel::bottom("status")
             .exact_size(theme::STATUS_HEIGHT)
-            .frame(panel_frame)
+            .frame(chrome_frame)
             .show_separator_line(true)
             .show(root, |ui| self.status_bar(ui));
+        crate::command_line::panel(root, &mut self.state);
         let window_width = root.available_width();
         self.side_panel(root, Side::Tree, window_width);
-        self.side_panel(root, Side::Assistant, window_width);
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(root, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::chrome())).show(root, |ui| {
             let mut panels = Panels { state: &mut self.state };
             show_dock(ui, &mut self.dock, egui::Id::new("center_dock"), &mut panels);
         });
@@ -1956,6 +2101,12 @@ impl eframe::App for SolidDraftApp {
         if self.state.layout != self.saved_layout && !ctx.input(|i| i.pointer.any_down()) {
             self.state.layout.save();
             self.saved_layout = self.state.layout;
+        }
+        if self.state.command_line.settings != self.saved_bar && !ctx.input(|i| i.pointer.any_down()) {
+            if let Err(e) = crate::settings::save_command_line(&self.state.command_line.settings) {
+                log::warn!("cannot save the command line: {e}");
+            }
+            self.saved_bar = self.state.command_line.settings.clone();
         }
         self.autosave(ctx);
         self.automation_step(ctx, frame);

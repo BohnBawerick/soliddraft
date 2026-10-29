@@ -141,6 +141,19 @@ impl Kernel for Counting {
         self.inner.preview(body, params)
     }
 
+    fn reserve_proof_work(&self) -> KernelResult<Box<dyn crate::ProofWork>> {
+        self.inner.reserve_proof_work()
+    }
+
+    fn construction_edit(
+        &self,
+        body: BodyId,
+        edits: &[crate::ScalarEdit],
+        params: &TessellationParams,
+    ) -> KernelResult<crate::ConstructionEdit> {
+        self.inner.construction_edit(body, edits, params)
+    }
+
     fn preview_levels(&self, body: BodyId, levels: &[TessellationParams]) -> KernelResult<Vec<Mesh>> {
         self.note(Work::Mesh(body));
         self.inner.preview_levels(body, levels)

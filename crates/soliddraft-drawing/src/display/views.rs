@@ -179,6 +179,7 @@ pub(super) fn hatch_items(
                 role: Role::Hatch,
                 owner: Owner::View(view.id),
                 fill: false,
+                accuracy: None,
             }));
         }
         let loops = match &clip {
@@ -284,6 +285,7 @@ pub(super) fn boundary_items(view: &View, ctx: &Context<'_>, items: &mut Vec<Ite
             role: Role::Boundary,
             owner: Owner::View(view.id),
             fill: false,
+            accuracy: None,
         }));
     };
     if let Some(outline) = &view.geometry.outline {
@@ -332,6 +334,7 @@ pub(super) fn parent_marks(drawing: &Drawing, sheet_index: usize, ctx: &Context<
                         role: Role::CuttingPlane,
                         owner,
                         fill: false,
+                        accuracy: None,
                     }));
                     let thick = 6.0f64.min(len / 3.0);
                     for (end, inward) in [(first, d), (last, d * -1.0)] {
@@ -342,6 +345,7 @@ pub(super) fn parent_marks(drawing: &Drawing, sheet_index: usize, ctx: &Context<
                             role: Role::CuttingPlane,
                             owner,
                             fill: false,
+                            accuracy: None,
                         }));
                         // The arrow stands on the line's end and points the way the
                         // section looks; the letter sits beyond its head.
@@ -353,6 +357,7 @@ pub(super) fn parent_marks(drawing: &Drawing, sheet_index: usize, ctx: &Context<
                             role: Role::CuttingPlane,
                             owner,
                             fill: false,
+                            accuracy: None,
                         }));
                         items.push(arrow(tip, a, ctx.style, Role::CuttingPlane, owner));
                         let text_at = add(tip, a * (letter_height * 0.5 + 2.0));
@@ -392,6 +397,7 @@ pub(super) fn parent_marks(drawing: &Drawing, sheet_index: usize, ctx: &Context<
                         role: Role::Boundary,
                         owner,
                         fill: false,
+                        accuracy: None,
                     }));
                     let [_, _, x1, y1] = boundary.bounds();
                     let c = at(center);
@@ -456,6 +462,7 @@ pub(super) fn parent_marks(drawing: &Drawing, sheet_index: usize, ctx: &Context<
                         role: Role::CuttingPlane,
                         owner,
                         fill: false,
+                        accuracy: None,
                     }));
                     items.push(arrow(tip, eye * -1.0, ctx.style, Role::CuttingPlane, owner));
                     if !letter.is_empty() {

@@ -3,9 +3,9 @@
 //! double-click edits, F2 or a slow second click renames, drag reorders,
 //! right-click offers the rest.
 
-use crate::document::{Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane, fmt_mm};
+use crate::document::{AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane};
 use crate::icons::{self, Icon};
-use crate::state::{AppAction, AppState, EditorParams, Rename};
+use crate::state::{AppAction, AppState, EditorParams, NoteKind, Rename};
 use crate::theme;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
@@ -34,16 +34,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         Align2::LEFT_CENTER,
         title,
         theme::font_semibold(12.5),
-        theme::INK,
+        theme::ink(),
     );
     let errors = state.doc.error_count();
     let repairs = state.doc.repair_count();
-    let (status, color) = if errors == 0 && repairs == 0 {
-        ("Rebuilt · OK".to_owned(), theme::OK)
+    let (status, color) = if let Some((message, kind)) = state.edit_status() {
+        (message.to_owned(), if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() })
+    } else if errors == 0 && repairs == 0 {
+        ("Rebuilt · OK".to_owned(), theme::ok())
     } else if errors > 0 {
-        (format!("{errors} error{}", if errors == 1 { "" } else { "s" }), theme::ERROR)
+        (format!("{errors} error{}", if errors == 1 { "" } else { "s" }), theme::error())
     } else {
-        (format!("{repairs} to repair"), theme::WARN)
+        (format!("{repairs} to repair"), theme::warn())
     };
     ui.painter().text(
         pos2(head.right() - 12.0, head.center().y),
@@ -52,23 +54,27 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         theme::font_medium(11.0),
         color,
     );
-    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
 
     let mut actions = Vec::new();
     egui::ScrollArea::vertical().id_salt("tree").auto_shrink([false, false]).show(ui, |ui| {
         ui.add_space(4.0);
         let selected_feature = state.selected_feature();
         let picking_plane = matches!(state.editor.as_ref().map(|e| &e.params), Some(EditorParams::PickPlane));
+        let picking_axis = matches!(
+            state.editor.as_ref().map(|e| &e.params),
+            Some(EditorParams::Revolve(_) | EditorParams::Pattern(_))
+        );
 
         // Origin group.
-        let open = state.origin_open || picking_plane;
+        let open = state.origin_open || picking_plane || picking_axis;
         if row(
             ui,
             RowSpec {
                 indent: 0,
                 chevron: Some(open),
                 icon: Icon::Origin,
-                name: "Origin and planes",
+                name: "Origin, planes and axes",
                 ..RowSpec::plain()
             },
         )
@@ -99,9 +105,45 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane, offset: 0.0 }));
                 }
             }
+            for axis in AxisKind::ALL {
+                let r = row(
+                    ui,
+                    RowSpec {
+                        indent: 1,
+                        icon: Icon::Axis,
+                        icon_color: Some(theme::axis_color(axis)),
+                        name: axis.label(),
+                        dim: !picking_axis,
+                        ..RowSpec::plain()
+                    },
+                );
+                if picking_axis
+                    && r.on_hover_text("Click to use this axis").clicked()
+                    && let Some(editor) = state.editor.as_mut()
+                {
+                    use_axis(&mut editor.params, axis);
+                }
+            }
             row(ui, RowSpec { indent: 1, icon: Icon::Point, name: "Origin", dim: true, ..RowSpec::plain() });
         }
         row(ui, RowSpec { indent: 0, icon: Icon::Material, name: "Material", sub: "Not set", ..RowSpec::plain() });
+        // The body row: selecting it shows every dimension that builds the body.
+        if state.doc.display_body().is_some() {
+            let r = row(
+                ui,
+                RowSpec {
+                    indent: 0,
+                    icon: Icon::Extrude,
+                    name: crate::document::BODY_NAME,
+                    selected: state.doc.selection == Some(Selection::Body),
+                    ..RowSpec::plain()
+                },
+            )
+            .on_hover_text("Select to show every dimension that builds the body");
+            if r.clicked() {
+                actions.push(AppAction::Select(Some(Selection::Body)));
+            }
+        }
 
         // Flatten features: absorbed sketches sit under their consumer.
         let absorbed: Vec<FeatureId> = state.doc.features.iter().filter_map(|f| f.kind.sketch()).collect();
@@ -124,8 +166,25 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 },
                 FeatureKind::Mirror(_) => Icon::Mirror,
                 FeatureKind::Draft(_) => Icon::Draft,
+                FeatureKind::Shell(_) => Icon::Shell,
+                FeatureKind::ImportStep(_) => Icon::Import,
+                FeatureKind::Lattice(_) => Icon::LinearPattern,
             };
             let child = f.kind.sketch().and_then(|s| state.doc.feature(s));
+            let (sub, status) = match &state.drag_preview {
+                Some(drag) if drag.feature() == f.id => {
+                    let (message, failed) = drag.label();
+                    let status = if failed { FeatureStatus::Error(message.clone()) } else { FeatureStatus::Pending };
+                    (message, status)
+                }
+                _ if f.status == FeatureStatus::Pending => {
+                    (format!("{} · proof pending", f.summary()), f.status.clone())
+                }
+                _ if matches!(f.status, FeatureStatus::Error(_)) => {
+                    (format!("Failed · {}", f.summary()), f.status.clone())
+                }
+                _ => (f.summary(), f.status.clone()),
+            };
             items.push(RowItem {
                 id: f.id,
                 index: i,
@@ -133,12 +192,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 chevron: child.map(|_| state.expanded.contains(&f.id)),
                 icon,
                 name: f.name.clone(),
-                // A dragged dimension shows as a preview until the drag applies it.
-                sub: match &state.drag_preview {
-                    Some(d) if d.feature() == f.id => format!("Preview {} mm", fmt_mm(d.value())),
-                    _ => f.summary(),
-                },
-                status: f.status.clone(),
+                sub,
+                status,
                 suppressed: f.suppressed,
                 via_assistant: f.via_assistant,
                 is_sketch: f.is_sketch(),
@@ -167,11 +222,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if items.is_empty() {
             ui.add_space(14.0);
             ui.vertical_centered(|ui| {
-                ui.label(egui::RichText::new("No features yet").family(theme::medium()).color(theme::MUTED));
+                ui.label(egui::RichText::new("No features yet").family(theme::medium()).color(theme::muted()));
                 ui.label(
                     egui::RichText::new("Sketch on a plane, or press E to extrude a built-in profile.")
                         .size(11.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
             });
         }
@@ -237,7 +292,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         pos2(rect.left() + 32.0 + item.indent as f32 * 20.0, rect.center().y),
                         vec2(15.0, 15.0),
                     ),
-                    theme::INK,
+                    theme::ink(),
                 );
                 if ui.input(|i| i.key_pressed(egui::Key::Enter))
                     || (edit.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape)))
@@ -254,6 +309,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         indent: item.indent,
                         chevron: item.chevron,
                         icon: item.icon,
+                        icon_color: None,
                         name: &item.name,
                         sub: &item.sub,
                         selected: selected_feature == Some(item.id),
@@ -342,7 +398,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 }
                 ui.separator();
                 if ui
-                    .add(egui::Button::new(egui::RichText::new("Delete").color(theme::ERROR)).shortcut_text("Del"))
+                    .add(egui::Button::new(egui::RichText::new("Delete").color(theme::error())).shortcut_text("Del"))
                     .clicked()
                 {
                     actions.push(AppAction::Command(Command::DeleteFeature(id)));
@@ -369,16 +425,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 let painter =
                     ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("tree_drag")));
                 let name = state.doc.feature(d).map(|f| f.name.clone()).unwrap_or_default();
-                let galley = painter.layout_no_wrap(name, theme::font_medium(12.0), theme::INK);
+                let galley = painter.layout_no_wrap(name, theme::font_medium(12.0), theme::ink());
                 let r = Rect::from_min_size(p + vec2(12.0, -10.0), galley.size() + vec2(16.0, 8.0));
                 painter.rect(
                     r,
                     CornerRadius::same(6),
-                    theme::PANEL,
-                    Stroke::new(1.0, theme::ACCENT),
+                    theme::panel(),
+                    Stroke::new(1.0, theme::accent()),
                     StrokeKind::Inside,
                 );
-                painter.galley(r.min + vec2(8.0, 4.0), galley, theme::INK);
+                painter.galley(r.min + vec2(8.0, 4.0), galley, theme::ink());
             }
             if pointer_released {
                 state.drag_feature = None;
@@ -391,7 +447,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             if let Some(p) = pointer_pos {
                 let painter = ui.painter();
                 let y = p.y.clamp(ui.min_rect().top(), ui.min_rect().bottom());
-                painter.hline(ui.min_rect().x_range().shrink(10.0), y, Stroke::new(2.0, theme::ACCENT));
+                painter.hline(ui.min_rect().x_range().shrink(10.0), y, Stroke::new(2.0, theme::accent()));
             }
             if pointer_released {
                 state.drag_rollback = false;
@@ -426,11 +482,11 @@ fn rollback_bar(
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, "Rollback bar"));
     let active = at < count;
     let color = if resp.hovered() || resp.dragged() {
-        theme::ACCENT
+        theme::accent()
     } else if active {
-        theme::WARN
+        theme::warn()
     } else {
-        theme::LINE.gamma_multiply(1.3)
+        theme::line().gamma_multiply(1.3)
     };
     let y = rect.center().y;
     ui.painter().hline(
@@ -461,27 +517,30 @@ fn rollback_bar(
     let _ = (released, &target);
 }
 
-struct RowSpec<'a> {
-    indent: u8,
-    chevron: Option<bool>,
-    icon: Icon,
-    name: &'a str,
-    sub: &'a str,
-    selected: bool,
-    dim: bool,
-    error: Option<&'a str>,
-    warn: Option<&'a str>,
-    via_assistant: bool,
-    suppressed: bool,
-    drop_above: bool,
+pub(crate) struct RowSpec<'a> {
+    pub(crate) indent: u8,
+    pub(crate) chevron: Option<bool>,
+    pub(crate) icon: Icon,
+    /// Paints the icon in this colour instead of the row's ink.
+    pub(crate) icon_color: Option<Color32>,
+    pub(crate) name: &'a str,
+    pub(crate) sub: &'a str,
+    pub(crate) selected: bool,
+    pub(crate) dim: bool,
+    pub(crate) error: Option<&'a str>,
+    pub(crate) warn: Option<&'a str>,
+    pub(crate) via_assistant: bool,
+    pub(crate) suppressed: bool,
+    pub(crate) drop_above: bool,
 }
 
 impl RowSpec<'static> {
-    fn plain() -> Self {
+    pub(crate) fn plain() -> Self {
         RowSpec {
             indent: 0,
             chevron: None,
             icon: Icon::Point,
+            icon_color: None,
             name: "",
             sub: "",
             selected: false,
@@ -495,7 +554,27 @@ impl RowSpec<'static> {
     }
 }
 
-fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
+/// Points the open revolve or pattern along an origin axis, through the origin.
+fn use_axis(params: &mut EditorParams, axis: AxisKind) {
+    let d = axis.direction();
+    let dir = soliddraft_kernel_api::Vec3::new(d.x.into(), d.y.into(), d.z.into());
+    match params {
+        EditorParams::Revolve(r) => {
+            r.axis_origin = [0.0; 3];
+            r.axis_direction = [dir.x, dir.y, dir.z];
+        }
+        EditorParams::Pattern(p) => match &mut p.layout {
+            soliddraft_model::PatternSpec::Linear { direction, .. } => *direction = dir,
+            soliddraft_model::PatternSpec::Circular { axis_origin, axis_direction, .. } => {
+                *axis_origin = soliddraft_kernel_api::Vec3::ZERO;
+                *axis_direction = dir;
+            }
+        },
+        _ => {}
+    }
+}
+
+pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), theme::ROW_HEIGHT), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, spec.selected, spec.name));
     if !ui.is_rect_visible(rect) {
@@ -504,20 +583,20 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let painter = ui.painter();
     let inner = Rect::from_min_max(pos2(rect.left() + 4.0, rect.top()), pos2(rect.right() - 4.0, rect.bottom()));
     if spec.selected {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::SELECTION_BG);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::selection_bg());
     } else if resp.hovered() {
-        painter.rect_filled(inner, CornerRadius::same(5), theme::HOVER);
+        painter.rect_filled(inner, CornerRadius::same(5), theme::hover());
     }
     if spec.drop_above {
-        painter.hline(inner.x_range(), inner.top() + 0.5, Stroke::new(2.0, theme::ACCENT));
+        painter.hline(inner.x_range(), inner.top() + 0.5, Stroke::new(2.0, theme::accent()));
     }
     let x0 = rect.left() + 10.0 + spec.indent as f32 * 20.0;
     let ink = if spec.selected {
-        theme::SELECTION_INK
+        theme::selection_ink()
     } else if spec.dim {
-        theme::MUTED
+        theme::muted()
     } else {
-        theme::INK
+        theme::ink()
     };
     if let Some(open) = spec.chevron {
         let icon = if open { Icon::ChevronDown } else { Icon::ChevronRight };
@@ -525,15 +604,15 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             icon,
             Rect::from_center_size(pos2(x0 + 4.0, rect.center().y), vec2(11.0, 11.0)),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     let icon_color = if spec.error.is_some() {
-        theme::ERROR
+        theme::error()
     } else if spec.warn.is_some() {
-        theme::WARN
+        theme::warn()
     } else {
-        ink
+        spec.icon_color.unwrap_or(ink)
     };
     icons::paint(
         painter,
@@ -549,7 +628,7 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             Icon::Suppress,
             Rect::from_center_size(pos2(after + 6.0, rect.center().y), vec2(12.0, 12.0)),
-            theme::MUTED,
+            theme::muted(),
         );
         after += 16.0;
     }
@@ -558,7 +637,7 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             painter,
             Icon::Spark,
             Rect::from_center_size(pos2(after + 6.0, rect.center().y), vec2(11.0, 11.0)),
-            theme::ACCENT,
+            theme::accent(),
         );
     }
     if !spec.sub.is_empty() {
@@ -567,21 +646,21 @@ fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
             Align2::RIGHT_CENTER,
             spec.sub,
             theme::font(11.0),
-            theme::MUTED,
+            theme::muted(),
         );
     }
     if let Some(err) = spec.error {
-        painter.circle_filled(pos2(x0 + 29.0, rect.top() + 6.0), 3.0, theme::ERROR);
-        return resp.on_hover_text(egui::RichText::new(err).color(Color32::WHITE));
+        painter.circle_filled(pos2(x0 + 29.0, rect.top() + 6.0), 3.0, theme::error());
+        return resp.on_hover_text(egui::RichText::new(err).color(theme::ink()));
     }
     if let Some(w) = spec.warn {
         icons::paint(
             painter,
             Icon::Warning,
             Rect::from_center_size(pos2(x0 + 30.0, rect.top() + 6.5), vec2(9.0, 9.0)),
-            theme::WARN,
+            theme::warn(),
         );
-        return resp.on_hover_text(egui::RichText::new(w).color(Color32::WHITE));
+        return resp.on_hover_text(egui::RichText::new(w).color(theme::ink()));
     }
     resp
 }

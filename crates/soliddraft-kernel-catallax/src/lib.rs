@@ -4,12 +4,15 @@
 //! immutable Catallax application build. Legacy history is derived from Catallax's
 //! origin sets; display estimates never decide topology or operation success.
 
+mod construction;
 mod convert;
 mod diagnostics;
 mod drawing_queries;
 mod edge_control;
 mod frames;
+mod identity;
 mod native;
+mod shell;
 mod step;
 
 use std::collections::{BTreeMap, VecDeque};
@@ -23,7 +26,7 @@ use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "a5c42583dd684e54c473bc377267e5e190c37bb6";
+pub const CATALLAX_REVISION: &str = "e3a7f71ce05c742690a496353fc58cf1c89ec0e1";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -368,13 +371,8 @@ fn gap(what: &str, stage: &str) -> KernelError {
     ))
 }
 
-/// Builds a legacy recipe, returning the body and the legacy step names' Catallax step ids.
-fn build(
-    input: &Value,
-    op: OpKind,
-    prefix: Option<&IncrementalApplicationBody>,
-    questions: Option<&mut Vec<Value>>,
-) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+/// Converts retained application definitions, preserving native steps and frames.
+fn converted_recipe(input: &Value, op: OpKind) -> KernelResult<catallax_app::soliddraft::Converted> {
     // The converter reads `soliddraft-recipe/1` only. A native step stands in as an
     // identity union of the body it reads, then takes its own operation back.
     let mut legacy = input.clone();
@@ -448,6 +446,17 @@ fn build(
         let step = converted.recipe.steps.iter_mut().find(|s| s.id == id).expect("converted native step");
         step.op = native;
     }
+    Ok(converted)
+}
+
+/// Builds a legacy recipe, returning the body and the legacy step names' Catallax step ids.
+fn build(
+    input: &Value,
+    op: OpKind,
+    prefix: Option<&IncrementalApplicationBody>,
+    questions: Option<&mut Vec<Value>>,
+) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+    let converted = converted_recipe(input, op)?;
     if let Some(questions) = questions {
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
         questions.push(json!({"format":"catallax-question/1", "source":"recipe", "problem":problem}));
@@ -650,10 +659,12 @@ impl Kernel for CatallaxKernel {
         })
     }
 
-    fn shell(&self, _: &OpTag, body: BodyId, _: &[FaceId], _: f64) -> KernelResult<OpResult> {
+    fn shell(&self, tag: &OpTag, body: BodyId, open: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
         self.observe("shell", || {
-            self.solid(body)?;
-            Err(gap("shell", "3"))
+            let state = self.state()?;
+            let solid = state.solid(body)?;
+            let operation = shell::operation(state.step(body)?, open, thickness, |face| solid.face_ref(face, body))?;
+            self.native(state, tag, OpKind::Shell, body, &[body], operation, None)
         })
     }
 
@@ -776,6 +787,19 @@ impl Kernel for CatallaxKernel {
                 })
                 .collect())
         })
+    }
+
+    fn reserve_proof_work(&self) -> KernelResult<Box<dyn ProofWork>> {
+        construction::reserve_proof_work()
+    }
+
+    fn construction_edit(
+        &self,
+        body: BodyId,
+        edits: &[ScalarEdit],
+        params: &TessellationParams,
+    ) -> KernelResult<ConstructionEdit> {
+        self.observe("construction_edit", || construction::prepare(self, body, edits, params))
     }
 
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {

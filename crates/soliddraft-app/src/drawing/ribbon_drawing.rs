@@ -51,11 +51,11 @@ fn groups(state: &AppState) -> Vec<Group> {
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     let Some(current) = state.drawing.session.as_ref().map(|s| s.tab) else { return };
     let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::PANEL);
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::chrome());
     let mut x = strip.left() + 10.0;
     let mut chosen = None;
     for tab in DrawingTab::ALL {
-        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
         let w = galley.size().x + 24.0;
         let r = Rect::from_min_size(pos2(x, strip.top() + 4.0), vec2(w, strip.height() - 4.0));
         x += w + 2.0;
@@ -67,45 +67,49 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if on {
             ui.painter().rect(
                 r,
-                CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
-                theme::BG,
-                Stroke::new(1.0, theme::LINE),
+                CornerRadius { nw: theme::RADIUS, ne: theme::RADIUS, sw: 0, se: 0 },
+                theme::panel(),
+                Stroke::new(1.0, theme::line()),
                 StrokeKind::Inside,
             );
         } else if resp.hovered() {
-            ui.painter().rect_filled(r, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, theme::HOVER);
+            ui.painter().rect_filled(
+                r,
+                CornerRadius { nw: theme::RADIUS, ne: theme::RADIUS, sw: 0, se: 0 },
+                theme::hover(),
+            );
         }
-        let color = if on { theme::INK } else { theme::MUTED };
+        let color = if on { theme::ink() } else { theme::muted() };
         ui.painter().galley(r.center() - galley.size() / 2.0, galley, color);
         if resp.clicked() {
             chosen = Some(tab);
         }
     }
-    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().hline(strip.x_range(), strip.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let mut x = strip.left() + 10.0;
     for tab in DrawingTab::ALL {
-        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::INK);
+        let galley = ui.painter().layout_no_wrap(tab.label().to_owned(), theme::font_medium(12.5), theme::ink());
         let w = galley.size().x + 24.0;
         if current == tab {
-            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::BG));
+            ui.painter().hline((x + 1.0)..=(x + w - 1.0), strip.bottom() - 0.5, Stroke::new(1.0, theme::panel()));
         }
         x += w + 2.0;
     }
     // A pill at the right of the strip names the document the ribbon drives.
     if let Some(s) = state.drawing.session.as_ref() {
         let text = format!("Drawing · {}", s.title());
-        let galley = ui.painter().layout_no_wrap(text, theme::font(10.5), theme::MUTED);
+        let galley = ui.painter().layout_no_wrap(text, theme::font(10.5), theme::muted());
         let r = Rect::from_min_size(
             pos2(strip.right() - galley.size().x - 26.0, strip.top() + 5.0),
             galley.size() + vec2(16.0, 6.0),
         );
-        ui.painter().rect(r, CornerRadius::same(99), theme::ACCENT_SOFT, Stroke::NONE, StrokeKind::Inside);
-        ui.painter().galley(r.center() - galley.size() / 2.0, galley, theme::SELECTION_INK);
+        ui.painter().rect(r, CornerRadius::same(99), theme::accent_soft(), Stroke::NONE, StrokeKind::Inside);
+        ui.painter().galley(r.center() - galley.size() / 2.0, galley, theme::selection_ink());
     }
 
     let (body, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_BODY_HEIGHT), Sense::hover());
-    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::BG);
-    ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::LINE));
+    ui.painter().rect_filled(body, CornerRadius::ZERO, theme::panel());
+    ui.painter().hline(body.x_range(), body.bottom() - 0.5, Stroke::new(1.0, theme::line()));
     let groups = groups(state);
     let mut x = body.left() + 8.0;
     let top = body.top() + 6.0;
@@ -117,7 +121,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         while i < group.items.len() {
             let item = &group.items[i];
             if item.size == Size::Large {
-                let galley = ui.painter().layout(item.label.clone(), theme::font(11.0), theme::INK, 64.0);
+                let galley = ui.painter().layout(item.label.clone(), theme::font(11.0), theme::ink(), 64.0);
                 let w = galley.size().x.max(44.0) + 14.0;
                 let r = Rect::from_min_size(pos2(x, top), vec2(w, item_h));
                 if draw_item(ui, item, r, (gi, i)).clicked() {
@@ -132,7 +136,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     let g = ui.painter().layout_no_wrap(
                         group.items[i + count].label.clone(),
                         theme::font(11.0),
-                        theme::INK,
+                        theme::ink(),
                     );
                     widest = widest.max(g.size().x);
                     count += 1;
@@ -156,9 +160,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             Align2::CENTER_CENTER,
             group.label,
             theme::font(10.5),
-            theme::MUTED,
+            theme::muted(),
         );
-        ui.painter().vline(x, (body.top() + 8.0)..=(body.bottom() - 8.0), Stroke::new(1.0, theme::LINE));
+        ui.painter().vline(x, (body.top() + 8.0)..=(body.bottom() - 8.0), Stroke::new(1.0, theme::line()));
         x += 8.0;
     }
     if let Some(t) = chosen {
@@ -174,21 +178,23 @@ fn draw_item(ui: &mut egui::Ui, item: &Item, rect: Rect, key: (usize, usize)) ->
     let resp = ui.interact(
         rect,
         ui.id().with(("drawing_ribbon_item", key)),
-        if enabled { Sense::click() } else { Sense::hover() },
+        if enabled { Sense::click_and_drag() } else { Sense::hover() },
     );
+    // A button dragged onto the command line's chip row becomes a chip there.
+    resp.dnd_set_drag_payload(crate::command_line::ToolDrag { id: item.command.id });
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, item.active, &item.label));
     let painter = ui.painter();
     if item.active {
-        painter.rect_filled(rect, CornerRadius::same(7), theme::SELECTION_BG);
+        painter.rect_filled(rect, CornerRadius::same(7), theme::selection_bg());
     } else if enabled && resp.hovered() {
-        painter.rect_filled(rect, CornerRadius::same(7), theme::HOVER);
+        painter.rect_filled(rect, CornerRadius::same(7), theme::hover());
     }
     let color = if !enabled {
-        theme::MUTED.gamma_multiply(0.55)
+        theme::muted().gamma_multiply(0.55)
     } else if item.active {
-        theme::SELECTION_INK
+        theme::selection_ink()
     } else {
-        theme::INK
+        theme::ink()
     };
     match item.size {
         Size::Large => {

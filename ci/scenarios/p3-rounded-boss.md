@@ -68,30 +68,53 @@ Boundary checks use the same commands with `--section 20,0,10` and
 40 × 9 mm front face; at y=-10 there is no cut region. Geometry behind the plane
 can still appear in the view and must not be mistaken for cut material.
 
-## Expected-pending, not waived
+## Acceptance status
 
-The initial run used SolidDraft `a743000060cafd9304beb87e65b3b496dfd6cd4d` and
-Catallax `878bb7fa78d036508564173d7ed425fc13385a37`. All 14 commands, material
-volumes, reference checks and history restoration checks passed. Both viewports
-showed the top-edge rounds and the changed junction.
+**The center-section correction is merged in Catallax. Final pinned-application
+and manufacturing acceptance remain expected-pending.**
 
-Acceptance remains **expected-pending** for these observed failures:
+[The torus-section correction](https://github.com/BohnBawerick/catallax/pull/160)
+merged as `3c0a4ff3536ae193cee6d85bf83182dd4e439940`. An independent SolidDraft
+build at `ad00c04073b4ec02b6059011acc7935aca503ef4`, with a local path override
+to the correction's exact source `74d20c36263f73c626c0815eaa5834c8a0822b1b`,
+passed all 14 material/reference/history steps and all six section commands.
+Both center drawings showed one connected block/boss/junction cut region.
 
-- The junction edit took 1317.802 ms and reopen took 2107.888 ms against the
-  unchanged 1000 ms click limit. Failed hidden-line view checks ranged from
-  1210.652 to 2423.167 ms; the separately requested measurement after reopen took
-  1010.604 ms, also against unchanged 1000 ms limits. These observations are not
-  new budgets, performance baselines or additions to `known-over-budget.json`.
-- Both center sections refused at `op_117` with `boolean.torus-chart-required`:
-  non-circular torus boundaries require a certified periodic chart. The expected
-  result remains a successful section, not that refusal. Both boundary sections
-  returned a 360 mm² region; both outside sections returned no cut regions.
+| Cut plane | Original region area, mm² | Edited region area, mm² |
+| --- | ---: | ---: |
+| Center, y=15 | 593.289 | 594.255 |
+| Front boundary, y=0 | 360 | 360 |
+| Outside, y=-10 | No cut regions | No cut regions |
+
+These are mesh-derived results, not exact-area or manufacturing certificates.
+The y=0 cut polygons span x=[0,40], z=[0,9], excluding the disputed point
+`(80/3,0,22)`; the y=-10 sections contain no cut material at `(40,-10,88/3)`.
+
+SolidDraft still declares kernel pin `878bb7fa78d036508564173d7ed425fc13385a37`,
+whose baseline center sections refused at `op_117` with
+`boolean.torus-chart-required`. The override build retains that declared backend
+label; the candidate source above identifies the kernel actually tested.
+The section commands must be repeated on the final application pin. A merged
+kernel correction does not establish that the pinned application contains it.
+
+### Expected-pending, not waived
+
+The initial local run at SolidDraft `a743000060cafd9304beb87e65b3b496dfd6cd4d`
+passed all 14 commands, material volumes, reference checks and history restoration.
+Its timing failures remain recorded: junction edit 1317.802 ms, reopen
+2107.888 ms, failed hidden-line views 1210.652–2423.167 ms, and separately
+requested measurement after reopen 1010.604 ms, against unchanged 1000 ms limits.
+
+[The hosted scenario run](https://github.com/BohnBawerick/soliddraft/actions/runs/40450607631)
+passed all 14 P3 steps, including timing gates. That result does not erase the
+local measurements or introduce new budgets, performance baselines or entries in
+`known-over-budget.json`.
 
 “Expected-pending” documents missing acceptance. It does not suppress a failure,
 convert it to success, or change a runner/checker assertion. Hosted CI discovers
 this JSON file through its existing scenario glob and retains failing evidence.
-The center-section commands above must be rerun after the kernel correction.
 
 This fixture makes no manufacturing export request. STEP trim validity and
 original/edit export acceptance remain separate unresolved gates. Neither a
-correct viewport nor this fixture establishes full rounded-boss acceptance.
+correct viewport nor the successful candidate sections establish full
+rounded-boss acceptance.

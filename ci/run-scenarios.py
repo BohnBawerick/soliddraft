@@ -14,8 +14,10 @@ import threading
 import time
 
 
-# Shared with the scenario latency gate. Acceptance limits, not process timeouts.
-BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000}
+# Shared with the scenario latency gate. Acceptance limits, not process timeouts. An
+# output has no click limit: its wait is the caller's wait for the certified file, and is
+# recorded and summarised, not gated, as the CLI export and drawing checks are.
+BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000, "output": None}
 # Calibrated independently from click latency; see docs/application-loop.md.
 DRAWING_VIEW_BUDGET_MS = 1000
 # A requested measurement keeps its 1,000 ms click-class budget; no wait above this gate is accepted.
@@ -35,6 +37,8 @@ def budget(tool):
         return "boolean"
     if tool == "compare":
         return "comparison"
+    if tool.startswith("drawing_export_"):
+        return "output"
     return "feature"
 
 
@@ -132,10 +136,11 @@ def timing(tool, segments):
         split[segment.get("overhead_phase", fallback)] += max(0.0, remaining)
         sources.append({"source": segment["source"], "elapsed_ms": elapsed})
     elapsed = sum(s["elapsed_ms"] for s in sources)
-    return {"check": "click budget", "class": kind, "budget_ms": BUDGET_MS[kind],
+    limit = BUDGET_MS[kind]
+    return {"check": "click budget", "class": kind, "budget_ms": limit,
             "elapsed_ms": elapsed, "split_ms": split, "work": work, "segments": sources,
             "background": {"call_ms": background_split, "work": background_work},
-            "pass": elapsed <= BUDGET_MS[kind]}
+            "pass": limit is None or elapsed <= limit}
 
 
 def drawing_view_timing(elapsed_ms, kernel):
@@ -154,9 +159,14 @@ def measurement_timing(elapsed_ms, kernel):
 
 
 def verdict(result):
-    """strict-pass met its budget; known-gap was accepted over budget; fail was not accepted."""
+    """strict-pass met its budget; known-gap was accepted over budget; fail was not accepted.
+
+    An output has no click budget: its wait is recorded as "output", neither a strict pass
+    nor a known gap."""
     if not result["pass"]:
         return "fail"
+    if result.get("budget_ms", 0) is None:
+        return "output"
     return "strict-pass" if result.get("within_budget", True) else "known-gap"
 
 
@@ -181,6 +191,44 @@ def answers(request, command, evidence, selectable=False):
     return None
 
 
+DRAWING_VIEW_CALLS = {"view_curves", "section_view"}
+
+
+def drawing_view_calls(kernel, gated=True):
+    """Every drawing view a command regenerated on its thread, each under the drawing-view ceiling.
+
+    An open drawing follows the part inside the command (automatic update), so its views'
+    kernel calls are in the click; this keeps each one under the same ceiling the live
+    hidden-line view has, and fails closed on a call without a wall time. An output draws
+    its views again from the certified mesh: those calls are recorded, not gated, as the
+    rest of its wait is.
+    """
+    views = []
+    for call in kernel["calls"]:
+        if call.get("nested", False) or call["operation"] not in DRAWING_VIEW_CALLS:
+            continue
+        if not isinstance(call["on_capture_thread"], bool):
+            raise ValueError("missing capture-thread ownership")
+        if call["on_capture_thread"]:
+            views.append({"operation": call["operation"], "wall_ms": milliseconds(call["wall_ms"])})
+    slowest = max((v["wall_ms"] for v in views), default=0.0)
+    return {"check": "drawing view calls", "class": "drawing-view",
+            "budget_ms": DRAWING_VIEW_BUDGET_MS if gated else None,
+            "views": views, "slowest_ms": slowest, "pass": not gated or slowest <= DRAWING_VIEW_BUDGET_MS}
+
+
+def output_files(paths, absent=()):
+    """Each file a step says it wrote exists and is not empty; a refused output left no file."""
+    checks = []
+    for path in paths:
+        p = pathlib.Path(path)
+        size = p.stat().st_size if p.is_file() else None
+        checks.append({"check": "output file", "path": str(p), "bytes": size, "pass": bool(size)})
+    for path in absent:
+        checks.append({"check": "no partial output", "path": str(path), "pass": not pathlib.Path(path).exists()})
+    return checks
+
+
 def load_known_over_budget(path):
     policy = json.loads(path.read_text())
     if policy["format"] != "soliddraft-known-over-budget/1":
@@ -202,6 +250,17 @@ def accept_latency(scenario, number, tool, latency, known):
     result = {**latency, "within_budget": latency["pass"],
               "status": "pass" if latency["pass"] else "over-budget"}
     approved = known.get((scenario, number))
+    if latency["budget_ms"] is None:
+        # An output's wait is recorded, not gated, and no known gap may be listed for it.
+        result["within_budget"] = None
+        result["status"] = "output"
+        result["message"] = f"{scenario} step {number} ({tool}) wrote its output in {latency['elapsed_ms']:.3f} ms"
+        if approved is not None:
+            result["pass"] = False
+            result["status"] = "invalid-known-over-budget"
+            result["message"] = f"{scenario} step {number} ({tool}) is an output with no click budget; remove its listing"
+        result["verdict"] = verdict(result)
+        return result
     if approved is None:
         result["verdict"] = verdict(result)
         return result
@@ -415,6 +474,20 @@ def timings(steps):
              "pass": s["pass"]} for s in steps if "label" in s]
 
 
+def no_solid(request, command, displayed):
+    """Whether the display reply shows no solid, and why a reply that claims none cannot.
+
+    Only a successful reply for this request and command revision may say `solid: false`.
+    Every other reply owes the step its display, whatever files exist."""
+    reply = displayed.get("structuredContent") or {}
+    if reply.get("solid") is not False:
+        return False, None
+    if displayed.get("isError"):
+        return False, "a failed reply cannot report no solid"
+    reason = answers(request, command, reply)
+    return reason is None, reason
+
+
 def wait(client, entry, name, arguments):
     """One timed MCP call. A timeout or closed pipe leaves the step incomplete, never passed."""
     try:
@@ -447,7 +520,10 @@ def run(args):
             raise RuntimeError("MCP initialization version mismatch")
         client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         known = {}
-        prepared = False
+        # GPU preparation runs once, outside every click.
+        response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
+        if response.get("isError"):
+            raise RuntimeError(f"renderer preparation failed: {response}")
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
             if "label" in step:
@@ -458,18 +534,45 @@ def run(args):
             result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000
             directory = args.out / "commands" / f"{number:04}"
+            # The click ends at the viewport, before the command's evidence is written. A step
+            # with no solid to show ends at the command's reply; its display request does not count.
+            started = time.perf_counter_ns()
+            displayed = wait(client, entry, "scenario_display", {})
+            display_ms = (time.perf_counter_ns() - started) / 1_000_000
+            written = wait(client, entry, "scenario_evidence", {})
+            if written.get("isError"):
+                raise RuntimeError(f"bundle evidence was not written: {written}")
             command = json.loads((directory / "command.json").read_text())
             kernel = json.loads((directory / "kernel.json").read_text())
             segments = [{"source": "kernel.json", "elapsed_ms": command_ms, "kernel": kernel,
                          "phase": "refusal" if result.get("isError") else command_phase(step["tool"])}]
             entry["feature_count"] = len(command["summary"]["features"])
             checks = entry["checks"]
-            checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == bool(step.get("refusal"))})
+            none, reason = no_solid(number, command, displayed)
+            if reason is not None:
+                checks.append({"check": "no-solid reply answers this request", "reason": reason, "pass": False})
+            solid = not none
+            expected_error = bool(step.get("refusal") or step.get("refused"))
+            checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == expected_error})
             if command.get("request") != number:
                 checks.append({"check": "command evidence is this request", "actual": command.get("request"),
                                "pass": False})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
             checks.append(backend_pinned(command, pin))
+            if step.get("refused"):
+                # An application refusal, such as an export the drawing's previews cannot
+                # certify: the tool refuses with this text and no kernel replay applies.
+                checks.append({"check": "application refusal", "actual": command["output"],
+                               "pass": step["refused"] in command["output"]})
+            if "drawing" in command["summary"]:
+                # The drawing followed the part inside this command: each regenerated view
+                # keeps the drawing-view ceiling, on top of the click budget below.
+                checks.append(drawing_view_calls(kernel, gated=budget(step["tool"]) != "output"))
+            try:
+                # The tool's JSON answer, for checks on what it reported.
+                command["result"] = json.loads(command["output"])
+            except (TypeError, ValueError):
+                command["result"] = None
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
             checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature"))
@@ -487,25 +590,25 @@ def run(args):
                     replay["expected_refusal"] = code
                     replay["pass"] &= replay.get("refusal") == code and replay.get("status") == "refused"
                     checks.append(replay)
-            if (directory / "recipe.json").exists():
-                if not prepared:
-                    response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
-                    if response.get("isError"):
-                        raise RuntimeError(f"renderer preparation failed: {response}")
-                    prepared = True
-                started = time.perf_counter_ns()
-                displayed = wait(client, entry, "scenario_display", {})
-                display_ms = (time.perf_counter_ns() - started) / 1_000_000
+            if solid:
                 checks.append({"check": "live display", "response": displayed, "pass": not displayed.get("isError")})
+                lost = [] if displayed.get("isError") else [
+                    name for name in ("display.json", "display.kernel.json") if not (directory / name).exists()]
+                if lost:
+                    checks.append({"check": "display evidence written", "pass": False,
+                                   "reason": f"scenario_display wrote no {' or '.join(lost)} for this step's solid"})
+                # Without its capture calls the display still keeps its whole wait in the click.
+                log = directory / "display.kernel.json"
                 segments.append({"source": "display.kernel.json", "elapsed_ms": display_ms, "phase": "display",
-                                 "kernel": json.loads((directory / "display.kernel.json").read_text())})
+                                 "kernel": json.loads(log.read_text()) if log.exists() else {"calls": []}})
                 display = None
-                if not displayed.get("isError"):
+                if not displayed.get("isError") and "display.json" not in lost:
                     display = json.loads((directory / "display.json").read_text())
                     checks.append({"check": "live Catallax display", "actual": display,
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
                 # The click ends only when the viewport shows this revision with pickable faces.
-                reason = "display request failed" if display is None else answers(number, command, display, True)
+                reason = ("display request failed" if displayed.get("isError") else "display evidence missing"
+                          if display is None else answers(number, command, display, True))
                 checks.append({"check": "click ends at a visible selectable edit", "reason": reason,
                                "pass": reason is None})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
@@ -515,19 +618,20 @@ def run(args):
             entry["timing"] = latency
             entry["intervals"] = {"preview": {
                 "starts": "command request sent",
-                "ends": "visible selectable edit" if (directory / "recipe.json").exists()
-                        else "command reply, no solid to show",
+                "ends": "visible selectable edit" if solid else "command reply, no solid to show",
                 "elapsed_ms": latency["elapsed_ms"], "budget_ms": latency["budget_ms"],
                 "verdict": latency["verdict"]}}
             checks.append(latency)
             write(directory / "timing.json", latency)
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
-            if latency["status"] == "known-over-budget":
+            if latency["status"] == "output":
+                print(f"::notice::{latency['message']}", flush=True)
+            elif latency["status"] == "known-over-budget":
                 print(f"::warning::{latency['message']}", flush=True)
             elif latency["status"] in {"known-gap-regression", "invalid-known-over-budget"}:
                 print(f"::error::{latency['message']}", flush=True)
             view_latency = None
-            if (directory / "recipe.json").exists():
+            if solid:
                 started = time.perf_counter_ns()
                 viewed = wait(client, entry, "scenario_view", {})
                 view_ms = (time.perf_counter_ns() - started) / 1_000_000
@@ -589,6 +693,8 @@ def run(args):
                         measurement = None
                 evidence = {**command, "measurement": measurement}
             checks.extend(check(evidence, spec) for spec in step.get("checks", []))
+            checks.extend(output_files(substitute(step.get("files", []), args.out),
+                                       substitute(step.get("absent", []), args.out)))
             # Exports run after the click is timed, as a user's separate request would.
             for extension in step.get("export", []):
                 exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",

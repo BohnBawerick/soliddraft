@@ -145,9 +145,13 @@ fn refused_extrusion_does_not_change_its_profile_and_handles_stay_owned() {
     assert_eq!(before, summarize(&k, b).unwrap());
     assert!(k.validate(b).unwrap().valid);
     assert!(matches!(k.chamfer(&OpTag::new("bevel"), b, &[], 1.0), Err(KernelError::InvalidInput(_))));
-    assert!(
-        matches!(k.shell(&OpTag::new("shell"), b, &[], 1.0), Err(KernelError::Unsupported(s)) if s.contains("stage 3"))
-    );
+    // This extruded circular profile still has an unsupported axial domain; the
+    // supported open-top planar shell and its export are exercised in shell.rs.
+    assert!(matches!(
+        k.shell(&OpTag::new("shell"), b, &[], 1.0),
+        Err(KernelError::Failed { op: OpKind::Shell, message, .. }) if message.starts_with("distance.cylinder-domain:")
+    ));
+    assert_eq!(before, summarize(&k, b).unwrap());
 }
 
 #[test]

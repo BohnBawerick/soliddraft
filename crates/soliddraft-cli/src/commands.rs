@@ -76,6 +76,7 @@ fn to_json(c: &CommandSpec) -> Value {
         "workspace": match c.workspace {
             Workspace::Part => "part",
             Workspace::Drawing => "drawing",
+            Workspace::Assembly => "assembly",
             Workspace::Both => "both",
         },
         "agents": who(c),
