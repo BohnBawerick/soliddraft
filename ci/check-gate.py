@@ -18,6 +18,8 @@ def verdict(registry, base_registry, retired, selected, needs):
     if selected is None or needs.get('select') != 'success':
         failures.append('select: selection failed or missing')
     for unit in sorted(set(selected or []) | {'select'}):
+        if unit in retirement and unit not in registry and unit != 'select':
+            continue
         result = needs.get(unit, 'absent')
         messages.append(f'{unit}: {result}')
         if unit not in registry or result != 'success':
