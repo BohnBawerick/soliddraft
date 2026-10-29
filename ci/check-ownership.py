@@ -119,6 +119,8 @@ def absolute(path, module, exports):
 
 def check(root):
     areas = tomllib.loads((root / 'ci/ownership.toml').read_text())['areas']
+    crate_names = {area['crate'].replace('-', '_'): area['crate'] for area in areas}
+    roots = {'crate', 'self', 'super'} | crate_names.keys()
     violations = []
     for crate in ('soliddraft-app', 'soliddraft-model'):
         src = root / 'crates' / crate / 'src'
@@ -142,7 +144,7 @@ def check(root):
             words = tokens(file.read_text())
             references = [(path, line) for path, _, line in imports(words)]
             for i, (word, line) in enumerate(words):
-                if word not in ('crate', 'self', 'super') or i + 1 >= len(words) or words[i + 1][0] != '::':
+                if word not in roots or i + 1 >= len(words) or words[i + 1][0] != '::':
                     continue
                 path = [word]
                 j = i + 1
@@ -152,8 +154,12 @@ def check(root):
                 references.append((path, line))
             seen = set()
             for path, line in references:
-                target_path = absolute(path, module, exports)
-                targets = [area for area in crate_areas if target_path[:len(area['module'])] == area['module']]
+                if not path:
+                    continue
+                target_crate = crate_names.get(path[0], crate)
+                target_path = path[1:] if path[0] in crate_names else absolute(path, module, exports)
+                targets = [area for area in areas if area['crate'] == target_crate
+                           and target_path[:len(area['module'])] == area['module']]
                 if not target_path or not targets:
                     continue
                 target = max(targets, key=lambda area: len(area['module']))

@@ -58,3 +58,16 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(result.stdout,
                          'crates/soliddraft-app/src/pick_measure.rs:1: O3: '
                          'file belongs to 0 areas; expected exactly one\n')
+
+    def test_cross_crate_slices_cannot_import_other_slices(self):
+        for crate, module, source in (
+            ('soliddraft-app', 'measure', 'use soliddraft_model::configs::Variant;\n'),
+            ('soliddraft-model', 'configs', 'pub struct Variant;\n'),
+        ):
+            directory = self.root / 'crates' / crate / 'src' / module
+            directory.mkdir()
+            (directory / 'mod.rs').write_text(source)
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout,
+                         'crates/soliddraft-app/src/measure/mod.rs:1: O1: v2.measure references v3.configs\n')
