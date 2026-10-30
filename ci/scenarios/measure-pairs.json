@@ -1174,7 +1174,7 @@
         },
         {
           "pointer": "/summary/undo",
-          "equals": "track diagonal_gap"
+          "equals": "Track this"
         },
         {
           "pointer": "/rebuild/operations",
@@ -1351,7 +1351,7 @@
         },
         {
           "pointer": "/summary/undo",
-          "equals": "track cap_gap"
+          "equals": "Track this"
         },
         {
           "pointer": "/rebuild/operations",
@@ -1371,7 +1371,7 @@
       "checks": [
         {
           "pointer": "/summary/undo",
-          "equals": "track diagonal_gap"
+          "equals": "Track this"
         },
         {
           "pointer": "/rebuild/operations",
@@ -1481,7 +1481,7 @@
       "checks": [
         {
           "pointer": "/summary/undo",
-          "equals": "track cap_gap"
+          "equals": "Track this"
         },
         {
           "pointer": "/rebuild/operations",
