@@ -1,16 +1,21 @@
-//! Navigation settings against the real app, through egui_kittest: a new installation
-//! starts on Fusion and an existing one on SolidDraft's original controls, even when
-//! another setting is written first, and changing navigation leaves the part alone.
+//! Navigation against the real app, through egui_kittest: a new installation starts on
+//! Fusion and an existing one on SolidDraft's original controls, changing navigation
+//! leaves the part alone, and the presets' gestures move the camera from the first drag,
+//! with no click first, while selection, sketches and feature panels carry on.
 //!
-//! Skips itself when no GPU adapter is available; `navigation_settings.rs` proves the
-//! same behaviour without one. Each scenario writes the settings file it ended with
-//! under `target/navigation-test/app/`.
+//! Skips itself when no GPU adapter is available; `navigation_settings.rs` and
+//! `navigation_routing.rs` prove the same behaviour without one. Each scenario writes the
+//! settings file it ended with, a camera trace and a frame under
+//! `target/navigation-test/app/`. Nothing here is timed.
 
-use egui::vec2;
+use egui::{Key, Modifiers, PointerButton, Pos2, pos2, vec2};
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
+use glam::Vec3;
 use soliddraft_app::app::{Automation, SolidDraftApp};
-use soliddraft_app::document::Selection;
-use soliddraft_app::state::AppAction;
+use soliddraft_app::document::{Command, Document, ExtrudeParams, PlaneKind, ProfileKind, Selection, SketchPlane};
+use soliddraft_app::navigation::NAV_DRAG_THRESHOLD;
+use soliddraft_app::state::{AppAction, Tool};
 use soliddraft_app::theme::Mode;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -114,4 +119,543 @@ fn navigation_save_does_not_touch_document_or_undo() {
     assert_eq!(settings(&dir)["navigation"]["preset_id"], "solidworks");
     record("document-unchanged", &dir);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+type App = Harness<'static, SolidDraftApp>;
+
+/// The app on `doc`, drawing every step so picks read back, with the camera fitted.
+fn gesture_app(doc: Document, preset: &str) -> App {
+    let mut app = Harness::builder()
+        .with_size(vec2(1440.0, 900.0))
+        .with_pixels_per_point(1.0)
+        .with_render_every_step(true)
+        .with_step_dt(1.0 / 60.0)
+        .wgpu()
+        .build_eframe(move |cc| SolidDraftApp::new(cc, doc, Automation::default()));
+    app.run_steps(6);
+    use_preset(&mut app, preset);
+    app.state_mut().state.push(AppAction::ZoomFit);
+    app.run_steps(30);
+    app
+}
+
+/// Switches the preset through the app's settings path, as the Preferences will.
+fn use_preset(app: &mut App, preset: &str) {
+    let mut nav = app.state().state.navigation.clone();
+    nav.select_preset(preset).unwrap();
+    app.state_mut().state.set_navigation(nav).unwrap();
+    app.run_steps(1);
+}
+
+/// A 60 x 40 x 20 box on the top plane.
+fn box_document() -> Document {
+    let mut doc = Document::new("Box", soliddraft_app::kernel());
+    doc.apply(Command::AddExtrude {
+        params: ExtrudeParams {
+            profile: ProfileKind::Rectangle { width: 60.0, height: 40.0 },
+            depth: 20.0,
+            ..Default::default()
+        },
+        via_assistant: false,
+    })
+    .unwrap();
+    doc
+}
+
+/// Yaw, pitch, target and distance.
+type Cam = (f32, f32, Vec3, f32);
+
+fn cam(app: &App) -> Cam {
+    let c = &app.state().state.viewport.camera;
+    (c.yaw, c.pitch, c.target, c.distance)
+}
+
+fn viewport(app: &App) -> egui::Rect {
+    app.state().state.viewport.rect
+}
+
+fn modifiers(app: &App, m: Modifiers) {
+    app.event(egui::Event::ModifiersChanged(m));
+}
+
+fn press(app: &mut App, button: PointerButton, pos: Pos2, m: Modifiers) {
+    app.hover_at(pos);
+    app.step();
+    modifiers(app, m);
+    app.event(egui::Event::PointerButton { pos, button, pressed: true, modifiers: m });
+    app.step();
+}
+
+fn move_to(app: &mut App, pos: Pos2) {
+    app.event(egui::Event::PointerMoved(pos));
+    app.step();
+}
+
+fn release(app: &mut App, button: PointerButton, pos: Pos2, m: Modifiers) {
+    app.event(egui::Event::PointerButton { pos, button, pressed: false, modifiers: m });
+    app.step();
+    modifiers(app, Modifiers::NONE);
+    app.run_steps(2);
+}
+
+/// Drags from `from` to `to` in a few moves and lets go.
+fn drag(app: &mut App, button: PointerButton, from: Pos2, to: Pos2, m: Modifiers) {
+    press(app, button, from, m);
+    for i in 1..=4 {
+        move_to(app, from + (to - from) * (i as f32 / 4.0));
+    }
+    release(app, button, to, m);
+}
+
+/// Keeps a gesture's camera before and after, and a frame after, for review.
+fn trace(app: &mut App, name: &str, before: Cam, after: Cam) {
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/navigation-test/app");
+    std::fs::create_dir_all(&out).unwrap();
+    let row = |c: Cam| serde_json::json!({"yaw": c.0, "pitch": c.1, "target": [c.2.x, c.2.y, c.2.z], "distance": c.3});
+    let json = serde_json::json!({"gesture": name, "before": row(before), "after": row(after)});
+    std::fs::write(out.join(format!("{name}.json")), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+    if let Ok(image) = app.render() {
+        let _ = image.save(out.join(format!("{name}.png")));
+    }
+}
+
+/// Runs a gesture and says what it changed: (turned, panned, zoomed).
+fn effect(app: &mut App, name: &str, gesture: impl FnOnce(&mut App)) -> (bool, bool, bool) {
+    let before = cam(app);
+    gesture(app);
+    let after = cam(app);
+    trace(app, name, before, after);
+    let turned = (after.0 - before.0).abs() > 1e-4 || (after.1 - before.1).abs() > 1e-4;
+    let panned = (after.2 - before.2).length() > 1e-3;
+    let zoomed = (after.3 - before.3).abs() > 1e-3;
+    (turned, panned, zoomed)
+}
+
+const ORBIT: (bool, bool, bool) = (true, false, false);
+const PAN: (bool, bool, bool) = (false, true, false);
+const NOTHING: (bool, bool, bool) = (false, false, false);
+
+fn modelling_unchanged(app: &App) -> impl Fn(&App, &str) + use<> {
+    let s = &app.state().state;
+    let before = (s.doc.selection, s.doc.undo_depth(), s.doc.revision(), s.editor.is_some());
+    move |app: &App, what: &str| {
+        let s = &app.state().state;
+        assert_eq!((s.doc.selection, s.doc.undo_depth(), s.doc.revision(), s.editor.is_some()), before, "{what}");
+    }
+}
+
+fn skip_without_gpu() -> bool {
+    if gpu_available() {
+        return false;
+    }
+    eprintln!("skipping: no GPU adapter");
+    true
+}
+
+#[test]
+fn held_ordinary_keys_are_modifiers_and_taps_still_run_their_command() {
+    let (_guard, dir) = config_dir("held-keys");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "inventor");
+    let feature = app.state().state.doc.features[0].id;
+    app.state_mut().state.doc.selection = Some(Selection::Feature(feature));
+    app.run_steps(2);
+    let c = viewport(&app).center();
+    let effect_of = effect(&mut app, "inventor-f2-left-drag", |app| {
+        app.key_down(Key::F2);
+        app.step();
+        drag(app, PointerButton::Primary, c, c + vec2(80.0, 30.0), Modifiers::NONE);
+        app.key_up(Key::F2);
+        app.run_steps(3);
+    });
+    assert_eq!(effect_of, PAN, "held F2 and a left drag pans");
+    let s = &app.state().state;
+    assert!(s.rename.is_none(), "the held F2 did not rename");
+    assert_eq!(s.doc.selection, Some(Selection::Feature(feature)), "the drag selected nothing");
+    app.key_down(Key::F2);
+    app.step();
+    app.key_up(Key::F2);
+    app.run_steps(3);
+    assert!(app.state().state.rename.is_some(), "a tap of F2 still renames");
+    record("held-keys", &dir);
+}
+
+#[test]
+fn drag_capture_requires_viewport_origin_and_threshold() {
+    let (_guard, _dir) = config_dir("capture");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "legacy_soliddraft");
+    let rect = viewport(&app);
+    // Empty space near a corner, away from the part, the cube and the toolbar.
+    let start = rect.left_bottom() + vec2(120.0, -120.0);
+    let short = effect(&mut app, "legacy-under-threshold", |app| {
+        drag(app, PointerButton::Primary, start, start + vec2(0.0, NAV_DRAG_THRESHOLD - 1.0), Modifiers::NONE)
+    });
+    assert_eq!(short, NOTHING, "under the threshold the camera stays");
+    let long = effect(&mut app, "legacy-past-threshold", |app| {
+        drag(app, PointerButton::Primary, start, start + vec2(0.0, NAV_DRAG_THRESHOLD + 1.0), Modifiers::NONE)
+    });
+    assert_eq!(long, ORBIT, "past it the first drag orbits, with no click first");
+    let tree = pos2(rect.left() - 120.0, rect.center().y);
+    let from_tree = effect(&mut app, "legacy-press-in-tree", |app| {
+        drag(app, PointerButton::Primary, tree, rect.center(), Modifiers::NONE)
+    });
+    assert_eq!(from_tree, NOTHING, "a press in the tree does not navigate");
+    let out = effect(&mut app, "legacy-out-of-window", |app| {
+        press(app, PointerButton::Primary, start, Modifiers::NONE);
+        move_to(app, start + vec2(60.0, -40.0));
+        assert!(app.state().state.viewport.router.dragging(), "captured");
+        move_to(app, pos2(-50.0, -30.0));
+        assert!(app.state().state.viewport.router.dragging(), "still captured outside the window");
+        release(app, PointerButton::Primary, pos2(-50.0, -30.0), Modifiers::NONE);
+    });
+    assert!(out.0, "the camera turned while inside");
+    assert!(!app.state().state.viewport.router.captured(), "capture ends at the release");
+    // Over the ribbon and the view cube the drag goes on, and neither is clicked.
+    let tab = app.state().state.ribbon_tab;
+    let over = effect(&mut app, "legacy-release-over-overlays", |app| {
+        press(app, PointerButton::Primary, start, Modifiers::NONE);
+        move_to(app, start + vec2(40.0, 0.0));
+        move_to(app, rect.right_top() + vec2(-70.0, 70.0));
+        move_to(app, pos2(rect.center().x, 60.0));
+        release(app, PointerButton::Primary, pos2(rect.center().x, 60.0), Modifiers::NONE);
+    });
+    assert!(over.0);
+    assert_eq!(app.state().state.ribbon_tab, tab, "the ribbon was not clicked");
+    assert_eq!(app.state().state.viewport.camera.view_name, "Custom", "the cube was not clicked");
+}
+
+#[test]
+fn navigation_drag_does_not_select_or_open_a_secondary_click_path() {
+    let (_guard, _dir) = config_dir("click-paths");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "solidworks");
+    let top = {
+        let s = &app.state().state;
+        s.viewport.camera.project(Vec3::new(0.0, 0.0, 20.0), s.viewport.rect).unwrap()
+    };
+    let unchanged = modelling_unchanged(&app);
+    let orbit = effect(&mut app, "solidworks-middle-drag-on-face", |app| {
+        drag(app, PointerButton::Middle, top, top + vec2(70.0, 20.0), Modifiers::NONE)
+    });
+    assert_eq!(orbit, ORBIT);
+    unchanged(&app, "a middle drag on a face selects nothing and opens nothing");
+
+    use_preset(&mut app, "onshape");
+    let unchanged = modelling_unchanged(&app);
+    let r_drag = effect(&mut app, "onshape-right-drag", |app| {
+        drag(app, PointerButton::Secondary, top, top + vec2(-60.0, 25.0), Modifiers::NONE)
+    });
+    assert_eq!(r_drag, ORBIT);
+    unchanged(&app, "the right drag's release is not a click");
+    let r_click = effect(&mut app, "onshape-right-click", |app| {
+        press(app, PointerButton::Secondary, top, Modifiers::NONE);
+        release(app, PointerButton::Secondary, top, Modifiers::NONE);
+    });
+    assert_eq!(r_click, NOTHING, "a right click does not move the camera");
+
+    // A click without a drag still selects what is under the pointer.
+    let top = {
+        let s = &app.state().state;
+        s.viewport.camera.project(Vec3::new(0.0, 0.0, 20.0), s.viewport.rect).unwrap()
+    };
+    app.hover_at(top);
+    app.run_steps(4);
+    press(&mut app, PointerButton::Primary, top, Modifiers::NONE);
+    release(&mut app, PointerButton::Primary, top, Modifiers::NONE);
+    assert!(matches!(app.state().state.doc.selection, Some(Selection::Face(_))), "the click picked the top face");
+}
+
+fn wheel_event(unit: egui::MouseWheelUnit, dy: f32, m: Modifiers) -> egui::Event {
+    egui::Event::MouseWheel { unit, delta: vec2(0.0, dy), phase: egui::TouchPhase::Move, modifiers: m }
+}
+
+#[test]
+fn one_physical_zoom_gesture_produces_one_zoom() {
+    let (_guard, _dir) = config_dir("zoom");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "fusion");
+    let c = viewport(&app).center();
+    app.hover_at(c);
+    app.run_steps(2);
+    let d0 = cam(&app).3;
+    app.event(wheel_event(egui::MouseWheelUnit::Line, 1.0, Modifiers::NONE));
+    app.run_steps(3);
+    let d1 = cam(&app).3;
+    assert!((d0 / d1 - 0.1f32.exp()).abs() < 1e-3, "one line, one zoom: {d0} to {d1}");
+    // Both in one frame, as the browser delivers them.
+    app.input_mut().events.push(egui::Event::Zoom(1.25));
+    app.input_mut().events.push(wheel_event(egui::MouseWheelUnit::Point, 30.0, Modifiers::CTRL));
+    app.run_steps(3);
+    let d2 = cam(&app).3;
+    assert!((d1 / d2 - 1.25).abs() < 1e-3, "a pinch and its Ctrl-wheel copy zoom once: {d1} to {d2}");
+    trace(&mut app, "fusion-wheel-and-pinch", (0.0, 0.0, Vec3::ZERO, d0), (0.0, 0.0, Vec3::ZERO, d2));
+}
+
+#[test]
+fn navigation_works_with_active_sketch_and_collector() {
+    let (_guard, _dir) = config_dir("sketch-collector");
+    if skip_without_gpu() {
+        return;
+    }
+    // A sketch with the line tool, under Fusion.
+    let mut app = gesture_app(soliddraft_app::new_document(), "fusion");
+    app.state_mut().state.push(AppAction::StartSketchOn(SketchPlane::Reference { plane: PlaneKind::Top, offset: 0.0 }));
+    app.run_steps(60);
+    app.state_mut().state.push(AppAction::SketchTool(Tool::Line));
+    app.run_steps(3);
+    let c = viewport(&app).center();
+    let pan = effect(&mut app, "fusion-sketch-middle-drag", |app| {
+        drag(app, PointerButton::Middle, c, c + vec2(60.0, 0.0), Modifiers::NONE)
+    });
+    assert_eq!(pan, PAN);
+    let orbit = effect(&mut app, "fusion-sketch-shift-middle-drag", |app| {
+        drag(app, PointerButton::Middle, c, c + vec2(40.0, 30.0), Modifiers::SHIFT)
+    });
+    assert_eq!(orbit, ORBIT);
+    let s = app.state().state.sketch.as_ref().expect("the sketch stays open");
+    assert_eq!(s.tool, Tool::Line, "the line tool stays");
+    let left = effect(&mut app, "fusion-sketch-left-drag", |app| {
+        drag(app, PointerButton::Primary, c, c + vec2(50.0, 40.0), Modifiers::NONE)
+    });
+    assert_eq!(left, NOTHING, "a left drag in the sketch does not navigate");
+    let lines = |app: &App| app.state().state.sketch.as_ref().map_or(0, |s| s.sketch.entities.len());
+    let before = lines(&app);
+    for p in [c + vec2(-80.0, -40.0), c + vec2(90.0, 50.0)] {
+        app.hover_at(p);
+        app.run_steps(2);
+        press(&mut app, PointerButton::Primary, p, Modifiers::NONE);
+        release(&mut app, PointerButton::Primary, p, Modifiers::NONE);
+    }
+    assert!(lines(&app) > before, "left clicks still draw a line");
+    assert_eq!(app.state().state.sketch.as_ref().unwrap().tool, Tool::Line);
+
+    // A fillet panel collecting edges, under SOLIDWORKS.
+    let mut app = gesture_app(box_document(), "fusion");
+    let edge = {
+        let doc = &app.state().state.doc;
+        doc.edges.iter().find(|e| (e.midpoint.z - 20.0).abs() < 1e-9).unwrap().id
+    };
+    app.state_mut().state.doc.selection = Some(Selection::Edge(edge));
+    app.state_mut().state.push(AppAction::StartFillet);
+    app.run_steps(20);
+    let snapshot = |app: &App| {
+        let s = &app.state().state;
+        let e = s.editor.as_ref().expect("the fillet panel is open");
+        (e.edges().to_vec(), e.preview.result.clone(), s.doc.undo_depth())
+    };
+    let (edges, preview, depth) = snapshot(&app);
+    assert_eq!(edges.len(), 1);
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let orbit = effect(&mut app, "fusion-fillet-shift-middle-drag", |app| {
+        drag(app, PointerButton::Middle, c, c + vec2(50.0, 20.0), Modifiers::SHIFT)
+    });
+    assert_eq!(orbit, ORBIT);
+    let pan = effect(&mut app, "fusion-fillet-middle-drag", |app| {
+        drag(app, PointerButton::Middle, c, c + vec2(-40.0, 10.0), Modifiers::NONE)
+    });
+    assert_eq!(pan, PAN);
+    let (edges_after, preview_after, depth_after) = snapshot(&app);
+    assert_eq!(edges_after, edges, "the collector keeps its edges");
+    assert_eq!(depth_after, depth, "no undo step");
+    match (&preview, &preview_after) {
+        (Some(a), Some(b)) => assert!(std::sync::Arc::ptr_eq(a, b), "the preview mesh is the same"),
+        (a, b) => assert_eq!(a.is_some(), b.is_some(), "the preview stays as it was"),
+    }
+    // A left click on another top edge still adds it.
+    let other = {
+        let doc = &app.state().state.doc;
+        doc.edges.iter().filter(|e| (e.midpoint.z - 20.0).abs() < 1e-9).find(|e| e.id != edge).unwrap().midpoint
+    };
+    let p = {
+        let s = &app.state().state;
+        let m = Vec3::new(other.x as f32, other.y as f32, other.z as f32);
+        s.viewport.camera.project(m, s.viewport.rect).unwrap()
+    };
+    app.hover_at(p);
+    app.run_steps(4);
+    press(&mut app, PointerButton::Primary, p, Modifiers::NONE);
+    release(&mut app, PointerButton::Primary, p, Modifiers::NONE);
+    app.run_steps(10);
+    assert_eq!(snapshot(&app).0.len(), 2, "the click added the edge to the collector");
+
+    // A focused number field keeps the keys: Z does not fit, and a drag in the viewport
+    // ends the edit as a click outside does, without spoiling what was typed.
+    let radius = |app: &App| match &app.state().state.editor.as_ref().expect("the panel stays open").params {
+        soliddraft_app::state::EditorParams::Fillet(f) => f.radius,
+        other => panic!("{other:?}"),
+    };
+    let before = radius(&app);
+    app.get_by_label("Radius value").click();
+    app.run_steps(2);
+    app.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    app.get_by_label("Radius value").type_text("3");
+    app.run_steps(2);
+    let typed = effect(&mut app, "fusion-fillet-z-while-typing", |app| {
+        app.key_press(Key::Z);
+        app.run_steps(30);
+    });
+    assert_eq!(typed, NOTHING, "Z typed into the field does not fit the view");
+    drag(&mut app, PointerButton::Middle, c, c + vec2(30.0, 0.0), Modifiers::NONE);
+    app.run_steps(10);
+    let after = radius(&app);
+    assert!(after == 3.0 || after == before, "the radius is the typed 3 or the untouched {before}, not {after}");
+}
+
+#[test]
+fn legacy_preset_reproduces_current_navigation() {
+    let (_guard, _dir) = config_dir("legacy");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "legacy_soliddraft");
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let none = Modifiers::NONE;
+    for (name, button, m, want) in [
+        ("legacy-left-drag", PointerButton::Primary, none, ORBIT),
+        ("legacy-middle-drag", PointerButton::Middle, none, PAN),
+        ("legacy-right-drag", PointerButton::Secondary, none, PAN),
+        ("legacy-shift-left-drag", PointerButton::Primary, Modifiers::SHIFT, PAN),
+    ] {
+        let got = effect(&mut app, name, |app| drag(app, button, c, c + vec2(50.0, 25.0), m));
+        assert_eq!(got, want, "{name}");
+    }
+    let unchanged = modelling_unchanged(&app);
+    let ctrl = effect(&mut app, "legacy-ctrl-left-drag", |app| {
+        drag(app, PointerButton::Primary, c, c + vec2(50.0, 25.0), Modifiers::CTRL)
+    });
+    assert_eq!(ctrl, NOTHING, "no other gesture moves the camera");
+    unchanged(&app, "and it selects nothing");
+    app.hover_at(viewport(&app).center());
+    app.run_steps(2);
+    let wheel = effect(&mut app, "legacy-wheel", |app| {
+        app.event(wheel_event(egui::MouseWheelUnit::Line, -2.0, Modifiers::NONE));
+        app.run_steps(3);
+    });
+    assert!(wheel.2, "the wheel zooms");
+    let fit = effect(&mut app, "legacy-z-fit", |app| {
+        app.key_press(Key::Z);
+        app.run_steps(40);
+    });
+    assert!(fit.2 || fit.1, "Z fits");
+    let face = {
+        let doc = &app.state().state.doc;
+        doc.faces.iter().find(|f| (f.centroid.z - 20.0).abs() < 1e-9).unwrap().id
+    };
+    app.state_mut().state.doc.selection = Some(Selection::Face(face));
+    app.run_steps(2);
+    let normal = effect(&mut app, "legacy-n-normal", |app| {
+        app.key_press(Key::N);
+        app.run_steps(60);
+    });
+    assert!(normal.0, "N turns to the face");
+    let dir = app.state().state.viewport.camera.direction();
+    assert!(dir.dot(Vec3::Z) > 0.999, "looking straight down the top face's normal: {dir:?}");
+    // A left drag in a sketch belongs to the sketch.
+    app.state_mut()
+        .state
+        .push(AppAction::StartSketchOn(SketchPlane::Reference { plane: PlaneKind::Front, offset: 0.0 }));
+    app.run_steps(60);
+    let sketch = effect(&mut app, "legacy-sketch-left-drag", |app| {
+        drag(app, PointerButton::Primary, c, c + vec2(50.0, 25.0), Modifiers::NONE)
+    });
+    assert!(!sketch.0, "no orbit in a sketch");
+    // A click selects.
+    app.state_mut().state.push(AppAction::ExitSketch(None));
+    app.run_steps(5);
+    app.state_mut().state.doc.selection = None;
+    let top = {
+        let s = &app.state().state;
+        s.viewport.camera.project(Vec3::new(5.0, 5.0, 20.0), s.viewport.rect).unwrap()
+    };
+    app.hover_at(top);
+    app.run_steps(4);
+    press(&mut app, PointerButton::Primary, top, Modifiers::NONE);
+    release(&mut app, PointerButton::Primary, top, Modifiers::NONE);
+    assert!(app.state().state.doc.selection.is_some(), "a click without a drag selects");
+}
+
+#[test]
+fn fusion_solidworks_onshape_end_to_end() {
+    let (_guard, _dir) = config_dir("three-presets");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "fusion");
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let none = Modifiers::NONE;
+    let zoom = (false, false, true);
+    for (preset, button, m, want) in [
+        ("fusion", PointerButton::Middle, Modifiers::SHIFT, ORBIT),
+        ("fusion", PointerButton::Middle, none, PAN),
+        ("solidworks", PointerButton::Middle, none, ORBIT),
+        ("solidworks", PointerButton::Middle, Modifiers::CTRL, PAN),
+        ("solidworks", PointerButton::Middle, Modifiers::SHIFT, zoom),
+        ("onshape", PointerButton::Secondary, none, ORBIT),
+        ("onshape", PointerButton::Middle, none, PAN),
+        ("onshape", PointerButton::Secondary, Modifiers::CTRL, PAN),
+    ] {
+        use_preset(&mut app, preset);
+        let unchanged = modelling_unchanged(&app);
+        let name = format!("{preset}-{button:?}-{m:?}").replace(['{', '}', ' ', ':', ','], "");
+        let got = effect(&mut app, &name, |app| drag(app, button, c, c + vec2(40.0, -30.0), m));
+        let got = if want == zoom { (false, false, got.2) } else { got };
+        assert_eq!(got, want, "{preset}: {button:?} with {m:?}");
+        unchanged(&app, &name);
+    }
+    // Onshape: a middle double click fits, and N turns normal to a face through normal_to.
+    app.event(wheel_event(egui::MouseWheelUnit::Line, -5.0, Modifiers::NONE));
+    app.run_steps(3);
+    let fit = effect(&mut app, "onshape-middle-double-click", |app| {
+        for _ in 0..2 {
+            press(app, PointerButton::Middle, c, Modifiers::NONE);
+            app.event(egui::Event::PointerButton {
+                pos: c,
+                button: PointerButton::Middle,
+                pressed: false,
+                modifiers: Modifiers::NONE,
+            });
+            app.step();
+        }
+        app.run_steps(40);
+    });
+    assert!(fit.2 || fit.1, "the double click fitted the view");
+    let face = {
+        let doc = &app.state().state.doc;
+        doc.faces.iter().find(|f| (f.centroid.z - 20.0).abs() < 1e-9).unwrap().id
+    };
+    app.state_mut().state.doc.selection = Some(Selection::Face(face));
+    app.key_press(Key::N);
+    app.run_steps(60);
+    assert!(app.state().state.viewport.camera.direction().dot(Vec3::Z) > 0.999, "N looks along the face");
+}
+
+#[test]
+fn wheel_direction_is_global_and_independent() {
+    let (_guard, _dir) = config_dir("wheel");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "fusion");
+    let mut nav = app.state().state.navigation.clone();
+    nav.wheel.invert = true;
+    app.state_mut().state.set_navigation(nav).unwrap();
+    for preset in ["fusion", "solidworks", "onshape", "fusion"] {
+        use_preset(&mut app, preset);
+        assert!(app.state().state.navigation.wheel.invert, "{preset}: still inverted");
+        app.hover_at(viewport(&app).center());
+        app.run_steps(2);
+        let d0 = cam(&app).3;
+        app.event(wheel_event(egui::MouseWheelUnit::Line, 1.0, Modifiers::NONE));
+        app.run_steps(3);
+        assert!(cam(&app).3 > d0, "{preset}: inverted, a forward turn zooms out");
+    }
 }

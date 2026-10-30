@@ -29,11 +29,34 @@ impl SolidDraftApp {
             .into_iter()
             .filter(|(c, k)| (!typing || k.fires_while_typing()) && (c.is_enabled(state) || (c.hint)(state).is_some()))
             .collect();
+        // A key the navigation preset holds to navigate, as Inventor's F2, is left to the
+        // viewport; its own command runs when it comes up without a drag having used it.
+        let mac = ctx.os() == egui::os::OperatingSystem::Mac;
+        let router = &mut self.state.viewport.router;
+        router.configure(&self.state.navigation, mac);
+        let hold = |k: Key| router.is_hold_key(crate::navigation::NavKey::main(k));
         let mut fired = Vec::new();
         ctx.input_mut(|i| {
-            for (command, key) in bindings {
-                if i.consume_key(key.modifiers, key.key) {
-                    fired.push(command);
+            let mut taps: Vec<(Key, egui::Modifiers)> = i
+                .events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Key { key, physical_key, pressed: false, modifiers, .. } => {
+                        Some((physical_key.unwrap_or(*key), *modifiers))
+                    }
+                    _ => None,
+                })
+                .filter(|(k, _)| !typing && hold(*k) && !router.held_key_used(crate::navigation::NavKey::main(*k)))
+                .collect();
+            for (command, key) in &bindings {
+                if !typing && hold(key.key) {
+                    if let Some(t) = taps.iter().position(|(k, m)| *k == key.key && m.matches_logically(key.modifiers))
+                    {
+                        taps.remove(t);
+                        fired.push(*command);
+                    }
+                } else if i.consume_key(key.modifiers, key.key) {
+                    fired.push(*command);
                 }
             }
         });

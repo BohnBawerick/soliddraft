@@ -25,7 +25,7 @@ All icons are drawn with the egui painter on a 16 by 16 grid (`icons.rs`). No ic
 ## Viewport and navigation
 
 - Z is up. Front is the viewer standing on -Y looking at +Y; Top looks down -Z with +Y up on screen; Right looks along -X. Isometric is the viewer at (+X, -Y, +Z), the SolidWorks default.
-- Left drag orbits, right or middle drag pans, Shift + left drag pans, the wheel zooms toward the cursor. A click with no drag selects. Left drag for orbit keeps a laptop trackpad usable; SolidWorks users who expect middle drag get pan, which is the less destructive surprise.
+- The mouse follows the navigation preset in `settings.json` (`navigation.preset_id`, `src/navigation/`): a new installation starts on Fusion 360 (middle drag pans, Shift + middle drag orbits), an existing one on SolidDraft's original controls (left drag orbits, right or middle drag pans, Shift + left drag pans). The wheel zooms toward the cursor. A click with no drag selects.
 - View changes animate over about 150 ms so a keyboard user can see which way the model turned.
 - The view cube in the top right is drawn with the painter from the camera's rotation. Visible faces are clickable; the hovered face highlights.
 - The heads-up toolbar is a single floating strip: isometric, fit, F, T, R, then display style. Section and measure are present but disabled until phase 2.
