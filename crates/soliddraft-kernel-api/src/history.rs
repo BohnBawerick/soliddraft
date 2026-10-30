@@ -47,6 +47,8 @@ pub enum OpKind {
     Mirror,
     /// `draft`.
     Draft,
+    /// An imported STEP body.
+    ImportStep,
     /// Terminal field lattice.
     Lattice,
     /// Terminal field gyroid.
@@ -73,6 +75,7 @@ impl OpKind {
             OpKind::Draft => "draft",
             OpKind::Lattice => "lattice",
             OpKind::Gyroid => "gyroid",
+            OpKind::ImportStep => "import_step",
         }
     }
 }

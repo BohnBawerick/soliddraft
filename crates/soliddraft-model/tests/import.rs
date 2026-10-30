@@ -23,6 +23,7 @@ struct Importer {
     inner: CatallaxKernel,
     solids: usize,
     curved: bool,
+    unsupported: bool,
     left_open: Vec<String>,
     seen: Mutex<Vec<Vec<Decision>>>,
 }
@@ -30,7 +31,14 @@ struct Importer {
 impl Importer {
     fn new(solids: usize, left_open: &[&str]) -> Arc<Importer> {
         let left_open = left_open.iter().map(|s| s.to_string()).collect();
-        Arc::new(Importer { inner: CatallaxKernel::new(), solids, curved: false, left_open, seen: Mutex::default() })
+        Arc::new(Importer {
+            inner: CatallaxKernel::new(),
+            solids,
+            curved: false,
+            unsupported: false,
+            left_open,
+            seen: Mutex::default(),
+        })
     }
 }
 
@@ -91,6 +99,9 @@ impl Kernel for Importer {
     }
 
     fn import_step(&self, tag: &OpTag, request: &ImportStepRequest<'_>) -> KernelResult<ImportStepResult> {
+        if self.unsupported {
+            return Err(soliddraft_kernel_api::KernelError::Unsupported("import_step".into()));
+        }
         self.seen.lock().unwrap().push(request.decisions.to_vec());
         let mut bodies = Vec::new();
         if self.left_open.is_empty() {
@@ -168,7 +179,9 @@ fn the_import_hashes_its_bytes_and_keeps_them_unchanged() {
 
 #[test]
 fn without_a_backend_reader_the_import_fails_in_words_and_keeps_the_source() {
-    let mut doc = Document::new("Part1", Arc::new(CatallaxKernel::new()));
+    let mut kernel = Importer::new(1, &[]);
+    Arc::get_mut(&mut kernel).unwrap().unsupported = true;
+    let mut doc = Document::new("Part1", kernel);
     let id = add(&mut doc, FeatureKind::ImportStep(import())).unwrap();
     let message = failure(&doc, id);
     assert!(message.contains("cannot import STEP files yet"), "{message}");

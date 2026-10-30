@@ -2322,6 +2322,9 @@ impl CommandTools<'_> {
                 }
                 v["name"] = f.name.clone().into();
                 v["status"] = status_text(doc, f.id).into();
+                if let Some(record) = doc.model().import_record(soliddraft_model::FeatureId(f.id as u32)) {
+                    v["record"] = json!(record);
+                }
                 if f.via_assistant {
                     v["via_assistant"] = true.into();
                 }
@@ -2349,6 +2352,9 @@ impl CommandTools<'_> {
         let mut v = params_json(doc, &f.kind);
         v["name"] = f.name.clone().into();
         v["status"] = status_text(doc, id).into();
+        if let Some(record) = doc.model().import_record(soliddraft_model::FeatureId(id as u32)) {
+            v["record"] = json!(record);
+        }
         let topology = doc.display_body().and_then(|b| doc.kernel().topology(b).ok());
         v["faces"] = doc.faces.iter().filter(|x| x.feature == id).map(|x| face_json(doc, x.id)).collect();
         v["edges"] =
@@ -2513,6 +2519,17 @@ impl ToolHost for CommandTools<'_> {
                 let part = crate::drawing::part::PartContext::new(self.doc);
                 drawing.run_journal_command(command, part.as_ref())?;
                 Ok(json!({"status":"applied"}))
+            })(),
+            "preview_import" if mcp => (|| {
+                let preview = crate::import::Preview::read(self.doc, &crate::import::source_path(&input)?)?;
+                Ok(preview.summary())
+            })(),
+            "import_step" if mcp => (|| {
+                let preview = crate::import::Preview::read(self.doc, &crate::import::source_path(&input)?)?;
+                let decline: Vec<String> = serde_json::from_value(input.get("decline").cloned().unwrap_or(json!([])))
+                    .map_err(|e| format!("bad decline list: {e}"))?;
+                crate::import::commit(self.doc, &preview, &decline)?;
+                Ok(self.summary())
             })(),
             "model_summary" => Ok(self.summary()),
             "feature" => self.feature(input["name"].as_str().unwrap_or_default()),

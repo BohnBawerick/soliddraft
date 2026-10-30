@@ -33,11 +33,12 @@ pub(crate) struct Built {
     /// Which kept build this is, so a feature that reads it can key on it. Zero for a
     /// result the cache does not keep.
     pub version: u64,
+    pub import_record: Option<soliddraft_kernel_api::RepairRecord>,
 }
 
 impl Built {
     fn pass(status: FeatureStatus, current: Option<BodyId>) -> Built {
-        Built { status, output: current, owned: None, names: Vec::new(), sketch: None, version: 0 }
+        Built { status, output: current, owned: None, names: Vec::new(), sketch: None, version: 0, import_record: None }
     }
 
     fn failed(current: Option<BodyId>, message: impl Into<String>) -> Built {
@@ -287,6 +288,7 @@ impl Document {
             names: Vec::new(),
             sketch: Some(BuiltSketch { plane, on_face, regions }),
             version: 0,
+            import_record: None,
         }
     }
 
@@ -355,9 +357,15 @@ impl Document {
             Ok(body)
         };
         match run() {
-            Ok(output) => {
-                Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None, version: 0 }
-            }
+            Ok(output) => Built {
+                status: FeatureStatus::Ok,
+                output,
+                owned: mine,
+                names: number(faces),
+                sketch: None,
+                version: 0,
+                import_record: None,
+            },
             Err(error) => {
                 if let Some(body) = mine {
                     let _ = self.kernel.release(body);
@@ -491,9 +499,15 @@ impl Document {
             Ok(body)
         };
         match run(&mut mine) {
-            Ok(output) => {
-                Built { status: FeatureStatus::Ok, output, owned: mine, names: number(faces), sketch: None, version: 0 }
-            }
+            Ok(output) => Built {
+                status: FeatureStatus::Ok,
+                output,
+                owned: mine,
+                names: number(faces),
+                sketch: None,
+                version: 0,
+                import_record: None,
+            },
             Err(err) => {
                 if let Some(body) = mine {
                     let _ = self.kernel.release(body);
@@ -561,6 +575,7 @@ impl Document {
             names: number(faces),
             sketch: None,
             version: 0,
+            import_record: None,
         }
     }
 
@@ -609,6 +624,7 @@ impl Document {
                 names: name(&r),
                 sketch: None,
                 version: 0,
+                import_record: None,
             },
             Err(err) => Built::failed(current, err.to_string()),
         }
@@ -812,6 +828,11 @@ impl Document {
         })
     }
 
+    /// The last rebuild's repair record, including a declined import with no body.
+    pub fn import_record(&self, id: FeatureId) -> Option<&soliddraft_kernel_api::RepairRecord> {
+        self.built.get(self.built_index(id)?)?.import_record.as_ref()
+    }
+
     fn build_import(&self, f: &Feature, i: &ImportStepFeature, current: Option<BodyId>) -> Built {
         if current.is_some() {
             return Built::failed(current, "an imported body must come first in the part");
@@ -840,12 +861,14 @@ impl Document {
                 if !r.left_open.is_empty() {
                     release(&r);
                     let names = r.left_open.join(", ");
-                    return Built::failed(
+                    let mut built = Built::failed(
                         current,
                         format!(
                             "{names} not imported until the gap is resolved: a declined or unanswered repair leaves the solid open and unbuilt. The original file was never changed"
                         ),
                     );
+                    built.import_record = Some(r.record);
+                    return built;
                 }
                 if r.bodies.len() != 1 {
                     release(&r);
@@ -860,6 +883,7 @@ impl Document {
                     names: Vec::new(),
                     sketch: None,
                     version: 0,
+                    import_record: Some(r.record),
                 }
             }
             Err(KernelError::Unsupported(what)) => {

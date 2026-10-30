@@ -89,7 +89,7 @@ class Routing(unittest.TestCase):
         cls.sources = staticmethod(lambda p: [selector.content(ROOT, p, 'HEAD'), selector.content(ROOT, p)])
 
     def test_frozen_fixtures(self):
-        for name, sha in [('routing-cases.json', '7c7f4d30af6b7e598c9ca1e4befae99bf1845218e827c8076671e92751609e16'),
+        for name, sha in [('routing-cases.json', '5360929b3dd5d42d103faa99866ffb686d466abe111d4167b5c55bb442aff40d'),
                           ('gate-cases.json', 'c66b54349c735d237663849692c9df802caabf8b9f33d6e03940134d89d23c05')]:
             self.assertEqual(hashlib.sha256((ROOT / 'ci' / name).read_bytes()).hexdigest(), sha)
         for name, sha in read('routing-cases.json')['snapshots'].items():
@@ -166,11 +166,13 @@ class Routing(unittest.TestCase):
         script = FROZEN_BASE.read_text()
         for case in read('routing-replays/round2-replays.json')['cases']:
             with self.subTest(case['id']):
+                packages = ({name: set(deps) for name, deps in case['packages'].items()}
+                            if 'packages' in case else self.packages)
                 sources = self.case_sources(case)
-                selected = selector.select(case['changes'], case['event'], '', self.packages, sources)
+                selected = selector.select(case['changes'], case['event'], '', packages, sources)
                 self.assertEqual(set(selected), set(case['must']))
                 union = selector.with_base_rules(selected, script, case['changes'], case['event'], '',
-                                                 self.packages, sources)
+                                                 packages, sources)
                 self.assertEqual(set(union), everything())
 
     def test_real_base_selector_keeps_its_obligations(self):

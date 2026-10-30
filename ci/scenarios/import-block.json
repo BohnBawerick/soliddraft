@@ -1,0 +1,498 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "import-block",
+  "max_work": 20000000,
+  "steps": [
+    {
+      "tool": "preview_import",
+      "arguments": {
+        "path": "ci/fixtures/import/two-blocks-5um.step"
+      },
+      "checks": [
+        {
+          "pointer": "/result/source_sha256",
+          "equals": "0a16eb4caa0073701b15903a503d8b75e629936806506918cae1814ac162a0bd"
+        },
+        {
+          "pointer": "/result/proposals",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "import_step",
+      "arguments": {
+        "path": "ci/fixtures/import/two-blocks-5um.step",
+        "decline": []
+      },
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 1
+        },
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "equals": null
+        }
+      ],
+      "refused": "2 solids; a part holds one body"
+    },
+    {
+      "tool": "preview_import",
+      "arguments": {
+        "path": "ci/fixtures/import/block-seam-4um.step"
+      },
+      "checks": [
+        {
+          "pointer": "/result/source_sha256",
+          "equals": "1a602addaa4b534ef9427427d5231ba689a811a11159a5f9e7ebc17b3365c32b"
+        },
+        {
+          "pointer": "/result/proposals",
+          "length": 1
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 1
+        },
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        },
+        {
+          "pointer": "/result/proposals/0/id",
+          "equals": "g0"
+        },
+        {
+          "pointer": "/result/proposals/0/question",
+          "equals": "repair:1a602addaa4b:g0"
+        },
+        {
+          "pointer": "/result/proposals/0/kind",
+          "equals": "seam_close"
+        },
+        {
+          "pointer": "/result/proposals/0/distance_min_mm",
+          "equals": "0.004"
+        },
+        {
+          "pointer": "/result/proposals/0/distance_max_mm",
+          "equals": "0.004"
+        },
+        {
+          "pointer": "/result/proposals/0/tolerance_mm",
+          "equals": "0.01"
+        },
+        {
+          "pointer": "/result/proposals/0/disposition",
+          "equals": "auto"
+        },
+        {
+          "pointer": "/result/proposals/0/entities",
+          "contains": "#176"
+        }
+      ]
+    },
+    {
+      "tool": "import_step",
+      "arguments": {
+        "path": "ci/fixtures/import/block-seam-4um.step",
+        "decline": [
+          "g0"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0/name",
+          "equals": "Import1"
+        },
+        {
+          "pointer": "/summary/features/0/type",
+          "equals": "import_step"
+        },
+        {
+          "pointer": "/summary/features/0/sha256",
+          "equals": "1a602addaa4b534ef9427427d5231ba689a811a11159a5f9e7ebc17b3365c32b"
+        },
+        {
+          "pointer": "/summary/features/0/bytes",
+          "equals": 7241
+        },
+        {
+          "pointer": "/summary/features/0/decisions",
+          "equals": {
+            "repair:1a602addaa4b:g0": "decline"
+          }
+        },
+        {
+          "pointer": "/summary/features/0/status",
+          "contains": "#178 not imported until the gap is resolved"
+        },
+        {
+          "pointer": "/summary/features/0/status",
+          "contains": "The original file was never changed"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/approval",
+          "equals": "declined"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/max_movement_mm",
+          "equals": "0"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/bounds_before",
+          "equals": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "40",
+              "25",
+              "10.004"
+            ]
+          ]
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/bounds_after",
+          "equals": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "40",
+              "25",
+              "10.004"
+            ]
+          ]
+        },
+        {
+          "pointer": "/summary/features/0/record/derivative",
+          "absent": true
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "equals": null
+        }
+      ],
+      "failed": {
+        "Import1": "not imported until the gap is resolved"
+      }
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/declined.dwprt"
+      },
+      "checks": [],
+      "failed": {
+        "Import1": "not imported until the gap is resolved"
+      }
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/declined.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0",
+          "same_as_step": 4
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "equals": null
+        }
+      ],
+      "failed": {
+        "Import1": "not imported until the gap is resolved"
+      }
+    },
+    {
+      "tool": "delete_feature",
+      "arguments": {
+        "feature": "Import1"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "import_step",
+      "arguments": {
+        "path": "ci/fixtures/import/block-seam-4um.step",
+        "decline": []
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0/name",
+          "equals": "Import1"
+        },
+        {
+          "pointer": "/summary/features/0/type",
+          "equals": "import_step"
+        },
+        {
+          "pointer": "/summary/features/0/sha256",
+          "equals": "1a602addaa4b534ef9427427d5231ba689a811a11159a5f9e7ebc17b3365c32b"
+        },
+        {
+          "pointer": "/summary/features/0/bytes",
+          "equals": 7241
+        },
+        {
+          "pointer": "/summary/features/0/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/0/decisions",
+          "equals": {}
+        },
+        {
+          "pointer": "/summary/features/0/record/changes",
+          "length": 1
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/id",
+          "equals": "g0"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/kind",
+          "equals": "seam_close"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/approval",
+          "equals": "automatic"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/max_movement_mm",
+          "equals": "0.004"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/tolerance_mm",
+          "equals": "0.01"
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/bounds_before",
+          "equals": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "40",
+              "25",
+              "10.004"
+            ]
+          ]
+        },
+        {
+          "pointer": "/summary/features/0/record/changes/0/bounds_after",
+          "equals": [
+            [
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "40",
+              "25",
+              "10.004"
+            ]
+          ]
+        },
+        {
+          "pointer": "/summary/features/0/record/source/sha256",
+          "equals": "1a602addaa4b534ef9427427d5231ba689a811a11159a5f9e7ebc17b3365c32b"
+        },
+        {
+          "pointer": "/summary/features/0/record/derivative/sha256",
+          "absent": false
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 12
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 10004,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 3300.52,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 20,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 12.5,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 5.002,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 40,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 25,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10.004,
+          "tolerance": 0.0005
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/imported.dwprt"
+      },
+      "checks": []
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/imported.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0",
+          "same_as_step": 9
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 12
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 10004,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 3300.52,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 20,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 12.5,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 5.002,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 40,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 25,
+          "tolerance": 0.0005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10.004,
+          "tolerance": 0.0005
+        }
+      ],
+      "same_geometry_as_step": 9,
+      "checked_step_export": "{bundle}/imported.dwprt"
+    }
+  ]
+}

@@ -163,6 +163,21 @@
       ]
     },
     {
+      "id": "import-block",
+      "file": "ci/scenarios/import-block.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-api",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
+      "route": "MCP document commands -> Catallax adapter -> pinned kernel",
+      "supported_limits": "One AP214 MANIFOLD_SOLID_BREP of planar faces in millimetres; one straight seam within the 0.01 mm automatic cap; decline leaves the solid open and unbuilt; files with more than one solid are refused; over-cap, opening, uncertain, curved and unsupported-entity cases are later V9 batches",
+      "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json}; declined.dwprt and imported.dwprt; step 12 part.step, step-report.json, check-step.stdout and check-step.stderr; geometry-info.stdout recipe hashes"
+    },
+    {
       "id": "lattice",
       "file": "ci/scenarios/lattice.json",
       "acceptance": true,

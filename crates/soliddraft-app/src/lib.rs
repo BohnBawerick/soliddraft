@@ -21,6 +21,7 @@ pub mod drawing;
 pub mod file;
 mod grid;
 pub mod icons;
+pub mod import;
 pub mod journal;
 #[cfg(target_arch = "wasm32")]
 pub mod journal_browser;

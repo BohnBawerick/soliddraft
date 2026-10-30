@@ -43,3 +43,11 @@ A part with a feature that needs a repair, is blocked or failed is refused, so n
 Hosted CI's STEP job exports the bracket and opens its STEP in OpenCASCADE through `ci/check-step.py`. The check passes when OpenCASCADE reads one valid solid with the face count of the report and of the exact body less the report's `removed_faces`, removed counts that are whole numbers from 0 to the exact body's face and edge counts, and a volume within the reported deviation of Catallax's exact volume. A surface moved by at most `d` changes the enclosed volume by at most `area * d` to first order, so the allowance is that product, plus OpenCASCADE's own integration error estimate and the exact volume's measurement width.
 
 OpenCASCADE and the exact-body acceptance measurements are test tools only. The application never links or runs OpenCASCADE. To capture the bracket and its measurement report locally, run `SOLIDDRAFT_STEP_PROOF_DIR=/tmp/bracket-proof cargo test -p soliddraft-exchange --test bracket step_carries_the_proven_deviation_and_the_body_faces -- --exact`, then `python3 ci/check-step.py /tmp/bracket-proof/bracket.step /tmp/bracket-proof/step-report.json`.
+
+## STEP import
+
+File > Import STEP reads a source file and shows its repair preview. Accept applies automatic repairs within the kernel's cap without saving an acceptance answer. Decline keeps the source with a declined answer and an unbuilt import in the tree. Cancel leaves the part unchanged. Closing the preview also cancels it. Files with several solids are refused because a part holds one body.
+
+The part file keeps the original source bytes, their SHA-256 and the repair decisions. Reopening checks the digest and rebuilds the same import and change record. Repairs never overwrite the source file. A built import can be exported through the checked STEP route above.
+
+MCP clients use `preview_import {"path":"source.step"}` to read the preview, then `import_step {"path":"source.step","decline":["g0"]}` to decline a gap. An empty decline list applies automatic repairs. This batch supports one planar AP214 body with a straight seam inside the 0.01 mm automatic cap. Other repair approvals remain later work.

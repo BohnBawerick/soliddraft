@@ -20,7 +20,7 @@ pub const PROPOSALS_FORMAT: &str = "catallax-import-proposals/1";
 /// key of the saved decision.
 pub fn question_id(sha256: &str, index: usize) -> String {
     let prefix: String = sha256.chars().take(12).collect();
-    format!("repair:{prefix}:{index}")
+    format!("repair:{prefix}:g{index}")
 }
 
 /// The gap index a question id names, when it is a question about the source with hash
@@ -28,10 +28,10 @@ pub fn question_id(sha256: &str, index: usize) -> String {
 pub fn question_index(sha256: &str, question: &str) -> Option<usize> {
     let rest = question.strip_prefix("repair:")?;
     let (prefix, index) = rest.split_once(':')?;
-    if prefix.is_empty() || !sha256.starts_with(prefix) {
+    if prefix.chars().count() != 12 || !sha256.starts_with(prefix) {
         return None;
     }
-    index.parse().ok()
+    index.strip_prefix('g')?.parse().ok()
 }
 
 /// What the app does with a proposal.
@@ -215,4 +215,18 @@ pub struct ImportStepResult {
     pub left_open: Vec<String>,
     /// The change record: automatic repairs, accepted repairs and declined proposals.
     pub record: RepairRecord,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kernel_question_ids_round_trip() {
+        let sha = "1a602addaa4b534ef9427427d5231ba689a811a11159a5f9e7ebc17b3365c32b";
+        assert_eq!(question_index(sha, "repair:1a602addaa4b:g0"), Some(0));
+        assert_eq!(question_id(sha, 0), "repair:1a602addaa4b:g0");
+        assert_eq!(question_index(sha, "repair:1:g0"), None);
+        assert_eq!(question_index(sha, "repair:1a602addaa4b:0"), None);
+    }
 }
