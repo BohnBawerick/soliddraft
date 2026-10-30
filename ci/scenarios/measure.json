@@ -1,0 +1,824 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "measure",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch2",
+        "through_all": false,
+        "depth": 100,
+        "flip": true
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 10869.026644707674,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 3950.79644737231,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "10"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "parameter": "depth",
+        "expression": "block_h"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/1/expressions/depth",
+          "equals": "block_h"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/edges/8/name",
+          "equals": "Boss-Extrude1 \u00b7 Edge 9"
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/0",
+          "approx": 20,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/1",
+          "approx": -15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/2",
+          "approx": 5,
+          "tolerance": 0.02
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 \u00b7 Edge 9"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "edge"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "edge_length"
+        },
+        {
+          "pointer": "/result/value",
+          "equals": 10
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/result/lo",
+          "equals": 10
+        },
+        {
+          "pointer": "/result/hi",
+          "equals": 10
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Cut-Extrude1 \u00b7 Wall of circle 1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 376.9911184307752,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm2"
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 376.9911184307752
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 376.9911184307752
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "block_edge",
+        "entity": "Boss-Extrude1 \u00b7 Edge 9",
+        "check": "< 12 mm"
+      },
+      "same_geometry_as_step": 9,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "block_edge"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "edge_length"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 9"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "bore_wall",
+        "entity": "Cut-Extrude1 \u00b7 Wall of circle 1",
+        "check": "> 300"
+      },
+      "same_geometry_as_step": 9,
+      "checks": [
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm2"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 376.9911184307752,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 376.9911184307752
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 376.9911184307752
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "same_geometry_as_step": 10,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 10
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "same_geometry_as_step": 11,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 11
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "plate",
+        "entity": "Boss-Extrude1"
+      },
+      "label": "refused entity with no single measure",
+      "refused": "an edge or a face",
+      "same_geometry_as_step": 13,
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 13
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 13
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 13
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 13
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "15"
+      },
+      "label": "upstream edit updates both rows",
+      "checks": [
+        {
+          "pointer": "/summary/features/1/depth",
+          "equals": 15
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 15
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 565.4866776461628,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 565.4866776461628
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 565.4866776461628
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 16303.539967061512,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 4839.292006587698,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 7.5,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "same_geometry_as_step": 11,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 11
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 10869.026644707674,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "same_geometry_as_step": 15,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 15
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 16303.539967061512,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "parameter": "depth",
+        "expression": "block_edge"
+      },
+      "label": "refused tracked driver",
+      "refused": "tracked",
+      "same_geometry_as_step": 17,
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 17
+        }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude1",
+        "suppressed": true
+      },
+      "label": "source gone, row stale",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 15
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 565.4866776461628,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/reason",
+          "contains": "Cut-Extrude1"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "unknown"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 18000,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 4500,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Block"
+      },
+      "same_geometry_as_step": 19,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "contains": "Block \u00b7"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "suppress",
+      "arguments": {
+        "feature": "Cut-Extrude1",
+        "suppressed": false
+      },
+      "same_geometry_as_step": 17,
+      "checks": [
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/reason",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 565.4866776461628,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 565.4866776461628
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 565.4866776461628
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 16303.539967061512,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/measure.dwprt"
+      },
+      "files": [
+        "{bundle}/measure.dwprt"
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "11"
+      },
+      "label": "memory differs from the file",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 11
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 414.6902302738527,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 414.6902302738527
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 414.6902302738527
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 11955.929309178442,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/measure.dwprt"
+      },
+      "same_geometry_as_step": 21,
+      "checked_step_export": "{bundle}/measure.dwprt",
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 21
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 16303.539967061512,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 4839.292006587698,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "10"
+      },
+      "label": "the reopened references still measure",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 376.9911184307752,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 376.9911184307752
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 376.9911184307752
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 10869.026644707674,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 3950.79644737231,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Block \u00b7 Edge 1"
+        ],
+        "radius": 2
+      },
+      "label": "labels move, the reference holds",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 376.9911184307752,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 376.9911184307752
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 376.9911184307752
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Block \u00b7 Edge 9"
+      },
+      "label": "the old name is now another edge",
+      "checks": [
+        {
+          "pointer": "/result/value",
+          "approx": 8,
+          "tolerance": 1e-09
+        }
+      ]
+    }
+  ]
+}

@@ -164,6 +164,7 @@ impl Pools {
             "sketch" => &self.sketches,
             "feature" | "before" => &self.features,
             "edges" => &self.edges,
+            "entity" => &self.any,
             "proposal_id" => &self.proposals,
             "template" => &self.templates,
             "view" => &self.views,

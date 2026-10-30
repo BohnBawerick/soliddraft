@@ -1170,3 +1170,39 @@ pub fn mesh_sections_match_boolean_sections(k: &dyn Kernel) {
         k.release(id).unwrap();
     }
 }
+
+/// Single-entity measurements carry exact or bounded evidence, and reject foreign ids.
+pub fn measures_say_how_they_are_known(k: &dyn Kernel) {
+    use crate::Certainty;
+    for depth in [10.0, 76.2] {
+        let profile = k
+            .create_body_from_profile(
+                &tag("measure_profile"),
+                &Profile::rectangle(Plane::XY, Point2::new(0.0, 0.0), 40.0, 30.0),
+            )
+            .unwrap();
+        let body =
+            k.extrude(&tag("measure_block"), profile.body, &Extrude { distance: depth, direction: None }).unwrap().body;
+        let topology = k.topology(body).unwrap();
+        let edge = topology.edges.iter().find(|e| (e.bbox.max.z - e.bbox.min.z - depth).abs() < 1e-5).unwrap();
+        let m = k.edge_length(body, edge.id).unwrap();
+        assert_eq!(m.value, depth);
+        assert!(m.lo <= depth && depth <= m.hi && m.hi - m.lo <= 1e-10, "{m:?}");
+        if depth == 10.0 {
+            assert_eq!(m.certainty, Certainty::Exact);
+            assert_eq!((m.value, m.lo, m.hi), (10.0, 10.0, 10.0));
+        }
+        assert!(k.edge_length(body, EdgeId::from_raw(u64::MAX)).is_err());
+        assert!(k.face_area(body, FaceId::from_raw(u64::MAX)).is_err());
+        k.release(body).unwrap();
+        k.release(profile.body).unwrap();
+    }
+    let body = cylinder(k, Vec3::ZERO, 10.0, 20.0);
+    let topology = k.topology(body).unwrap();
+    let side = topology.faces.iter().find(|f| f.surface == SurfaceKind::Cylinder).unwrap();
+    let m = k.face_area(body, side.id).unwrap();
+    assert_eq!(m.certainty, Certainty::Bounded);
+    assert!(m.lo <= 1256.6370614359173 && 1256.6370614359173 <= m.hi, "{m:?}");
+    assert!(m.hi - m.lo <= 3e-9);
+    k.release(body).unwrap();
+}

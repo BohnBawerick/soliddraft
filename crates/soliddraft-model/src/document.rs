@@ -84,6 +84,7 @@ pub struct Document {
     pub(crate) name: String,
     pub(crate) features: Vec<Feature>,
     pub(crate) values: crate::values::Values,
+    pub(crate) observations: BTreeMap<String, crate::tracked::Observation>,
     pub(crate) datum_names: BTreeMap<DatumPlane, String>,
     /// The first feature below the rollback bar.
     pub(crate) rollback: Option<FeatureId>,
@@ -126,6 +127,7 @@ impl Document {
             name: name.into(),
             features: Vec::new(),
             values: Default::default(),
+            observations: Default::default(),
             datum_names: BTreeMap::new(),
             rollback: None,
             next_id: 1,

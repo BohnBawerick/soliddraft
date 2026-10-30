@@ -363,3 +363,10 @@ owner = "core"
 crate = "soliddraft-model"
 paths = ["crates/soliddraft-model/src/values.rs"]
 module = ["values"]
+
+[[areas]]
+name = "v2.tracked"
+owner = "V2"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/tracked.rs"]
+module = ["tracked"]

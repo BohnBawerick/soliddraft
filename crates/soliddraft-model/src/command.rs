@@ -62,6 +62,15 @@ pub enum Command {
         /// Authored expression text.
         expression: String,
     },
+    /// Tracks a proven entity with an optional check, without rebuilding geometry.
+    Track {
+        /// Shared value identifier.
+        name: String,
+        /// Persistent reference to measure.
+        source: crate::tracked::Source,
+        /// Optional comparison text.
+        check: Option<String>,
+    },
     /// Binds a feature input to an expression.
     Drive {
         /// The input to drive.
@@ -569,6 +578,9 @@ impl Document {
         let mut state = self.values.clone();
         let mut features = self.features.clone();
         let label = match &command {
+            Command::Track { name, source, check } => {
+                self.track_request(&mut state, name, source, check.as_deref()).map_err(CommandError::Invalid)?
+            }
             Command::SetValue { name, expression } => {
                 state.set(name, expression).map_err(CommandError::Invalid)?;
                 format!("set value {name}")
@@ -606,6 +618,11 @@ impl Document {
         Self::check_order(&features)?;
         Self::check_lattice_last(&features)?;
         let first = self.features.iter().zip(&features).position(|(a, b)| a.kind != b.kind);
+        if let Command::RenameValue { name, to } = &command
+            && let Some(proof) = self.observations.remove(name)
+        {
+            self.observations.insert(to.clone(), proof);
+        }
         self.values = state;
         self.features = features;
         if let Some(i) = first {
@@ -616,7 +633,8 @@ impl Document {
 
     fn apply(&mut self, command: Command) -> Result<Applied, CommandError> {
         match command {
-            command @ (Command::SetValue { .. }
+            command @ (Command::Track { .. }
+            | Command::SetValue { .. }
             | Command::Drive { .. }
             | Command::RenameValue { .. }
             | Command::RestoreValues { .. }) => self.apply_values(command),

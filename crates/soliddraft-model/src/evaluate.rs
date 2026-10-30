@@ -56,6 +56,7 @@ impl Document {
             name: self.name.clone(),
             features: self.features.clone(),
             values: self.values.clone(),
+            observations: self.observations.clone(),
             datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_id: self.next_id,
@@ -117,6 +118,7 @@ impl Document {
                 .collect();
             self.dirty = self.built.len();
             self.cache.trim(&self.built);
+            self.refresh_tracked();
             Ok(())
         })
     }
@@ -150,6 +152,7 @@ impl Document {
         let journal = self.journal_command(|| serde_json::json!({"op":"rebuild"}));
         let _ = journal.finish({
             self.rebuild_inner();
+            self.refresh_tracked();
             Ok::<_, String>(())
         });
     }
@@ -180,6 +183,7 @@ impl Document {
     /// Marks every feature from `index` down as stale.
     pub(crate) fn touch(&mut self, index: usize) {
         self.dirty = self.dirty.min(index);
+        self.stale_tracked("proof pending");
     }
 
     /// A feature's build: the kept one when the cache has its exact inputs, else a new

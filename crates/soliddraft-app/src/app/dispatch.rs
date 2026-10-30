@@ -613,6 +613,7 @@ impl SolidDraftApp {
                 self.state.doc.selection = sel;
                 self.state.rename = None;
             }
+            AppAction::MeasureEntity => self.state.measure.open = !self.state.measure.open,
             AppAction::MeasureMassProperties => {
                 let feature = self.state.doc.selection.and_then(|sel| self.state.doc.selection_feature(sel));
                 if let Some(id) = feature

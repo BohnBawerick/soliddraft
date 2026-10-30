@@ -27,6 +27,8 @@ pub mod contract;
 #[cfg(feature = "counting")]
 pub mod counting;
 pub mod drawing;
+pub mod measure;
+pub use measure::{Certainty, Measurement};
 mod edit;
 mod geometry;
 mod history;
@@ -835,6 +837,16 @@ pub trait Kernel: Send + Sync {
     /// it. The default returns `topology`.
     fn measured_topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.topology(body)
+    }
+
+    /// Proven length of one trimmed edge. Display estimates cannot answer this query.
+    fn edge_length(&self, _body: BodyId, _edge: EdgeId) -> KernelResult<Measurement> {
+        Err(KernelError::Unsupported("proven edge length".into()))
+    }
+
+    /// Proven area of one trimmed face.
+    fn face_area(&self, _body: BodyId, _face: FaceId) -> KernelResult<Measurement> {
+        Err(KernelError::Unsupported("proven face area".into()))
     }
 
     /// The records of every operation that produced `body`, oldest first.

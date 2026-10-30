@@ -144,6 +144,20 @@
       "evidence": "result.json and commands/NNNN/{command.json,kernel.json,viewport.png,part.stl,export-stl-oracle.stdout}"
     },
     {
+      "id": "measure",
+      "file": "ci/scenarios/measure.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "1556d52678efa27af32a32914723cad5e222746f",
+      "route": "MCP measure_entity and track -> persistent references -> Catallax single-entity proofs",
+      "supported_limits": "B-rep edge length and face area, part frame, exact or bounded; <, <=, > and >= checks with one limit; tracked names cannot drive expressions; partial M2/M3 evidence; hover points and guides deferred",
+      "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,viewport.png}; 27-step update/stale/reference scenario; measure.dwprt and commands/0024/{part.step,step-report.json,check-step.stdout,check-step.stderr}; tracked_proof and measure_panel tests"
+    },
+    {
       "id": "mirror",
       "file": "ci/scenarios/mirror.json",
       "acceptance": false,

@@ -2073,7 +2073,7 @@ fn edge_json(
 fn mark_estimates(v: &mut Value, topology: Option<&soliddraft_kernel_api::Topology>) {
     if let Some(chord) = topology.and_then(|t| t.display_chord_height) {
         v["estimates"] = format!(
-            "centroids, midpoints and lengths are estimated from the display mesh, within {chord:.3} mm; measure proves them"
+            "centroids, midpoints and lengths are estimated from the display mesh, within {chord:.3} mm; measure_entity proves edge length or face area; measure reports reference-point offsets"
         )
         .into();
     }
@@ -2216,7 +2216,7 @@ impl CommandTools<'_> {
         json!({
             "part": doc.name,
             "units": "mm",
-            "values": doc.model().values().summary(),
+            "values": crate::measure::values(doc),
             "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {
@@ -2425,6 +2425,7 @@ impl ToolHost for CommandTools<'_> {
             "selection" => Ok(json!({
                 "selection": self.doc.selection.map(|s| selection_json(self.doc, s)).unwrap_or(Value::Null)
             })),
+            "measure_entity" | "track" => crate::measure::tools::call(self.doc, name, &input),
             "measure" => self.measure(input["a"].as_str().unwrap_or_default(), input["b"].as_str().unwrap_or_default()),
             "propose" => self.propose(&input, caller),
             "apply" => self.apply(input["proposal_id"].as_str().unwrap_or_default(), caller),

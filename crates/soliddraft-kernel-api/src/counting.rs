@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::{
     BackendInfo, BodyId, BooleanOp, Draft, EdgeId, EdgePolyline, Extrude, ExtrudeLimit, FaceId, HistoryRecord, Hole,
-    Kernel, KernelResult, MassProperties, Mesh, Mirror, OpResult, OpTag, PatternLayout, Plane, Profile, Revolve,
-    TessellationParams, Topology, Validation, Vec3, drawing,
+    Kernel, KernelResult, MassProperties, Measurement, Mesh, Mirror, OpResult, OpTag, PatternLayout, Plane, Profile,
+    Revolve, TessellationParams, Topology, Validation, Vec3, drawing,
 };
 
 /// One piece of work a kernel was asked for.
@@ -191,6 +191,14 @@ impl Kernel for Counting {
 
     fn measured_topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.inner.measured_topology(body)
+    }
+
+    fn edge_length(&self, body: BodyId, edge: EdgeId) -> KernelResult<Measurement> {
+        self.inner.edge_length(body, edge)
+    }
+
+    fn face_area(&self, body: BodyId, face: FaceId) -> KernelResult<Measurement> {
+        self.inner.face_area(body, face)
     }
 
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {

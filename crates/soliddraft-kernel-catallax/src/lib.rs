@@ -12,6 +12,7 @@ mod edge_control;
 mod frames;
 mod identity;
 mod lattice;
+mod measure;
 mod native;
 mod shell;
 mod step;
@@ -925,6 +926,14 @@ impl Kernel for CatallaxKernel {
             let solid = self.solid(body)?;
             solid.measured.get_or_init(|| convert::topology(&solid.app, &solid.ids, true)).clone()
         })
+    }
+
+    fn edge_length(&self, body: BodyId, edge: EdgeId) -> KernelResult<Measurement> {
+        self.observe("edge_length", || measure::edge_length(self, body, edge))
+    }
+
+    fn face_area(&self, body: BodyId, face: FaceId) -> KernelResult<Measurement> {
+        self.observe("face_area", || measure::face_area(self, body, face))
     }
 
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {

@@ -1,0 +1,230 @@
+//! Persistent measurement requests and session-only proof results.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Measurement};
+
+use crate::{Document, EdgeRef, FaceRef};
+
+/// A geometry identity, independent of labels and transient kernel handles.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Source {
+    /// Length of an edge.
+    Edge {
+        /// Persistent reference.
+        reference: EdgeRef,
+    },
+    /// Area of a face.
+    Face {
+        /// Persistent reference.
+        reference: FaceRef,
+    },
+}
+
+/// A resolved entity on the current part body.
+pub enum Entity {
+    /// An edge length.
+    Edge(EdgeId),
+    /// A face area.
+    Face(FaceId),
+}
+
+impl Source {
+    /// The label saved when the reference was created.
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Edge { reference } => &reference.label,
+            Self::Face { reference } => &reference.label,
+        }
+    }
+
+    /// The quantity requested by this reference.
+    pub fn quantity(&self) -> &'static str {
+        match self {
+            Self::Edge { .. } => "edge_length",
+            Self::Face { .. } => "face_area",
+        }
+    }
+
+    /// The quantity's document unit.
+    pub fn unit(&self) -> &'static str {
+        match self {
+            Self::Edge { .. } => "mm",
+            Self::Face { .. } => "mm2",
+        }
+    }
+
+    /// Resolves against the final body, never a previous feature's body.
+    pub fn resolve(&self, doc: &Document, body: BodyId) -> Result<Entity, String> {
+        match self {
+            Self::Edge { reference } => doc.resolve_edge(reference, body).map(Entity::Edge),
+            Self::Face { reference } => doc.resolve_face(reference, body).map(Entity::Face),
+        }
+        .map_err(|e| format!("{}: {}", self.label(), e.message))
+    }
+}
+
+/// An authored row. Proof results stay outside the part's truth.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Row {
+    /// Shared value identifier.
+    pub name: String,
+    /// Persistent geometry reference.
+    pub source: Source,
+    /// Optional bound comparison.
+    pub check: Option<Check>,
+}
+
+/// One comparison, parsed through the document's unit model.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Check {
+    /// Authored comparison text.
+    pub text: String,
+    op: Operator,
+    limit: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+enum Operator {
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+}
+
+impl Check {
+    /// Parses `<`, `<=`, `>` or `>=` followed by one limit.
+    pub fn parse(text: &str, unit: &str) -> Result<Self, String> {
+        let text = text.trim();
+        let (op, rest) = [
+            ("<=", Operator::LessEqual),
+            (">=", Operator::GreaterEqual),
+            ("<", Operator::Less),
+            (">", Operator::Greater),
+        ]
+        .into_iter()
+        .find_map(|(s, op)| text.strip_prefix(s).map(|rest| (op, rest)))
+        .ok_or("a check needs <, <=, > or >= and one limit")?;
+        let limit = crate::values::parse_limit(rest.trim(), unit)?;
+        Ok(Self { text: text.into(), op, limit })
+    }
+
+    /// Answers only what a current enclosure proves.
+    pub fn state(&self, measurement: Option<&Measurement>) -> &'static str {
+        let Some(m) = measurement else { return "unknown" };
+        let (pass, fail) = match self.op {
+            Operator::Less => (m.hi < self.limit, m.lo >= self.limit),
+            Operator::LessEqual => (m.hi <= self.limit, m.lo > self.limit),
+            Operator::Greater => (m.lo > self.limit, m.hi <= self.limit),
+            Operator::GreaterEqual => (m.lo >= self.limit, m.hi < self.limit),
+        };
+        if pass {
+            "pass"
+        } else if fail {
+            "fail"
+        } else {
+            "unknown"
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Observation {
+    measurement: Option<Measurement>,
+    geometry: Option<soliddraft_document::ContentHash>,
+    reason: Option<String>,
+}
+
+impl Document {
+    pub(crate) fn track_request(
+        &self,
+        state: &mut crate::values::Values,
+        name: &str,
+        source: &Source,
+        check: Option<&str>,
+    ) -> Result<String, String> {
+        crate::values::check_name(name)?;
+        if state.summary().as_array().is_some_and(|rows| rows.iter().any(|r| r["name"] == name))
+            || state.tracked.iter().any(|r| r.name == name)
+        {
+            return Err(format!("the name {name} is already taken"));
+        }
+        let check = check.map(|text| Check::parse(text, source.unit())).transpose()?;
+        self.measure_source(source)?;
+        state.tracked.push(Row { name: name.into(), source: source.clone(), check });
+        Ok(format!("track {name}"))
+    }
+
+    /// Authored measurement requests, in creation order.
+    pub fn tracked(&self) -> &[Row] {
+        &self.values.tracked
+    }
+
+    /// A single proof on the current part, without changing either hash.
+    pub fn measure_source(&self, source: &Source) -> Result<Measurement, String> {
+        if self.is_dirty() {
+            return Err("proof pending".into());
+        }
+        let body = self.body().ok_or("the part has no body")?;
+        match source.resolve(self, body)? {
+            Entity::Edge(edge) => self.kernel.edge_length(body, edge),
+            Entity::Face(face) => self.kernel.face_area(body, face),
+        }
+        .map_err(|e| format!("{} could not be measured: {e}", source.label()))
+    }
+
+    pub(crate) fn refresh_tracked(&mut self) {
+        if self.values.tracked.is_empty() {
+            self.observations.clear();
+            return;
+        }
+        let geometry = self.geometry_hash();
+        for row in &self.values.tracked {
+            let result = self.measure_source(&row.source);
+            let previous = self.observations.entry(row.name.clone()).or_default();
+            match result {
+                Ok(measurement) => {
+                    *previous =
+                        Observation { measurement: Some(measurement), geometry: Some(geometry.clone()), reason: None }
+                }
+                Err(reason) => previous.reason = Some(reason),
+            }
+        }
+        self.observations.retain(|name, _| self.values.tracked.iter().any(|r| r.name == *name));
+    }
+
+    /// Marks results stale while an interactive proof is pending or has failed.
+    pub fn stale_tracked(&mut self, reason: &str) {
+        for row in &self.values.tracked {
+            self.observations.entry(row.name.clone()).or_default().reason = Some(reason.into());
+        }
+    }
+
+    /// Values followed by tracked rows, with session-only proof evidence.
+    pub fn values_summary(&self) -> Value {
+        let mut rows = self.values.summary().as_array().cloned().unwrap_or_default();
+        let geometry = (!self.values.tracked.is_empty()).then(|| self.geometry_hash());
+        for row in &self.values.tracked {
+            let o = self.observations.get(&row.name).cloned().unwrap_or_default();
+            let current = !self.is_dirty()
+                && o.reason.is_none()
+                && o.measurement.is_some()
+                && o.geometry.as_ref() == geometry.as_ref();
+            let reason = if current { None } else { Some(o.reason.as_deref().unwrap_or("proof pending")) };
+            let m = o.measurement;
+            rows.push(json!({"name": row.name, "expression": null, "value": m.map(|m| m.value),
+            "unit": row.source.unit(), "tracked": {
+                "quantity": row.source.quantity(), "source": row.source.label(),
+                "state": if current { "current" } else { "stale" }, "reason": reason,
+                "certainty": m.map(|m| m.certainty), "lo": m.map(|m| m.lo), "hi": m.map(|m| m.hi),
+                "frame": "part", "geometry": o.geometry,
+                "check": row.check.as_ref().map(|c| json!({"text": c.text,
+                    "state": c.state(if current { m.as_ref() } else { None })}))
+            }}));
+        }
+        Value::Array(rows)
+    }
+}
