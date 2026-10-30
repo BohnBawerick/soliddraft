@@ -615,6 +615,25 @@ class FieldExportChecks(unittest.TestCase):
                 with mock.patch.object(scenarios, "cli", side_effect=fake_oracle):
                     self.assertEqual(scenarios.export_check(args, directory, spec, {})["pass"], expected)
 
+    def test_oracle_receives_the_caps_the_header_must_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            real_cli, seen = scenarios.cli, []
+            def record(binary, arguments, output, label, timeout):
+                if label.endswith("-oracle"):
+                    seen.append([str(a) for a in arguments])
+                    return {"check": label, "pass": True}
+                return real_cli(binary, arguments, output, label, timeout)
+            oracle = {"box": [0, 0, 0, 1, 1, 1], "cell": 5, "radius": 1, "accuracy": "1/10", "euler": 2}
+            for spec_oracle, expected in [(oracle, None), ({**oracle, "caps": [2000000, 1000000]}, ["2000000", "1000000"])]:
+                seen.clear()
+                with mock.patch.object(scenarios, "cli", side_effect=record):
+                    scenarios.export_check(args, directory, {"format": "stl", "oracle": spec_oracle}, {})
+                command = seen[0]
+                actual = command[command.index("--caps") + 1:command.index("--caps") + 3] if "--caps" in command else None
+                self.assertEqual(actual, expected)
+
     def test_length_and_maximum_fail_closed(self):
         self.assertTrue(scenarios.check([1, 2], {"pointer": "", "length": 2})["pass"])
         self.assertFalse(scenarios.check([1], {"pointer": "", "length": 2})["pass"])

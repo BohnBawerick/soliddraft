@@ -494,6 +494,8 @@ def export_check(args, directory, spec, previous):
             command = [str(checker), str(path), "--box", *map(str, oracle["box"]),
                        "--cell", str(oracle["cell"]), "--radius", str(oracle["radius"]),
                        "--accuracy", oracle["accuracy"], "--euler", str(oracle["euler"])]
+            if "caps" in oracle:
+                command += ["--caps", *map(str, oracle["caps"])]
             result = cli(sys.executable, command, directory, f"{label}-oracle", args.timeout)
             exported["checks"].append(result)
             # The report must describe precisely the bytes the oracle checked.
