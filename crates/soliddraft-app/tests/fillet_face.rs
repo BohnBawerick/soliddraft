@@ -3,11 +3,12 @@
 //! kernel, with the gestures a user makes: pick in the viewport, press the ribbon
 //! command, press OK.
 //!
-//! The box is a body the kernel can round today, so it carries the positive cases and
-//! the refuse-then-retry recovery. The extruded slot is the captain's body; Catallax
-//! rounds one straight top edge of it but still refuses its tangent-terminated top
-//! boundary, so it carries the refusal cases: the panel must show the kernel's typed
-//! reason, the part must stay usable, and no red failed feature may block the next pick.
+//! The box carries the positive cases and the refuse-then-retry recovery. The extruded
+//! slot is the captain's body: Catallax rounds its whole top boundary and one straight top
+//! edge, and the viewport draws both. It still refuses a chamfer of that boundary and a
+//! radius too large for the slot, so it also carries the refusal cases: the panel must
+//! show the kernel's typed reason, the part must stay usable, and no red failed feature
+//! may block the next pick.
 //!
 //! Asserts a renderer exists: an acceptance run that skips is not acceptance.
 
@@ -63,9 +64,8 @@ fn box_document() -> Document {
 }
 
 /// A 50 x 10 slot, 10 deep: line and arc top edges meeting tangentially. Catallax
-/// rounds one straight top edge, but refuses a fillet or chamfer of the whole boundary
-/// until its stage-4 work lands, so this is the body whose refusal must not poison the
-/// part.
+/// rounds the whole top boundary or one straight top edge, but refuses a chamfer of the
+/// boundary, so this is also the body whose refusal must not poison the part.
 fn slot_document() -> Document {
     let mut doc = Document::new("Slot", soliddraft_app::kernel());
     let sketch = doc
@@ -160,11 +160,6 @@ fn ok(app: &mut App) {
         .expect("the open panel has an OK button")
         .click();
     app.run_steps(30);
-}
-
-fn escape(app: &mut App) {
-    app.key_press(Key::Escape);
-    app.run_steps(4);
 }
 
 // ---------------------------------------------------------------------------
@@ -454,78 +449,68 @@ fn fillet_edge_picks_still_round_the_box_top() {
 }
 
 // ---------------------------------------------------------------------------
-// (2) and (3) A kernel refusal: the typed reason, and a part that stays usable.
+// The captain's slot: its top edges round as the box's do.
 
-#[test]
-fn fillet_face_refusal_on_the_slot_names_the_kernel_reason_and_leaves_the_part_usable() {
-    let _gpu = gpu();
-    let mut app = harness(slot_document());
-    let before = shape(&app.state().state.doc);
-    click_world(&mut app, glam::Vec3::new(0.0, 0.0, 10.0));
-    let state = &app.state().state;
-    let Some(Selection::Face(face)) = state.doc.selection else {
-        panic!("the slot's top face is picked, not {:?}", state.doc.selection);
-    };
-    let expected = face_boundary(&state.doc, face);
-    assert_eq!(expected.len(), 4, "the slot's top face has four boundary edges");
-
-    button(&mut app, "Fillet");
-    let expected_reason = {
-        let state = &app.state().state;
-        let editor = state.editor.as_ref().expect("Fillet opens on the slot's face pick");
-        assert_eq!(editor.edges().len(), 4, "the face still expands on the body the kernel refuses");
-        // The reason is the kernel's own, for the very edges and radius the panel holds.
-        let shown = panel_edges(&state.doc, editor.edges());
-        let kernel_says = kernel_refusal(&state.doc, &shown, rounding_size(editor), false);
-        let expected_reason = typed_reason(&kernel_says);
-        let panel_says = editor.error.as_deref().expect("the panel shows the refusal");
-        assert_eq!(typed_reason(panel_says), expected_reason, "the panel shows the kernel's reason: {panel_says}");
-        expected_reason
-    };
-
-    ok(&mut app);
+/// The committed fillet replaced the part on screen: an OK note, the rounded body drawn
+/// with a mesh, less material, a valid exact body with a STEP export, and a green status.
+fn assert_rounded_slot_on_screen(app: &mut App, before: f64) {
     {
         let state = &app.state().state;
         let note = state.note.as_ref().expect("committing leaves a note");
-        assert_eq!(note.kind, NoteKind::Error, "{}", note.text);
-        assert_eq!(typed_reason(&note.text), expected_reason, "the note names the kernel's reason: {}", note.text);
-        assert!(note.text.contains("fillet"), "the note names what was refused: {}", note.text);
-    }
-    let after = shape(&app.state().state.doc);
-    assert!(same_shape(before, after), "a refusal does not change the shown shape: {before:?} -> {after:?}");
-    assert_no_blocking_failure(&app.state().state.doc, "the refused fillet");
+        assert_eq!(note.kind, NoteKind::Ok, "{}", note.text);
+        let fillet = the_rounding(&state.doc, false);
+        assert_eq!(state.doc.display_body(), fillet.body, "the rounded slot is shown");
+        assert_eq!(state.doc.display_failure(), None);
+        assert!(state.doc.triangle_count() > 0, "the rounded slot has a display mesh");
+        assert!(volume(&state.doc) < before, "a fillet removes material");
 
-    // (2) no red feature gates the names, and (3) the next pick says why again.
-    assert_picks_still_work(&mut app, glam::Vec3::new(0.0, 0.0, 10.0), 4, "Fillet");
-    {
-        let state = &app.state().state;
-        let editor = state.editor.as_ref().expect("the second face pick opens a panel");
-        let panel_says = editor.error.as_deref().expect("the second panel shows the refusal too");
-        assert_eq!(typed_reason(panel_says), expected_reason, "the same refusal, named");
+        let kernel = state.doc.kernel();
+        let body = fillet.body.expect("the fillet built a body");
+        assert!(kernel.validate(body).expect("a validity answer").valid, "the rounded slot is valid");
+        let step = kernel.export_step(body, &StepOptions::default()).expect("a STEP export").report;
+        assert!(step.within_tolerance, "{step:?}");
     }
-    escape(&mut app);
-
-    // An edge pick after the refusal still resolves to a named edge and joins a panel.
-    let edge_midpoint = straight_top_edge(&app.state().state.doc);
-    click_world(&mut app, edge_midpoint);
-    {
-        let state = &app.state().state;
-        assert!(matches!(state.doc.selection, Some(Selection::Edge(_))), "an edge is picked after the refusal");
-    }
-    button(&mut app, "Fillet");
-    let state = &app.state().state;
-    let editor = state.editor.as_ref().expect("Fillet opens on an edge pick");
-    assert_eq!(editor.edges().len(), 1, "the picked edge joins the panel: {:?}", editor.error);
+    assert_eq!(app.state().state.doc.error_count(), 0, "the rounded slot has no failed feature");
+    let status = ribbon::status_lines(app);
+    assert!(status.iter().any(|line| line == "Rebuild OK"), "{status:?}");
+    assert!(!status.iter().any(|line| line == "Display failed"), "{status:?}");
 }
 
-/// Catallax builds this fillet but cannot mesh it at the viewport's default angle, so the
-/// app rolls it back. Once Catallax can, this expects the fillet instead.
 #[test]
-fn fillet_edge_on_the_slot_rolls_back_for_want_of_a_display_mesh() {
-    const REASON: &str = "mesh.precision-or-budget";
+fn fillet_a_picked_slot_face_rounds_its_whole_top_boundary() {
     let _gpu = gpu();
     let mut app = harness(slot_document());
-    let before = shape(&app.state().state.doc);
+    let before = volume(&app.state().state.doc);
+    click_world(&mut app, glam::Vec3::new(0.0, 0.0, 10.0));
+    let expected = {
+        let state = &app.state().state;
+        let Some(Selection::Face(face)) = state.doc.selection else {
+            panic!("the slot's top face is picked, not {:?}", state.doc.selection);
+        };
+        face_boundary(&state.doc, face)
+    };
+    assert_eq!(expected.len(), 4, "the slot's top face has four boundary edges");
+
+    button(&mut app, "Fillet");
+    {
+        let state = &app.state().state;
+        let editor = state.editor.as_ref().expect("Fillet opens on the slot's face pick");
+        let mut shown = panel_edges(&state.doc, editor.edges());
+        shown.sort();
+        assert_eq!(shown, expected, "the face pick expands into exactly the face's boundary edges");
+        assert!(editor.error.is_none(), "the panel previews: {:?}", editor.error);
+        assert!(editor.preview.result.is_some(), "the preview shows the rounded slot");
+    }
+
+    ok(&mut app);
+    assert_rounded_slot_on_screen(&mut app, before);
+}
+
+#[test]
+fn fillet_edge_on_the_slot_rounds_the_straight_top_edge() {
+    let _gpu = gpu();
+    let mut app = harness(slot_document());
+    let before = volume(&app.state().state.doc);
     let midpoint = straight_top_edge(&app.state().state.doc);
     click_world(&mut app, midpoint);
 
@@ -536,40 +521,16 @@ fn fillet_edge_on_the_slot_rolls_back_for_want_of_a_display_mesh() {
         let state = &app.state().state;
         let editor = state.editor.as_ref().expect("F opens Fillet on an edge pick");
         assert_eq!(editor.edges().len(), 1);
-        let panel_says = editor.error.as_deref().expect("the panel shows why it cannot be shown");
-        assert!(panel_says.contains(REASON), "{panel_says}");
-
-        // The exact part is sound. Only its display mesh is missing.
-        let kernel = state.doc.kernel();
-        let body = state.doc.display_body().expect("a body");
-        let edges = panel_edges(&state.doc, editor.edges());
-        let rounded = kernel.fillet(&OpTag::new("contract"), body, &edges, rounding_size(editor)).expect("a fillet");
-        assert!(kernel.validate(rounded.body).expect("a validity answer").valid, "the rounded slot is valid");
-        let step = kernel.export_step(rounded.body, &StepOptions::default()).expect("a STEP export").report;
-        assert!(step.within_tolerance, "{step:?}");
-        kernel.release(rounded.body).unwrap();
+        assert!(editor.error.is_none(), "the panel previews: {:?}", editor.error);
+        assert!(editor.preview.result.is_some(), "the preview shows the rounded slot");
     }
 
     ok(&mut app);
-    {
-        let state = &app.state().state;
-        let note = state.note.as_ref().expect("committing leaves a note");
-        assert_eq!(note.kind, NoteKind::Error, "{}", note.text);
-        assert!(note.text.contains(REASON), "the note names the kernel's reason: {}", note.text);
-        assert_eq!(state.doc.display_failure(), Some(note.text.as_str()));
-        assert!(!state.doc.features.iter().any(|f| matches!(f.kind, FeatureKind::Fillet(_))), "the fillet is gone");
-        assert!(state.doc.triangle_count() > 0, "the part stays on screen");
-    }
-    let after = shape(&app.state().state.doc);
-    assert!(same_shape(before, after), "the rollback restores the shape: {before:?} -> {after:?}");
-    assert_no_blocking_failure(&app.state().state.doc, "the rolled back fillet");
-
-    let status = ribbon::status_lines(&mut app);
-    assert!(!status.iter().any(|line| line.contains("Rebuild OK")), "{status:?}");
-    assert!(status.iter().any(|line| line.contains(REASON)), "{status:?}");
-
-    assert_picks_still_work(&mut app, glam::Vec3::new(0.0, 0.0, 10.0), 4, "Fillet");
+    assert_rounded_slot_on_screen(&mut app, before);
 }
+
+// ---------------------------------------------------------------------------
+// (2) and (3) A kernel refusal: the typed reason, and a part that stays usable.
 
 #[test]
 fn fillet_edge_refusal_on_the_slot_names_the_kernel_reason_and_leaves_the_part_usable() {
