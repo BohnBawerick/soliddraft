@@ -13,7 +13,8 @@ use std::collections::BTreeMap;
 /// The navigation section's version this build writes.
 pub const VERSION: u64 = 1;
 
-const KNOWN: [&str; 7] = ["version", "preset_id", "overrides", "wheel", "keyboard_profile", "trackpad", "camera"];
+const KNOWN: [&str; 8] =
+    ["version", "preset_id", "overrides", "wheel", "keyboard_profile", "view_key_overrides", "trackpad", "camera"];
 
 /// The mouse wheel, for every preset.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -77,6 +78,8 @@ pub struct NavigationSettings {
     pub wheel: WheelSettings,
     /// The view keys' profile, chosen apart from the mouse preset.
     pub keyboard_profile: String,
+    /// The user's changes to view-key rows: profile id, then row id.
+    pub view_key_overrides: BTreeMap<String, BTreeMap<String, Chord>>,
     /// The trackpad's profile, chosen apart from the mouse preset.
     pub trackpad: String,
     pub camera: CameraSettings,
@@ -104,6 +107,7 @@ impl NavigationSettings {
             overrides: BTreeMap::new(),
             wheel: WheelSettings::default(),
             keyboard_profile: KEYBOARD_PROFILE.to_owned(),
+            view_key_overrides: BTreeMap::new(),
             trackpad: TRACKPAD_PROFILE.to_owned(),
             camera: CameraSettings::default(),
             read_only: false,
@@ -122,16 +126,8 @@ impl NavigationSettings {
         if let Some(id) = obj.get("preset_id").and_then(Value::as_str) {
             s.preset_id = id.to_owned();
         }
-        if let Some(Value::Object(presets)) = obj.get("overrides") {
-            for (preset, rows) in presets {
-                let Some(rows) = rows.as_object() else { continue };
-                let rows: BTreeMap<String, Chord> = rows
-                    .iter()
-                    .filter_map(|(id, chord)| Some((id.clone(), serde_json::from_value(chord.clone()).ok()?)))
-                    .collect();
-                s.overrides.insert(preset.clone(), rows);
-            }
-        }
+        s.overrides = chords(obj.get("overrides"));
+        s.view_key_overrides = chords(obj.get("view_key_overrides"));
         let field = |key: &str| obj.get(key).cloned().unwrap_or(Value::Null);
         s.wheel = serde_json::from_value(field("wheel")).unwrap_or_default();
         s.camera = serde_json::from_value(field("camera")).unwrap_or_default();
@@ -154,6 +150,7 @@ impl NavigationSettings {
         obj.insert("overrides".into(), serde_json::to_value(&self.overrides).unwrap_or_default());
         obj.insert("wheel".into(), serde_json::to_value(self.wheel).unwrap_or_default());
         obj.insert("keyboard_profile".into(), self.keyboard_profile.clone().into());
+        obj.insert("view_key_overrides".into(), serde_json::to_value(&self.view_key_overrides).unwrap_or_default());
         obj.insert("trackpad".into(), self.trackpad.clone().into());
         obj.insert("camera".into(), serde_json::to_value(self.camera).unwrap_or_default());
         Value::Object(obj)
@@ -210,6 +207,22 @@ impl NavigationSettings {
         *self = changed;
         Ok(())
     }
+}
+
+/// Rows' changed chords, by owner then row id. Entries this build cannot read are left out.
+fn chords(value: Option<&Value>) -> BTreeMap<String, BTreeMap<String, Chord>> {
+    let Some(Value::Object(owners)) = value else { return BTreeMap::new() };
+    owners
+        .iter()
+        .filter_map(|(owner, rows)| {
+            let rows = rows
+                .as_object()?
+                .iter()
+                .filter_map(|(id, chord)| Some((id.clone(), serde_json::from_value(chord.clone()).ok()?)))
+                .collect();
+            Some((owner.clone(), rows))
+        })
+        .collect()
 }
 
 /// Fusion for a new installation; SolidDraft's original controls for an existing one.

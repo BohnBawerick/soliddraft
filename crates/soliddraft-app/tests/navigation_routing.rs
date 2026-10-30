@@ -564,3 +564,206 @@ fn fusion_solidworks_onshape_end_to_end() {
         assert_eq!(up.outcome, Outcome::None);
     }
 }
+
+#[test]
+fn inventor_held_keys_and_wheel_direction() {
+    let mut t = Trace::new("inventor");
+    let mut r = router("inventor");
+    let none = Modifiers::NONE;
+    assert_outcome(
+        &mut t,
+        "inventor",
+        "Shift+M drag",
+        gesture(&mut r, &[M], Modifiers::SHIFT),
+        Outcome::Action(Action::Orbit),
+    );
+    assert_outcome(&mut t, "inventor", "M drag", gesture(&mut r, &[M], none), Outcome::Action(Action::Pan));
+    for (k, want) in [(Key::F4, Action::Orbit), (Key::F2, Action::Pan), (Key::F3, Action::DragZoom)] {
+        key_down(&mut r, k);
+        assert_outcome(
+            &mut t,
+            "inventor",
+            &format!("held {k:?}+L"),
+            gesture(&mut r, &[L], none),
+            Outcome::Action(want),
+        );
+        assert!(key_up(&mut r, k).consumed);
+    }
+    key_down(&mut r, Key::F2);
+    assert!(!key_up(&mut r, Key::F2).consumed, "an F2 tap still renames");
+    let zoom = |r: &mut Router, lines: f32| match r.handle(NavEvent::Wheel { lines }).motion {
+        Motion::Zoom { factor } => factor,
+        other => panic!("{other:?}"),
+    };
+    assert!(zoom(&mut r, 1.0) < 1.0, "forward zooms out");
+    assert!(zoom(&mut r, -1.0) > 1.0, "backward zooms in");
+}
+
+#[test]
+fn creo_axis_split_never_falls_back_to_orbit() {
+    let mut t = Trace::new("creo");
+    let mut r = router("creo");
+    let ctrl = mods(true, false, false);
+    assert_outcome(&mut t, "creo", "M drag", gesture(&mut r, &[M], Modifiers::NONE), Outcome::Action(Action::Orbit));
+    assert_outcome(
+        &mut t,
+        "creo",
+        "Shift+M drag",
+        gesture(&mut r, &[M], Modifiers::SHIFT),
+        Outcome::Action(Action::Pan),
+    );
+    let along = |r: &mut Router, moved: Vec2| {
+        r.handle(NavEvent::Modifiers(ctrl));
+        press(r, M);
+        let out = r.handle(NavEvent::Move(O + moved));
+        let rest = r.handle(NavEvent::Move(O + moved * 2.0));
+        assert_eq!(rest.outcome, out.outcome, "one action for the whole drag");
+        end(r, &[M]);
+        out
+    };
+    let up = along(&mut r, vec2(1.0, -10.0));
+    assert_outcome(&mut t, "creo", "Ctrl+M vertical", up, Outcome::Action(Action::DragZoom));
+    let side = along(&mut r, vec2(10.0, 1.0));
+    assert_outcome(&mut t, "creo", "Ctrl+M horizontal", side, Outcome::Unsupported(Action::Roll));
+    let diagonal = along(&mut r, vec2(8.0, 8.0));
+    assert_outcome(&mut t, "creo", "Ctrl+M diagonal", diagonal, Outcome::Action(Action::DragZoom));
+    assert_eq!(along(&mut r, vec2(8.0, 8.0)).binding, Some("zoom"), "a diagonal decides the same way every time");
+    let creo = navigation::preset("creo").unwrap();
+    assert!(creo.limitations.iter().any(|l| l.kind == LimitKind::NeedsCameraRoll && l.text.contains("roll")));
+    assert!(creo.limitations.iter().any(|l| l.kind == LimitKind::HistoricalBinding && l.text.contains("Ctrl+D")));
+}
+
+#[test]
+fn nx12_ordered_chords_and_historical_label() {
+    use soliddraft_app::navigation::view_keys;
+    let mut t = Trace::new("nx12");
+    let mut r = router("nx12");
+    let none = Modifiers::NONE;
+    for (buttons, m, name, want) in [
+        (&[M][..], none, "M", Action::Orbit),
+        (&[M][..], Modifiers::SHIFT, "Shift+M", Action::Pan),
+        (&[M, R][..], none, "M+R", Action::Pan),
+        (&[M][..], mods(true, false, false), "Ctrl+M", Action::DragZoom),
+        (&[L, M][..], none, "L+M", Action::DragZoom),
+    ] {
+        assert_outcome(&mut t, "nx12", name, gesture(&mut r, buttons, m), Outcome::Action(want));
+    }
+    let keys = view_keys::analyse("nx12", None, view_keys::PLATFORM).unwrap();
+    assert_eq!(
+        keys.row_for(NavKey::main(Key::F8), none, false, false).map(|b| b.action),
+        Some(Action::NormalOrNearest)
+    );
+    assert_eq!(keys.row_for(NavKey::main(Key::End), none, false, false).map(|b| b.action), Some(Action::Isometric));
+    let nx = navigation::preset("nx12").unwrap();
+    assert_eq!(nx.label, "NX 12");
+    assert!(nx.limitations.iter().any(|l| l.kind == LimitKind::HistoricalProfile && l.text.contains("not certified")));
+    assert!(!nx.label.to_lowercase().contains("current"));
+}
+
+#[test]
+fn solid_edge_double_click_and_orientation_keys() {
+    use soliddraft_app::navigation::view_keys::{self, RowState};
+    let mut t = Trace::new("solid-edge");
+    let mut r = router("solid_edge");
+    let ctrl = mods(true, false, false);
+    assert_outcome(&mut t, "solid_edge", "M", gesture(&mut r, &[M], Modifiers::NONE), Outcome::Action(Action::Orbit));
+    assert_outcome(
+        &mut t,
+        "solid_edge",
+        "Shift+M",
+        gesture(&mut r, &[M], Modifiers::SHIFT),
+        Outcome::Action(Action::Pan),
+    );
+    assert_outcome(
+        &mut t,
+        "solid_edge",
+        "Ctrl+Shift+R",
+        gesture(&mut r, &[R], mods(true, true, false)),
+        Outcome::Action(Action::Pan),
+    );
+    assert_outcome(&mut t, "solid_edge", "Ctrl+R", gesture(&mut r, &[R], ctrl), Outcome::Action(Action::DragZoom));
+    // A double click without moving fits; one whose second press drags does not.
+    let mut last = None;
+    for time in [5.0, 5.1] {
+        press(&mut r, M);
+        last = Some(r.handle(NavEvent::Release { button: M, pos: O, time }));
+    }
+    assert_outcome(&mut t, "solid_edge", "M double-click", last.unwrap(), Outcome::Action(Action::Fit));
+    press(&mut r, M);
+    r.handle(NavEvent::Release { button: M, pos: O, time: 9.0 });
+    press(&mut r, M);
+    let dragged = r.handle(NavEvent::Move(O + PAST));
+    assert_outcome(&mut t, "solid_edge", "M click then M drag", dragged, Outcome::Action(Action::Orbit));
+    let up = r.handle(NavEvent::Release { button: M, pos: O + PAST, time: 9.1 });
+    assert_ne!(up.outcome, Outcome::Action(Action::Fit), "a drag is not a double click");
+
+    let keys = view_keys::analyse("solid_edge", None, view_keys::PLATFORM).unwrap();
+    for (row, key, m, action) in [
+        ("top", Key::T, ctrl, Action::Top),
+        ("bottom", Key::B, Modifiers::NONE, Action::Bottom),
+        ("back", Key::K, Modifiers::NONE, Action::Back),
+        ("left", Key::L, Modifiers::NONE, Action::Left),
+        ("dimetric", Key::J, Modifiers::NONE, Action::Dimetric),
+        ("trimetric", Key::M, Modifiers::NONE, Action::Trimetric),
+        ("home", Key::Home, Modifiers::NONE, Action::Isometric),
+    ] {
+        assert_eq!(keys.row_for(NavKey::main(key), m, false, false).map(|b| b.action), Some(action), "{row}");
+    }
+    for row in ["front", "right", "isometric"] {
+        assert!(matches!(keys.state_of(row), Some(RowState::Duplicate(_))), "{row}: SolidDraft's own key runs it once");
+    }
+    assert!(keys.row_for(NavKey::main(Key::L), Modifiers::NONE, true, false).is_none(), "L in a sketch is Line");
+    let se = navigation::preset("solid_edge").unwrap();
+    assert!(se.limitations.iter().any(|l| l.kind == LimitKind::SelectionUnverified));
+}
+
+#[test]
+fn blender_numpad_location_is_required_and_never_main_row() {
+    use soliddraft_app::navigation::KeyLocation;
+    use soliddraft_app::navigation::view_keys::{self, RowState};
+    let pad = |key| NavKey { key, location: KeyLocation::Numpad };
+    let none = Modifiers::NONE;
+    let ctrl = mods(true, false, false);
+    // The rows as data, where the keypad can be told apart.
+    let live =
+        view_keys::analyse("blender", None, navigation::Supports { numpad_location: true, ..view_keys::PLATFORM })
+            .unwrap();
+    let act = |key: NavKey, m| live.row_for(key, m, false, false).map(|b| b.action);
+    assert_eq!(act(pad(Key::Num1), none), Some(Action::Front));
+    assert_eq!(act(NavKey::main(Key::Num1), none), None, "the number row is not the keypad");
+    assert_eq!(act(pad(Key::Num1), ctrl), Some(Action::Back));
+    assert_eq!(act(NavKey::main(Key::Num1), ctrl), None);
+    assert_eq!(act(pad(Key::Num3), none), Some(Action::Right));
+    assert_eq!(act(pad(Key::Num7), none), Some(Action::Top));
+    assert_eq!(act(pad(Key::Num5), none), Some(Action::ProjectionToggle));
+    assert_eq!(act(pad(Key::Period), none), Some(Action::FitSelected));
+    assert_eq!(act(pad(Key::Num7), Modifiers::SHIFT), Some(Action::AlignTopToFace));
+    let unknown = NavKey { key: Key::Num1, location: KeyLocation::Unknown };
+    assert_eq!(act(unknown, none), None, "a key egui could not place is not the keypad's");
+
+    // What builds can do now: egui places neither, so the rows are unavailable and say why.
+    assert_eq!(navigation::key_location(Key::Num1), KeyLocation::Unknown);
+    assert_eq!(navigation::key_location(Key::Period), KeyLocation::Unknown);
+    let now = view_keys::analyse("blender", None, view_keys::PLATFORM).unwrap();
+    for row in ["front", "back", "right", "left", "top", "bottom", "projection", "align_top", "fit_selected"] {
+        match now.state_of(row) {
+            Some(RowState::Unavailable(why)) => assert!(why.contains("keypad"), "{row}: {why}"),
+            other => panic!("{row}: {other:?}"),
+        }
+    }
+    for key in [pad(Key::Num1), unknown, NavKey::main(Key::Num1)] {
+        assert!(now.row_for(key, none, false, false).is_none(), "{key:?}: nothing, never the digits");
+    }
+    assert_eq!(now.row_for(NavKey::main(Key::Home), none, false, false).map(|b| b.action), Some(Action::Fit));
+
+    // The adapter that places keys from the platform's key codes, winit's and the browser's.
+    for (code, want) in [
+        ("Numpad1", KeyLocation::Numpad),
+        ("NumpadDecimal", KeyLocation::Numpad),
+        ("Digit1", KeyLocation::Main),
+        ("Period", KeyLocation::Main),
+        ("", KeyLocation::Unknown),
+    ] {
+        assert_eq!(view_keys::location_from_code(code), want, "{code}");
+    }
+}

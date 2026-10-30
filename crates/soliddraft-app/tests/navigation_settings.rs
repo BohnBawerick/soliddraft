@@ -368,3 +368,49 @@ fn wheel_direction_is_global_and_independent() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn apply_and_reset_view_keys_are_independent() {
+    use soliddraft_app::navigation::view_keys;
+    let (_guard, dir) = config_dir("view-keys");
+    write(&dir, r#"{"theme":"dark"}"#);
+    let mut s = NavigationSettings::new(InstallKind::Existing);
+    s.select_preset("fusion").unwrap();
+    s.wheel.invert = true;
+    s.camera.pan_sensitivity = 1.5;
+    settings::save_navigation(&s).unwrap();
+
+    let applied = view_keys::apply("solidworks").unwrap();
+    assert!(!applied.conflicts.is_empty());
+    let saved = settings::navigation(InstallKind::Existing);
+    assert_eq!(saved.keyboard_profile, "solidworks");
+    assert_eq!(saved.preset_id, "fusion", "the mouse preset stays");
+    assert!(saved.wheel.invert && saved.camera.pan_sensitivity == 1.5, "the wheel and camera stay");
+    assert_eq!(file_json(&dir)["theme"], "dark");
+    // The conflicts come back the same after a reload.
+    assert_eq!(view_keys::in_use(&saved).conflicts, applied.conflicts);
+
+    let before = bytes(&dir);
+    assert!(matches!(view_keys::apply("not_a_profile"), Err(navigation::Refusal::UnknownProfile(_))));
+    assert_eq!(bytes(&dir), before, "an unknown profile writes nothing");
+
+    let mut with_change = settings::navigation(InstallKind::Existing);
+    with_change.view_key_overrides.entry("solidworks".into()).or_default().insert(
+        "normal".into(),
+        Chord { event: EventKind::Key, key: Some(navigation::NavKey::main(egui::Key::F7)), ..Default::default() },
+    );
+    with_change.set_override("fusion", "pan", drag(&[Button::Right], Mods::NONE)).unwrap();
+    settings::save_navigation(&with_change).unwrap();
+    assert!(
+        settings::navigation(InstallKind::Existing).view_key_overrides.contains_key("solidworks"),
+        "view-key changes persist"
+    );
+    view_keys::reset().unwrap();
+    let reset = settings::navigation(InstallKind::Existing);
+    assert_eq!(reset.keyboard_profile, view_keys::SOLIDDRAFT, "back to SolidDraft's own keys");
+    assert!(reset.view_key_overrides.is_empty());
+    assert!(reset.overrides.contains_key("fusion"), "mouse overrides stay");
+    assert_eq!(reset.preset_id, "fusion");
+    assert!(reset.wheel.invert);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -25,9 +25,15 @@ impl SolidDraftApp {
         // The open palette takes the plain keys, as a focused text field does.
         let typing = ctx.egui_wants_keyboard_input() || self.state.palette.is_some();
         let state = &self.state;
-        let bindings: Vec<_> = commands::bindings(commands::Context::of(state))
+        let context = commands::Context::of(state);
+        // The view-key profile's rows run first. A row that took over a command's key
+        // (Onshape's N) leaves that command off the key.
+        let view_keys = (context.part() && !typing).then(|| crate::navigation::view_keys::in_use(&state.navigation));
+        let superseded: Vec<(&str, Key)> = view_keys.iter().flat_map(|v| v.superseded()).collect();
+        let bindings: Vec<_> = commands::bindings(context)
             .into_iter()
             .filter(|(c, k)| (!typing || k.fires_while_typing()) && (c.is_enabled(state) || (c.hint)(state).is_some()))
+            .filter(|(c, k)| !superseded.contains(&(c.id, k.key)))
             .collect();
         // A key the navigation preset holds to navigate, as Inventor's F2, is left to the
         // viewport; its own command runs when it comes up without a drag having used it.
@@ -36,7 +42,24 @@ impl SolidDraftApp {
         router.configure(&self.state.navigation, mac);
         let hold = |k: Key| router.is_hold_key(crate::navigation::NavKey::main(k));
         let mut fired = Vec::new();
+        let mut views = Vec::new();
         ctx.input_mut(|i| {
+            if let Some(v) = &view_keys {
+                i.events.retain(|e| {
+                    let egui::Event::Key { key, physical_key, pressed: true, repeat: false, modifiers } = e else {
+                        return true;
+                    };
+                    let key = physical_key.unwrap_or(*key);
+                    let nav = crate::navigation::NavKey { key, location: crate::navigation::key_location(key) };
+                    match v.row_for(nav, *modifiers, context.sketch, mac) {
+                        Some(row) => {
+                            views.push(row.action);
+                            false
+                        }
+                        None => true,
+                    }
+                });
+            }
             let mut taps: Vec<(Key, egui::Modifiers)> = i
                 .events
                 .iter()
@@ -60,6 +83,9 @@ impl SolidDraftApp {
                 }
             }
         });
+        for action in views {
+            crate::navigation::view_keys::run(&mut self.state, action);
+        }
         for command in fired {
             self.state.run_command(command);
         }
