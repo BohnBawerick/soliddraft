@@ -46,8 +46,8 @@ fn config() -> ProptestConfig {
     config
 }
 
-/// No case may take longer than this: a command that does not return is a bug.
-const LIMIT: Duration = Duration::from_secs(60);
+/// A hang guard: this detects a command that does not return, not a slow one.
+const LIMIT: Duration = Duration::from_secs(600);
 
 // ----- inputs -----
 

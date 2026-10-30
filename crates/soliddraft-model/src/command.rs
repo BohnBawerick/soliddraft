@@ -233,8 +233,11 @@ pub enum CommandError {
     /// A CAD feature would come after the lattice, which is always last.
     #[error("{0} is the lattice stage and must stay last; return before the lattice to change the part")]
     AfterLattice(FeatureId),
-    /// A lattice would not be the single last feature.
-    #[error("the lattice must be the only lattice and the last feature")]
+    /// A CAD feature would come after the gyroid, which is always last.
+    #[error("{0} is the gyroid stage and must stay last; return before the gyroid to change the part")]
+    AfterGyroid(FeatureId),
+    /// A terminal field would not be the single last feature.
+    #[error("a terminal field must be the only one and the last feature")]
     LatticeNotLast,
     /// Nothing to undo or redo.
     #[error("nothing to {0}")]
@@ -316,21 +319,21 @@ impl Document {
         })())
     }
 
-    /// The terminal lattice feature, if the part has one.
+    /// The terminal field feature, a lattice or a gyroid, if the part has one.
     pub fn lattice(&self) -> Option<FeatureId> {
-        self.features.iter().find(|f| f.kind.is_lattice()).map(|f| f.id)
+        self.features.iter().find(|f| f.kind.is_terminal_field()).map(|f| f.id)
     }
 
-    /// The enabled lattice above the rollback bar, including a failed build.
-    pub fn active_lattice(&self) -> Option<&Feature> {
-        self.features.iter().take(self.active_count()).find(|f| f.kind.is_lattice() && !f.suppressed)
+    /// The enabled terminal field above the rollback bar, including a failed build.
+    pub fn active_field(&self) -> Option<&Feature> {
+        self.features.iter().take(self.active_count()).find(|f| f.kind.is_terminal_field() && !f.suppressed)
     }
 
-    /// Puts the rollback bar above the lattice so the user is back at the last CAD
-    /// feature. The lattice and its settings stay in the tree and are not built until
+    /// Puts the rollback bar above the terminal field so the user is back at the last
+    /// CAD feature. The field and its settings stay in the tree and are not built until
     /// the bar rolls forward.
     pub fn return_before_lattice(&mut self) -> Result<Executed, CommandError> {
-        let id = self.lattice().ok_or_else(|| CommandError::Invalid("the part has no lattice".into()))?;
+        let id = self.lattice().ok_or_else(|| CommandError::Invalid("the part has no terminal field".into()))?;
         self.execute(Command::RollTo { before: Some(id) })
     }
 
@@ -474,14 +477,19 @@ impl Document {
         Ok(())
     }
 
-    /// Checks that a lattice is the only one and the last feature, so no CAD follows it.
-    pub(crate) fn check_lattice_last(features: &[Feature]) -> Result<(), CommandError> {
-        let Some(first) = features.iter().position(|f| f.kind.is_lattice()) else { return Ok(()) };
-        if features.iter().filter(|f| f.kind.is_lattice()).count() > 1 {
+    /// Checks that a terminal field is the only one and the last feature, so no CAD
+    /// follows it.
+    pub(crate) fn check_field_last(features: &[Feature]) -> Result<(), CommandError> {
+        let Some(first) = features.iter().position(|f| f.kind.is_terminal_field()) else { return Ok(()) };
+        if features.iter().filter(|f| f.kind.is_terminal_field()).count() > 1 {
             return Err(CommandError::LatticeNotLast);
         }
         if first + 1 < features.len() {
-            return Err(CommandError::AfterLattice(features[first].id));
+            let field = &features[first];
+            return Err(match field.kind {
+                FeatureKind::Gyroid(_) => CommandError::AfterGyroid(field.id),
+                _ => CommandError::AfterLattice(field.id),
+            });
         }
         Ok(())
     }
@@ -532,6 +540,17 @@ impl Document {
             {
                 Err(CommandError::Invalid("lattice accuracy and minimum detail must be positive".into()))
             }
+            FeatureKind::Gyroid(g) if !(g.period_mm.is_finite() && g.period_mm > 0.0) || !g.level.is_finite() => {
+                Err(CommandError::Invalid("gyroid period must be positive and its level finite".into()))
+            }
+            FeatureKind::Gyroid(g)
+                if !(g.accuracy_mm.is_finite()
+                    && g.accuracy_mm > 0.0
+                    && g.min_detail_mm.is_finite()
+                    && g.min_detail_mm > 0.0) =>
+            {
+                Err(CommandError::Invalid("gyroid accuracy and minimum detail must be positive".into()))
+            }
             FeatureKind::ImportStep(i) if i.source.is_empty() => {
                 Err(CommandError::Invalid("the imported file is empty".into()))
             }
@@ -563,7 +582,7 @@ impl Document {
         let mut next = self.features.clone();
         next.insert(position, feature.clone());
         Self::check_order(&next)?;
-        Self::check_lattice_last(&next)?;
+        Self::check_field_last(&next)?;
         self.next_id = self.next_id.max(feature.id.0 + 1);
         self.features = next;
         self.touch(position);
@@ -611,7 +630,7 @@ impl Document {
                     || a.name != b.name
                     || a.suppressed != b.suppressed
                     || a.via_assistant != b.via_assistant
-                    || a.kind.is_lattice() != b.kind.is_lattice()
+                    || !a.kind.same_stage(&b.kind)
             })
         {
             return Err(CommandError::Invalid("a value command cannot replace the feature tree".into()));
@@ -621,7 +640,7 @@ impl Document {
             Self::check_kind(&f.kind)?;
         }
         Self::check_order(&features)?;
-        Self::check_lattice_last(&features)?;
+        Self::check_field_last(&features)?;
         let first = self.features.iter().zip(&features).position(|(a, b)| a.kind != b.kind);
         if let Command::RenameValue { name, to } = &command
             && let Some(proof) = self.observations.remove(name)
@@ -677,8 +696,10 @@ impl Document {
                 let i = self.index(id)?;
                 let mut next = self.features.clone();
                 let old = std::mem::replace(&mut next[i].kind, kind.clone());
-                if old.is_lattice() != kind.is_lattice() {
-                    return Err(CommandError::Invalid("a feature cannot change into or out of a lattice".into()));
+                if !old.same_stage(&kind) {
+                    return Err(CommandError::Invalid(
+                        "a feature cannot change into or out of a terminal field".into(),
+                    ));
                 }
                 Self::check_order(&next)?;
                 self.check_drivers(&next)?;
@@ -778,7 +799,7 @@ impl Document {
                 let label = format!("move {} to position {}", f.name, position + 1);
                 next.insert(position, f);
                 Self::check_order(&next)?;
-                Self::check_lattice_last(&next)?;
+                Self::check_field_last(&next)?;
                 self.features = next;
                 self.touch(from.min(position));
                 Ok(Applied {

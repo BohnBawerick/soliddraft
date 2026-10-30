@@ -85,7 +85,7 @@ Application work for a feature, such as its PropertyManager page, ribbon command
 | Draft | 4 | Works for planar faces and cylinders parallel to the pull |
 | Sweep, loft; spline, ellipse and text profiles | 5 | Waits |
 | STEP import, then IGES import | 6 | Waits for Catallax's importers |
-| Lattice, gyroid, graded density, field-driven thickness | Field-only track, after stage 3 | Not available today either |
+| Lattice, gyroid, graded density, field-driven thickness | Field-only track, after stage 3 | One cubic lattice or one constant network gyroid works as the last feature; graded density and field-driven thickness wait |
 
 Reference geometry (planes, axes, points) is application-side work and can come at any time.
 

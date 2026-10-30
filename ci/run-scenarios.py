@@ -485,6 +485,25 @@ def cli(binary, arguments, directory, label, timeout):
             "pass": result.returncode == 0}
 
 
+def oracle_command(oracle, path):
+    """The independent checker for one exported STL. Only a named kind or the cubic lattice runs."""
+    kind = oracle.get("kind")
+    if kind == "gyroid":
+        checker = pathlib.Path(__file__).with_name("check-gyroid-stl.py")
+        return [str(checker), str(path), "--box", *map(str, oracle["box"]), "--period", str(oracle["period"]),
+                f"--level={oracle['level']}", "--accuracy", oracle["accuracy"],
+                "--caps", *map(str, oracle["caps"])]
+    if kind is not None:
+        raise ValueError(f"unknown oracle kind {kind}")
+    checker = pathlib.Path(__file__).with_name("check-lattice-stl.py")
+    command = [str(checker), str(path), "--box", *map(str, oracle["box"]),
+               "--cell", str(oracle["cell"]), "--radius", str(oracle["radius"]),
+               "--accuracy", oracle["accuracy"], "--euler", str(oracle["euler"])]
+    if "caps" in oracle:
+        command += ["--caps", *map(str, oracle["caps"])]
+    return command
+
+
 def export_check(args, directory, spec, previous):
     extension = spec["format"]
     path = directory / f"part.{extension}"
@@ -508,14 +527,15 @@ def export_check(args, directory, spec, previous):
                                        "pass": expected is not None and expected == exported["sha256"]})
         if "oracle" in spec:
             oracle = spec["oracle"]
-            checker = pathlib.Path(__file__).with_name("check-lattice-stl.py")
-            command = [str(checker), str(path), "--box", *map(str, oracle["box"]),
-                       "--cell", str(oracle["cell"]), "--radius", str(oracle["radius"]),
-                       "--accuracy", oracle["accuracy"], "--euler", str(oracle["euler"])]
-            if "caps" in oracle:
-                command += ["--caps", *map(str, oracle["caps"])]
+            command = oracle_command(oracle, path)
             result = cli(sys.executable, command, directory, f"{label}-oracle", args.timeout)
             exported["checks"].append(result)
+            if "kind" in oracle:
+                # Report counts stay claims until they match the bytes the oracle read.
+                decoded = json.loads((directory / f"{label}-oracle.stdout").read_text())
+                exported["checks"].append({"check": "export report counts match labelled file",
+                    "pass": value["report"].get("triangles") == decoded["triangles"] and
+                            value["report"].get("vertices") == decoded["vertices"]})
             # The report must describe precisely the bytes the oracle checked.
             bound = struct.unpack_from("<d", path.read_bytes(), 68)[0]
             exported["checks"].append({"check": "export report matches labelled file",

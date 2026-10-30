@@ -126,6 +126,11 @@ impl Kernel for Counting {
         self.inner.lattice(tag, body, params)
     }
 
+    fn gyroid(&self, tag: &OpTag, body: BodyId, params: &crate::Gyroid) -> KernelResult<OpResult> {
+        self.op(tag);
+        self.inner.gyroid(tag, body, params)
+    }
+
     fn export_field_stl(&self, body: BodyId) -> KernelResult<crate::FieldExport> {
         self.inner.export_field_stl(body)
     }

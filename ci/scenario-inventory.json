@@ -139,6 +139,20 @@
       ]
     },
     {
+      "id": "gyroid",
+      "file": "ci/scenarios/gyroid.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "route": "MCP document commands -> terminal Catallax field stage -> certified labelled STL",
+      "supported_limits": "One terminal network gyroid in the part frame with a constant dimensionless level; the scenario uses period 10 mm, levels 0 and -1/2, accuracy 0.1 mm, minimum detail 0.5 mm and the default caps. Sheet gyroids, graded levels, field mass and drawings remain deferred.",
+      "evidence": "result.json and commands/NNNN/{command.json,kernel.json,viewport.png,part.stl,export-stl-oracle.stdout}"
+    },
+    {
       "id": "hole",
       "file": "ci/scenarios/hole.json",
       "acceptance": false,

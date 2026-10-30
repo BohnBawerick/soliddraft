@@ -337,6 +337,10 @@ impl SolidDraftApp {
                 self.open_editor(None, EditorParams::Lattice(soliddraft_model::LatticeFeature::default()));
                 self.state.doc.selection = None;
             }
+            AppAction::StartGyroid => {
+                self.open_editor(None, EditorParams::Gyroid(soliddraft_model::GyroidFeature::default()));
+                self.state.doc.selection = None;
+            }
             AppAction::StartShell => {
                 let open_faces = match self.state.doc.selection {
                     Some(Selection::Face(face)) => self.state.doc.any_face_ref(face).into_iter().collect(),
@@ -399,6 +403,7 @@ impl SolidDraftApp {
                     FeatureKind::ImportStep(_) => return,
                     // The lattice's controls arrive with its editor slice.
                     FeatureKind::Lattice(l) => EditorParams::Lattice(*l),
+                    FeatureKind::Gyroid(g) => EditorParams::Gyroid(*g),
                 };
                 if self.state.in_sketch() {
                     self.apply(ctx, AppAction::ExitSketch(None));
@@ -442,6 +447,10 @@ impl SolidDraftApp {
                     (target, EditorParams::Lattice(l)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Lattice(l) },
                         None => Command::AddFeature(FeatureKind::Lattice(l)),
+                    },
+                    (target, EditorParams::Gyroid(g)) => match target {
+                        Some(id) => Command::EditFeature { id, kind: FeatureKind::Gyroid(g) },
+                        None => Command::AddFeature(FeatureKind::Gyroid(g)),
                     },
                     (target, EditorParams::Shell(s)) => match target {
                         Some(id) => Command::EditFeature { id, kind: FeatureKind::Shell(s) },

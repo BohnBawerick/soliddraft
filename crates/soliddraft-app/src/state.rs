@@ -55,6 +55,7 @@ pub enum AppAction {
     StartDraft,
     StartShell,
     StartLattice,
+    StartGyroid,
     StartRepair(FeatureId),
     EditFeature(FeatureId),
     SketchTool(Tool),
@@ -196,6 +197,7 @@ pub enum EditorParams {
     Draft(DraftParams),
     Shell(soliddraft_model::ShellFeature),
     Lattice(soliddraft_model::LatticeFeature),
+    Gyroid(soliddraft_model::GyroidFeature),
     /// Picking a plane or planar face for a new sketch.
     PickPlane,
     /// Choosing replacements for a feature's missing references.
@@ -228,6 +230,7 @@ impl FeatureEditor {
             EditorParams::Draft(_) => format!("{edit}Draft"),
             EditorParams::Shell(_) => format!("{edit}Shell"),
             EditorParams::Lattice(_) => format!("{edit}Lattice"),
+            EditorParams::Gyroid(_) => format!("{edit}Gyroid"),
             EditorParams::PickPlane => "Sketch".to_owned(),
             EditorParams::Repair { .. } => "Repair references".to_owned(),
         }
@@ -269,6 +272,7 @@ impl FeatureEditor {
             EditorParams::Shell(s) => doc.preview_shell(s, before),
             // These preview once applied; the interface half adds ghosts for them.
             EditorParams::Lattice(_)
+            | EditorParams::Gyroid(_)
             | EditorParams::Hole(_)
             | EditorParams::Pattern(_)
             | EditorParams::Mirror(_)

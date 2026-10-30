@@ -331,6 +331,13 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(!edited.is_null(), "edit_lattice must succeed");
     s.call("undo", json!({}));
     s.call("undo", json!({}));
+    // The terminal gyroid and its edit do the same.
+    let gyroid = s.call("gyroid", json!({"kind":"network", "period":10, "level":0, "accuracy":0.5, "min_detail":0.5}));
+    assert!(!gyroid.is_null(), "gyroid must succeed");
+    let edited = s.call("edit_gyroid", json!({"feature":"Gyroid1", "level":-0.5}));
+    assert!(!edited.is_null(), "edit_gyroid must succeed");
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
     s.call("open", json!({ "path": part }));
     assert!(s.state.doc.features.iter().any(|f| f.name == "Hole"), "the saved part opens with its features");
 

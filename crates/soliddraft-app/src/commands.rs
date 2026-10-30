@@ -1145,6 +1145,16 @@ fn registry() -> Vec<CommandSpec> {
         cmd("edit_lattice", "Edit lattice", Icon::LinearPattern, "Change lattice density and output settings")
             .agents(Agents::Verb, "Only supplied settings change.", tools::edit_lattice_params)
             .undo(Undo::Step),
+        cmd("gyroid", "Gyroid", Icon::LinearPattern, "Make a terminal network gyroid")
+            .on(Features, "Finish", Small)
+            .run(|_| AppAction::StartGyroid)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Gyroid(_))))
+            .agents(Agents::Verb, "The level is dimensionless, not a thickness, and may be zero or negative. The preview is unproved; export certifies the mesh.", tools::gyroid_params)
+            .undo(Undo::Step),
+        cmd("edit_gyroid", "Edit gyroid", Icon::LinearPattern, "Change gyroid period, level and output settings")
+            .agents(Agents::Verb, "Only supplied settings change.", tools::edit_gyroid_params)
+            .undo(Undo::Step),
         cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
             .on(Features, "Finish", Small)
             .run(|_| AppAction::StartShell)

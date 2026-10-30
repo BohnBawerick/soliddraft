@@ -1,0 +1,830 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "gyroid",
+  "max_work": 100000000,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": -5,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              -5
+            ],
+            "width": 20,
+            "height": 20
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "label": "body",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 4000,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 5,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "gyroid",
+      "arguments": {
+        "kind": "network",
+        "period": 10,
+        "level": 0,
+        "accuracy": 0.1,
+        "min_detail": 0.5
+      },
+      "label": "gyroid",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 5,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "kind": "gyroid",
+            "box": [
+              -10,
+              -10,
+              -5,
+              10,
+              10,
+              5
+            ],
+            "period": 10,
+            "level": 0,
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ]
+          }
+        },
+        {
+          "format": "step",
+          "refused": "field parts export as meshes"
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": 0,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 4,
+            "height": 4
+          }
+        ]
+      },
+      "label": "CAD after the gyroid",
+      "view": "unavailable",
+      "refused": "is the gyroid stage and must stay last",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 5,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 20,
+        "flip": false
+      },
+      "label": "upstream edit",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "kind": "gyroid",
+            "box": [
+              -10,
+              -10,
+              -5,
+              10,
+              10,
+              15
+            ],
+            "period": 10,
+            "level": 0,
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tool": "edit_gyroid",
+      "arguments": {
+        "feature": "Gyroid1",
+        "level": -0.5
+      },
+      "label": "level edit",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": -0.5
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "kind": "gyroid",
+            "box": [
+              -10,
+              -10,
+              -5,
+              10,
+              10,
+              15
+            ],
+            "period": 10,
+            "level": -0.5,
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": -0.5
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/gyroid.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/gyroid.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/gyroid.dwprt"
+      },
+      "label": "reopen",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Gyroid1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/kind",
+          "equals": "network"
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": -0.5
+        },
+        {
+          "pointer": "/summary/features/2/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "level edit"
+        }
+      ]
+    }
+  ]
+}

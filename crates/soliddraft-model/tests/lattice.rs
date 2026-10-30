@@ -8,7 +8,7 @@ use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
 use soliddraft_model::{
     Command, CommandError, DatumPlane, Document, EndCondition, ExtrudeFeature, ExtrudeOp, FeatureId, FeatureKind,
-    FeatureStatus, LatticeFeature, ProfileSource, SketchFeature, SketchPlane,
+    FeatureStatus, GyroidFeature, LatticeFeature, ProfileSource, SketchFeature, SketchPlane,
 };
 
 fn kernel() -> Arc<CatallaxKernel> {
@@ -319,6 +319,13 @@ impl Kernel for RefusingKernel {
             message: "field.print-budget: designed refusal".into(),
         })
     }
+    fn gyroid(&self, _: &OpTag, _: BodyId, _: &Gyroid) -> KernelResult<OpResult> {
+        Err(KernelError::QueryFailed {
+            query: "gyroid".into(),
+            code: 0,
+            message: "field.print-budget: designed refusal".into(),
+        })
+    }
 }
 
 /// The real kernel builds the lattice; only its certified export refuses, as a part
@@ -366,6 +373,9 @@ impl Kernel for ExportRefusingKernel {
     }
     fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
         self.real.lattice(tag, body, params)
+    }
+    fn gyroid(&self, tag: &OpTag, body: BodyId, params: &Gyroid) -> KernelResult<OpResult> {
+        self.real.gyroid(tag, body, params)
     }
     fn export_field_stl(&self, _: BodyId) -> KernelResult<FieldExport> {
         Self::bump(&self.field_exports);
@@ -430,4 +440,157 @@ fn a_refused_field_export_returns_the_refusal_and_never_falls_back() {
     assert_eq!(d.feature(l).unwrap().kind, before, "the accuracy is not relaxed");
     assert!(status(&d, l).is_ok());
     assert_eq!(d.undo_label(), undo.as_deref());
+}
+
+/// The 20 by 20 by 10 body of G0, on a top plane at z = -5.
+fn g0_body(kernel: Arc<dyn Kernel>) -> (Document, FeatureId) {
+    let mut d = Document::new("G0", kernel);
+    let mut sketch = Sketch::new();
+    sketch.rectangle(P2::new(0.0, 0.0), 20.0, 20.0).unwrap();
+    solve(&mut sketch, None, true);
+    let plane = SketchPlane::Datum { datum: DatumPlane::Top, offset: -5.0 };
+    let s = add(&mut d, FeatureKind::Sketch(SketchFeature { plane, sketch }));
+    let b = add(&mut d, boss(s, 10.0));
+    (d, b)
+}
+
+fn gyroid(settings: GyroidFeature) -> FeatureKind {
+    FeatureKind::Gyroid(settings)
+}
+
+/// G0: the accepted network gyroid over that body.
+fn g0() -> (Document, FeatureId, FeatureId) {
+    let (mut d, b) = g0_body(kernel());
+    let g = add(&mut d, gyroid(GyroidFeature::default()));
+    assert!(status(&d, g).is_ok(), "{:?}", status(&d, g));
+    (d, b, g)
+}
+
+/// Each row below is a boundary the scenario's happy path cannot reach.
+#[test]
+fn gyroid_commands_preserve_terminal_document_contract() {
+    let base = GyroidFeature::default();
+    assert_eq!(base.period_mm, 10.0);
+    assert_eq!((base.accuracy_mm, base.min_detail_mm), (0.1, 0.5));
+    let invalid = [
+        GyroidFeature { period_mm: 0.0, ..base },
+        GyroidFeature { period_mm: -10.0, ..base },
+        GyroidFeature { period_mm: f64::NAN, ..base },
+        GyroidFeature { level: f64::NAN, ..base },
+        GyroidFeature { level: f64::INFINITY, ..base },
+        GyroidFeature { accuracy_mm: 0.0, ..base },
+        GyroidFeature { min_detail_mm: 0.0, ..base },
+    ];
+
+    // An invalid add or edit is a typed input error that changes nothing.
+    let (mut d, _) = g0_body(kernel());
+    let body = d.body();
+    let (depth, saved) = (d.undo_depth(), d.part_json());
+    for settings in invalid {
+        assert!(matches!(try_add(&mut d, gyroid(settings), None), Err(CommandError::Invalid(_))), "{settings:?}");
+        assert_eq!((d.body(), d.undo_depth(), d.part_json()), (body, depth, saved.clone()), "{settings:?}");
+    }
+    let (mut d, b, g) = g0();
+    let body = d.body();
+    let (depth, saved) = (d.undo_depth(), d.part_json());
+    for settings in invalid {
+        let edit = Command::EditFeature { id: g, kind: gyroid(settings) };
+        assert!(matches!(d.execute(edit), Err(CommandError::Invalid(_))), "{settings:?}");
+        assert_eq!(d.feature(g).unwrap().kind, gyroid(base));
+        assert_eq!((d.body(), d.undo_depth(), d.part_json()), (body, depth, saved.clone()), "{settings:?}");
+    }
+    // A network level is not a radius: zero and negative levels pass validation.
+    for level in [0.0, -0.5] {
+        let kind = gyroid(GyroidFeature { level, ..base });
+        d.execute(Command::EditFeature { id: g, kind }).unwrap();
+        assert!(status(&d, g).is_ok(), "level {level}: {:?}", status(&d, g));
+    }
+    d.undo().unwrap();
+    d.undo().unwrap();
+
+    // Exactly one terminal field, and nothing below it.
+    let count = d.features().len();
+    let depth = d.undo_depth();
+    for kind in [gyroid(base), FeatureKind::Lattice(LatticeFeature::default())] {
+        assert_eq!(try_add(&mut d, kind.clone(), None), Err(CommandError::LatticeNotLast));
+        assert_eq!(try_add(&mut d, kind, Some(1)), Err(CommandError::LatticeNotLast));
+    }
+    let (mut latticed, _) = g0_body(kernel());
+    add(&mut latticed, FeatureKind::Lattice(LatticeFeature::default()));
+    assert_eq!(try_add(&mut latticed, gyroid(base), None), Err(CommandError::LatticeNotLast));
+    assert_eq!(try_add(&mut d, rectangle(4.0), None), Err(CommandError::AfterGyroid(g)));
+    assert_eq!(try_add(&mut d, rectangle(4.0), Some(count)), Err(CommandError::AfterGyroid(g)));
+    let last = count - 1;
+    assert_eq!(
+        d.execute(Command::MoveFeature { id: b, position: last }).map(|_| ()),
+        Err(CommandError::AfterGyroid(g))
+    );
+    assert_eq!(d.execute(Command::MoveFeature { id: g, position: 0 }).map(|_| ()), Err(CommandError::AfterGyroid(g)));
+    assert!(matches!(
+        d.execute(Command::EditFeature { id: g, kind: FeatureKind::Lattice(LatticeFeature::default()) }),
+        Err(CommandError::Invalid(_))
+    ));
+    assert!(matches!(d.execute(Command::EditFeature { id: b, kind: gyroid(base) }), Err(CommandError::Invalid(_))));
+    assert_eq!((d.features().len(), d.undo_depth()), (count, depth));
+
+    // A file with CAD or a second field after the gyroid is damaged, not a different part.
+    let saved: serde_json::Value = serde_json::from_str(&d.part_json()).unwrap();
+    let mut cad_after = saved.clone();
+    let features = cad_after["features"].as_array_mut().unwrap();
+    let cad = features.remove(1);
+    features.push(cad);
+    assert!(Document::from_part_json(&cad_after.to_string(), kernel()).is_err());
+    let mut second_gyroid = saved.clone();
+    let features = second_gyroid["features"].as_array_mut().unwrap();
+    let mut copy = features.last().unwrap().clone();
+    copy["id"] = serde_json::json!(99);
+    features.push(copy);
+    assert!(Document::from_part_json(&second_gyroid.to_string(), kernel()).is_err());
+    let lattice_part = latticed.part_json();
+    let mut lattice_part: serde_json::Value = serde_json::from_str(&lattice_part).unwrap();
+    let mut after_lattice = lattice_part["features"].as_array().unwrap().last().unwrap().clone();
+    after_lattice["kind"] = saved["features"].as_array().unwrap().last().unwrap()["kind"].clone();
+    after_lattice["id"] = serde_json::json!(99);
+    lattice_part["features"].as_array_mut().unwrap().push(after_lattice);
+    assert!(Document::from_part_json(&lattice_part.to_string(), kernel()).is_err());
+
+    // Rolling back keeps the settings and restores the B-rep, which is not a ban on the file.
+    d.return_before_lattice().unwrap();
+    assert_eq!(status(&d, g), FeatureStatus::RolledBack);
+    assert!(matches!(
+        d.export(soliddraft_exchange::Format::Step).unwrap().report,
+        soliddraft_exchange::Report::Step(_)
+    ));
+    let mut reopened = Document::from_bytes(&d.to_bytes().unwrap(), kernel()).unwrap();
+    assert_eq!(status(&reopened, g), FeatureStatus::RolledBack);
+    assert_eq!(reopened.feature(g).unwrap().kind, gyroid(base));
+    reopened.execute(Command::RollTo { before: None }).unwrap();
+    assert!(status(&reopened, g).is_ok());
+    let refused = reopened.export(soliddraft_exchange::Format::Step).map(|_| ()).unwrap_err();
+    assert!(refused.contains("field parts export as meshes"), "{refused}");
+
+    // A refused certified export escapes unchanged, with no stand-in and no coarser retry.
+    let refusing = Arc::new(ExportRefusingKernel::default());
+    let (mut d, _) = g0_body(refusing.clone());
+    let g = add(&mut d, gyroid(base));
+    assert!(status(&d, g).is_ok());
+    let undo = d.undo_label().map(str::to_owned);
+    let tessellations = ExportRefusingKernel::count(&refusing.tessellations);
+    let error = d.export(soliddraft_exchange::Format::Stl).map(|_| ()).unwrap_err();
+    assert!(error.contains("field.print-budget"), "{error}");
+    assert_eq!(ExportRefusingKernel::count(&refusing.field_exports), 1, "one certified attempt, no retry");
+    assert_eq!(ExportRefusingKernel::count(&refusing.tessellations), tessellations, "no B-rep mesh stands in");
+    assert_eq!(d.feature(g).unwrap().kind, gyroid(base), "the accuracy is not relaxed");
+    assert!(status(&d, g).is_ok());
+    assert_eq!(d.undo_label(), undo.as_deref());
+
+    // A refused build leaves the previous body and blocks the export.
+    let (mut d, b) = g0_body(Arc::new(RefusingKernel(CatallaxKernel::new())));
+    let before = d.body();
+    let g = add(&mut d, gyroid(base));
+    let FeatureStatus::Failed(message) = status(&d, g) else { panic!("{:?}", status(&d, g)) };
+    assert!(message.contains("field.print-budget"), "{message}");
+    assert!(status(&d, b).is_ok());
+    assert_eq!(d.body(), before, "the body before the gyroid stays visible");
+    assert!(d.export(soliddraft_exchange::Format::Stl).is_err());
 }

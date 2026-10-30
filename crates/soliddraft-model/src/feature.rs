@@ -74,6 +74,8 @@ pub enum FeatureKind {
     ImportStep(ImportStepFeature),
     /// Turns the finished body into a lattice. It is always the last feature.
     Lattice(LatticeFeature),
+    /// Turns the finished body into a network gyroid. It is always the last feature.
+    Gyroid(GyroidFeature),
 }
 
 impl FeatureKind {
@@ -96,12 +98,20 @@ impl FeatureKind {
             FeatureKind::Shell(_) => "Shell",
             FeatureKind::ImportStep(_) => "Import",
             FeatureKind::Lattice(_) => "Lattice",
+            FeatureKind::Gyroid(_) => "Gyroid",
         }
     }
 
-    /// True for the terminal lattice, which no CAD feature may follow.
-    pub fn is_lattice(&self) -> bool {
-        matches!(self, FeatureKind::Lattice(_))
+    /// True for a terminal field, which no CAD feature may follow.
+    pub fn is_terminal_field(&self) -> bool {
+        matches!(self, FeatureKind::Lattice(_) | FeatureKind::Gyroid(_))
+    }
+
+    /// True when an edit may turn this kind into `other`. A terminal field stays the
+    /// same field; it never becomes another field or a CAD feature.
+    pub(crate) fn same_stage(&self, other: &FeatureKind) -> bool {
+        !(self.is_terminal_field() || other.is_terminal_field())
+            || std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 
     /// The features this one reads: its sketch, and the features that made the faces
@@ -127,7 +137,8 @@ impl FeatureKind {
                 out.extend(b.edges.iter().flat_map(|e| e.faces.iter().map(|f| f.feature)));
             }
             FeatureKind::Hole(h) => out.push(h.face.feature),
-            FeatureKind::Pattern(_) | FeatureKind::ImportStep(_) | FeatureKind::Lattice(_) => {}
+            FeatureKind::Pattern(_) | FeatureKind::ImportStep(_) | FeatureKind::Lattice(_) | FeatureKind::Gyroid(_) => {
+            }
             FeatureKind::Mirror(m) => {
                 if let PlaneRef::Face { face } = &m.plane {
                     out.push(face.feature);
@@ -448,7 +459,7 @@ pub struct LatticeFeature {
     pub radius_mm: Option<f64>,
     /// Grid fixed to the part origin and axes.
     #[serde(default)]
-    pub frame: soliddraft_kernel_api::LatticeFrame,
+    pub frame: soliddraft_kernel_api::FieldFrame,
     /// Accuracy the lattice is proven to, in millimetres.
     pub accuracy_mm: f64,
     /// The smallest detail the lattice keeps, in millimetres.
@@ -461,7 +472,38 @@ impl Default for LatticeFeature {
             cell: Some(soliddraft_kernel_api::LatticeCell::Cubic),
             cell_size_mm: Some(5.0),
             radius_mm: Some(1.0),
-            frame: soliddraft_kernel_api::LatticeFrame::Part,
+            frame: soliddraft_kernel_api::FieldFrame::Part,
+            accuracy_mm: 0.1,
+            min_detail_mm: 0.5,
+        }
+    }
+}
+
+/// The final gyroid stage. It reads the whole finished body, so it references nothing.
+/// The level is the dimensionless value of the gyroid function, not a wall thickness.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GyroidFeature {
+    /// Only the network is supported.
+    pub kind: soliddraft_kernel_api::GyroidKind,
+    /// Length of one period, in millimetres.
+    pub period_mm: f64,
+    /// Constant dimensionless level. Zero and negative networks are valid.
+    pub level: f64,
+    /// Gyroid fixed to the part origin and axes.
+    pub frame: soliddraft_kernel_api::FieldFrame,
+    /// Accuracy the gyroid is proven to, in millimetres.
+    pub accuracy_mm: f64,
+    /// The smallest detail the gyroid keeps, in millimetres.
+    pub min_detail_mm: f64,
+}
+
+impl Default for GyroidFeature {
+    fn default() -> Self {
+        GyroidFeature {
+            kind: soliddraft_kernel_api::GyroidKind::Network,
+            period_mm: 10.0,
+            level: 0.0,
+            frame: soliddraft_kernel_api::FieldFrame::Part,
             accuracy_mm: 0.1,
             min_detail_mm: 0.5,
         }

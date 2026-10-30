@@ -49,6 +49,8 @@ pub enum OpKind {
     Draft,
     /// Terminal field lattice.
     Lattice,
+    /// Terminal field gyroid.
+    Gyroid,
 }
 
 impl OpKind {
@@ -70,6 +72,7 @@ impl OpKind {
             OpKind::Mirror => "mirror",
             OpKind::Draft => "draft",
             OpKind::Lattice => "lattice",
+            OpKind::Gyroid => "gyroid",
         }
     }
 }

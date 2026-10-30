@@ -1,17 +1,36 @@
 //! Terminal fields keep their native stage separate from B-rep bodies and exports.
 
 use catallax_field::{
-    lattice_stage::{self, LatticeSpec, Settings, Stage},
+    lattice_stage::{self, GyroidSpec, LatticeSpec, Output, Settings, Stage, TerminalField},
     printing,
 };
-use catallax_numbers::{Decider, OperationSpan, Refusal};
-use catallax_recipe::{Grade, Pose};
+use catallax_numbers::{Decider, OperationSpan, Rational, Refusal};
+use catallax_recipe::{Grade, Pose, Recipe};
 use sha2::{Digest, Sha256};
 
 use crate::*;
 
+/// The stage calls an active field needs, whichever field it holds.
+trait FieldStage: Send + Sync {
+    fn recipe(&self) -> &Recipe;
+    fn accuracy(&self) -> &Rational;
+    fn export(&self, dec: &mut Decider) -> Result<Output, Refusal>;
+}
+
+impl<S: TerminalField + Send + Sync> FieldStage for Stage<S> {
+    fn recipe(&self) -> &Recipe {
+        Stage::recipe(self)
+    }
+    fn accuracy(&self) -> &Rational {
+        &self.settings().accuracy
+    }
+    fn export(&self, dec: &mut Decider) -> Result<Output, Refusal> {
+        Stage::export(self, dec)
+    }
+}
+
 pub(super) struct Field {
-    stage: Stage,
+    stage: Box<dyn FieldStage>,
     preview: Mesh,
     topology: Topology,
 }
@@ -24,30 +43,64 @@ fn run<T>(operation: &str, action: impl FnOnce(&mut Decider) -> Result<T, Refusa
     result.map_err(|e| query_error(operation, e))
 }
 
+/// The output settings of one field, at the default caps.
+fn settings(name: &str, accuracy_mm: f64, min_detail_mm: f64) -> KernelResult<Settings> {
+    let defaults = printing::Options::default();
+    Ok(Settings {
+        accuracy: native::number(accuracy_mm, &format!("{name} accuracy"))?.value().clone(),
+        minimum_detail: native::number(min_detail_mm, &format!("{name} minimum detail"))?.value().clone(),
+        max_cells: defaults.max_cells,
+        max_vertices: defaults.max_vertices,
+    })
+}
+
 impl CatallaxKernel {
     pub(super) fn field(&self, body: BodyId) -> KernelResult<Option<Arc<Field>>> {
         Ok(self.state()?.fields.get(&body).cloned())
     }
 
-    pub(super) fn build_field(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
-        let recipe = converted_recipe(&self.body_recipe(body)?, OpKind::Lattice)?.recipe;
-        let defaults = printing::Options::default();
-        let settings = Settings {
-            accuracy: native::number(params.accuracy_mm, "lattice accuracy")?.value().clone(),
-            minimum_detail: native::number(params.min_detail_mm, "lattice minimum detail")?.value().clone(),
-            max_cells: defaults.max_cells,
-            max_vertices: defaults.max_vertices,
-        };
+    pub(super) fn build_lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
+        let settings = settings("lattice", params.accuracy_mm, params.min_detail_mm)?;
         let spec = LatticeSpec {
             cell: match params.cell {
                 LatticeCell::Cubic => catallax_recipe::LatticeCell::Cubic,
             },
             size: native::number(params.cell_size_mm, "cell size")?,
             frame: match params.frame {
-                LatticeFrame::Part => Pose::identity(),
+                FieldFrame::Part => Pose::identity(),
             },
             radius: Grade::Constant(native::number(params.radius_mm, "density")?),
         };
+        self.build_field(tag, body, OpKind::Lattice, spec, settings)
+    }
+
+    pub(super) fn build_gyroid(&self, tag: &OpTag, body: BodyId, params: &Gyroid) -> KernelResult<OpResult> {
+        let settings = settings("gyroid", params.accuracy_mm, params.min_detail_mm)?;
+        let spec = GyroidSpec {
+            period: native::number(params.period_mm, "gyroid period")?,
+            level: Grade::Constant(native::number(params.level, "gyroid level")?),
+            kind: match params.kind {
+                GyroidKind::Network => catallax_recipe::GyroidKind::Network,
+            },
+            frame: match params.frame {
+                FieldFrame::Part => Pose::identity(),
+            },
+        };
+        self.build_field(tag, body, OpKind::Gyroid, spec, settings)
+    }
+
+    fn build_field<S>(
+        &self,
+        tag: &OpTag,
+        body: BodyId,
+        op: OpKind,
+        spec: S,
+        settings: Settings,
+    ) -> KernelResult<OpResult>
+    where
+        S: TerminalField + Send + Sync + 'static,
+    {
+        let recipe = converted_recipe(&self.body_recipe(body)?, op)?.recipe;
         let solid = self.solid(body)?;
         let built = solid.app.checkpoint.built();
         let bounds = numerical("bounding_box", |dec| {
@@ -55,12 +108,12 @@ impl CatallaxKernel {
         })
         .map_err(|e| query_error("bounding_box", e))?
         .value
-        .ok_or_else(|| KernelError::InvalidInput("the lattice needs a nonempty body".into()))?;
+        .ok_or_else(|| KernelError::InvalidInput(format!("the {} needs a nonempty body", op.name())))?;
         let bbox = Aabb {
             min: bounds.min.each_ref().map(Rational::to_f64_nearest).into(),
             max: bounds.max.each_ref().map(Rational::to_f64_nearest).into(),
         };
-        let stage = run("lattice", |dec| Stage::new(&recipe, spec, settings, dec))?;
+        let stage = run(op.name(), |dec| Stage::new(&recipe, spec, settings, dec))?;
         // Keep the native question even when preview generation refuses.
         {
             let mut state = self.state()?;
@@ -99,7 +152,7 @@ impl CatallaxKernel {
         let record = HistoryRecord {
             seq: state.id(),
             tag: tag.clone(),
-            op: OpKind::Lattice,
+            op,
             faces: EntityChanges { created: vec![face], ..Default::default() },
             edges: Default::default(),
             vertices: Default::default(),
@@ -110,7 +163,7 @@ impl CatallaxKernel {
         history.push(record.clone());
         let stored = Stored { steps: input.steps.clone(), result: input.result.clone(), history, solid: None };
         state.bodies.insert(id, stored);
-        state.fields.insert(id, Arc::new(Field { stage, preview, topology }));
+        state.fields.insert(id, Arc::new(Field { stage: Box::new(stage), preview, topology }));
         Ok(OpResult { body: id, record })
     }
 }
@@ -136,7 +189,7 @@ impl Field {
         let report = FieldReport {
             approximate: true,
             route: "field".into(),
-            requested_accuracy_mm: self.stage.settings().accuracy.to_string(),
+            requested_accuracy_mm: self.stage.accuracy().to_string(),
             deviation_bound_mm: bound,
             closed: output.verdict().closed,
             connected: output.verdict().connected,
