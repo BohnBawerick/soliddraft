@@ -45,9 +45,15 @@ fn step_carries_the_proven_deviation_and_the_body_faces() {
         let directory = std::path::PathBuf::from(directory);
         std::fs::create_dir_all(&directory).unwrap();
         let mass = k.mass_properties(body).unwrap();
+        let topology = k.topology(body).unwrap();
         let report = serde_json::json!({
             "report": out.report,
-            "body": {"faces": k.topology(body).unwrap().faces.len(), "volume": mass.volume, "area": mass.area},
+            "body": {
+                "faces": topology.faces.len(),
+                "edges": topology.edges.len(),
+                "volume": mass.volume,
+                "area": mass.area,
+            },
         });
         std::fs::write(directory.join("bracket.step"), &out.bytes).unwrap();
         std::fs::write(directory.join("step-report.json"), serde_json::to_vec(&report).unwrap()).unwrap();

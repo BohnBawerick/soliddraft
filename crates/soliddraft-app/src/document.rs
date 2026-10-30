@@ -1182,6 +1182,12 @@ pub struct Document {
     provisional: Option<ProvisionalShown>,
     proof_failure: Option<String>,
     proof_notice: Option<String>,
+    /// Why the current body has no display mesh, or why the last change was rolled back
+    /// for lacking one. Holds until the next change.
+    display_failure: Option<String>,
+    /// The undo depth of the part on screen while deferred edits after it wait for a
+    /// display. Later edits keep it, because the ones before them were never drawn.
+    edit_depth: Option<usize>,
     shown_revision: u64,
     /// Which display level is shown, and the worker that makes the others.
     quality: DisplayQuality,
@@ -1230,6 +1236,8 @@ impl Document {
             provisional: None,
             proof_failure: None,
             proof_notice: None,
+            display_failure: None,
+            edit_depth: None,
             shown_revision: 0,
             assistant_mark: false,
             headless: false,
@@ -1278,6 +1286,8 @@ impl Document {
             provisional: None,
             proof_failure: None,
             proof_notice: None,
+            display_failure: None,
+            edit_depth: None,
             shown_revision: self.shown_revision,
             quality: self.quality.fork(self.kernel().clone()),
             assistant_mark: self.assistant_mark,
@@ -1380,7 +1390,13 @@ impl Document {
         if self.proof_pending() {
             return Some(("Proof pending", false));
         }
-        self.proof_notice.as_deref().map(|message| (message, false))
+        self.display_failure.as_deref().or(self.proof_notice.as_deref()).map(|message| (message, false))
+    }
+
+    /// Why the part has no display mesh, or why the last change was rolled back for
+    /// lacking one. The exact model can still be proved and exported.
+    pub fn display_failure(&self) -> Option<&str> {
+        self.display_failure.as_deref()
     }
 
     /// Background proof answers wake `ctx` instead of waiting for a polled frame.
@@ -1589,6 +1605,7 @@ impl Document {
             return Ok(());
         }
         self.retain_proved_revision();
+        let depth = self.edit_depth.take();
         if let Some(display) = proof.display {
             let display = Arc::try_unwrap(display).unwrap_or_else(|display| (*display).clone());
             let wanted = self.quality.retarget(display.body, &display.topology, &self.model.settings().viewport);
@@ -1613,8 +1630,14 @@ impl Document {
         } else {
             // A display refusal does not unprove the model, or retag an old LOD
             // answer with the new body's identity.
+            let message = self.proof_notice.take().map(display_unavailable);
+            if let (Some(depth), Some(message)) = (depth, &message) {
+                self.abandon(depth).map_err(|e| format!("{message}; {e}"))?;
+                self.display_failure = Some(message.clone());
+                return Ok(());
+            }
             self.quality.clear();
-            self.proof_notice = self.proof_notice.take().map(|message| format!("Display unavailable: {message}"));
+            self.display_failure = message;
             self.mesh_version += 1;
         }
         if let Some(selection) = resolved {
@@ -1698,6 +1721,8 @@ impl Document {
         self.provisional = None;
         self.proof_failure = None;
         self.proof_notice = None;
+        self.display_failure = None;
+        self.edit_depth = None;
         self.mesh_version += 1;
         self.sync();
         self.selection = selected.filter(|feature| self.feature(*feature).is_some()).map(Selection::Feature);
@@ -1843,6 +1868,16 @@ impl Document {
         Ok(())
     }
 
+    /// Abandons the steps since `depth`, and those since `drawn` too if the part at
+    /// `depth` cannot be displayed either.
+    fn withdraw(&mut self, depth: usize, drawn: Option<usize>) -> Result<(), String> {
+        self.abandon(depth)?;
+        match drawn {
+            Some(drawn) if drawn < depth && self.display_failure.is_some() => self.abandon(drawn),
+            _ => Ok(()),
+        }
+    }
+
     /// Adds a line to the command log.
     pub fn log_note(&mut self, line: impl Into<String>) {
         self.model.log_note(line);
@@ -1890,6 +1925,9 @@ impl Document {
             let label = command.label();
             let rounding = matches!(command, Command::AddFillet { .. } | Command::AddChamfer { .. });
             let depth = self.model.undo_depth();
+            // Rolling back helps only when the part on screen can come back.
+            let showing = self.display_body().is_none() || !self.meshes.is_empty();
+            let drawn = self.edit_depth.or((showing && self.shown_revision == self.revision).then_some(depth));
             let commands = self.to_model(command)?;
             let batch = model::Command::Batch { label, commands };
             let done = if deferred { self.model.execute_deferred(batch) } else { self.model.execute(batch) }
@@ -1897,6 +1935,7 @@ impl Document {
             self.touch();
             if deferred {
                 self.after_deferred_change();
+                self.edit_depth = drawn;
             } else {
                 self.after_change();
             }
@@ -1908,9 +1947,19 @@ impl Document {
                 // A refused fillet or chamfer is rolled back, as the command tools do: left
                 // red, it would block every later edge and face reference.
                 if rounding {
-                    self.abandon(depth).map_err(|e| format!("{msg}; {e}"))?;
+                    self.withdraw(depth, drawn).map_err(|e| format!("{msg}; {e}"))?;
                 }
                 return Err(msg);
+            }
+            // A body with no display mesh would leave the viewport empty, so it does not
+            // replace the part on screen.
+            if !deferred
+                && showing
+                && let Some(message) = self.display_failure.take()
+            {
+                self.withdraw(depth, drawn).map_err(|e| format!("{message}; {e}"))?;
+                self.display_failure = Some(message.clone());
+                return Err(message);
             }
             Ok(created)
         })())
@@ -2093,6 +2142,8 @@ impl Document {
         }
         self.proof_failure = None;
         self.proof_notice = None;
+        self.display_failure = None;
+        self.edit_depth = None;
         self.revision += 1;
         self.edit_request = None;
         let previous_selection = self.selection.and_then(|s| self.describe(s)).map(|i| (i.feature, i.title));
@@ -2223,10 +2274,15 @@ impl Document {
                 if let Some(mesh) = cached {
                     self.show_mesh(body, &topology, &mesh);
                     self.shown = next;
-                } else if let Ok(mesh) = self.kernel().preview(body, &self.tess_params) {
-                    self.show_mesh(body, &topology, &mesh);
-                    self.quality.made(body, mesh);
-                    self.shown = next;
+                } else {
+                    match self.kernel().preview(body, &self.tess_params) {
+                        Ok(mesh) => {
+                            self.show_mesh(body, &topology, &mesh);
+                            self.quality.made(body, mesh);
+                            self.shown = next;
+                        }
+                        Err(error) => self.display_failure = Some(display_unavailable(error.to_string())),
+                    }
                 }
             }
         } else {
@@ -3090,6 +3146,10 @@ fn view_status(
 
 /// The display mesh of a body that is only previewed: no picks, so nothing in it can be
 /// selected or confused with the document's own body.
+fn display_unavailable(reason: String) -> String {
+    format!("Display unavailable: {reason}")
+}
+
 pub(crate) fn preview_mesh(
     kernel: &dyn Kernel,
     body: BodyId,

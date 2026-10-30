@@ -492,6 +492,8 @@ fn part_status(st: &AppState) -> Status {
         (format!("{errors} rebuild error{}", if errors == 1 { "" } else { "s" }), theme::error())
     } else if repairs > 0 {
         (format!("{repairs} feature{} to repair", if repairs == 1 { "" } else { "s" }), theme::warn())
+    } else if st.doc.display_failure().is_some() {
+        ("Display failed".to_owned(), theme::error())
     } else {
         ("Rebuild OK".to_owned(), theme::ok())
     };
@@ -515,7 +517,11 @@ fn part_status(st: &AppState) -> Status {
     };
     Status {
         headline,
-        note: st.note.as_ref().map(StatusNote::of),
+        note: st
+            .doc
+            .display_failure()
+            .map(|text| StatusNote { text: text.to_owned(), color: theme::error(), fresh: true })
+            .or_else(|| st.note.as_ref().map(StatusNote::of)),
         details: vec![
             mode,
             format!("{n} feature{}", if n == 1 { "" } else { "s" }),

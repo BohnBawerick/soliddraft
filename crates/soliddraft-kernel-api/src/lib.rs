@@ -602,6 +602,11 @@ pub struct StepReport {
     pub added_vertices: usize,
     /// Edges added because STEP needs them, such as seams of faces without a boundary.
     pub added_edges: usize,
+    /// Faces of the exact body that export-only repairs left out of the file, such as a
+    /// planar step too narrow for a STEP reader. The exact body keeps them.
+    pub removed_faces: usize,
+    /// Edges of the exact body that those repairs left out of the file.
+    pub removed_edges: usize,
     /// Warnings the backend attached to the export, in words. Empty for a clean export.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
