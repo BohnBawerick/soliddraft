@@ -255,7 +255,15 @@ impl InstallKind {
     }
 }
 
-static INSTALL: std::sync::Mutex<Option<InstallKind>> = std::sync::Mutex::new(None);
+/// The kind captured at startup and the config directory it was captured for.
+static INSTALL: std::sync::Mutex<Option<(Option<PathBuf>, InstallKind)>> = std::sync::Mutex::new(None);
+
+/// The kind captured for the config directory in use; none when nothing captured it or
+/// the directory has changed since.
+fn captured_install_kind() -> Option<InstallKind> {
+    let dir = crate::file::config_dir();
+    INSTALL.lock().unwrap().as_ref().filter(|(d, _)| *d == dir).map(|(_, kind)| *kind)
+}
 
 /// Decides at startup, before anything writes the settings file, whether this is a new
 /// installation. From then on every save of the settings file also records the preset
@@ -263,13 +271,14 @@ static INSTALL: std::sync::Mutex<Option<InstallKind>> = std::sync::Mutex::new(No
 /// installation look like an old one at the next start.
 pub fn capture_install_kind() -> InstallKind {
     let kind = InstallKind::detect();
-    *INSTALL.lock().unwrap() = Some(kind);
+    *INSTALL.lock().unwrap() = Some((crate::file::config_dir(), kind));
     kind
 }
 
-/// The kind captured at startup, or found now when nothing captured it.
+/// The kind captured at startup for the config directory in use, or found now when
+/// nothing captured it there.
 pub fn install_kind() -> InstallKind {
-    INSTALL.lock().unwrap().unwrap_or_else(InstallKind::detect)
+    captured_install_kind().unwrap_or_else(InstallKind::detect)
 }
 
 /// The navigation settings, or the defaults for `install` when the file has none.
@@ -305,7 +314,7 @@ fn save_navigation_in(file: &Path, settings: &NavigationSettings) -> Result<(), 
 
 /// Records the captured installation's preset in a file that has none yet.
 fn record_install_preset(all: &mut Value) {
-    let Some(kind) = *INSTALL.lock().unwrap() else { return };
+    let Some(kind) = captured_install_kind() else { return };
     let preset = crate::navigation::default_preset(kind);
     match all["navigation"].as_object_mut() {
         None => all["navigation"] = NavigationSettings::new(kind).to_json(),

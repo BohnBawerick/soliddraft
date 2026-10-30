@@ -144,36 +144,48 @@ fn overrides_are_scoped_to_their_preset() {
 
 #[test]
 fn navigation_save_does_not_touch_document_or_undo() {
-    let (_guard, dir) = config_dir("document");
-    let mut state = AppState::new(soliddraft_app::demo_document());
-    let feature = state.doc.features[0].id;
-    state.doc.selection = Some(Selection::Feature(feature));
-    let part = dir.join("part.dwprt");
-    soliddraft_app::file::save(&mut state.doc, &part).unwrap();
-    let saved = std::fs::read(&part).unwrap();
-    let hash = state.doc.model().semantic_hash();
-    let (revision, depth, selection, dirty) =
-        (state.doc.revision(), state.doc.undo_depth(), state.doc.selection, state.doc.dirty);
-    assert!(depth > 0, "the demo has undo steps");
+    // Both installs, each started deliberately: an existing settings file keeps SolidDraft's
+    // original controls, a fresh directory starts on Fusion.
+    for (name, start, kind, preset) in [
+        ("document-existing", Some(r#"{"theme":"dark"}"#), InstallKind::Existing, "legacy_soliddraft"),
+        ("document-new", None, InstallKind::New, "fusion"),
+    ] {
+        let (_guard, dir) = config_dir(name);
+        if let Some(text) = start {
+            write(&dir, text);
+        }
+        assert_eq!(settings::capture_install_kind(), kind, "{name}: the app starts");
+        let mut state = AppState::new(soliddraft_app::demo_document());
+        assert_eq!(state.navigation.active_preset().id, preset, "{name}");
+        let feature = state.doc.features[0].id;
+        state.doc.selection = Some(Selection::Feature(feature));
+        let part = dir.join("part.dwprt");
+        soliddraft_app::file::save(&mut state.doc, &part).unwrap();
+        let saved = std::fs::read(&part).unwrap();
+        let hash = state.doc.model().semantic_hash();
+        let (revision, depth, selection, dirty) =
+            (state.doc.revision(), state.doc.undo_depth(), state.doc.selection, state.doc.dirty);
+        assert!(depth > 0, "the demo has undo steps");
 
-    let mut through_settings = settings::navigation(InstallKind::Existing);
-    through_settings.select_preset("blender").unwrap();
-    settings::save_navigation(&through_settings).unwrap();
-    let mut through_app = state.navigation.clone();
-    through_app.select_preset("onshape").unwrap();
-    through_app.wheel.invert = true;
-    state.set_navigation(through_app.clone()).unwrap();
-    assert_eq!(state.navigation, through_app, "the app uses the new settings");
-    assert_eq!(settings::navigation(InstallKind::Existing), through_app, "and saved them");
+        let mut through_settings = settings::navigation(kind);
+        through_settings.select_preset("blender").unwrap();
+        settings::save_navigation(&through_settings).unwrap();
+        let mut through_app = state.navigation.clone();
+        through_app.select_preset("onshape").unwrap();
+        through_app.wheel.invert = true;
+        state.set_navigation(through_app.clone()).unwrap();
+        assert_eq!(state.navigation, through_app, "{name}: the app uses the new settings");
+        assert_eq!(settings::navigation(settings::install_kind()), through_app, "{name}: and saved them");
 
-    assert_eq!(state.doc.revision(), revision);
-    assert_eq!(state.doc.undo_depth(), depth);
-    assert_eq!(state.doc.selection, selection);
-    assert_eq!(state.doc.dirty, dirty);
-    assert_eq!(state.doc.model().semantic_hash(), hash);
-    soliddraft_app::file::save(&mut state.doc, &part).unwrap();
-    assert_eq!(std::fs::read(&part).unwrap(), saved, "the part file is the same");
-    let _ = std::fs::remove_dir_all(dir);
+        assert_eq!(state.doc.revision(), revision);
+        assert_eq!(state.doc.undo_depth(), depth);
+        assert_eq!(state.doc.selection, selection);
+        assert_eq!(state.doc.dirty, dirty);
+        assert_eq!(state.doc.model().semantic_hash(), hash);
+        soliddraft_app::file::save(&mut state.doc, &part).unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), saved, "{name}: the part file is the same");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
 
 #[test]
@@ -292,4 +304,19 @@ fn newer_navigation_section_is_preserved_and_read_only() {
         assert_eq!(nav["later"], json!([1]), "a key this build does not know is kept");
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_captured_install_kind_belongs_to_its_config_dir() {
+    let (guard, existing) = config_dir("captured-existing");
+    write(&existing, r#"{"theme":"dark"}"#);
+    assert_eq!(settings::capture_install_kind(), InstallKind::Existing);
+    drop(guard);
+    let (_guard, fresh) = config_dir("captured-fresh");
+    assert_eq!(settings::install_kind(), InstallKind::New, "another directory is not the captured one");
+    assert_eq!(AppState::new(soliddraft_app::new_document()).navigation.active_preset().id, "fusion");
+    settings::save_appearance(&settings::Appearance { theme: soliddraft_app::theme::Mode::Dark }).unwrap();
+    assert!(file_json(&fresh).get("navigation").is_none(), "nothing captured here, so nothing is recorded");
+    let _ = std::fs::remove_dir_all(existing);
+    let _ = std::fs::remove_dir_all(fresh);
 }
