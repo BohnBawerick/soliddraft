@@ -12,6 +12,7 @@ pub mod render;
 
 use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
+use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Router, ZoomAnchor};
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
 use crate::theme;
@@ -64,6 +65,8 @@ pub struct ViewportState {
     pub rect: Rect,
     /// The dimensions a selected body showed last frame.
     pub dimensions: Vec<dimensions::ShownDimension>,
+    /// Turns the pointer, the wheel and held keys into camera moves, by the user's preset.
+    pub router: Router,
     pick: Arc<Mutex<PickSample>>,
     cube_hover: Option<StandardView>,
 }
@@ -78,11 +81,15 @@ impl Default for ViewportState {
             hover_point: None,
             rect: Rect::NOTHING,
             dimensions: Vec::new(),
+            router: Router::new(&NavigationSettings::new(crate::settings::InstallKind::Existing), false),
             pick: Arc::new(Mutex::new(PickSample::default())),
             cube_hover: None,
         }
     }
 }
+
+/// The zoom of one point of a drag-zoom: the natural log of its factor.
+const DRAG_ZOOM: f32 = 0.005;
 
 /// A projected view-cube face: view, normal, label, screen polygon, depth, facing.
 type CubeFace<'a> = (StandardView, Vec3, &'a str, Vec<Pos2>, f32, f32);
@@ -120,6 +127,7 @@ impl ViewportState {
         overlay: Overlay<'_>,
         selection: Option<Selection>,
         hover_label: Option<&str>,
+        nav: &NavigationSettings,
     ) -> ViewportEvents {
         let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
         let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
@@ -133,7 +141,7 @@ impl ViewportState {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "3D viewport"));
         let ppp = ui.ctx().pixels_per_point();
-        self.navigate(ui, &response, rect, sketching);
+        events.fit = self.navigate(ui, &response, rect, sketching, nav);
 
         // Hover pick from the last id-buffer readback. The readback lags one
         // frame, so keep repainting briefly while the pointer rests on the view.
@@ -246,6 +254,7 @@ impl ViewportState {
         ui: &mut egui::Ui,
         mut frame: assembly::AssemblyFrame,
         hover_label: Option<&str>,
+        nav: &NavigationSettings,
     ) -> ViewportEvents {
         let mut events = ViewportEvents::default();
         let rect = ui.available_rect_before_wrap();
@@ -253,7 +262,7 @@ impl ViewportState {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Assembly viewport"));
         let ppp = ui.ctx().pixels_per_point();
-        self.navigate(ui, &response, rect, false);
+        events.fit = self.navigate(ui, &response, rect, false, nav);
         let hover_pos = if response.hovered() && !response.dragged() { response.hover_pos() } else { None };
         let cursor_px = hover_pos
             .map(|p| [((p.x - rect.left()) * ppp).max(0.0) as u32, ((p.y - rect.top()) * ppp).max(0.0) as u32]);
@@ -313,37 +322,75 @@ impl ViewportState {
         }
     }
 
-    /// Left drag orbits, right or middle drag (or Shift with the left) pans, the wheel
-    /// zooms toward the cursor. In a sketch the left button belongs to the sketcher.
-    fn navigate(&mut self, ui: &egui::Ui, response: &egui::Response, rect: Rect, sketching: bool) {
+    /// Moves the camera as the user's navigation preset says: the router decides what
+    /// the pointer, the wheel and held keys do, and this applies it. A drag captured here
+    /// keeps going over panels and overlays until its buttons are up. Returns whether a
+    /// gesture asked to fit the view.
+    fn navigate(
+        &mut self,
+        ui: &egui::Ui,
+        response: &egui::Response,
+        rect: Rect,
+        sketching: bool,
+        nav: &NavigationSettings,
+    ) -> bool {
         let aspect = rect.width() / rect.height().max(1.0);
         let dt = ui.input(|i| i.stable_dt).min(0.1);
         if self.camera.tick(dt) {
             ui.ctx().request_repaint();
         }
-        let shift = ui.input(|i| i.modifiers.shift);
-        let delta = response.drag_delta();
-        if response.dragged_by(egui::PointerButton::Primary) && !shift && !sketching {
-            self.camera.orbit(delta.x, delta.y);
-        } else if response.dragged_by(egui::PointerButton::Secondary)
-            || response.dragged_by(egui::PointerButton::Middle)
-            || (response.dragged_by(egui::PointerButton::Primary) && shift)
-        {
-            self.camera.pan(delta.x, delta.y, rect.height());
-        }
-        if response.hovered() {
-            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = (scroll * 0.0025).exp() * pinch;
-            if (factor - 1.0).abs() > 1e-5 {
-                let ndc = response.hover_pos().map(|p| {
-                    ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0)
-                });
-                self.camera.zoom(factor, ndc, aspect);
+        let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+        self.router.configure(nav, mac);
+        self.router.context = if sketching { NavContext::Sketch } else { NavContext::Model };
+        let hovered = response.hovered();
+        let events =
+            ui.input(|i| crate::navigation::gather(&i.events, i.time, |p| hovered && rect.contains(p), hovered));
+        let pointer = ui.input(|i| i.pointer.hover_pos());
+        let ndc =
+            |p: Pos2| ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0);
+        let mut fit = false;
+        let mut routed: Vec<_> = events.into_iter().map(|e| self.router.handle(e)).collect();
+        // A release outside the window may never arrive; the buttons egui sees down decide.
+        let (time, last) = ui.input(|i| (i.time, i.pointer.latest_pos()));
+        for b in self.router.buttons().to_vec() {
+            if !ui.input(|i| i.pointer.button_down(crate::navigation::egui_button(b))) {
+                let pos = last.unwrap_or(rect.center());
+                routed.push(self.router.handle(crate::navigation::NavEvent::Release { button: b, pos, time }));
             }
         }
-        if response.dragged() && !(sketching && response.dragged_by(egui::PointerButton::Primary)) {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        for r in routed {
+            let Outcome::Action(action) = r.outcome else { continue };
+            match (action, r.motion) {
+                (Action::Orbit, Motion::Drag { delta, .. }) => {
+                    let k = nav.camera.orbit_sensitivity;
+                    self.camera.orbit(delta.x * k, delta.y * k);
+                }
+                (Action::Pan, Motion::Drag { delta, .. }) => {
+                    let k = nav.camera.pan_sensitivity;
+                    self.camera.pan(delta.x * k, delta.y * k, rect.height());
+                }
+                (Action::DragZoom, Motion::Drag { delta, origin }) => {
+                    let anchor = r.binding.and_then(|id| self.router.binding(id)).map(|b| b.anchor);
+                    let at = (anchor == Some(ZoomAnchor::Cursor)).then(|| ndc(origin));
+                    // Dragging up zooms in.
+                    self.camera.zoom((-delta.y * DRAG_ZOOM).exp(), at, aspect);
+                }
+                (Action::WheelZoom, Motion::Zoom { factor }) => {
+                    let at = match nav.camera.zoom_anchor {
+                        ZoomAnchor::Cursor => pointer.filter(|p| rect.contains(*p)).map(ndc),
+                        ZoomAnchor::Center => None,
+                    };
+                    self.camera.zoom(factor, at, aspect);
+                }
+                (Action::Fit, _) => fit = true,
+                _ => {}
+            }
         }
+        if self.router.dragging() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            ui.ctx().request_repaint();
+        }
+        fit
     }
 
     fn paint_highlights(&self, painter: &egui::Painter, doc: &Document, selection: Option<Selection>, rect: Rect) {

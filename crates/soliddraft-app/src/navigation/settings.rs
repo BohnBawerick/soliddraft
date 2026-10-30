@@ -190,6 +190,13 @@ impl NavigationSettings {
         Ok(())
     }
 
+    /// Puts the wheel and the camera back to their defaults: the Orbit and zoom page's
+    /// reset. The preset, its rows and the view keys stay.
+    pub fn reset_orbit_and_zoom(&mut self) {
+        self.wheel = WheelSettings::default();
+        self.camera = CameraSettings::default();
+    }
+
     /// Changes one row's gesture. Refused when the preset or row does not exist, or when
     /// the result would be invalid, such as a gesture another row already has.
     pub fn set_override(&mut self, preset_id: &str, binding: &str, chord: Chord) -> Result<(), Refusal> {

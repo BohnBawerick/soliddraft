@@ -532,12 +532,13 @@ fn plural(n: usize) -> &'static str {
 
 /// The assembly tab: the viewport with the assembly's parts.
 pub fn viewport(ui: &mut egui::Ui, state: &mut AppState) {
+    let nav = &state.navigation;
     let Some(s) = state.assembly.session.as_mut() else { return };
     let ctx = ui.ctx().clone();
     let frame = s.frame(&ctx);
     let hover_label = s.shown.1.map(|r| s.doc.label(r));
     let empty = s.components().is_empty();
-    let events = s.viewport.show_assembly(ui, frame, hover_label.as_deref());
+    let events = s.viewport.show_assembly(ui, frame, hover_label.as_deref(), nav);
     let picked = |s: &AssemblySession, texel: Option<[u32; 2]>| {
         let scene = s.scene.lock().expect("the scene lock");
         texel.and_then(|t| scene.decode(t)).map(|p| p.occurrence)

@@ -145,7 +145,7 @@ impl TabViewer for Panels<'_> {
                     None
                 };
                 let overlay = Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive };
-                let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref());
+                let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref(), &st.navigation);
                 let (dt, ppp) = ui.input(|i| (i.stable_dt.min(0.1), i.pixels_per_point));
                 if st.doc.update_display(&st.viewport.projection(ppp), dt) {
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));

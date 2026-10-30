@@ -278,16 +278,28 @@ fn open_extrude_orbit_click_face() {
     harness.run_steps(12);
     save(&mut harness, "03-extruded");
 
-    // Orbit by dragging in the viewport.
+    // Orbit by dragging in the viewport, as a new installation's Fusion preset does:
+    // Shift and the middle button.
     let rect = viewport_rect(&harness);
     let yaw_before = harness.state().state.viewport.camera.yaw;
     let start = rect.center() + vec2(-120.0, 60.0);
-    harness.drag_at(start);
+    let shift = egui::Modifiers::SHIFT;
+    let middle = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Middle,
+        pressed,
+        modifiers: shift,
+    };
+    harness.hover_at(start);
+    harness.event(egui::Event::ModifiersChanged(shift));
+    harness.event(middle(start, true));
+    harness.step();
     for i in 1..=8 {
         harness.hover_at(start + vec2(20.0 * i as f32, -6.0 * i as f32));
         harness.step();
     }
-    harness.drop_at(start + vec2(160.0, -48.0));
+    harness.event(middle(start + vec2(160.0, -48.0), false));
+    harness.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
     harness.run_steps(3);
     let yaw_after = harness.state().state.viewport.camera.yaw;
     assert!((yaw_after - yaw_before).abs() > 0.1, "orbit should change the camera yaw");
@@ -297,7 +309,15 @@ fn open_extrude_orbit_click_face() {
     // Hover and click the face under the viewport centre; it must be named.
     let centre = rect.center();
     harness.hover_at(centre);
+    // The pick under the pointer reads back from the GPU a frame or two behind; a readback
+    // still in flight for the pointer's last place can add one.
     harness.run_steps(4);
+    for _ in 0..8 {
+        if harness.state().state.hover_info.is_some() {
+            break;
+        }
+        harness.step();
+    }
     let hover = harness.state().state.hover_info.clone().expect("hovering the body should name a face");
     assert!(hover.title.starts_with("Boss-Extrude1 · "), "hover title: {}", hover.title);
     save(&mut harness, "04-hover");

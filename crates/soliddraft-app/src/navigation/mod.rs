@@ -10,8 +10,13 @@
 //! still describe them ([`EventKind::Sequence`]).
 
 mod presets;
+mod router;
 mod settings;
 
+pub use router::{
+    Motion, NAV_DRAG_THRESHOLD, NavEvent, Outcome, Routed, Router, RouterConfig, Supports, TrackpadProfile,
+    egui_button, gather, key_location, modifiers_match, selection_primary,
+};
 pub use settings::{
     CameraSettings, KEYBOARD_PROFILE, NavigationSettings, Pivot, SaveError, TRACKPAD_PROFILE, VERSION, WheelSettings,
     default_preset,

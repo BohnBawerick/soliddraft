@@ -320,3 +320,51 @@ fn a_captured_install_kind_belongs_to_its_config_dir() {
     let _ = std::fs::remove_dir_all(existing);
     let _ = std::fs::remove_dir_all(fresh);
 }
+
+/// What one forward wheel line does under these settings: above 1 zooms in.
+fn forward_line(s: &NavigationSettings) -> f32 {
+    use navigation::{Motion, NavEvent, Router};
+    match Router::new(s, false).handle(NavEvent::Wheel { lines: 1.0 }).motion {
+        Motion::Zoom { factor } => factor,
+        other => panic!("the wheel zooms, got {other:?}"),
+    }
+}
+
+#[test]
+fn wheel_direction_is_global_and_independent() {
+    let (_guard, dir) = config_dir("wheel");
+    let mut s = NavigationSettings::new(InstallKind::New);
+    assert_eq!(s.active_preset().id, "fusion");
+    assert!(forward_line(&s) > 1.0, "Fusion uses SolidDraft's direction: forward zooms in");
+    s.wheel.invert = true;
+    settings::save_navigation(&s).unwrap();
+    for id in ["solidworks", "onshape", "fusion"] {
+        let mut s = settings::navigation(InstallKind::New);
+        s.select_preset(id).unwrap();
+        settings::save_navigation(&s).unwrap();
+        let back = settings::navigation(InstallKind::New);
+        assert!(back.wheel.invert, "{id}: the inversion stays through the switch");
+        assert!(forward_line(&back) < 1.0, "{id}: inverted, forward zooms out");
+    }
+    navigation::reset_preset("fusion").unwrap();
+    assert!(settings::navigation(InstallKind::New).wheel.invert, "resetting the preset keeps the wheel");
+
+    let mut page = settings::navigation(InstallKind::New);
+    page.select_preset("onshape").unwrap();
+    page.set_override("onshape", "orbit", drag(&[Button::Left], Mods::ALT)).unwrap();
+    page.reset_orbit_and_zoom();
+    assert!(!page.wheel.invert, "resetting the page restores the wheel");
+    assert_eq!(page.preset_id, "onshape", "and keeps the preset");
+    assert!(page.overrides.contains_key("onshape"), "and its rows");
+
+    // The documented directions are the profile's default; the invert flips them.
+    let mut d = NavigationSettings::new(InstallKind::Existing);
+    for (id, forward_in) in [("onshape", true), ("inventor", false)] {
+        d.select_preset(id).unwrap();
+        d.wheel.invert = false;
+        assert_eq!(forward_line(&d) > 1.0, forward_in, "{id}: its documented direction");
+        d.wheel.invert = true;
+        assert_eq!(forward_line(&d) > 1.0, !forward_in, "{id}: inverted");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
