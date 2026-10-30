@@ -8,6 +8,8 @@
 //! `ribbon.rs`, the tree and property tabs and the status bar, one `AppAction::Assembly`
 //! variant and one `AssemblyState` field in `state.rs`.
 
+pub(crate) mod tools;
+
 use crate::app::Tab;
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, NoteKind};
@@ -55,6 +57,9 @@ pub enum AssemblyAction {
     Select(Option<OccurrencePath>),
     /// Moves an occurrence to a placement relative to the assembly that contains it.
     Place(OccurrencePath, Placement),
+    Show,
+    ShowPart,
+    Update,
     Undo,
     Redo,
     ZoomFit,
@@ -67,6 +72,7 @@ pub struct AssemblyState {
     /// An assembly file whose structure is being read on another thread.
     pub opening: Option<(PathBuf, Opening)>,
     pub active: bool,
+    last_part: Option<soliddraft_document::OpenDocument>,
 }
 
 impl AssemblyState {
@@ -269,6 +275,57 @@ fn options(state: &AppState) -> OpenOptions {
     }
 }
 
+fn open_part(state: &AppState) -> soliddraft_document::OpenDocument {
+    soliddraft_document::OpenDocument {
+        id: state.doc.model().id(),
+        kind: DocKind::Part,
+        path: state.doc.path.clone(),
+        revision: crate::drawing::part::digest(&state.doc),
+    }
+}
+
+pub(crate) fn refresh(state: &mut AppState) {
+    let part = open_part(state);
+    if let Some(session) = state.assembly.session.as_mut() {
+        session.doc.refresh_references(vec![part.clone()]);
+    }
+    state.assembly.last_part = Some(part);
+}
+
+fn warning(def: &soliddraft_assembly::Definition) -> Option<String> {
+    match (&def.state, &def.freshness) {
+        (LoadState::Stale, _) => def.problem.clone(),
+        (_, Freshness::NewerAvailable { .. }) => Some("The part has changed; Update to use it".into()),
+        (_, Freshness::Missing) => Some("The file cannot be found; the assembly shows its copy".into()),
+        _ => None,
+    }
+}
+
+fn from_part(state: &mut AppState) -> Result<(), String> {
+    let part =
+        state.doc.path.clone().filter(|_| !state.doc.dirty).ok_or("Save the part before making an assembly of it")?;
+    let mut session = new_session(state, format!("{} assembly", state.doc.name));
+    session.selected = Some(place(&mut session, &*state.revisions, &part)?);
+    session.doc.finish_loading();
+    state.assembly.session = Some(session);
+    state.assembly.active = true;
+    state.drawing.active = false;
+    refresh(state);
+    Ok(())
+}
+
+fn update(state: &mut AppState) -> Result<soliddraft_assembly::RebuildReport, String> {
+    refresh(state);
+    let session = state.assembly.session.as_mut().ok_or("no assembly is open")?;
+    let report = session.doc.rebuild();
+    if let Some(refusal) = &report.refusal {
+        return Err(refusal.clone());
+    }
+    session.update();
+    refresh(state);
+    Ok(report)
+}
+
 /// Runs once a frame before the panels: tracks which document is active, takes an
 /// assembly that finished opening, and brings the open one up to date.
 pub fn frame(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Context) {
@@ -302,11 +359,17 @@ pub fn frame(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Contex
         Some((_, None)) => ctx.request_repaint_after(Duration::from_millis(16)),
         None => {}
     }
+    let mut loaded = false;
     if let Some(s) = state.assembly.session.as_mut() {
+        loaded = s.doc.is_loading();
         s.update();
         if s.doc.is_loading() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
+    }
+    let part = open_part(state);
+    if loaded || state.assembly.last_part.as_ref() != Some(&part) {
+        refresh(state);
     }
 }
 
@@ -331,6 +394,7 @@ pub fn dropped(state: &mut AppState, files: Vec<PathBuf>) {
 
 /// Puts a session in place of the open assembly and shows its tab.
 fn show(state: &mut AppState, dock: &mut DockState<Tab>, session: AssemblySession) {
+    state.assembly.last_part = None;
     state.assembly.session = Some(session);
     state.assembly.active = true;
     state.drawing.active = false;
@@ -375,14 +439,29 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, action: AssemblyAc
             show(state, dock, session);
             state.note(format!("New assembly {name} · insert a part to start"), NoteKind::Info);
         }
-        AssemblyAction::FromPart => {
-            let Some(part) = state.doc.path.clone().filter(|_| !state.doc.dirty) else {
-                return state.note("Save the part before making an assembly of it", NoteKind::Info);
-            };
-            let session = new_session(state, format!("{} assembly", state.doc.name));
-            show(state, dock, session);
-            insert(state, &[part]);
+        AssemblyAction::FromPart => match from_part(state) {
+            Ok(()) => show_tab(dock),
+            Err(e) => state.note(e, NoteKind::Info),
+        },
+        AssemblyAction::Show => {
+            if state.assembly.session.is_some() {
+                state.assembly.active = true;
+                state.drawing.active = false;
+                show_tab(dock);
+            }
         }
+        AssemblyAction::ShowPart => {
+            state.assembly.active = false;
+            state.drawing.active = false;
+            if let Some(path) = dock.find_tab(&Tab::Viewport) {
+                let _ = dock.set_active_tab(path);
+                dock.set_focused_node_and_surface(egui_dock::NodePath { surface: path.surface, node: path.node });
+            }
+        }
+        AssemblyAction::Update => match update(state) {
+            Ok(report) => state.note(format!("Updated {} sources", report.updated()), NoteKind::Ok),
+            Err(e) => state.note(e, NoteKind::Error),
+        },
         AssemblyAction::Open(path) => {
             state.note(format!("Opening {}…", path.display()), NoteKind::Info);
             let opening = AssemblyDocument::open_in_background(&path, options(state));
@@ -644,12 +723,7 @@ pub fn tree(ui: &mut egui::Ui, state: &mut AppState) {
                 (LoadState::Failed, _) => Some(def.problem.clone().unwrap_or_else(|| "Not loaded".into())),
                 _ => None,
             };
-            let warn = match (&def.state, &def.freshness) {
-                (LoadState::Stale, _) => def.problem.clone(),
-                (_, Freshness::NewerAvailable { .. }) => Some("A newer version is saved; Rebuild to use it".into()),
-                (_, Freshness::Missing) => Some("The file cannot be found; the assembly shows its copy".into()),
-                _ => None,
-            };
+            let warn = warning(def);
             let sub_text = if flags.has(Flags::HIDDEN_SELF) { "hidden" } else { "" };
             let resp = row(
                 ui,

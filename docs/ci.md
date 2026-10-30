@@ -91,3 +91,7 @@ Four property-test files use `proptest` as a dev-dependency. Each runs a fixed n
 `FUZZ_TRACE=1 cargo test ... -- --nocapture` prints each command-line run's exit status and arguments, and each tool call's outcome in `command_fuzz`.
 
 The `countersink` acceptance scenario extends its original seven steps with a boss beside the countersinks, a third hole and diameter edit, face-name checks, save/reopen and fresh-process checked STEP export. Its last step requires the typed refusal for a countersink that truly meets the boss wall and verifies unchanged geometry. Volume and bounds expectations come from the V8 merge B test design.
+
+The `assembly` acceptance scenario checks separate part and assembly undo, a floating
+component at the origin, in-session freshness, transactional Update, failure retention
+and reopen from accepted display copies through MCP at the current Catallax pin.

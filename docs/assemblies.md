@@ -307,10 +307,18 @@ whose meshes arrived, rows that moved, rows whose flags changed, or a new struct
 
 ## Rebuild
 
-`AssemblyDocument::rebuild` resolves every source of the root, re-pins it at its
-document's current revision, stores a moved document's new path, rereads the structure
-and loads what changed. It returns what happened to each source (updated, unchanged,
-missing) and is one undo step. Saving afterwards writes the new revisions' copies.
+`AssemblyDocument::rebuild` implements the app's explicit Update. It resolves every
+source of the root and loads the proposed revisions before accepting any of them.
+If any source is missing or cannot be shown at its proposed revision, it refuses the
+whole Update. The report names the blocking files. Pins, displayed definitions,
+placements, dirty state and undo history stay unchanged.
+
+A successful Update accepts the new pins and moved paths together in one undo step
+labelled `Update`. Saving afterwards writes the accepted revisions' display copies.
+Part edits mark components out of date immediately, including unsaved edits in the
+open part. Returning the part to its pinned revision clears the warning. The assembly
+keeps showing its accepted revision until Update succeeds.
+
 A sub-assembly shows its own pins: Rebuild the sub-assembly to move its parts on, then
 Rebuild the assembly above it.
 
@@ -456,6 +464,8 @@ soliddraft asm bench <file.dwasm> [--size <w>x<h>] [--frames <n>] [--json]
 `soliddraft doc rebuild` on an assembly is `asm rebuild`; `doc info`, `doc refs` and
 `doc where-used` read assemblies like any document. `asm info` reports how long each
 opening phase took and roughly how much memory the open assembly holds.
+Both rebuild commands use the same transactional Update as the app. A refused Update
+exits with status 1 and writes nothing to the assembly file.
 
 ## In the app
 
@@ -465,7 +475,8 @@ the property panel and the status bar are the assembly's.
 
 - **File > New assembly** starts an empty assembly. **File > Make assembly from part**
   saves the open part if it has unsaved changes, then starts an assembly that places it
-  at the origin.
+  at the origin. The component is floating. The `make_assembly` MCP tool requires a
+  saved part without unsaved changes.
 - **Insert component** (Ctrl+I) asks for part or assembly files; dropping files on the
   window while the assembly is active does the same. The first component goes at the
   origin; each later one sits 20 mm beside what is already placed, along x. Each is pinned
@@ -473,6 +484,8 @@ the property panel and the status bar are the assembly's.
   references from, so the app hands the loader each inserted file's bytes through its
   revision store (`AssemblyDocument::new_with` with `OpenOptions::revisions`). The first
   save stores every reference relative to the new file.
+- **Update** accepts every source together or keeps the previous assembly with a repair
+  message. Undo and redo act only on the active document.
 - **The tree** lists the components by `label`, with sub-assemblies opening to their own;
   a failed or stale definition shows its problem. A click in the tree or the viewport
   selects a component of the root.

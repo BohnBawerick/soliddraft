@@ -257,3 +257,82 @@ fn references_resolve_from_the_file_that_holds_them() {
         assert_eq!(d.freshness, Freshness::Current, "{}", d.label);
     }
 }
+
+#[test]
+fn an_update_is_refused_whole_while_one_part_is_missing() {
+    let dir = folder("atomic-update");
+    let elsewhere = folder("missing-update-source");
+    let a = dir.join("a.dwprt");
+    let b = dir.join("b.dwprt");
+    let root = dir.join("rig.dwasm");
+    save_block(&a, 40.0, 10.0);
+    save_block(&b, 10.0, 10.0);
+    let mut doc = AssemblyDocument::new_with("Rig", with_kernel());
+    doc.save(Some(&root)).unwrap();
+    let component = doc.insert(reference(&root, &a), Placement::IDENTITY).unwrap();
+    doc.insert(reference(&root, &b), Placement::translation(DVec3::new(50.0, 0.0, 0.0))).unwrap();
+    doc.finish_loading();
+    doc.save(None).unwrap();
+    let revision = doc.revision();
+    let pins: Vec<_> = doc.assembly().sources.iter().map(|s| s.document.pinned.clone()).collect();
+    let undo = doc.undo_label().map(str::to_owned);
+    save_block(&a, 60.0, 10.0);
+    std::fs::rename(&b, elsewhere.join("b.dwprt")).unwrap();
+    let report = doc.rebuild();
+    assert_eq!(report.missing(), 1, "{report:?}");
+    assert!(report.refusal.as_ref().is_some_and(|r| r.contains("b.dwprt")), "{report:?}");
+    assert!(report.sources.iter().any(|s| s.label == "b" && s.status == RefChange::Missing));
+    assert_eq!(doc.revision(), revision, "a missing source must refuse the whole Update");
+    assert_eq!(doc.assembly().sources.iter().map(|s| s.document.pinned.clone()).collect::<Vec<_>>(), pins);
+    assert_eq!(doc.undo_label(), undo.as_deref());
+    assert!(!doc.is_dirty());
+    doc.finish_loading();
+    let path = OccurrencePath::root().child(soliddraft_assembly::Step::component(component));
+    let row = doc.table().find(&path).unwrap();
+    assert!((doc.table().bounds(row).max.x - 20.0).abs() < 1e-3);
+    std::fs::rename(elsewhere.join("b.dwprt"), &b).unwrap();
+    let report = doc.rebuild();
+    assert_eq!(report.updated(), 1);
+    assert_eq!(report.sources.iter().filter(|s| s.status == RefChange::Unchanged).count(), 1);
+    doc.finish_loading();
+    let row = doc.table().find(&path).unwrap();
+    assert!((doc.table().bounds(row).max.x - 30.0).abs() < 1e-3);
+    assert_eq!(doc.undo_label(), Some("Update"));
+}
+
+#[test]
+fn an_update_whose_new_revision_cannot_be_shown_keeps_the_old_one() {
+    let dir = folder("unshowable-update");
+    let a = dir.join("a.dwprt");
+    let root = dir.join("rig.dwasm");
+    save_block(&a, 40.0, 10.0);
+    let mut doc = AssemblyDocument::new_with("Rig", with_kernel());
+    doc.save(Some(&root)).unwrap();
+    let component = doc.insert(reference(&root, &a), Placement::IDENTITY).unwrap();
+    doc.finish_loading();
+    doc.save(None).unwrap();
+    let mut doc =
+        AssemblyDocument::open(&root, OpenOptions { check_freshness: true, ..OpenOptions::default() }).unwrap();
+    doc.finish_loading();
+    let revision = doc.revision();
+    let pin = doc.assembly().sources[0].document.pinned.clone();
+    let undo = doc.undo_label().map(str::to_owned);
+    save_block(&a, 60.0, 10.0);
+    let part = Document::open(&a, kernel()).unwrap();
+    let bytes =
+        part.to_bytes_with(&soliddraft_model::file::Extras { no_display_data: true, ..Default::default() }).unwrap();
+    std::fs::write(&a, bytes).unwrap();
+    let report = doc.rebuild();
+    assert!(
+        report.refusal.as_ref().is_some_and(|r| r.contains("a.dwprt") && r.contains("cannot be shown")),
+        "{report:?}"
+    );
+    assert_eq!(doc.revision(), revision, "an unshowable revision must refuse Update: {report:?}");
+    assert_eq!(doc.assembly().sources[0].document.pinned, pin);
+    assert_eq!(doc.undo_label(), undo.as_deref());
+    assert!(!doc.is_dirty());
+    let path = OccurrencePath::root().child(soliddraft_assembly::Step::component(component));
+    let row = doc.table().find(&path).unwrap();
+    assert_eq!(doc.store().get(doc.table().definition(row)).state, LoadState::DisplayReady);
+    assert!((doc.table().bounds(row).max.x - 20.0).abs() < 1e-3);
+}

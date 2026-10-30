@@ -1,0 +1,772 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "assembly",
+  "folders": [
+    "work"
+  ],
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "files": [
+        "{bundle}/work/a.dwprt"
+      ],
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "pointer": "/inspect/part/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "make_assembly",
+      "arguments": {},
+      "label": "assembly from the saved part",
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/display",
+          "equals": "display"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/document",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Insert component"
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 3
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 4
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "label": "empty assembly history",
+      "refused": "nothing to undo in the assembly",
+      "checks": [
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 5
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 5
+        },
+        {
+          "pointer": "/summary/assembly/components",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 4
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 4
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Insert component"
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 6
+        }
+      ]
+    },
+    {
+      "tool": "assembly_show_part",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 15,
+        "flip": false
+      },
+      "label": "part edit, assembly out of date",
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/now",
+          "same_as": {
+            "pointer": "/inspect/part/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "differs_from": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/components/0/warning",
+          "contains": "Update"
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "current"
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "same_as_step": 9
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/part/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/id",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/now",
+          "same_as": {
+            "pointer": "/inspect/a/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "show_assembly",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "tool": "assembly_update",
+      "arguments": {},
+      "label": "explicit update",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 12,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/display",
+          "equals": "display"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "differs_from": {
+            "step": 13,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Update"
+        },
+        {
+          "pointer": "/result/updated",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 13
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "inspect": {
+        "part": [
+          "doc",
+          "info",
+          "{step}/part.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 13
+        },
+        {
+          "pointer": "/inspect/part/revision",
+          "same_as": {
+            "step": 12,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 14
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 14
+        }
+      ]
+    },
+    {
+      "tool": "assembly_save",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "files": [
+        "{bundle}/work/rig.dwasm"
+      ],
+      "inspect": {
+        "rig": [
+          "doc",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ],
+        "tree": [
+          "asm",
+          "tree",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/rig/references/0/pinned",
+          "same_as": {
+            "step": 16,
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/inspect/rig/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 16
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/inspect/tree/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/inspect/tree/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "new_part",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/id",
+          "differs_from": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_update",
+      "arguments": {},
+      "label": "refused update keeps the accepted revision",
+      "refused": "a.dwprt",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "missing"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "same_as_step": 17
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "label": "reopen assembly",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/assembly/components/0/display",
+          "equals": "display"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "missing"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/assembly/path",
+          "contains": "rig.dwasm"
+        },
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": true
+        }
+      ]
+    }
+  ]
+}

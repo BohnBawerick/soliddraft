@@ -60,7 +60,7 @@ fn path_param(what: &str) -> Vec<(&'static str, Value)> {
 
 /// The `open` tool's parameters.
 pub fn open_params() -> Vec<(&'static str, Value)> {
-    path_param("A part or drawing file path, ending in .dwprt or .dwdrw")
+    path_param("A part, drawing or assembly file path, ending in .dwprt, .dwdrw or .dwasm")
 }
 
 /// The `export_step` tool's parameters.
@@ -238,14 +238,23 @@ impl AppTools<'_> {
         if let Some(d) = drawing_json(self.state) {
             v["drawing"] = d;
         }
+        if let Some(a) = crate::assembly::tools::summary(self.state) {
+            v["assembly"] = a;
+        }
         v
     }
 
     /// Runs the tools this host adds to the part's layer. `None` hands the call on.
     fn run(&mut self, name: &str, input: &Value) -> Option<Result<Value, String>> {
+        if let Some(result) = crate::assembly::tools::run(self.state, name, input) {
+            return Some(result);
+        }
         let drawing_active = self.state.drawing.is_active();
+        let assembly_active = self.state.assembly.is_active();
         Some(match name {
             "model_summary" => Ok(self.summary()),
+            "undo" if assembly_active => crate::assembly::tools::step(self.state, true),
+            "redo" if assembly_active => crate::assembly::tools::step(self.state, false),
             "undo" if drawing_active => self.step_drawing(true),
             "redo" if drawing_active => self.step_drawing(false),
             "open" => self.open(input)?,
@@ -257,10 +266,12 @@ impl AppTools<'_> {
             "roll_to_end" => self.roll_to_end(),
             "make_drawing" => self.make_drawing(input),
             "show_drawing" => self.session().map(|_| ()).map(|()| {
+                self.state.assembly.active = false;
                 self.state.drawing.active = true;
                 self.drawing_now()
             }),
             "drawing_show_part" => {
+                self.state.assembly.active = false;
                 self.state.drawing.active = false;
                 Ok(json!({ "active": "part" }))
             }
@@ -323,13 +334,15 @@ impl AppTools<'_> {
         let path = PathBuf::from(input["path"].as_str().unwrap_or_default());
         match DocKind::of_path(&path) {
             Some(DocKind::Part) => None,
+            Some(DocKind::Assembly) => Some(crate::assembly::tools::open(self.state, path)),
             Some(DocKind::Drawing) => Some(self.open_drawing(path)),
-            _ => Some(Err("the path must name a .dwprt part file or a .dwdrw drawing file".into())),
+            _ => Some(Err("the path must name a .dwprt part, .dwdrw drawing or .dwasm assembly file".into())),
         }
     }
 
     fn open_drawing(&mut self, path: PathBuf) -> Result<Value, String> {
         let doc = DrawingDoc::open(&path)?;
+        self.state.assembly.active = false;
         let said = drawing::put_opened(self.state, doc);
         let missing = self.state.drawing.session.as_ref().is_some_and(|s| s.link_state() == LinkState::Missing);
         let part = if missing {
@@ -360,6 +373,8 @@ impl AppTools<'_> {
         st.sketch = None;
         st.chat.preview = None;
         st.drag_preview = None;
+        st.assembly.active = false;
+        st.drawing.active = false;
         st.doc = Document::new("Part1", kernel);
         Ok(self.summary())
     }
@@ -401,6 +416,7 @@ impl AppTools<'_> {
         let mut new = NewDrawing::new();
         new.set_template(id);
         let session = drawing::create_drawing(self.state, &new)?;
+        self.state.assembly.active = false;
         self.state.drawing.session = Some(session);
         self.state.drawing.new = None;
         self.state.drawing.active = true;
@@ -627,6 +643,9 @@ impl ToolHost for AppTools<'_> {
     }
 
     fn call(&mut self, name: &str, input: Value, caller: &Caller) -> ToolOutput {
+        let opening_part = name == "open"
+            && DocKind::of_path(std::path::Path::new(input["path"].as_str().unwrap_or_default()))
+                == Some(DocKind::Part);
         let out = match name {
             // A copy in another file is a save in that file, as in the app.
             "save_as" => self.part().call("save", input, caller),
@@ -636,6 +655,10 @@ impl ToolHost for AppTools<'_> {
                 None => self.part().call(name, input, caller),
             },
         };
+        if opening_part && !out.is_error {
+            self.state.assembly.active = false;
+            self.state.drawing.active = false;
+        }
         // What the window's frame does after a change: the drawing follows its part.
         drawing::follow_part(self.state);
         out
