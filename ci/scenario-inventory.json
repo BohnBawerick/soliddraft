@@ -35,7 +35,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
       "supported_limits": "Prismatic and cylindrical features on top and right planes; centred Sketch1 plate width 120 -> 140 mm, supported widths >= 120 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; partial M1 evidence, not canonical P1; known click gaps in ci/known-over-budget.json; plain named values and stable bindings; whole bare literals use mm, multiplicative bare literals are factors; mm, cm, m, in and deg; width >= 120 mm, depth > 37 mm; automatic dotted names, functions and configs deferred; partial M2 evidence",
       "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; step 25 drawing.dwdrw and drawing.svg; steps 27-32 width edit, undo, redo, save, diverge and reopen; bracket-140.dwprt; commands/0032/{part.step,step-report.json,check-step.stdout,check-step.stderr}; geometry-info.stdout recipe hashes; steps 33-50 named width, derived depth, rename, exact inch literal conversion, cycle and unit refusals, undo/redo/reopen; bracket-named.dwprt, bracket-inch.dwprt; commands/0040 and commands/0050 checked STEP exports"
@@ -59,7 +59,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
       "supported_limits": "P2 collar: radii 6 to 12 mm, height 12 mm, revolved 360 degrees about Y, outer-rim chamfers 1 and 0.75 mm; one plain through hole on the top annulus at radius 9 mm, diameter 2 edited to 2.5 mm, strictly inside both bevel rings; volume tolerance 0.005 mm3 at a 20M work allowance; a hole whose wall meets a bevel cone retains intersect.traced-pair-required; partial M7 evidence",
       "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,measurement.json,viewport.png,view.svg}; steps 3-4 drawing.dwdrw, drawing.svg and STEP/STL exports; steps 10 and 13 Hole1 wall name; collar-hole.dwprt; commands/0012/{part.step,step-report.json,check-step.stdout,check-step.stderr,raw-step.stdout,raw-step.stderr}; commands/0014 refusal question and replay; geometry-info.stdout recipe hashes"
@@ -73,7 +73,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
       "supported_limits": "60 x 40 x 5 mm plate at the origin corner, two 90-degree countersinks, a radius-8 boss and a third countersink 14 mm from its axis; volume tolerance 0.005 mm3 and bounds tolerance 0.001 mm; true cone/cylinder meeting retains intersect.traced-pair-required; partial M7 evidence",
       "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,measurement.json,viewport.png,view.svg}; steps 12 and 15 Hole2 face names; countersink-boss.dwprt; commands/0014/{part.step,step-report.json,check-step.stdout,check-step.stderr,raw-step.stdout,raw-step.stderr}; geometry-info.stdout recipe hashes"
@@ -171,7 +171,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document commands -> terminal Catallax field stage -> certified labelled STL",
       "supported_limits": "One terminal cubic lattice in the part frame; S1 uses cell size 5 mm, radius 1 to 1.5 mm, accuracy 0.1 mm, minimum detail 0.5 mm and the default caps. Field mass and drawings remain deferred.",
       "evidence": "result.json and commands/NNNN/{command.json,kernel.json,viewport.png,part.stl,export-stl-oracle.stdout}"

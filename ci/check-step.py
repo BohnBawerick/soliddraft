@@ -5,8 +5,8 @@ usage: check-step.py <file.step> <report.json>
 
 <report.json> is the acceptance test's STEP report and exact-body measurements. The check
 passes when OpenCASCADE reads the file into one valid solid whose face count equals both
-the report's and the exact body's, and whose volume is within the reported deviation of
-the exact volume. A surface moved by at most d changes the enclosed volume by at most
+the report's and the exact body's less the faces the report says the export removed, and
+whose volume is within the reported deviation of the exact volume. A surface moved by at most d changes the enclosed volume by at most
 area * d to first order in d, so the allowance is area * d, plus OpenCASCADE's own
 estimate of its integration error, plus the exact volume's measurement width (a
 relative 1e-12 around Catallax's proven enclosure).
@@ -66,7 +66,7 @@ def check(step_path, report):
     failures = []
     if seen["solids"] != step["solids"]:
         failures.append(f"{seen['solids']} solids in OpenCASCADE, {step['solids']} in the report")
-    if not (seen["faces"] == step["faces"] == exact["faces"]):
+    if not (seen["faces"] == step["faces"] == exact["faces"] - step["removed_faces"]):
         failures.append(
             f"{seen['faces']} faces in OpenCASCADE, {step['faces']} in the report, {exact['faces']} on the exact body"
         )

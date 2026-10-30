@@ -468,6 +468,54 @@ fn bracket_step_export_reports_its_proven_deviation() {
     contract::step_export_reports_what_it_wrote(&CatallaxKernel::new());
 }
 
+fn rectangle(corners: [[f64; 2]; 4]) -> Profile {
+    let outer = Loop(
+        (0..4)
+            .map(|i| {
+                let (a, b) = (corners[i], corners[(i + 1) % 4]);
+                Segment::Line { from: Point2::new(a[0], a[1]), to: Point2::new(b[0], b[1]) }
+            })
+            .collect(),
+    );
+    Profile { plane: Plane::XY, outer, holes: vec![] }
+}
+
+fn extruded(k: &CatallaxKernel, name: &str, profile: Profile, params: Extrude) -> BodyId {
+    let tag = OpTag::new(format!("{name}_profile"));
+    let profile = k.create_body_from_profile(&tag, &profile).unwrap().body;
+    k.extrude(&OpTag::new(name), profile, &params).unwrap().body
+}
+
+#[test]
+fn step_report_forwards_the_faces_the_export_removed() {
+    // A captured Narrow export. Solved rounding leaves the plate's -X wall 2.8e-15 mm off
+    // the flange's, and the union keeps that step as a ribbon face.
+    let k = CatallaxKernel::new();
+    let up = |distance| Extrude { distance, direction: None };
+    let plate =
+        rectangle([[-2.771785326802074e-15, 0.0], [120.0, 0.0], [120.0, 90.0], [-2.8387853417623135e-15, 90.0]]);
+    let plate = extruded(&k, "plate", plate, up(10.0));
+    let flange = rectangle([[0.0, 0.0], [10.0, 0.0], [10.0, 90.0], [0.0, 90.0]]);
+    let flange = extruded(&k, "flange", flange, up(60.0));
+    let angle = k.boolean(&OpTag::new("angle"), BooleanOp::Union, plate, flange).unwrap().body;
+    let bore = Loop(vec![Segment::Circle { center: Point2::new(70.0, 45.0), radius: 6.0 }]);
+    let plane = Plane { origin: Vec3::new(0.0, 0.0, 10.0), ..Plane::XY };
+    let down = Extrude { distance: 12.625883696309854, direction: Some(Vec3::new(0.0, 0.0, -1.0)) };
+    let tool = extruded(&k, "bore", Profile { plane, outer: bore, holes: vec![] }, down);
+    let narrow = k.boolean(&OpTag::new("bored"), BooleanOp::Subtract, angle, tool).unwrap().body;
+
+    let exact_faces = k.topology(narrow).unwrap().faces.len();
+    let step = k.export_step(narrow, &StepOptions::default()).unwrap();
+    assert_eq!((exact_faces, step.report.faces), (11, 9), "{:?}", step.report);
+    assert_eq!((step.report.removed_faces, step.report.removed_edges), (2, 4), "{:?}", step.report);
+    assert_eq!(step.text.matches("ADVANCED_FACE(").count(), step.report.faces);
+    assert!(step.report.within_tolerance, "{:?}", step.report);
+
+    let clean = extruded(&k, "clean", rectangle([[0.0, 0.0], [10.0, 0.0], [10.0, 9.0], [0.0, 9.0]]), up(5.0));
+    let clean = k.export_step(clean, &StepOptions::default()).unwrap().report;
+    assert_eq!((clean.removed_faces, clean.removed_edges), (0, 0), "{clean:?}");
+}
+
 fn longest_edges(mesh: &Mesh, polylines: &[EdgePolyline]) -> (f64, f64) {
     let position = |i: u32| mesh.positions[i as usize].map(f64::from);
     let distance = |a: [f64; 3], b: [f64; 3]| (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>().sqrt();

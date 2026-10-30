@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import struct
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -15,6 +16,43 @@ from unittest import mock
 spec = importlib.util.spec_from_file_location("scenarios", pathlib.Path(__file__).with_name("run-scenarios.py"))
 scenarios = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(scenarios)
+
+
+def step_checker():
+    """Loads check-step.py over a stand-in OCP, whose reader gives one valid solid of 1000 mm3."""
+    names = ["OCP"] + [f"OCP.{name}" for name in ("BRepCheck", "BRepGProp", "GProp", "IFSelect", "STEPControl",
+                                                  "TopAbs", "TopExp", "TopTools")]
+    with mock.patch.dict(sys.modules, {name: mock.MagicMock() for name in names}):
+        spec = importlib.util.spec_from_file_location("check_step", pathlib.Path(__file__).with_name("check-step.py"))
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+    checker.STEPControl_Reader.return_value.ReadFile.return_value = checker.IFSelect_RetDone
+    checker.BRepCheck_Analyzer.return_value.IsValid.return_value = True
+    checker.BRepGProp.VolumeProperties_s.return_value = 0.0
+    checker.GProp_GProps.return_value.Mass.return_value = 1000.0
+    return checker
+
+
+class CheckStepFaces(unittest.TestCase):
+    def failures(self, read, reported, exact, removed):
+        checker = step_checker()
+        checker.count = lambda shape, kind: read if kind is checker.TopAbs_FACE else 1
+        report = {"body": {"faces": exact, "volume": 1000.0, "area": 600.0},
+                  "report": {"solids": 1, "faces": reported, "removed_faces": removed, "max_deviation_mm": 0.0,
+                             "max_deviation": "0", "within_tolerance": True}}
+        return checker.check("part.step", report)[0]
+
+    def test_removed_faces_reconcile_the_written_and_exact_counts(self):
+        self.assertEqual(self.failures(9, 9, 11, 2), [])
+
+    def test_disagreeing_counts_still_fail_with_all_three_named(self):
+        for read, reported, exact, removed in ((10, 9, 11, 2), (9, 10, 11, 2), (9, 9, 12, 2), (9, 9, 11, 1)):
+            self.assertEqual(self.failures(read, reported, exact, removed), [
+                f"{read} faces in OpenCASCADE, {reported} in the report, {exact} on the exact body"])
+
+    def test_no_regularizations_leave_the_three_way_equality(self):
+        self.assertEqual(self.failures(11, 11, 11, 0), [])
+        self.assertEqual(self.failures(9, 9, 11, 0), ["9 faces in OpenCASCADE, 9 in the report, 11 on the exact body"])
 
 
 class Checks(unittest.TestCase):

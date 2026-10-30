@@ -48,6 +48,8 @@ pub(super) fn export(app: &EvaluatedApplicationBody, options: &StepOptions) -> K
             fitted_curves: report.approximated_curves,
             added_vertices: report.added_vertices,
             added_edges: report.added_edges,
+            removed_faces: report.regularizations.iter().map(|r| r.removed_faces).sum(),
+            removed_edges: report.regularizations.iter().map(|r| r.removed_edges).sum(),
             warnings: answer.marks.iter().map(|m| format!("{}: {}", m.code, m.detail)).collect(),
         },
     })

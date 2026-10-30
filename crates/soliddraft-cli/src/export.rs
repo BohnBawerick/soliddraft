@@ -183,6 +183,8 @@ mod tests {
                 fitted_curves: 0,
                 added_vertices: 0,
                 added_edges: 0,
+                removed_faces: 0,
+                removed_edges: 0,
                 warnings: Vec::new(),
             }),
         };
