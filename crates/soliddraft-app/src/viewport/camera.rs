@@ -62,7 +62,12 @@ pub struct Camera {
     pub orthographic: bool,
     goal: Option<Goal>,
     pub view_name: &'static str,
+    /// How long a move to a standard view takes, near enough: it is 99 % there by then.
+    pub transition_seconds: f32,
 }
+
+/// The natural log of how far from its goal a transition may be when its time is up.
+const SETTLE: f32 = 4.62;
 
 impl Default for Camera {
     fn default() -> Self {
@@ -76,6 +81,7 @@ impl Default for Camera {
             orthographic: false,
             goal: None,
             view_name: "Isometric",
+            transition_seconds: 0.33,
         }
     }
 }
@@ -202,7 +208,7 @@ impl Camera {
     /// Advances any view transition. Returns true while still animating.
     pub fn tick(&mut self, dt: f32) -> bool {
         let Some(goal) = self.goal else { return false };
-        let k = 1.0 - (-dt * 14.0).exp();
+        let k = if self.transition_seconds > 0.0 { 1.0 - (-dt * SETTLE / self.transition_seconds).exp() } else { 1.0 };
         let dyaw = wrap_angle(goal.yaw - self.yaw);
         self.yaw += dyaw * k;
         self.pitch += (goal.pitch - self.pitch) * k;

@@ -60,6 +60,8 @@ pub struct SolidDraftApp {
     render_state: Option<egui_wgpu::RenderState>,
     /// The renderer part thumbnails are drawn with, made at the first save.
     offscreen: Option<crate::viewport::offscreen::Offscreen>,
+    /// The open Preferences window.
+    pub preferences: Option<crate::preferences::Preferences>,
 }
 
 impl SolidDraftApp {
@@ -123,6 +125,7 @@ impl SolidDraftApp {
             #[cfg(target_arch = "wasm32")]
             render_state: None,
             offscreen: None,
+            preferences: None,
         }
     }
 
@@ -417,6 +420,7 @@ impl eframe::App for SolidDraftApp {
             show_dock(ui, &mut self.dock, egui::Id::new("center_dock"), &mut panels);
         });
         self.dialogs(ctx);
+        crate::preferences::window(ctx, &mut self.preferences, &mut self.state);
         self.apply_actions(ctx);
         // Panel choices are written once they settle, never in the middle of a drag.
         if self.state.commands != self.saved_commands {
