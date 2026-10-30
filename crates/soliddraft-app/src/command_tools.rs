@@ -2608,8 +2608,8 @@ mod tests {
     use super::*;
     use soliddraft_assistant::tools::{call_checked, check_strict};
     use soliddraft_kernel_api::{
-        BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, HistoryRecord, MassProperties, Mesh, OpResult, OpTag,
-        Profile, Revolve, TessellationParams, Topology, Validation,
+        BodyId, BooleanOp, EdgeId, EdgePolyline, Extrude, HistoryRecord, KernelResult, MassProperties, Mesh, OpResult,
+        OpTag, Profile, Revolve, TessellationParams, Topology, Validation,
     };
 
     fn assistant() -> Caller {
