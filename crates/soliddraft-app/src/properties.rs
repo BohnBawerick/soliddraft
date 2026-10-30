@@ -2,8 +2,8 @@
 //! being created or edited, otherwise the selected entity's properties.
 
 use crate::document::{
-    Command, EndKind, FeatureId, FeatureKind, FeatureStatus, PlaneKind, ProfileKind, Selection, SketchPlane, fmt_mm,
-    plane_ref_label,
+    Command, EndKind, FeatureId, FeatureKind, FeatureStatus, PlaneKind, ProfileKind, Reference, Selection, SketchPlane,
+    fmt_mm, plane_ref_label,
 };
 use crate::drag::Dimension;
 use crate::icons::{self, Icon};
@@ -1185,6 +1185,9 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Face(_), _) => Icon::Plane,
         (Selection::Edge(_), _) => Icon::Axis,
         (Selection::Vertex(_), _) => Icon::Point,
+        (Selection::Reference(Reference::Origin), _) => Icon::Point,
+        (Selection::Reference(Reference::Plane(_)), _) => Icon::Plane,
+        (Selection::Reference(Reference::Axis(_)), _) => Icon::Axis,
     };
     let head = header(ui, icon, &info.title);
     let clear = small_button(
@@ -1208,6 +1211,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
             Selection::Face(_) => "Face",
             Selection::Edge(_) => "Edge",
             Selection::Vertex(_) => "Vertex",
+            Selection::Reference(_) => "Reference",
         };
         theme::section_label(ui, kind);
         egui::Grid::new("props").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
@@ -1300,7 +1304,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
                     }
                 }
             }
-            Selection::Vertex(_) => {}
+            Selection::Vertex(_) | Selection::Reference(_) => {}
             Selection::Body => {
                 ui.label(
                     egui::RichText::new(

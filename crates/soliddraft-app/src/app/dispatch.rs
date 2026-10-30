@@ -1,8 +1,8 @@
 //! Application actions and editor sessions.
 
 use crate::document::{
-    ChamferParams, Command, CutParams, Document, DraftParams, EndKind, ExtrudeParams, FeatureKind, FeatureStatus,
-    FilletParams, HoleParams, Selection, SketchPlane,
+    AxisKind, ChamferParams, Command, CutParams, Document, DraftParams, EndKind, ExtrudeParams, FeatureKind,
+    FeatureStatus, FilletParams, HoleParams, Reference, Selection, SketchPlane,
 };
 use crate::file;
 use crate::panels::{Layout, Side};
@@ -172,12 +172,15 @@ impl SolidDraftApp {
                 if self.state.in_sketch() {
                     return;
                 }
-                let face = match self.state.doc.selection {
-                    Some(Selection::Face(f)) => self.state.doc.face_ref(f),
+                let plane = match self.state.doc.selection {
+                    Some(Selection::Face(f)) => self.state.doc.face_ref(f).map(|face| SketchPlane::Face { face }),
+                    Some(Selection::Reference(Reference::Plane(plane))) => {
+                        Some(SketchPlane::Reference { plane, offset: 0.0 })
+                    }
                     _ => None,
                 };
-                match face {
-                    Some(r) => self.apply(ctx, AppAction::StartSketchOn(SketchPlane::Face { face: r })),
+                match plane {
+                    Some(plane) => self.apply(ctx, AppAction::StartSketchOn(plane)),
                     None => {
                         self.open_editor(None, EditorParams::PickPlane);
                         self.state.origin_open = true;
@@ -586,6 +589,15 @@ impl SolidDraftApp {
                             }
                             return;
                         }
+                        (EditorParams::PickPlane, Some(Selection::Reference(Reference::Plane(plane)))) => {
+                            self.apply(ctx, AppAction::StartSketchOn(SketchPlane::Reference { plane, offset: 0.0 }));
+                            return;
+                        }
+                        // The axis is selected as well, so the origin axes show which one.
+                        (
+                            params @ (EditorParams::Revolve(_) | EditorParams::Pattern(_)),
+                            Some(Selection::Reference(Reference::Axis(axis))),
+                        ) => use_axis(params, axis),
                         (EditorParams::Repair { items, chosen, active }, Some(s)) => {
                             let wanted = items.get(*active).map(|i| i.kind);
                             let r = match (wanted, s) {
@@ -914,6 +926,26 @@ impl SolidDraftApp {
                 self.state.ribbon_tab = crate::state::RibbonTab::Solid;
             }
         }
+    }
+}
+
+/// Points the open revolve or pattern along an origin axis, through the origin.
+fn use_axis(params: &mut EditorParams, axis: AxisKind) {
+    let d = axis.direction();
+    let dir = soliddraft_kernel_api::Vec3::new(d.x.into(), d.y.into(), d.z.into());
+    match params {
+        EditorParams::Revolve(r) => {
+            r.axis_origin = [0.0; 3];
+            r.axis_direction = [dir.x, dir.y, dir.z];
+        }
+        EditorParams::Pattern(p) => match &mut p.layout {
+            soliddraft_model::PatternSpec::Linear { direction, .. } => *direction = dir,
+            soliddraft_model::PatternSpec::Circular { axis_origin, axis_direction, .. } => {
+                *axis_origin = soliddraft_kernel_api::Vec3::ZERO;
+                *axis_direction = dir;
+            }
+        },
+        _ => {}
     }
 }
 

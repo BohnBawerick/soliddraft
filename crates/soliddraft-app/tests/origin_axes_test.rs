@@ -1,8 +1,8 @@
 //! The origin axes, driven through egui_kittest against the real wgpu pipeline: an
-//! existing part file opens unchanged and shows the X, Y and Z axes in the viewport
-//! and in the tree beside the planes, and clicking an axis row sets the direction of
-//! the pattern being edited. Frames are written to `target/origin-axes-test/` for
-//! review.
+//! existing part file opens unchanged, lists the X, Y and Z axes in the tree beside the
+//! planes and shows them in the viewport once one is selected, and clicking an axis row
+//! sets the direction of the pattern being edited. Frames are written to
+//! `target/origin-axes-test/` for review.
 //!
 //! Skips itself when no GPU adapter is available (plain CI runners).
 
@@ -11,6 +11,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use glam::Vec3;
 use soliddraft_app::app::{Automation, SolidDraftApp};
+use soliddraft_app::document::Selection;
 use soliddraft_app::state::{AppAction, EditorParams};
 use soliddraft_kernel_api::Vec3 as KVec3;
 use soliddraft_model::PatternSpec;
@@ -98,13 +99,28 @@ fn origin_axes_show_in_every_part_and_set_directions() {
     for name in ["Front plane", "Top plane", "Right plane", "X axis", "Y axis", "Z axis"] {
         harness.get_by_label(name);
     }
+    let hits = |image: &image::RgbaImage, harness: &App<'_>| {
+        [
+            hits_along(image, harness, Vec3::X, |c| {
+                c.r() > c.g().saturating_add(60) && c.r() > c.b().saturating_add(60)
+            }),
+            hits_along(image, harness, Vec3::Y, |c| {
+                c.g() > c.r().saturating_add(40) && c.g() > c.b().saturating_add(20)
+            }),
+            hits_along(image, harness, Vec3::Z, |c| {
+                c.b() > c.r().saturating_add(60) && c.b() > c.g().saturating_add(30)
+            }),
+        ]
+    };
+    // Hidden at rest, on show once a reference is selected.
+    let image = render(&mut harness, "part-at-rest");
+    let [red, green, blue] = hits(&image, &harness);
+    assert!(red < 3 && green < 3 && blue < 3, "no axis lines at rest: red {red}, green {green}, blue {blue}");
+
+    harness.get_by_label("Origin").click();
+    harness.run_steps(3);
     let image = render(&mut harness, "part-with-axes");
-    let red =
-        hits_along(&image, &harness, Vec3::X, |c| c.r() > c.g().saturating_add(60) && c.r() > c.b().saturating_add(60));
-    let green =
-        hits_along(&image, &harness, Vec3::Y, |c| c.g() > c.r().saturating_add(40) && c.g() > c.b().saturating_add(20));
-    let blue =
-        hits_along(&image, &harness, Vec3::Z, |c| c.b() > c.r().saturating_add(60) && c.b() > c.g().saturating_add(30));
+    let [red, green, blue] = hits(&image, &harness);
     assert!(
         red >= 10 && green >= 10 && blue >= 10,
         "axis lines in the viewport: red {red}, green {green}, blue {blue}"
@@ -122,6 +138,14 @@ fn origin_axes_show_in_every_part_and_set_directions() {
         _ => panic!("pattern editor expected"),
     }
     render(&mut harness, "pattern-along-y-axis");
+
+    // Cancelled, and with the reference cleared, the axes go away again.
+    push(&mut harness, AppAction::CancelEditor);
+    push(&mut harness, AppAction::Select(None));
+    assert!(!matches!(harness.state().state.doc.selection, Some(Selection::Reference(_))));
+    let image = render(&mut harness, "part-after-pattern");
+    let [red, green, blue] = hits(&image, &harness);
+    assert!(red < 3 && green < 3 && blue < 3, "no axis lines after clearing: red {red}, green {green}, blue {blue}");
 
     let _ = std::fs::remove_file(&file);
 }

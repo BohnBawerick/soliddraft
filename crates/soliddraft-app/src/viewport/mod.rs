@@ -1,5 +1,5 @@
 //! The 3D viewport: camera input, picking, overlays (heads-up toolbar, view
-//! cube, origin triad, hover label) and the hand-off to the wgpu renderer.
+//! cube, origin axes, hover label) and the hand-off to the wgpu renderer.
 
 pub mod assembly;
 pub mod camera;
@@ -13,6 +13,7 @@ pub mod render;
 use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
 use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Router, ZoomAnchor};
+use crate::settings::ReferenceDisplay;
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
 use crate::theme;
@@ -60,6 +61,8 @@ pub struct ViewportState {
     pub camera: Camera,
     pub display: DisplayMode,
     pub preset: Preset,
+    /// What the viewport shows of the part's reference geometry without being asked.
+    pub references: ReferenceDisplay,
     pub hover: Option<Picked>,
     pub hover_point: Option<Vec3>,
     pub rect: Rect,
@@ -77,6 +80,7 @@ impl Default for ViewportState {
             camera: Camera::default(),
             display: DisplayMode::default(),
             preset: Preset::default(),
+            references: ReferenceDisplay::default(),
             hover: None,
             hover_point: None,
             rect: Rect::NOTHING,
@@ -212,7 +216,15 @@ impl ViewportState {
                 egui::Label::new(egui::RichText::new("unproved preview").color(theme::muted())),
             );
         }
-        self.paint_origin_axes(&painter, doc, rect);
+        // The origin axes stay out of the way until a reference is selected or the user
+        // keeps them on.
+        if self.references.always_show_origin_axes || matches!(selection, Some(Selection::Reference(_))) {
+            let reach = match doc.bounds() {
+                Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
+                None => self.camera.distance * 0.25,
+            };
+            self.paint_origin_axes(&painter, reach, rect);
+        }
         self.paint_highlights(&painter, doc, selection, rect);
         // A selected body shows the dimensions that build it. A click on one keeps the
         // body selected and a double-click edits it; a double-click on the part selects
@@ -239,7 +251,6 @@ impl ViewportState {
             events.actions.push(AppAction::Select(Some(Selection::Body)));
         }
         self.dimensions = dims;
-        self.paint_triad(&painter, rect);
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
         self.paint_pills(ui, rect, hover_label);
@@ -281,8 +292,10 @@ impl ViewportState {
         let mut input = self.frame_input(rect, ppp, cursor_px);
         input.assembly = Some(frame);
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
-        let painter = ui.painter().with_clip_rect(rect);
-        self.paint_triad(&painter, rect);
+        if self.references.always_show_origin_axes {
+            let painter = ui.painter().with_clip_rect(rect);
+            self.paint_origin_axes(&painter, self.camera.distance * 0.25, rect);
+        }
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
         let label = hover_label.unwrap_or("Hover a component");
@@ -441,13 +454,9 @@ impl ViewportState {
         }
     }
 
-    /// The origin axes through the part origin, reaching past the body on both sides.
-    /// The positive half is solid and labelled; the negative half is fainter.
-    fn paint_origin_axes(&self, painter: &egui::Painter, doc: &Document, rect: Rect) {
-        let reach = match doc.bounds() {
-            Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
-            None => self.camera.distance * 0.25,
-        };
+    /// The origin axes through the part origin, `reach` long on both sides. The positive
+    /// half is solid and labelled; the negative half is fainter.
+    fn paint_origin_axes(&self, painter: &egui::Painter, reach: f32, rect: Rect) {
         let Some(o) = self.camera.project(Vec3::ZERO, rect) else { return };
         // Labels stay inside the view, so an axis that runs off the edge is still named.
         let inside = rect.shrink(10.0);
@@ -474,27 +483,6 @@ impl ViewportState {
                     color,
                 );
             }
-        }
-    }
-
-    /// Small axis triad in the lower-left corner, rotation only.
-    fn paint_triad(&self, painter: &egui::Painter, rect: Rect) {
-        let origin = pos2(rect.left() + 34.0, rect.bottom() - 46.0);
-        let view = self.camera.view();
-        let axes = [(Vec3::X, theme::axis_x(), "X"), (Vec3::Y, theme::axis_y(), "Y"), (Vec3::Z, theme::axis_z(), "Z")];
-        let mut items: Vec<(f32, Pos2, Color32, &str)> = axes
-            .iter()
-            .map(|(a, c, l)| {
-                let v = view.transform_vector3(*a);
-                (v.z, origin + vec2(v.x, -v.y) * 22.0, *c, *l)
-            })
-            .collect();
-        items.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, tip, color, label) in items {
-            painter.line_segment([origin, tip], Stroke::new(2.0, color));
-            painter.circle_filled(tip, 2.5, color);
-            let dir = (tip - origin).normalized();
-            painter.text(tip + dir * 9.0, Align2::CENTER_CENTER, label, theme::font_semibold(10.0), color);
         }
     }
 

@@ -593,6 +593,18 @@ impl AppState {
         }
     }
 
+    /// Saves what the viewport shows of the reference geometry and uses it. It is the
+    /// user's choice, not the document's: the part, its undo steps and its selection are
+    /// untouched. When the save is refused nothing changes and the note says why.
+    pub fn set_reference_display(&mut self, references: crate::settings::ReferenceDisplay) -> Result<(), String> {
+        if let Err(e) = crate::settings::save_reference_display(&references) {
+            self.note(format!("Viewport settings not saved: {e}"), NoteKind::Error);
+            return Err(e);
+        }
+        self.viewport.references = references;
+        Ok(())
+    }
+
     /// Hands the revision store the part as it is now, after it was opened or saved.
     pub fn remember_revision(&self) {
         let model = self.doc.model();
