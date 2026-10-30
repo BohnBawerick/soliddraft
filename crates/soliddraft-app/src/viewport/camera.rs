@@ -134,9 +134,14 @@ impl Camera {
         self.pitch = (self.pitch + dy * 0.008).clamp(-1.553, 1.553);
     }
 
+    /// How many millimetres a point covers at the orbit target.
+    pub fn mm_per_point(&self, viewport_height: f32) -> f32 {
+        2.0 * self.distance * (self.fov_y / 2.0).tan() / viewport_height.max(1.0)
+    }
+
     pub fn pan(&mut self, dx: f32, dy: f32, viewport_height: f32) {
         self.goal = None;
-        let world_per_px = 2.0 * self.distance * (self.fov_y / 2.0).tan() / viewport_height.max(1.0);
+        let world_per_px = self.mm_per_point(viewport_height);
         self.target -= self.right() * dx * world_per_px;
         self.target += self.up() * dy * world_per_px;
     }
