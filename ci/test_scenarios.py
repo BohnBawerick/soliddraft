@@ -67,6 +67,20 @@ class Checks(unittest.TestCase):
         known["x"] = "y"
         self.assertTrue(scenarios.references_kept(known, [], [], True)["pass"], "its feature was deleted")
 
+    def test_new_part_starts_its_own_reference_history(self):
+        ref = {"feature_id": "F1", "feature": "Sketch1", "slot": "sketch plane", "origin": "Top plane",
+            "resolved": True, "kernel_origins": [], "matches_origin": True}
+        known = {}
+        self.assertTrue(scenarios.references_kept(known, [ref], [], False)["pass"])
+        # A refused replacement retains the old document and its reference checks.
+        self.assertFalse(scenarios.references_kept(known, [], [], False, replaced=False)["pass"])
+        self.assertTrue(scenarios.references_kept(known, [], [], False, replaced=True)["pass"])
+        self.assertEqual(known, {})
+        other = dict(ref, origin="Front plane")
+        self.assertTrue(scenarios.references_kept(known, [other], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [ref], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [], [], False)["pass"])
+
     def test_bundle_paths(self):
         self.assertEqual(scenarios.substitute({"path": "{bundle}/a.dwprt", "n": [1, "{bundle}"]}, "/run"),
             {"path": "/run/a.dwprt", "n": [1, "/run"]})

@@ -444,8 +444,10 @@ def rebuilds(features, repair):
         "pass": not broken and not missing}
 
 
-def references_kept(known, references, repair, deleted):
+def references_kept(known, references, repair, deleted, *, replaced=False):
     """Each reference names the origin it named before, and resolves or raises the repair prompt."""
+    if replaced:
+        known.clear()
     now = {(r["feature_id"], r["slot"]): r for r in references}
     changed = [{"reference": list(key), "was": identity, "now": now[key]["origin"]}
         for key, identity in known.items() if key in now
@@ -786,7 +788,8 @@ def run(args):
                 command["result"] = None
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
-            checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature"))
+            checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature",
+                replaced=step["tool"] == "new_part" and not result.get("isError")))
             if step.get("refusal"):
                 code = step["refusal"]
                 checks.append({"check": "application refusal", "actual": command["output"], "pass": code in command["output"]})
