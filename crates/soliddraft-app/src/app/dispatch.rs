@@ -280,6 +280,8 @@ impl SolidDraftApp {
                 let chamfer = matches!(action, AppAction::StartChamfer);
                 let edges = match self.state.doc.selection {
                     Some(Selection::Edge(e)) => self.state.doc.edge_ref(e).into_iter().collect(),
+                    // A face stands for every edge on its boundary.
+                    Some(Selection::Face(f)) => self.state.doc.face_edge_refs(f).unwrap_or_default(),
                     _ => Vec::new(),
                 };
                 let params = if chamfer {
