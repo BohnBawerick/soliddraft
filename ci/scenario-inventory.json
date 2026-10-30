@@ -11,7 +11,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document and assembly commands -> Catallax adapter -> pinned kernel -> assembly loader",
       "supported_limits": "One floating component at identity placement, default configuration; in-session freshness, saved-part transactional Update; partial M4 evidence.",
       "evidence": "result.json, protocol.json, commands/NNNN/{part.dwprt,command.json,kernel.json,inspect-*.stdout}; work/a.dwprt and work/rig.dwasm"
@@ -147,7 +147,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP document commands -> terminal Catallax field stage -> certified labelled STL",
       "supported_limits": "One terminal network gyroid in the part frame with a constant dimensionless level; the scenario uses period 10 mm, levels 0 and -1/2, accuracy 0.1 mm, minimum detail 0.5 mm and the default caps. Sheet gyroids, graded levels, field mass and drawings remain deferred.",
       "evidence": "result.json and commands/NNNN/{command.json,kernel.json,viewport.png,part.stl,export-stl-oracle.stdout}"
@@ -185,7 +185,7 @@
         "soliddraft-model",
         "soliddraft-kernel-catallax"
       ],
-      "catallax_revision": "1556d52678efa27af32a32914723cad5e222746f",
+      "catallax_revision": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc",
       "route": "MCP measure_entity and track -> persistent references -> Catallax single-entity proofs",
       "supported_limits": "B-rep edge length and face area, part frame, exact or bounded; <, <=, > and >= checks with one limit; tracked names cannot drive expressions; partial M2/M3 evidence; hover points and guides deferred",
       "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,viewport.png}; 27-step update/stale/reference scenario; measure.dwprt and commands/0024/{part.step,step-report.json,check-step.stdout,check-step.stderr}; tracked_proof and measure_panel tests"
