@@ -3,7 +3,6 @@
 //! whatever the kernel can mesh today.
 
 mod gated;
-#[allow(dead_code)]
 #[path = "support/ribbon.rs"]
 mod ribbon;
 

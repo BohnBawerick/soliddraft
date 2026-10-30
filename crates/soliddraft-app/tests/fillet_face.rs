@@ -23,7 +23,6 @@ use soliddraft_app::state::{EditorParams, NoteKind};
 use soliddraft_kernel_api::{EdgeId, FaceId, OpTag, StepOptions};
 use soliddraft_sketch::P2;
 
-#[allow(dead_code)]
 #[path = "support/ribbon.rs"]
 mod ribbon;
 
