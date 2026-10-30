@@ -81,7 +81,7 @@ def command_phase(tool):
     if tool == "measure":
         return "measurement"
     if tool.startswith("edit_") or tool in {
-        "undo", "redo", "rollback", "suppress", "delete_feature", "rename",
+        "undo", "redo", "rollback", "suppress", "delete_feature", "rename", "drive", "set_value",
     }:
         return "edit"
     return "construction"
@@ -170,6 +170,16 @@ def verdict(result):
     if result.get("budget_ms", 0) is None:
         return "output"
     return "strict-pass" if result.get("within_budget", True) else "known-gap"
+
+
+def edit_work_check(step, latency):
+    """A deterministic rebuild guard, independent of click-time acceptance."""
+    ceiling = step["max_edit_work"]
+    if isinstance(ceiling, bool) or not isinstance(ceiling, int) or ceiling < 0:
+        raise ValueError("max_edit_work must be a nonnegative integer")
+    used = latency["work"]["edit"]
+    return {"check": "edit work ceiling", "used": used, "ceiling": ceiling,
+            "status": "pass" if used <= ceiling else "edit-work-regression", "pass": used <= ceiling}
 
 
 def answers(request, command, evidence, selectable=False):
@@ -737,6 +747,8 @@ def run(args):
                 "elapsed_ms": latency["elapsed_ms"], "budget_ms": latency["budget_ms"],
                 "verdict": latency["verdict"]}}
             checks.append(latency)
+            if "max_edit_work" in step:
+                checks.append(edit_work_check(step, latency))
             write(directory / "timing.json", latency)
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
             if latency["status"] == "output":

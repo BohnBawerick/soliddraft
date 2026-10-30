@@ -25,10 +25,18 @@ successful and failed bundles as `application-loop`.
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
 makes the slot shallower and undoes that, rolls back to the plate and returns to the
 end. The slot edit must rebuild only the slot, and the undo and the return to the end
-must run no kernel operation. Its final step makes a drawing.
+must run no kernel operation. Step 25 makes a drawing. Steps 27-32 change the plate
+width to 140 mm, undo and redo, save, diverge, reopen and export checked STEP.
 Model commands, viewport screenshots, SVG views and drawing output use Catallax.
 The view and drawing checks require that backend. Views use the same polygon
 hidden-line method as the drawing workspace.
+
+The adapter uses Catallax's `build_incremental_without_display` entry. Exact
+checkpoints and picking names build immediately; certified meshes enter a
+per-body cache only when requested. Topology, drawing curves and native reference
+points read the same default certified mesh as before. A topology query can still
+require that mesh during an edit. The selectable viewport uses the separate
+unproved preview. Memory accounting does not request a display.
 
 `references.json` is the reference survival scenario. It builds the bracket with
 sketches on the plate's and the boss's top faces, splits the plate's top with a groove,
@@ -422,6 +430,25 @@ https://github.com/BohnBawerick/soliddraft/issues/27 — faster booleans when
 rebuilding after an edit. CI prints known gaps as warnings, regressions as errors,
 and uploads every raw step record; an accepted gap is not a claim of meeting
 the original budget.
+
+An edit step can set `max_edit_work` to a nonnegative integer. The runner checks
+`timing.work.edit` against that inclusive ceiling and fails the step with
+`edit-work-regression` when it exceeds the limit. The recorded ceiling is 120%
+of candidate edit work, rounded down. Work guards detect regressions; hosted
+click time still decides whether a budget gap can be removed.
+
+Compare baseline and candidate runs of the same scenario files on the same
+machine with:
+
+```sh
+python3 ci/compare-scenario-bundles.py /path/to/base /path/to/candidate \
+  --base-pin "$BASE_PIN" --candidate-pin "$CANDIDATE_PIN"
+```
+
+The pins must be full commit SHAs. The comparison normalises only those pins and
+document UUIDs, alongside the comparator's existing bundle-path, saved document
+id and mesh-rebuild-count handling. It compares viewport PNGs and all STEP files
+as raw bytes. A missing scenario, incomplete bundle or changed answer fails.
 
 An optional `trends` list selects comparable tool series with `tool` and
 `from_step`. Each sample records its current feature count. After the scenario,

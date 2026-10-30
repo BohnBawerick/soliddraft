@@ -58,17 +58,18 @@ impl Solid {
     }
 
     /// A point on a face's display triangles, within the display chord bound of the face.
-    fn point_on_face(&self, face: catallax_topology::FaceId) -> Option<Point3> {
-        let mesh = &self.app.display.value;
-        let triangles = &mesh.triangles[mesh.faces.iter().find(|f| f.face == face)?.triangles.clone()];
+    fn point_on_face(&self, face: catallax_topology::FaceId) -> KernelResult<Option<Point3>> {
+        let mesh = self.display(&catallax_mesh::MeshOptions::default(), "face_ref")?;
+        let Some(face_mesh) = mesh.faces.iter().find(|f| f.face == face) else { return Ok(None) };
+        let triangles = &mesh.triangles[face_mesh.triangles.clone()];
         let area = |t: &catallax_mesh::Triangle| {
             let [a, b, c] = t.vertices.map(|v| Vec3::from(mesh.positions[v]));
             (b - a).cross(c - a).length()
         };
-        let largest = triangles.iter().max_by(|a, b| area(a).total_cmp(&area(b)))?;
+        let Some(largest) = triangles.iter().max_by(|a, b| area(a).total_cmp(&area(b))) else { return Ok(None) };
         let [a, b, c] = largest.vertices.map(|v| Vec3::from(mesh.positions[v]));
         let centre = (a + b + c) * (1.0 / 3.0);
-        exact_point([centre.x, centre.y, centre.z])
+        Ok(exact_point([centre.x, centre.y, centre.z]))
     }
 
     /// Names one face of this body for a later operation by its first origin, with a
@@ -80,7 +81,7 @@ impl Solid {
         let face_pattern = pattern(first);
         let shared = self.app.names.faces.values().filter(|os| os.iter().any(|o| face_pattern.matches(o))).count();
         let near = if shared > 1 {
-            Some(self.point_on_face(cat).ok_or_else(|| KernelError::InvalidInput(format!("{face} has no display")))?)
+            Some(self.point_on_face(cat)?.ok_or_else(|| KernelError::InvalidInput(format!("{face} has no display")))?)
         } else {
             None
         };
@@ -110,7 +111,7 @@ impl Solid {
         let [Some(a), Some(b)] = [faces.first().and_then(first), faces.last().and_then(first)] else {
             return Err(KernelError::InvalidInput(format!("{edge} does not separate two named faces")));
         };
-        let mesh = &self.app.display.value;
+        let mesh = self.display(&catallax_mesh::MeshOptions::default(), "edge_ref")?;
         let line = mesh.edges.iter().find(|e| e.edge == cat).map(|e| &e.vertices);
         let near = line.and_then(|v| exact_point(mesh.positions[v[v.len() / 2]]));
         if near.is_none() {

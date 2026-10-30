@@ -19,15 +19,15 @@ mod step;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-use catallax_app::{Error, IncrementalApplicationBody};
-use catallax_mesh::{MeshOptions, PreviewMesh, PreviewOptions, mesh_body, preview_mesh_body};
+use catallax_app::{Error, EvaluatedApplicationBody};
+use catallax_mesh::{MeshOptions, PreviewMesh, PreviewOptions, preview_mesh_body};
 use catallax_numbers::{Decider, Rational};
 use catallax_recipe::StepId;
 use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "1556d52678efa27af32a32914723cad5e222746f";
+pub const CATALLAX_REVISION: &str = "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -53,7 +53,7 @@ struct Stored {
 }
 
 struct Solid {
-    app: IncrementalApplicationBody,
+    app: EvaluatedApplicationBody,
     ids: convert::Ids,
     display: MeshCache<catallax_mesh::Mesh>,
     /// `None` where Catallax refused to sample a preview, so it is not asked again.
@@ -84,9 +84,8 @@ struct CachedMesh<T> {
 }
 
 impl<T> MeshCache<T> {
-    fn new(seed: Option<(DisplayKey, T)>) -> Self {
-        let seed = seed.map(|(key, mesh)| Arc::new(CachedMesh { key, value: Mutex::new(Some(Arc::new(mesh))) }));
-        Self(Mutex::new(seed.into_iter().collect()))
+    fn new() -> Self {
+        Self(Mutex::new(VecDeque::new()))
     }
 
     fn get(&self, key: DisplayKey, make: impl FnOnce() -> KernelResult<T>) -> KernelResult<Arc<T>> {
@@ -96,7 +95,7 @@ impl<T> MeshCache<T> {
             let entry = if let Some(i) = cached.iter().position(|entry| entry.key == key) {
                 cached.remove(i).expect("the cached controls exist")
             } else {
-                // Three viewport levels, the build's own mesh and a drawing tolerance coexist.
+                // Three viewport levels, the default mesh and a drawing tolerance coexist.
                 const MESHES: usize = 5;
                 if cached.len() == MESHES {
                     cached.pop_front();
@@ -139,18 +138,32 @@ impl Solid {
         let default = key == display_key(&MeshOptions::default());
         self.display.get(key, || {
             if default {
-                return Ok(self.app.display.value.clone());
+                return self.app.display(options, &mut Decider::default()).map(|answer| answer.value).map_err(
+                    |error| match error {
+                        Error::Display(refusal) => query_error(query, refusal),
+                        other => KernelError::QueryFailed {
+                            query: query.into(),
+                            code: 0,
+                            message: format!("{other} (Catallax stage 1)"),
+                        },
+                    },
+                );
             }
             // The default mesh spans the body; pad it by both chord bounds so the
             // rounding allowance for a requested edge length covers every vertex.
             let pad =
                 MeshOptions::default().chord_tolerance.to_f64_nearest() + options.chord_tolerance.to_f64_nearest();
-            let extent = self.app.display.value.positions.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs())) + pad;
+            let default_mesh = self.display(&MeshOptions::default(), query)?;
+            let extent = default_mesh.positions.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs())) + pad;
             let native = edge_control::native_options(options, extent)?;
-            let built = self.app.checkpoint.built();
-            let mesh = numerical(query, |dec| mesh_body(&built.model, built.result, &native, dec))
-                .map_err(|e| query_error(query, e))?
-                .value;
+            let mesh = numerical(query, |dec| {
+                self.app.display(&native, dec).map_err(|error| match error {
+                    Error::Display(refusal) => refusal,
+                    other => catallax_numbers::Refusal::new(other.code(), other.to_string()),
+                })
+            })
+            .map_err(|e| query_error(query, e))?
+            .value;
             edge_control::check(options, &mesh)?;
             Ok(mesh)
         })
@@ -320,7 +333,7 @@ impl CatallaxKernel {
         let record = ids.record(seq, tag, op, &result, &parents.iter().map(|p| &p.ids).collect::<Vec<_>>());
         history.insert(seq, record.clone());
         let body = BodyId::from_raw(state.id());
-        let display = MeshCache::new(Some((display_key(&MeshOptions::default()), app.display.value.clone())));
+        let display = MeshCache::new();
         state.bodies.insert(
             body,
             Stored {
@@ -331,7 +344,7 @@ impl CatallaxKernel {
                     app,
                     ids,
                     display,
-                    previews: MeshCache::new(None),
+                    previews: MeshCache::new(),
                     topology: OnceLock::new(),
                     measured: OnceLock::new(),
                     mass: OnceLock::new(),
@@ -458,9 +471,9 @@ fn converted_recipe(input: &Value, op: OpKind) -> KernelResult<catallax_app::sol
 fn build(
     input: &Value,
     op: OpKind,
-    prefix: Option<&IncrementalApplicationBody>,
+    prefix: Option<&EvaluatedApplicationBody>,
     questions: Option<&mut Vec<Value>>,
-) -> KernelResult<(IncrementalApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
+) -> KernelResult<(EvaluatedApplicationBody, BTreeMap<String, catallax_recipe::StepId>)> {
     let converted = converted_recipe(input, op)?;
     if let Some(questions) = questions {
         let problem = serde_json::to_value(&converted.recipe).expect("Catallax recipes serialize");
@@ -469,9 +482,8 @@ fn build(
     // Earlier bodies remain immutable for undo, branches and concurrent queries.
     // Clone only the selected checkpoint, after releasing the body arena lock.
     let prefix = prefix.map(|app| app.checkpoint.clone());
-    let app =
-        catallax_app::build_incremental(&converted.recipe, prefix, &MeshOptions::default(), &mut Decider::default())
-            .map_err(|e| build_error(op, e))?;
+    let app = catallax_app::build_incremental_without_display(&converted.recipe, prefix, &mut Decider::default())
+        .map_err(|e| build_error(op, e))?;
     Ok((app, converted.steps))
 }
 
@@ -916,14 +928,22 @@ impl Kernel for CatallaxKernel {
             }
             let solid = self.solid(body)?;
             // Topology uses the original certified display, independent of later mesh requests.
-            solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids, false)).clone()
+            if let Some(value) = solid.topology.get() {
+                return value.clone();
+            }
+            let mesh = solid.display(&MeshOptions::default(), "topology")?;
+            solid.topology.get_or_init(|| convert::topology(&solid.app, &solid.ids, &mesh, false)).clone()
         })
     }
 
     fn measured_topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.observe("measured_topology", || {
             let solid = self.solid(body)?;
-            solid.measured.get_or_init(|| convert::topology(&solid.app, &solid.ids, true)).clone()
+            if let Some(value) = solid.measured.get() {
+                return value.clone();
+            }
+            let mesh = solid.display(&MeshOptions::default(), "measured_topology")?;
+            solid.measured.get_or_init(|| convert::topology(&solid.app, &solid.ids, &mesh, true)).clone()
         })
     }
 
@@ -939,8 +959,8 @@ impl Kernel for CatallaxKernel {
         })
     }
 
-    /// The recipe text, the history, the certified display mesh, the cached meshes and
-    /// previews, plus a fixed allowance per B-rep face and edge of every body the build kept.
+    /// The recipe text, the history, cached certified meshes and previews, plus a
+    /// fixed allowance per B-rep face and edge of every body the build kept.
     /// Catallax does not report its model's size, so the allowance is an estimate.
     fn retained_bytes(&self, body: BodyId) -> KernelResult<u64> {
         if let Some(field) = self.field(body)? {
@@ -960,11 +980,9 @@ impl Kernel for CatallaxKernel {
         let history: usize = stored.history.iter().map(|r| 256 + r.face_roles.len() * 32).sum();
         let mut bytes = recipe + history;
         if let Some(solid) = &stored.solid {
-            let display = &solid.app.display.value;
             let brep = solid.app.checkpoint.built().bodies.len().max(1)
-                * (display.faces.len() * FACE + display.edges.len() * EDGE);
-            bytes += brep + mesh_bytes(display);
-            // The display cache holds its own copy, even of the certified mesh.
+                * (solid.ids.faces.len() * FACE + solid.ids.edges.len() * EDGE);
+            bytes += brep;
             solid.display.each(|mesh| bytes += mesh_bytes(mesh));
             solid.previews.each(|m| {
                 let Some(m) = m else { return };
@@ -1020,6 +1038,32 @@ impl Kernel for CatallaxKernel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn certified_display_is_cached_after_a_refused_request_retries() {
+        let kernel = CatallaxKernel::new();
+        let body = contract::cylinder(&kernel, Vec3::ZERO, 5.0, 10.0);
+        let solid = kernel.solid(body).unwrap();
+        let retained = kernel.retained_bytes(body).unwrap();
+        let mut meshes = 0;
+        solid.display.each(|_| meshes += 1);
+        assert_eq!(meshes, 0, "building and accounting must not request a mesh");
+        let options = MeshOptions::default();
+        let (refused, work) = catallax_numbers::with_operation_budget(0, || kernel.topology(body));
+        assert!(work.exhausted);
+        assert!(matches!(refused, Err(KernelError::QueryFailed { message, .. })
+            if message.contains("numbers.operation-budget")));
+        let (mesh, work) = catallax_numbers::with_operation_budget(100_000_000, || solid.display(&options, "test"));
+        assert!(!work.exhausted);
+        assert!(work.used > 0);
+        let mesh = mesh.unwrap();
+        let (cached, work) = catallax_numbers::with_operation_budget(0, || solid.display(&options, "test"));
+        assert!(!work.exhausted);
+        assert_eq!(work.used, 0);
+        assert!(Arc::ptr_eq(&mesh, &cached.unwrap()));
+        assert!(kernel.retained_bytes(body).unwrap() > retained);
+        assert!(kernel.topology(body).is_ok(), "a mesh refusal must not poison the topology cache");
+    }
 
     #[test]
     fn retained_prefixes_branch_and_refuse_without_replaying_or_changing_earlier_bodies() {
