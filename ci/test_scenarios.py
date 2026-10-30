@@ -34,12 +34,12 @@ def step_checker():
 
 
 class CheckStepFaces(unittest.TestCase):
-    def failures(self, read, reported, exact, removed):
+    def failures(self, read, reported, exact, removed, removed_edges=0):
         checker = step_checker()
         checker.count = lambda shape, kind: read if kind is checker.TopAbs_FACE else 1
-        report = {"body": {"faces": exact, "volume": 1000.0, "area": 600.0},
-                  "report": {"solids": 1, "faces": reported, "removed_faces": removed, "max_deviation_mm": 0.0,
-                             "max_deviation": "0", "within_tolerance": True}}
+        report = {"body": {"faces": exact, "edges": 20, "volume": 1000.0, "area": 600.0},
+                  "report": {"solids": 1, "faces": reported, "removed_faces": removed, "removed_edges": removed_edges,
+                             "max_deviation_mm": 0.0, "max_deviation": "0", "within_tolerance": True}}
         return checker.check("part.step", report)[0]
 
     def test_removed_faces_reconcile_the_written_and_exact_counts(self):
@@ -53,6 +53,18 @@ class CheckStepFaces(unittest.TestCase):
     def test_no_regularizations_leave_the_three_way_equality(self):
         self.assertEqual(self.failures(11, 11, 11, 0), [])
         self.assertEqual(self.failures(9, 9, 11, 0), ["9 faces in OpenCASCADE, 9 in the report, 11 on the exact body"])
+
+    def test_removed_counts_must_be_whole_numbers_within_the_exact_counts(self):
+        for value in (-1, True, False, 0.5, 1.0, "1", None):
+            self.assertEqual(self.failures(12, 12, 11, value), [
+                f"the report's removed_faces is {value!r}, not a whole number from 0 to the exact body's 11"])
+            self.assertEqual(self.failures(11, 11, 11, 0, value), [
+                f"the report's removed_edges is {value!r}, not a whole number from 0 to the exact body's 20"])
+        self.assertEqual(self.failures(0, 0, 11, 12), [
+            "the report's removed_faces is 12, not a whole number from 0 to the exact body's 11"])
+        self.assertEqual(self.failures(11, 11, 11, 0, 21), [
+            "the report's removed_edges is 21, not a whole number from 0 to the exact body's 20"])
+        self.assertEqual(self.failures(11, 11, 11, 0, 20), [])
 
 
 class Checks(unittest.TestCase):
@@ -148,7 +160,7 @@ class SavedGeometry(unittest.TestCase):
                 self.assertEqual(result["pass"], expected)
 
     def test_checked_step_fails_when_opencascade_or_validity_check_fails(self):
-        evidence = {"summary": {"body": {"faces": 6}},
+        evidence = {"summary": {"body": {"faces": 6, "edges": 12}},
                     "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
         report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True}
         with tempfile.TemporaryDirectory() as temp:
@@ -164,10 +176,10 @@ class SavedGeometry(unittest.TestCase):
                 self.assertEqual((directory / "check-step.stderr").read_text(), error)
                 self.assertEqual(run.call_args_list[0].args[0][1:3], ["export", "saved.dwprt"])
                 self.assertEqual(json.loads((directory / "step-report.json").read_text()), {
-                    "report": report, "body": {"faces": 6, "volume": 1000, "area": 600}})
+                    "report": report, "body": {"faces": 6, "edges": 12, "volume": 1000, "area": 600}})
 
     def test_checked_step_raw_check_fails_closed(self):
-        evidence = {"summary": {"body": {"faces": 6}},
+        evidence = {"summary": {"body": {"faces": 6, "edges": 12}},
                     "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
         report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True}
         with tempfile.TemporaryDirectory() as temp:

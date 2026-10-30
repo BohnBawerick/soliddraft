@@ -5,9 +5,9 @@
 //!
 //! The box is a body the kernel can round today, so it carries the positive cases and
 //! the refuse-then-retry recovery. The extruded slot is the captain's body; Catallax
-//! still refuses its tangent-terminated top boundary, so it carries the refusal cases:
-//! the panel must show the kernel's typed reason, the part must stay usable, and no red
-//! failed feature may block the next pick.
+//! rounds one straight top edge of it but still refuses its tangent-terminated top
+//! boundary, so it carries the refusal cases: the panel must show the kernel's typed
+//! reason, the part must stay usable, and no red failed feature may block the next pick.
 //!
 //! Asserts a renderer exists: an acceptance run that skips is not acceptance.
 
@@ -60,8 +60,9 @@ fn box_document() -> Document {
 }
 
 /// A 50 x 10 slot, 10 deep: line and arc top edges meeting tangentially. Catallax
-/// refuses every fillet and chamfer on this boundary until its stage-4 work lands, so
-/// this is the body whose refusal must not poison the part.
+/// rounds one straight top edge, but refuses a fillet or chamfer of the whole boundary
+/// until its stage-4 work lands, so this is the body whose refusal must not poison the
+/// part.
 fn slot_document() -> Document {
     let mut doc = Document::new("Slot", soliddraft_app::kernel());
     let sketch = doc
@@ -77,6 +78,15 @@ fn slot_document() -> Document {
     })
     .unwrap();
     doc
+}
+
+/// The midpoint of a straight top edge of the slot.
+fn straight_top_edge(doc: &Document) -> glam::Vec3 {
+    doc.edges
+        .iter()
+        .find(|e| (e.midpoint.z - 10.0).abs() < 1e-9 && (e.midpoint.y.abs() - 5.0).abs() < 1e-9)
+        .map(|e| e.midpoint)
+        .expect("a straight top edge of the slot")
 }
 
 // ---------------------------------------------------------------------------
@@ -493,15 +503,7 @@ fn fillet_face_refusal_on_the_slot_names_the_kernel_reason_and_leaves_the_part_u
     escape(&mut app);
 
     // An edge pick after the refusal still resolves to a named edge and joins a panel.
-    let edge_midpoint = *app
-        .state()
-        .state
-        .doc
-        .edges
-        .iter()
-        .find(|e| (e.midpoint.z - 10.0).abs() < 1e-9 && (e.midpoint.y.abs() - 5.0).abs() < 1e-9)
-        .map(|e| &e.midpoint)
-        .expect("a straight top edge of the slot");
+    let edge_midpoint = straight_top_edge(&app.state().state.doc);
     click_world(&mut app, edge_midpoint);
     {
         let state = &app.state().state;
@@ -518,20 +520,14 @@ fn fillet_edge_refusal_on_the_slot_names_the_kernel_reason_and_leaves_the_part_u
     let _gpu = gpu();
     let mut app = harness(slot_document());
     let before = shape(&app.state().state.doc);
-    let midpoint = *app
-        .state()
-        .state
-        .doc
-        .edges
-        .iter()
-        .find(|e| (e.midpoint.z - 10.0).abs() < 1e-9 && (e.midpoint.y.abs() - 5.0).abs() < 1e-9)
-        .map(|e| &e.midpoint)
-        .expect("a straight top edge of the slot");
+    let midpoint = straight_top_edge(&app.state().state.doc);
     click_world(&mut app, midpoint);
 
     // F is the Fillet shortcut with an edge selected.
     app.key_press(Key::F);
     app.run_steps(4);
+    // r = 20 on a 10 mm wide, 10 mm deep slot: the round cannot fit.
+    type_field(&mut app, "Radius value", "20");
     let expected_reason = {
         let state = &app.state().state;
         let editor = state.editor.as_ref().expect("F opens Fillet on an edge pick");

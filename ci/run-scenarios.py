@@ -585,6 +585,7 @@ def checked_step_export(binary, part, directory, evidence, timeout):
                            and report.get("solids") == 1})
     write(directory / "step-report.json", {"report": report, "body": {
         "faces": evidence["summary"]["body"]["faces"],
+        "edges": evidence["summary"]["body"]["edges"],
         "volume": evidence["measurement"]["volume_mm3"],
         "area": evidence["measurement"]["area_mm2"],
     }})
