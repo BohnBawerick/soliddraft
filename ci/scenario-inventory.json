@@ -2,6 +2,21 @@
   "format": "soliddraft-scenario-inventory/1",
   "scenarios": [
     {
+      "id": "assembly",
+      "file": "ci/scenarios/assembly.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-assembly",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "86f724c3c190e6abdfd1be38930d2c4707fbd271",
+      "route": "MCP document and assembly commands -> Catallax adapter -> pinned kernel -> assembly loader",
+      "supported_limits": "One floating component at identity placement, default configuration; in-session freshness, saved-part transactional Update; partial M4 evidence.",
+      "evidence": "result.json, protocol.json, commands/NNNN/{part.dwprt,command.json,kernel.json,inspect-*.stdout}; work/a.dwprt and work/rig.dwasm"
+    },
+    {
       "id": "boss-on-face",
       "file": "ci/scenarios/boss-on-face.json",
       "acceptance": false,

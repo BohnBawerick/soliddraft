@@ -15,6 +15,9 @@
 //! A tab's panels come in the order [`panels`] gives, and each panel lists its commands
 //! in table order.
 
+#[path = "assembly/registry.rs"]
+mod assembly_registry;
+
 use crate::app_tools as app;
 use crate::assembly::AssemblyAction;
 use crate::command_tools as tools;
@@ -442,14 +445,6 @@ const CANVAS: &str = "It picks a tool of the drawing canvas, which places views 
 const CANVAS_STEP: &str = "It steers the drawing canvas tool in use, which only the window has";
 const SHEET_VIEW: &str = "It changes how the drawing canvas shows the sheet, which only the window has";
 const PANEL: &str = "It selects what the property panel edits; the panel's fields have no form without the window yet";
-const ASSEMBLY: &str = "It works on the assembly open in the window; soliddraft asm makes, places and saves assembly \
-                        files without it";
-
-/// Why an assembly command is off in the browser build, whose loader has no threads.
-fn desktop_only(_: &AppState) -> Option<String> {
-    cfg!(target_arch = "wasm32").then(|| "Assemblies open in the desktop app".to_owned())
-}
-
 impl CommandSpec {
     pub(crate) fn new(id: &'static str, label: &'static str, icon: Icon, doc: &'static str) -> Self {
         CommandSpec {
@@ -832,7 +827,7 @@ fn drawing_tool_is(s: &AppState, f: fn(&DrawingTool) -> bool) -> bool {
     session(s).is_some_and(|d| f(&d.tool))
 }
 
-/// The drawing's undo stack when the drawing is active, the part's otherwise.
+/// The active document's undo and redo labels.
 fn undo_labels(s: &AppState) -> (Option<String>, Option<String>) {
     if let Some(a) = s.assembly.session.as_ref().filter(|_| s.assembly.is_active()) {
         return (a.doc.undo_label().map(str::to_owned), a.doc.redo_label().map(str::to_owned));
@@ -928,7 +923,7 @@ fn registry() -> Vec<CommandSpec> {
             tools::rollback_params,
         ),
         // Edit.
-        cmd("undo", "Undo", Icon::Undo, "Undo the last change to the part or drawing")
+        cmd("undo", "Undo", Icon::Undo, "Undo the last change to the active document")
             .both()
             .on(Features, "Edit", Small)
             .on(Sketch, "Edit", Small)
@@ -1449,13 +1444,14 @@ fn registry() -> Vec<CommandSpec> {
             .key(Scope::Part, ctrl, Key::N)
             .run(|_| AppAction::NewPart)
 .agents(Agents::Mcp, "In place of the open part, which is not saved first.", Vec::new).undo(Undo::Replaces),
-        cmd("open", "Open", Icon::Open, "Open a part or a drawing; a drawing opens its part too")
+        cmd("open", "Open", Icon::Open, "Open a part, drawing or assembly; a drawing opens its part too")
             .key(Scope::Part, ctrl, Key::O)
             .run(|_| AppAction::Open(None))
             .agents(
                 Agents::Mcp,
                 "A part file opens in place of the current part. A drawing file opens in place of an open drawing, \
-                 with its part when the reference finds it, and becomes the active document.",
+                 with its part when the reference finds it, and becomes the active document. An assembly opens \
+                 beside the part and becomes active.",
                 app::open_params,
             )
 .undo(Undo::Replaces),
@@ -1467,36 +1463,6 @@ fn registry() -> Vec<CommandSpec> {
             .key(Scope::Part, ctrl_shift, Key::S)
             .run(|_| AppAction::SaveAs(None))
 .agents(Agents::Mcp, "Saves the part to the file, as save does.", tools::part_path_params),
-        // Assemblies. `soliddraft asm` does the same to assembly files from the command line.
-        cmd("new_assembly", "New assembly", Icon::Tree, "Start a new, empty assembly in a tab beside the part")
-            .both()
-            .run(|_| AppAction::Assembly(AssemblyAction::New))
-            .when(|_| !cfg!(target_arch = "wasm32"))
-            .hint(desktop_only)
-            .app_only(ASSEMBLY),
-        cmd("make_assembly", "Make assembly", Icon::Tree, "Start an assembly that places this part, saving the part first")
-            .run(|_| AppAction::Assembly(AssemblyAction::FromPart))
-            .when(|s| has_body(s) && !cfg!(target_arch = "wasm32"))
-            .hint(desktop_only)
-            .app_only(ASSEMBLY),
-        cmd("insert_component", "Insert component", Icon::Import, "Place a part or an assembly file in the assembly")
-            .assembly()
-            .on(Tab::Assembly, "Component", Large)
-            .key(Scope::Assembly, ctrl, Key::I)
-            .run(|_| AppAction::Assembly(AssemblyAction::Insert(None)))
-            .app_only(ASSEMBLY),
-        cmd("assembly_save", "Save assembly", Icon::Save, "Save the assembly with copies of the parts it shows")
-            .assembly()
-            .on(Tab::Assembly, "File", Small)
-            .key(Scope::Assembly, ctrl, Key::S)
-            .run(|_| AppAction::Assembly(AssemblyAction::Save(None)))
-            .app_only(ASSEMBLY),
-        cmd("assembly_save_as", "Save assembly as", Icon::Save, "Save the assembly under a new name")
-            .assembly()
-            .on(Tab::Assembly, "File", Small)
-            .key(Scope::Assembly, ctrl_shift, Key::S)
-            .run(|_| AppAction::Assembly(AssemblyAction::SaveAs))
-            .app_only(ASSEMBLY),
         cmd("export_step", "STEP", Icon::Save, "Export the part as STEP AP242, with its proven deviation")
             .run(|_| AppAction::Export { format: ExportFormat::Step, path: None })
             .when(can_export)
@@ -1704,6 +1670,7 @@ fn registry() -> Vec<CommandSpec> {
 .app_only(WINDOW),
     ]
     .into_iter()
+    .chain(assembly_registry::registry())
     .chain(drawing_registry())
     .chain(crate::measure::registry::commands())
     .collect()

@@ -1,8 +1,8 @@
 //! Assembly command registry rows.
 
 use super::*;
-use soliddraft_assistant::tools::schema::string;
 use crate::assembly::AssemblyAction;
+use soliddraft_assistant::tools::schema::string;
 
 const ASSEMBLY: &str = "It works on the assembly open in the window; soliddraft asm makes, places and saves assembly \
                         files without it";
@@ -46,11 +46,7 @@ pub(super) fn registry() -> Vec<CommandSpec> {
             .on(Tab::Assembly, "File", Small)
             .key(Scope::Assembly, ctrl, Key::S)
             .run(|_| AppAction::Assembly(AssemblyAction::Save(None)))
-            .agents(
-                Agents::Mcp,
-                "Saves the assembly and its accepted display copies.",
-                path_params,
-            ),
+            .agents(Agents::Mcp, "Saves the assembly and its accepted display copies.", path_params),
         cmd("assembly_save_as", "Save assembly as", Icon::Save, "Save the assembly under a new name")
             .assembly()
             .on(Tab::Assembly, "File", Small)

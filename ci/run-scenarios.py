@@ -403,7 +403,7 @@ def at(value, pointer):
 def check(value, spec, previous=None):
     try:
         actual = at(value, spec["pointer"])
-        comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "contains", "same_as_step") if key in spec]
+        comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "contains", "same_as_step", "same_as", "differs_from") if key in spec]
         if len(comparisons) != 1:
             raise ValueError("a check needs exactly one comparison")
         kind = comparisons[0]
@@ -411,6 +411,10 @@ def check(value, spec, previous=None):
         if kind == "same_as_step":
             expected = at(previous[expected], spec["pointer"])
             passed = actual == expected
+        elif kind in {"same_as", "differs_from"}:
+            other = previous[expected["step"]] if "step" in expected else value
+            expected = at(other, expected["pointer"])
+            passed = (actual == expected) if kind == "same_as" else (actual != expected)
         elif kind == "equals":
             passed = actual == expected
         elif kind == "approx":
@@ -586,6 +590,28 @@ sys.exit(0 if passed else 1)
     return checks
 
 
+def scenario_folders(bundle, folders):
+    for folder in folders:
+        path = (bundle / folder).resolve()
+        if not path.is_relative_to(bundle.resolve()):
+            raise ValueError("scenario folder must stay inside the bundle")
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def inspect(binary, requests, bundle, directory, timeout):
+    result = {}
+    for label, arguments in requests.items():
+        arguments = [
+            argument.replace("{bundle}", str(bundle)).replace("{step}", str(directory)) for argument in arguments]
+        process = subprocess.run([binary, *arguments], capture_output=True, text=True, timeout=timeout)
+        (directory / f"inspect-{label}.stdout").write_text(process.stdout)
+        (directory / f"inspect-{label}.stderr").write_text(process.stderr)
+        if process.returncode:
+            raise RuntimeError(f"inspect {label} exited {process.returncode}: {process.stderr}")
+        result[label] = json.loads(process.stdout)
+    return result
+
+
 def timings(steps):
     """Labelled steps' click times, such as a feature's build and edit."""
     return [{"label": s["label"], "tool": s["tool"], "elapsed_ms": s.get("timing", {}).get("elapsed_ms"),
@@ -673,6 +699,7 @@ def run(args):
         raise ValueError("expected soliddraft-scenario/1 with steps")
     args.out.mkdir(parents=True, exist_ok=False)
     write(args.out / "scenario.json", scenario)
+    scenario_folders(args.out, scenario.get("folders", []))
     pin = pinned_revision()
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "catallax_revision": pin,
               "soliddraft_revision": subprocess.check_output(
@@ -883,6 +910,8 @@ def run(args):
                     if reason is not None:
                         measurement = None
                 evidence = {**command, "measurement": measurement}
+            if step.get("inspect"):
+                evidence["inspect"] = inspect(args.soliddraft, step["inspect"], args.out, directory, args.timeout)
             checks.extend(check(evidence, spec, previous) for spec in step.get("checks", []))
             previous[number] = evidence
             if "same_geometry_as_step" in step:
