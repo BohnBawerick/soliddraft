@@ -29,7 +29,8 @@ All icons are drawn with the egui painter on a 16 by 16 grid (`icons.rs`). No ic
 - View changes animate over about 150 ms so a keyboard user can see which way the model turned.
 - The view cube in the top right is drawn with the painter from the camera's rotation. Visible faces are clickable; the hovered face highlights.
 - The heads-up toolbar is a single floating strip: isometric, fit, F, T, R, then display style. Section and measure are present but disabled until phase 2.
-- An axis triad in the lower left, a units and view pill next to it, and a hover label in the lower right that names what is under the cursor.
+- A units and view pill in the lower left and a hover label in the lower right that names what is under the cursor.
+- The origin axes are off at rest. Selecting the origin, a reference plane or an origin axis shows them, and the saved `view.always_show_origin_axes` setting keeps them on. Clearing the selection hides them again.
 
 ## Picking
 

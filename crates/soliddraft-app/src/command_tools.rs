@@ -2060,6 +2060,7 @@ fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>>
             measured()?.and_then(|t| t.edges.iter().find(|e| e.id == edge).map(|e| f32s(e.midpoint)))
         }
         Selection::Vertex(key) => doc.vertex_position(key),
+        Selection::Reference(_) => None,
     })
 }
 
@@ -2167,6 +2168,7 @@ fn selection_json(doc: &Document, sel: Selection) -> Value {
         Selection::Face(_) => "face",
         Selection::Edge(_) => "edge",
         Selection::Vertex(_) => "vertex",
+        Selection::Reference(_) => "reference",
     }
     .into();
     v["details"] =
