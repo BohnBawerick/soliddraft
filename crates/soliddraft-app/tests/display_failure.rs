@@ -192,6 +192,61 @@ fn an_edit_after_an_undo_the_viewport_cannot_draw_keeps_the_part_on_screen() {
     assert!(message.contains(REASON), "{message}");
 }
 
+/// The command rolls back to the undone-to part, which the viewport drew before and
+/// still holds a mesh for.
+#[test]
+fn a_new_feature_after_an_undo_the_viewport_cannot_draw_keeps_the_part_on_screen() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    let triangles = undone_past_the_mesh(&mut doc, &kernel, id);
+    let before = (doc.features.len(), doc.undo_depth());
+
+    let refused = doc.apply(add(25.0)).unwrap_err();
+    assert!(refused.contains(REASON), "{refused}");
+    assert_eq!((doc.features.len(), doc.undo_depth()), before, "the feature is rolled back");
+    assert_eq!(depth_of(&doc, id), 14.0);
+    assert_eq!(doc.triangle_count(), triangles, "the part stays on screen");
+    assert_eq!(doc.display_failure(), Some(refused.as_str()));
+}
+
+/// Here the part the command rolls back to was never drawn, so the mesh on screen stays,
+/// and it is still not called the current model.
+#[test]
+fn a_new_feature_over_a_part_never_drawn_keeps_the_mesh_on_screen() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    let triangles = undone_past_the_mesh(&mut doc, &kernel, id);
+    doc.apply_interactive(edit(id, 16.0)).unwrap();
+    settle(&mut doc);
+    let before = (doc.features.len(), doc.undo_depth(), doc.displayed_revision());
+    assert_ne!(before.2, doc.revision(), "the mesh on screen is not the current model");
+
+    let refused = doc.apply(add(25.0)).unwrap_err();
+    assert!(refused.contains(REASON), "{refused}");
+    assert_eq!((doc.features.len(), doc.undo_depth()), (before.0, before.1), "the feature is rolled back");
+    assert_eq!(depth_of(&doc, id), 16.0);
+    assert_eq!(doc.triangle_count(), triangles, "the part stays on screen");
+    assert_eq!(doc.displayed_revision(), before.2, "the mesh on screen is still not the current model");
+    assert_eq!(doc.display_failure(), Some(refused.as_str()));
+}
+
+/// Draws the part at 14 and 18, then undoes to 14 once the viewport cannot draw it, so
+/// the model is behind the mesh on screen. Returns that mesh's triangle count.
+fn undone_past_the_mesh(doc: &mut Document, kernel: &Gated, id: FeatureId) -> usize {
+    doc.apply_interactive(edit(id, 14.0)).unwrap();
+    settle(doc);
+    doc.apply_interactive(edit(id, 18.0)).unwrap();
+    settle(doc);
+    let triangles = doc.triangle_count();
+    assert!(triangles > 0);
+    refuse_display(kernel, true);
+    doc.undo_interactive().unwrap();
+    settle(doc);
+    assert_eq!(depth_of(doc, id), 14.0);
+    assert_eq!(doc.triangle_count(), triangles, "the undone edit stays on screen");
+    triangles
+}
+
 #[test]
 fn a_part_that_cannot_roll_back_keeps_its_model_and_says_why() {
     let kernel = Arc::new(Gated::default());
