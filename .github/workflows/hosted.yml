@@ -374,6 +374,10 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
       - run: python3 -m pip install cadquery-ocp==7.9.3.1.1
+      - name: Install the direct no-healing STEP check's OCP 8 binding
+        run: |
+          python3 -m venv .ci-ocp8
+          .ci-ocp8/bin/python -m pip install cadquery-ocp==8.0.1.1.0
       - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
       - name: Build the release application used for click budgets
         run: cargo build --release --locked -p soliddraft-cli

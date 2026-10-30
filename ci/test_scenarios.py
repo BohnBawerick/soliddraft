@@ -101,6 +101,29 @@ class SavedGeometry(unittest.TestCase):
                 self.assertEqual(json.loads((directory / "step-report.json").read_text()), {
                     "report": report, "body": {"faces": 6, "volume": 1000, "area": 600}})
 
+    def test_checked_step_raw_check_fails_closed(self):
+        evidence = {"summary": {"body": {"faces": 6}},
+                    "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
+        report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True}
+        with tempfile.TemporaryDirectory() as temp:
+            directory = pathlib.Path(temp)
+            (directory / "part.step").write_bytes(b"STEP bytes")
+            for code, error in ((0, ""), (1, "ModuleNotFoundError: No module named 'OCP'"),
+                                (1, "raw_valid: false")):
+                replies = [scenarios.subprocess.CompletedProcess([], 0, json.dumps({"report": report}), ""),
+                           scenarios.subprocess.CompletedProcess([], 0, "standard reader valid", ""),
+                           scenarios.subprocess.CompletedProcess([], code, "", error)]
+                with mock.patch.object(scenarios.subprocess, "run", side_effect=replies) as run:
+                    checks = scenarios.checked_step_export("soliddraft", "saved.dwprt", directory, evidence, 5)
+                self.assertEqual(all(c["pass"] for c in checks), code == 0)
+                self.assertEqual(checks[-1]["check"], "raw-step")
+                self.assertEqual((directory / "raw-step.stderr").read_text(), error)
+                command = run.call_args_list[-1].args[0]
+                self.assertTrue(command[0].endswith("/.ci-ocp8/bin/python"))
+                self.assertEqual(command[-2:], [scenarios.pinned_revision(), str(directory / "part.step")])
+                self.assertIn('from raw_step import valid', command[2])
+                self.assertIn('8.0.1.1.0', command[2])
+
 
 class Latency(unittest.TestCase):
     @staticmethod
