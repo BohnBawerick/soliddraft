@@ -2304,6 +2304,14 @@ impl CommandTools<'_> {
     pub fn summary(&self) -> Value {
         let doc = &*self.doc;
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
+        let imported =
+            doc.features.iter().any(|f| matches!(&f.kind, FeatureKind::ImportStep(_)) && f.status == FeatureStatus::Ok);
+        // A repair smaller than 0.01 mm must remain visible in the imported bounds.
+        let bounds = if imported {
+            json!({"min": lo.to_array(), "max": hi.to_array()})
+        } else {
+            json!({"min": vec3(lo), "max": vec3(hi)})
+        };
         let proof = doc.proof_state();
         let current = proof.current_proved_display();
         let mass = if current && doc.model().active_field().is_none() { cached_body_mass(doc) } else { None };
@@ -2331,7 +2339,7 @@ impl CommandTools<'_> {
                 v
             }).collect::<Vec<_>>(),
             "body": {
-                "bounding_box": { "min": vec3(lo), "max": vec3(hi) },
+                "bounding_box": bounds,
                 "volume_mm3": mass.map(|m| round(m.volume)),
                 "area_mm2": mass.map(|m| round(m.area)),
                 "faces": current.then_some(doc.faces.len()),

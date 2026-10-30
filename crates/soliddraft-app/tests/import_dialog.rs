@@ -114,6 +114,9 @@ fn mcp_refuses_source_substitution_after_preview() {
                 panic!("import")
             };
             assert_eq!(import.source, replacement);
+            let summary: Value = serde_json::from_str(&accepted.content).unwrap();
+            let top = summary["body"]["bounding_box"]["max"][2].as_f64().unwrap();
+            assert!((top - 10.004).abs() <= 0.0005, "the repaired top must survive the summary: {top}");
         }
     }
     std::fs::remove_dir_all(temporary).unwrap();

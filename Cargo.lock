@@ -5226,6 +5226,7 @@ version = "0.1.0"
 dependencies = [
  "catallax-app",
  "catallax-field",
+ "catallax-import",
  "catallax-measure",
  "catallax-mesh",
  "catallax-numbers",
@@ -5233,9 +5234,11 @@ dependencies = [
  "catallax-shapes",
  "catallax-step",
  "catallax-topology",
+ "serde",
  "serde_json",
  "sha2 0.10.9",
  "soliddraft-kernel-api",
+ "soliddraft-model",
  "soliddraft-recipe",
 ]
 
