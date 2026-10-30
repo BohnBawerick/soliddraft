@@ -193,6 +193,7 @@ impl Bench {
             preview_pickable: false,
             pick_revision: None,
             pick_out: self.pick.clone(),
+            grid: None,
             assembly: Some(AssemblyFrame {
                 scene: self.scene.clone(),
                 meshes,
@@ -285,6 +286,7 @@ fn empty_frame(size: [u32; 2], pick: Arc<Mutex<PickSample>>) -> FrameInput {
         pick_revision: None,
         pick_out: pick,
         assembly: None,
+        grid: None,
     }
 }
 

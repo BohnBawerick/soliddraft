@@ -88,6 +88,8 @@ impl Offscreen {
             pick_revision: None,
             pick_out: Arc::new(Mutex::new(Default::default())),
             assembly: None,
+            // A picture shows the part, not the workspace around it.
+            grid: None,
         };
         self.renderer.prepare(device, queue, &input);
         let texture = device.create_texture(&wgpu::TextureDescriptor {

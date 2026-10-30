@@ -1,10 +1,11 @@
 //! The 3D viewport: camera input, picking, overlays (heads-up toolbar, view
-//! cube, origin axes, hover label) and the hand-off to the wgpu renderer.
+//! cube, origin axes, grid readout, hover label) and the hand-off to the wgpu renderer.
 
 pub mod assembly;
 pub mod camera;
 pub mod dimensions;
 pub mod environment;
+pub mod grid;
 pub mod look;
 pub mod offscreen;
 pub mod pick;
@@ -19,6 +20,7 @@ use crate::theme;
 use camera::{Camera, StandardView};
 use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use glam::Vec3;
+use grid::{GridFrame, GridPlane, Spacing};
 use look::Preset;
 use render::{DisplayMode, FrameInput, PickSample, Picked, ViewportCallback};
 use soliddraft_kernel_api::Plane;
@@ -192,6 +194,9 @@ impl ViewportState {
         input.preview = preview;
         input.preview_pickable = preview_pickable;
         input.pick_revision = pick_revision;
+        if let Some(session) = &sketch {
+            input.grid = self.grid(rect, &GridPlane::of_sketch(&session.plane));
+        }
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
 
         let painter = ui.painter().with_clip_rect(rect);
@@ -294,8 +299,17 @@ impl ViewportState {
         events
     }
 
+    /// The grid's spacing at this frame's zoom, when the grid shows.
+    fn grid_spacing(&self, rect: Rect) -> Option<Spacing> {
+        Spacing::for_scale(self.camera.mm_per_point(rect.height())).filter(|_| self.references.show_grid)
+    }
+
+    fn grid(&self, rect: Rect, plane: &GridPlane) -> Option<GridFrame> {
+        GridFrame::new(plane, self.grid_spacing(rect)?, &self.camera, theme::ink())
+    }
+
     /// What every frame hands the renderer from the camera and the look, with nothing in
-    /// the scene yet.
+    /// the scene yet. The grid lies on the ground until a sketch moves it.
     fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
         let aspect = rect.width() / rect.height().max(1.0);
         let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
@@ -323,6 +337,7 @@ impl ViewportState {
             pick_revision: None,
             pick_out: self.pick.clone(),
             assembly: None,
+            grid: self.grid(rect, &GridPlane::GROUND),
         }
     }
 
@@ -568,6 +583,25 @@ impl ViewportState {
         painter.rect(r, CornerRadius::same(99), theme::hud_bg(), Stroke::new(1.0, theme::line()), StrokeKind::Inside);
         painter.galley(r.center() - galley.size() / 2.0, galley, theme::muted());
 
+        if let Some(spacing) = self.grid_spacing(rect) {
+            let galley = painter.layout_no_wrap(spacing.label(), theme::font(11.0), theme::muted());
+            let size = galley.size() + vec2(18.0, 7.0);
+            let r = Rect::from_min_size(pos2(r.right() + 6.0, r.top()), size);
+            painter.rect(
+                r,
+                CornerRadius::same(99),
+                theme::hud_bg(),
+                Stroke::new(1.0, theme::line()),
+                StrokeKind::Inside,
+            );
+            painter.galley(r.center() - galley.size() / 2.0, galley, theme::muted());
+            let response = ui.interact(r, ui.id().with("grid readout"), Sense::hover());
+            let description = spacing.description();
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &description));
+            response.on_hover_text(&description);
+        }
+
+        let painter = ui.painter();
         let (label, color) = match hover_label {
             Some(l) => (l.to_owned(), theme::ink()),
             None => ("Hover a face, edge or vertex".to_owned(), theme::muted()),
