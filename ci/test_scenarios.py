@@ -18,6 +18,19 @@ spec.loader.exec_module(scenarios)
 
 
 class Checks(unittest.TestCase):
+    def test_edit_work_ceiling_accepts_equality_and_rejects_one_unit_more(self):
+        step = {"max_edit_work": 3571497}
+        equal = scenarios.edit_work_check(step, {"work": {"edit": 3571497}})
+        self.assertTrue(equal["pass"])
+        above = scenarios.edit_work_check(step, {"work": {"edit": 3571498}})
+        self.assertFalse(above["pass"])
+        self.assertEqual(above["status"], "edit-work-regression")
+
+    def test_edit_work_ceiling_rejects_invalid_limits(self):
+        for ceiling in (-1, True, 1.5, None):
+            with self.subTest(ceiling=ceiling), self.assertRaises(ValueError):
+                scenarios.edit_work_check({"max_edit_work": ceiling}, {"work": {"edit": 1}})
+
     def test_numeric_check_and_missing_evidence(self):
         rule = {"pointer": "/body/volume", "approx": 12000, "tolerance": 0.01}
         self.assertTrue(scenarios.check({"body": {"volume": 12000.005}}, rule)["pass"])
@@ -168,19 +181,23 @@ class Latency(unittest.TestCase):
         self.assertEqual(sum(result["work"].values()), 5)
 
     def test_concurrent_background_mesh_keeps_external_wait_and_its_work(self):
-        result = scenarios.timing("edit_extrude", [self.segment(1100, [
-            self.call("tessellate", 3000, [self.operation("mesh", 2900, 15)],
-                      work={"used": 15}, foreground=False),
-            self.call("tessellate_edges", 500, nested=True, foreground=False),
-            self.call("extrude", 500, work={"used": 25}),
-        ])])
-        self.assertFalse(result["pass"])
-        self.assertEqual(result["elapsed_ms"], 1100)
-        self.assertEqual(result["split_ms"]["edit"], 1100)
-        self.assertEqual(sum(result["split_ms"].values()), 1100)
-        self.assertEqual(result["work"]["edit"], 25)
-        self.assertEqual(result["background"]["call_ms"]["display"], 3000)
-        self.assertEqual(result["background"]["work"]["display"], 15)
+        for tool in ("edit_extrude", "drive", "set_value"):
+            with self.subTest(tool=tool):
+                result = scenarios.timing(tool, [self.segment(1100, [
+                    self.call("tessellate", 3000, [self.operation("mesh", 2900, 15)],
+                              work={"used": 15}, foreground=False),
+                    self.call("tessellate_edges", 500, nested=True, foreground=False),
+                    self.call("extrude", 500, work={"used": 25}),
+                ])])
+                self.assertFalse(result["pass"])
+                self.assertEqual(result["elapsed_ms"], 1100)
+                self.assertEqual(result["split_ms"]["edit"], 1100)
+                self.assertEqual(sum(result["split_ms"].values()), 1100)
+                self.assertEqual(result["work"]["edit"], 25)
+                self.assertEqual(result["background"]["call_ms"]["display"], 3000)
+                self.assertEqual(result["background"]["work"]["display"], 15)
+                self.assertEqual(scenarios.edit_work_check({"max_edit_work": 24}, result)["status"],
+                                 "edit-work-regression")
 
     def test_refusal_keeps_its_whole_wait_and_work(self):
         result = scenarios.timing("cut", [self.segment(600, [
@@ -486,6 +503,24 @@ class RunnerEndToEnd(unittest.TestCase):
         interval = report["steps"][0]["intervals"]["preview"]
         self.assertEqual(interval["ends"], "visible selectable edit")
         self.assertEqual(interval["verdict"], "strict-pass")
+
+    def test_edit_work_regression_fails_the_runner_even_with_a_fast_click(self):
+        report, checks = self.run_step("ok", extra={"max_edit_work": 0})
+        self.assertTrue(report["pass"])
+        self.assertTrue(checks["edit work ceiling"]["pass"])
+        original = scenarios.timing
+
+        def one_more(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["work"]["edit"] = 1
+            return result
+
+        with mock.patch.object(scenarios, "timing", side_effect=one_more):
+            report, checks = self.run_step("ok", extra={"max_edit_work": 0})
+        self.assertTrue(checks["click budget"]["pass"])
+        self.assertEqual(checks["edit work ceiling"]["status"], "edit-work-regression")
+        self.assertFalse(report["pass"])
+        self.assertEqual(self.code, 1)
 
     def test_a_display_without_its_evidence_fails_the_step(self):
         report, checks = self.run_step("lost-display")

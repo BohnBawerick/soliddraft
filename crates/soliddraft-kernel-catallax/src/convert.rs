@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use catallax_app::IncrementalApplicationBody;
+use catallax_app::EvaluatedApplicationBody;
 use catallax_recipe::{Origin, Role};
 use catallax_shapes::{CurveKind as CatCurve, Surface, SurfaceKind as CatSurface};
 use catallax_topology::Sense;
@@ -47,7 +47,7 @@ fn assign<I: Copy + Ord, K>(
 
 impl Ids {
     pub fn new(
-        app: &IncrementalApplicationBody,
+        app: &EvaluatedApplicationBody,
         parents: &[&Ids],
         tags: &BTreeMap<String, OpTag>,
         next: &mut u64,
@@ -288,9 +288,13 @@ fn proven_box(b: &catallax_measure::BoundingBox) -> Aabb {
 /// rebuild or a display never waits for a measurement. With it, they are Catallax's
 /// proven measures, for an explicit measurement request. Edge boxes are the edge's
 /// display polyline grown by its chord error either way, so they enclose the edge.
-pub(super) fn topology(app: &IncrementalApplicationBody, ids: &Ids, proven: bool) -> KernelResult<Topology> {
+pub(super) fn topology(
+    app: &EvaluatedApplicationBody,
+    ids: &Ids,
+    mesh: &catallax_mesh::Mesh,
+    proven: bool,
+) -> KernelResult<Topology> {
     let model = &app.checkpoint.built().model;
-    let mesh = &app.display.value;
     let chord = catallax_mesh::MeshOptions::default().chord_tolerance.to_f64_nearest();
     let accuracy = catallax_measure::Accuracy::default();
     let query = |name: &str, e: catallax_numbers::Refusal| query_error(name, e);

@@ -301,6 +301,7 @@
     },
     {
       "tool": "edit_extrude",
+      "max_edit_work": 3412454,
       "arguments": {
         "feature": "Boss-Extrude2",
         "depth": 72,
@@ -435,6 +436,7 @@
     },
     {
       "tool": "edit_dimension",
+      "max_edit_work": 3571497,
       "arguments": {
         "sketch": "Sketch1",
         "dimension": 1,
@@ -582,6 +584,7 @@
     },
     {
       "tool": "drive",
+      "max_edit_work": 3571568,
       "arguments": {
         "feature": "Boss-Extrude2",
         "parameter": "depth",
@@ -772,6 +775,7 @@
     },
     {
       "tool": "set_value",
+      "max_edit_work": 3582588,
       "arguments": {
         "name": "bracket_width",
         "expression": "6 in"

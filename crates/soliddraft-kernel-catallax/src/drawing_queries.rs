@@ -43,13 +43,13 @@ pub(super) fn edge_curve(solid: &Solid, body: BodyId, edge: EdgeId) -> KernelRes
         .ok_or(KernelError::UnknownEdge { body, edge })?;
     let model = &solid.app.checkpoint.built().model;
     let e = model.edge(id);
-    let polyline =
-        solid.app.display.value.edges.iter().find(|p| p.edge == id).ok_or_else(|| KernelError::QueryFailed {
-            query: "edge_curve".into(),
-            code: 0,
-            message: "Catallax edge has no display polyline".into(),
-        })?;
-    let points: Vec<Vec3> = polyline.vertices.iter().map(|v| solid.app.display.value.positions[*v].into()).collect();
+    let mesh = solid.display(&catallax_mesh::MeshOptions::default(), "edge_curve")?;
+    let polyline = mesh.edges.iter().find(|p| p.edge == id).ok_or_else(|| KernelError::QueryFailed {
+        query: "edge_curve".into(),
+        code: 0,
+        message: "Catallax edge has no display polyline".into(),
+    })?;
+    let points: Vec<Vec3> = polyline.vertices.iter().map(|v| mesh.positions[*v].into()).collect();
     match model.geom().curve(e.curve) {
         Curve::Line(_) => Ok(Curve3::Line { a: points[0], b: *points.last().expect("edge has endpoints") }),
         Curve::Circle(c) if e.start.is_none() && e.end.is_none() => {
@@ -72,7 +72,7 @@ pub(super) fn face_loops(solid: &Solid, body: BodyId, face: FaceId) -> KernelRes
         .find_map(|(id, f)| (*f == face).then_some(*id))
         .ok_or(KernelError::UnknownFace { body, face })?;
     let model = &solid.app.checkpoint.built().model;
-    let mesh = &solid.app.display.value;
+    let mesh = solid.display(&catallax_mesh::MeshOptions::default(), "face_loops")?;
     let edges: BTreeMap<_, _> = mesh.edges.iter().map(|e| (e.edge, e)).collect();
     let mut loops = Vec::new();
     for boundary in &model.face(id).loops {

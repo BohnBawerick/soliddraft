@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-use catallax_app::IncrementalApplicationBody;
+use catallax_app::EvaluatedApplicationBody;
 use catallax_numbers::Real;
 use catallax_shapes::{
     Circle, Cone, Curve, Cylinder, Ellipse, EllipticCylinder, Line, Plane, Point3, Sphere, Surface, Torus, Vector3,
@@ -36,7 +36,7 @@ pub(super) struct Keys {
 }
 
 impl Keys {
-    pub fn new(app: &IncrementalApplicationBody) -> Self {
+    pub fn new(app: &EvaluatedApplicationBody) -> Self {
         let model = &app.checkpoint.built().model;
         // Each exact position and curve is read once; faces share their edges' keys.
         let vertices: BTreeMap<_, _> = app.names.vertices.keys().map(|v| (*v, VertexKey::new(model, *v))).collect();
@@ -325,7 +325,7 @@ mod tests {
         format!("{:?}:{ends:?}", model.geom().curve(e.curve))
     }
 
-    fn face_text(app: &IncrementalApplicationBody, face: CatFace) -> String {
+    fn face_text(app: &EvaluatedApplicationBody, face: CatFace) -> String {
         let model = &app.checkpoint.built().model;
         let f = model.face(face);
         let support = format!("{:?}", model.geom().surface(f.surface));

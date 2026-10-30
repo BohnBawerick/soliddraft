@@ -25,10 +25,18 @@ successful and failed bundles as `application-loop`.
 slot. It checks volumes, changes the flange depth, undoes and redoes the edit,
 makes the slot shallower and undoes that, rolls back to the plate and returns to the
 end. The slot edit must rebuild only the slot, and the undo and the return to the end
-must run no kernel operation. Its final step makes a drawing.
+must run no kernel operation. Step 25 makes a drawing. Steps 27-32 change the plate
+width to 140 mm, undo and redo, save, diverge, reopen and export checked STEP.
 Model commands, viewport screenshots, SVG views and drawing output use Catallax.
 The view and drawing checks require that backend. Views use the same polygon
 hidden-line method as the drawing workspace.
+
+The adapter uses Catallax's `build_incremental_without_display` entry. Exact
+checkpoints and picking names build immediately; certified meshes enter a
+per-body cache only when requested. Topology, drawing curves and native reference
+points read the same default certified mesh as before. A topology query can still
+require that mesh during an edit. The selectable viewport uses the separate
+unproved preview. Memory accounting does not request a display.
 
 `references.json` is the reference survival scenario. It builds the bracket with
 sketches on the plate's and the boss's top faces, splits the plate's top with a groove,
@@ -323,9 +331,9 @@ Each step's `intervals` record what the user waited for, with its own verdict:
   revision, with a pickable face. A step with no solid ends at the command
   reply; its display request answers `solid: false` and is not timed. This is the
   click and keeps its class budget.
-- `view` is the hidden-line SVG request, with its own 1,000 ms ceiling.
+- `view` is the hidden-line SVG request, timed against a 1,000 ms reference.
 - `measurement` is the explicit measurement request. It keeps its unchanged 1,000 ms
-  budget and also records a 2,000 ms gate, so a 4,245 ms measurement fails both.
+  reference and also records a 2,000 ms threshold; a 4,245 ms measurement warns against both.
 - `export` records each export's elapsed time. It runs after the click, as a separate request.
 
 The bundle tags `command.json`, `display.json`, `view.json` and `measurement.json`
@@ -340,17 +348,11 @@ and a command reply that returns before the viewport shows the edit cannot pass.
 timeout or closed pipe records `incomplete` on the step with the request that did not
 answer and fails the run; it is never counted as a pass.
 
-Every click carries a `verdict`: `strict-pass` met its budget, `known-gap` was accepted
-only under `ci/known-over-budget.json` and is not a strict pass, `fail` was not accepted.
-An output has no click budget, so its verdict is `output`, neither a strict pass nor a
-known gap.
-The result lists `known_gaps` and sets `strict_pass` only when the run passed with none.
-`pass` keeps its meaning of CI acceptance.
-
-`--strict` selects the release-path verdict. The exit status is zero only when `strict_pass`
-is true, so an approved known gap exits one and is printed as an error. Without the flag the
-exit status keeps its meaning of CI acceptance, where a listed gap is a warning. The hosted
-workflow runs without `--strict`; a release gate runs the same scenarios with it.
+Timing verdicts are diagnostics under the 30 October advisory policy. The
+recorded labels distinguish a `strict-pass` within its timing reference, a
+legacy `known-gap`, and a timing overrun. An output has no click budget and
+records `output`. Timing labels do not fail a PR. Correctness, complete evidence
+and work limits remain hard acceptance checks, including when `--strict` is used.
 
 ### Pinned evidence
 
@@ -365,19 +367,18 @@ The baseline-reuse ledger holds no measured real-corpus time saving, so this run
 claims none and does not consume it. A reused baseline would have to arrive as pinned,
 qualified evidence of its own before it could excuse a measurement.
 
-### Independent drawing-view gate
+### Independent drawing-view timing
 
 Every step with a solid requests `scenario_display` first and records the click
-before asking `scenario_view` for the hidden-line SVG. A slow SVG cannot consume
-the user's 1,000 ms edit-to-viewport allowance or escape CI: `drawing_view` has an
-independent strict 1,000 ms ceiling, no known-gap exemptions, error annotations
-and its own per-step CI summary table. A drawing-view timing failure fails the
-scenario while later steps still run, retaining the cost distribution.
+before asking `scenario_view` for the hidden-line SVG. SVG time is recorded
+separately against a 1,000 ms reference, with its own per-step CI summary table.
+A timing overrun is advisory; drawing correctness errors remain hard failures.
+Later steps still run so the cost distribution is retained.
 
 An open drawing follows the part inside the editing command, so the kernel calls that
 regenerate its views (`view_curves`, `section_view`) are in that click. Each such call
-on the command thread must also keep the same 1,000 ms ceiling (`drawing view calls` in
-the step's checks), on top of the click budget. A section on screen is cut from the
+on the command thread is also timed against the 1,000 ms reference (`drawing view calls`
+in the step's checks), alongside the click timing. A section on screen is cut from the
 preview mesh with no boolean, so it costs about what a view costs; the certified section
 an export draws subtracts a half-space through a Catallax boolean, inside the export's
 recorded wait. The drawing exports (`drawing_export_svg`,
@@ -387,51 +388,72 @@ summary, not gated, as the CLI export and drawing checks are; an output cannot b
 as a known gap. Each export reports how many views it drew again from the certified
 mesh, and a view that is a preview of another revision refuses to export.
 
-The initial ceiling is calibrated from the
+The timing reference was calibrated from the
 [current-main baseline run](https://github.com/BohnBawerick/soliddraft/actions/runs/40229375814)
 at `cfedbd7`: 183 capture-thread `view_curves` samples across ten scenarios,
 with median 0.565 ms, nearest-rank p95 417.182 ms, p99 731.791 ms and maximum
-769.365 ms. The 1,000 ms ceiling leaves about 231 ms above the observed maximum
+769.365 ms. The 1,000 ms reference leaves about 231 ms above the observed maximum
 for protocol, SVG serialization and run-to-run variation. The new check measures
 that entire external request, not just the kernel call. The click budget and
 existing approved-gap records are unchanged.
 
-Option 3 remains kernel follow-up: faster fine meshing of curved faces inside
-`view_curves`. Measure that improvement, then tighten the drawing-view ceiling;
-this change does not alter geometric proofs or mesh accuracy to make SVG pass.
+Faster fine meshing of curved faces inside `view_curves` remains kernel
+follow-up. The advisory timing policy does not change geometric proofs or mesh
+accuracy requirements.
 
 ### Click budgets and trends
 
-The strict command-class limits remain 100 ms for stock primitives, 500 ms for
-booleans, 1,000 ms for features and 2,000 ms for comparisons. All bracket and
-progressive steps use the unchanged 1,000 ms feature limit. The owner-approved
-thirteen known gaps in `ci/known-over-budget.json` record the measured times for
-reference steps 16, 17, 18, 25 and 30, bracket steps 14, 16, 18, 19, 22 and 25, and
-drawing plate-edit steps 24 and 35.
-The reference and bracket records identify the local work-PC Linux runner and the
-calibration run; hosted-VM times are not substituted for that machine's baselines.
-The drawing records were added for the 0.1.0 release from the hosted ubuntu-latest
-run named in the file, because the scenario has only run on hosted runners.
-Bracket step 16 records 1,189.068388 ms, with a 1,426.8820656 ms regression limit.
-An over-budget listed step is accepted only up to 120% of its recorded time;
-anything slower fails as a known-gap regression. Its `budget_ms` stays 1,000
-and `within_budget` stays false. An improved listed step can pass the strict
-budget without changing its baseline. Every unlisted step stays strict, and
-the feature-count trend guard is unchanged. Remaining work:
-https://github.com/BohnBawerick/soliddraft/issues/27 — faster booleans when
-rebuilding after an edit. CI prints known gaps as warnings, regressions as errors,
-and uploads every raw step record; an accepted gap is not a claim of meeting
-the original budget.
+Click timings retain the command-class reference limits: 100 ms for stock
+primitives, 500 ms for booleans, 1,000 ms for features and 2,000 ms for
+comparisons. Under the 30 October CI policy, wall-clock budgets and the former
+20% known-step regression limits are advisory. Timings are still recorded;
+correctness and kernel work limits remain hard checks. Pure hang guards use a
+generous ten-minute allowance.
+
+Sample 1 after deferred certified display supports removing ten of the sixteen
+legacy entries. `ci/known-over-budget.json` retains reference steps 17 and 18,
+bracket steps 27, 35 (`drive`) and 43 (`set_value`), and drawing step 24.
+Their original recorded times and measurement sources are unchanged. The new
+measurements are in
+https://github.com/BohnBawerick/soliddraft/actions/runs/41036690172.
+No entry was added or re-recorded.
+
+For this inventory cleanup, each removed entry was below 1,000 ms raw and 900 ms
+when projected to the slow runner class. The projection is `elapsed_ms * 392 /
+calibration_ms`, using the sole `mass_properties` call in
+`bracket/commands/0019/measurement.kernel.json`, still at 92,153 work. This is
+measurement evidence, not a wall-clock PR gate. Further rebuild-speed work:
+https://github.com/BohnBawerick/soliddraft/issues/27.
+
+An edit step can set `max_edit_work` to a nonnegative integer. The runner checks
+`timing.work.edit` against that inclusive ceiling and fails the step with
+`edit-work-regression` when it exceeds the limit. The recorded ceiling is 120%
+of candidate edit work, rounded down. Work guards are hard regression checks. Click timings remain recorded and
+advisory.
+
+Compare baseline and candidate runs of the same scenario files on the same
+machine with:
+
+```sh
+python3 ci/compare-scenario-bundles.py /path/to/base /path/to/candidate \
+  --base-pin "$BASE_PIN" --candidate-pin "$CANDIDATE_PIN"
+```
+
+The pins must be full commit SHAs. The comparison normalises only those pins and
+document UUIDs, alongside the comparator's existing bundle-path, saved document
+id and mesh-rebuild-count handling. It compares viewport PNGs and all STEP files
+as raw bytes. A missing scenario, incomplete bundle or changed answer fails.
 
 An optional `trends` list selects comparable tool series with `tool` and
 `from_step`. Each sample records its current feature count. After the scenario,
 the runner fits the median pairwise slope (Theil–Sen), requiring at least ten
 samples with increasing feature counts. Fitted positive growth over the full
-feature-count range must not exceed the fixed 25 ms noise allowance. This catches
-gradual accumulation even when every individual click stays below 1,000 ms, while
+feature-count range above the fixed 25 ms noise allowance is reported as a
+warning. This identifies gradual accumulation even when every individual click
+stays below 1,000 ms, while
 resisting isolated shared-runner stalls. The progressive scenario excludes only
-the initial empty-document sketch from its sketch trend; its click budget still
-applies. Missing timing or feature-count evidence fails closed.
+the initial empty-document sketch from its sketch trend. Its click timing is
+still recorded. Missing timing or feature-count evidence fails closed.
 
 Timing, rebuild reports and reference-survival assertions remain in the opt-in
 command bundle, scenario runner and CI, not in the model build or normal edit path.
