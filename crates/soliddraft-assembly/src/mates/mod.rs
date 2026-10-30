@@ -196,6 +196,8 @@ pub enum RefusalCode {
     AmbiguousReference,
     /// No face matches a selector.
     NoSuchFace,
+    /// A mate or the source it reads names a configuration other than the default.
+    UnsupportedConfiguration,
     /// The kernel will not prove this face's plane.
     UnsupportedPlane,
     /// A placed plane's normal is not on a world axis.
@@ -231,6 +233,7 @@ impl RefusalCode {
             RefusalCode::DanglingReference => "dangling_reference",
             RefusalCode::AmbiguousReference => "ambiguous_reference",
             RefusalCode::NoSuchFace => "no_such_face",
+            RefusalCode::UnsupportedConfiguration => "unsupported_configuration",
             RefusalCode::UnsupportedPlane => "unsupported_plane",
             RefusalCode::UnsupportedPlacement => "unsupported_placement",
             RefusalCode::NotParallel => "not_parallel",

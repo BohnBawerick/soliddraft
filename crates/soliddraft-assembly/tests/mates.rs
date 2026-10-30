@@ -12,9 +12,10 @@ use glam::{DQuat, DVec3};
 use serde_json::{Value, json};
 use soliddraft_assembly::{
     Alignment, Assembly, AssemblyDocument, AssemblyPackage, ComponentId, EndpointSelector, FaceSelector, FileError,
-    GeneratorChoice, KernelSource, MateEdit, OccurrencePath, OpenOptions, Placement, RefusalCode, SolverState, Step,
+    GeneratorChoice, KernelSource, Mate, MateEdit, MateEntry, OccurrencePath, OpenOptions, Placement, RefusalCode,
+    SolverState, Step,
 };
-use soliddraft_document::{CacheOnlyStore, DocRef, identify_file};
+use soliddraft_document::{CacheOnlyStore, ConfigurationId, DocRef, identify_file};
 use soliddraft_kernel_api::Kernel;
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_model::sketch::{P2, Sketch, solve::solve};
@@ -441,6 +442,79 @@ fn old_and_future_assembly_truth_survives() {
     v["mates"] = json!([{ "kind": "origin", "id": 9, "name": "O", "component": 77, "align_axes": true }]);
     v["next_id"] = json!(10);
     assert!(matches!(Assembly::from_truth(v.to_string().as_bytes(), None), Err(FileError::Invalid(_))));
+}
+
+/// A configuration a file carries on a mate's endpoint or source is kept and refused, never
+/// solved on the default. A save and a load bring it back, as the reserved field always did.
+#[test]
+fn a_configuration_is_refused_not_ignored() {
+    fn nondefault() -> Option<ConfigurationId> {
+        Some(ConfigurationId("nondefault".into()))
+    }
+    type Change = fn(&mut Assembly);
+    let cases: [(&str, Change); 2] = [
+        ("endpoint", |truth| {
+            for entry in &mut truth.mates {
+                if let MateEntry::Known(Mate::Distance { a, name, .. }) = entry
+                    && name == "Z"
+                {
+                    a.configuration = nondefault();
+                }
+            }
+        }),
+        ("source", |truth| truth.sources[0].document.configuration = nondefault()),
+    ];
+    let reload = |r: &mut Rig, change: Change| {
+        r.doc.save(None).unwrap();
+        let package = AssemblyPackage::open(&r.root).unwrap();
+        let mut truth = (**package.assembly()).clone();
+        change(&mut truth);
+        truth.save(&r.root, package.id(), None, &[]).unwrap();
+        r.doc = AssemblyDocument::open(&r.root, options()).unwrap();
+        r.doc.finish_loading();
+        assert_eq!(r.doc.assembly(), &truth, "a save and a load keep it");
+    };
+    let code = RefusalCode::UnsupportedConfiguration;
+    for (name, change) in cases {
+        let mut r = rig(&format!("configuration-{name}"), 10.0);
+        r.graph();
+        reload(&mut r, change);
+        let before = r.state();
+        let refused = r.doc.set_value("gap", "5 mm").unwrap_err();
+        assert_eq!((refused.code, refused.mates.is_empty()), (code, false), "{name}: {refused:?}");
+        assert!(refused.message.contains("nondefault"), "{refused:?}");
+        let edit = [("Z".to_owned(), MateEdit::Distance("9 mm".into()))];
+        assert_eq!(r.doc.edit_mates(&edit).unwrap_err().code, code, "{name}");
+        assert_eq!(r.doc.solver().state, SolverState::Error);
+        assert!(r.doc.solver().diagnostics[0].contains("unsupported_configuration"));
+        let measured = r.doc.mate_measurements();
+        assert!(measured.iter().any(|(_, m)| m.as_ref().is_err_and(|e| e.code == code)), "{name}: {measured:?}");
+        set_height(&r.a_file, 14.0);
+        assert_eq!(r.doc.rebuild().mate_refusal.unwrap().code, code, "{name}: Update refuses as a whole");
+        assert_eq!(r.state(), before, "{name}: a refusal changes nothing");
+    }
+
+    // An Origin mate reads no face, and its component's source is refused all the same.
+    let mut r = rig("configuration-origin", 10.0);
+    r.doc.mate_origin("O", r.a, true, false).unwrap();
+    reload(&mut r, cases[1].1);
+    assert_eq!(r.doc.set_value("gap", "5 mm").unwrap_err().code, code);
+
+    // Nothing to read a new face from, and no change to find one.
+    let mut r = rig("configuration-new", 10.0);
+    reload(&mut r, cases[1].1);
+    let before = r.state();
+    assert_eq!(r.doc.measure_planes(&top(r.a), &bottom(r.b)).unwrap_err().code, code);
+    let refused = r.doc.mate_distance("Z", &top(r.a), &bottom(r.b), "5 mm", Alignment::Opposed, false);
+    assert_eq!(refused.unwrap_err().code, code);
+    assert_eq!(r.state(), before);
+
+    // Outside mates the field stays reserved: an unmated source saves, loads and edits.
+    assert_ne!(r.doc.solver().state, SolverState::Error);
+    r.doc.set_value("gap", "5 mm").unwrap();
+    r.doc.save(None).unwrap();
+    let saved = AssemblyPackage::open(&r.root).unwrap();
+    assert_eq!(saved.assembly().sources[0].document.configuration, nondefault());
 }
 
 /// A proof names the accepted revision, and a part that moved on leaves it retained.

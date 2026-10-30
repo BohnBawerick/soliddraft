@@ -19,6 +19,10 @@ identity and exact half-turn placements carry the exact claim below: a quarter t
 accepted when its normals round onto the axes, but a later general rotation needs a bounded
 transform contract and does not inherit this one.
 
+A file may carry a configuration on an endpoint or on the reference a mate reads. It is kept as
+read and refused as `unsupported_configuration`: nothing solves on the default instead, and an
+unmated reference is left alone.
+
 Anything else is refused by name. Nothing falls back to a mesh, a bounding box or a displayed
 centroid.
 
@@ -113,6 +117,7 @@ the redo stack. Refusals are JSON: `refused` holds the code, with `message`, `ma
 | `dangling_reference` | A stored face is gone at the proposed revision |
 | `ambiguous_reference` | A selector or reference finds several faces |
 | `no_such_face` | A selector finds nothing |
+| `unsupported_configuration` | A mate or its source names a configuration other than the default |
 | `unsupported_plane` | The kernel will not prove this face's plane |
 | `unsupported_placement` | A placed normal is off the world axes |
 | `not_parallel` | The two planes are not parallel |

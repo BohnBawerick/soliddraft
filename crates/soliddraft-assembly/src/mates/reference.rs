@@ -6,15 +6,16 @@
 //! part's persistent [`FaceRef`].
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use soliddraft_document::{ContentHash, DocKind, DocRef, DocumentId};
+use soliddraft_document::{ConfigurationId, ContentHash, DocKind, DocRef, DocumentId};
 use soliddraft_kernel_api::{ExactAxisPlane, FaceId, KernelError};
 use soliddraft_model::{Document as PartDocument, FaceRef, FeatureId, Generator, RepairReason};
 
 use crate::document::AssemblyDocument;
-use crate::mates::{MateRefusal, RefusalCode};
+use crate::mates::{FaceEndpoint, Mate, MateRefusal, RefusalCode};
 use crate::path::ComponentId;
 use crate::schema::Assembly;
 
@@ -98,6 +99,43 @@ pub(crate) struct Proofs {
 
 fn unavailable(message: String) -> MateRefusal {
     MateRefusal::new(RefusalCode::ProofUnavailable, message)
+}
+
+fn configuration_refusal(what: fmt::Arguments, configuration: &ConfigurationId) -> MateRefusal {
+    MateRefusal::new(
+        RefusalCode::UnsupportedConfiguration,
+        format!("{what} names configuration {}; this version mates default configurations only", configuration.0),
+    )
+}
+
+/// Refuses a mate that would have to ignore a configuration. A file keeps the field as
+/// read, so this runs before anything is proved or changed.
+pub(crate) fn check_configurations(truth: &Assembly) -> Result<(), MateRefusal> {
+    for mate in truth.known_mates() {
+        let ends = match mate {
+            Mate::Distance { a, b, .. } => vec![a, b],
+            Mate::Origin { .. } => Vec::new(),
+        };
+        for end in ends {
+            check_endpoint(end).map_err(|r| MateRefusal { mates: vec![mate.name().to_owned()], ..r })?;
+        }
+        for c in mate.components() {
+            let source = truth.component(c).and_then(|c| truth.source(c.source));
+            if let Some(configuration) = source.and_then(|s| s.document.configuration.as_ref()) {
+                let refused = configuration_refusal(format_args!("component {c}"), configuration);
+                return Err(MateRefusal { mates: vec![mate.name().to_owned()], ..refused });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a stored face of a configuration other than the default.
+pub(crate) fn check_endpoint(end: &FaceEndpoint) -> Result<(), MateRefusal> {
+    match &end.configuration {
+        Some(configuration) => Err(configuration_refusal(format_args!("occurrence {}", end.path), configuration)),
+        None => Ok(()),
+    }
 }
 
 impl AssemblyDocument {
@@ -199,6 +237,9 @@ impl AssemblyDocument {
         let source = truth
             .source(c.source)
             .ok_or_else(|| MateRefusal::invalid(format!("component {component} has no source")))?;
+        if let Some(configuration) = &source.document.configuration {
+            return Err(configuration_refusal(format_args!("component {component}"), configuration));
+        }
         if source.document.kind != DocKind::Part {
             return Err(MateRefusal::invalid(format!(
                 "component {component} is a sub-assembly; mates reach the parts placed directly for now"

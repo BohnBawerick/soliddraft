@@ -12,6 +12,7 @@ use soliddraft_kernel_api::Certainty;
 use soliddraft_model::{FaceRef, ValueTable};
 
 use crate::document::{AssemblyDocument, EditError, key_of};
+use crate::mates::reference::{check_configurations, check_endpoint};
 use crate::mates::solver::{self, Constraint, FreeMotion, LocalPlane, SolverState, SolverStatus};
 use crate::mates::{
     Alignment, EndpointSelector, FaceEndpoint, Mate, MateEntry, MateId, MateRefusal, PlaneProof, RefusalCode,
@@ -202,6 +203,7 @@ impl AssemblyDocument {
                 format!("this version cannot solve the mate {}", serde_json::to_string(future).unwrap_or_default()),
             ));
         }
+        check_configurations(truth)?;
         let mut bodies = BTreeMap::new();
         let mut constraints = Vec::new();
         let mut dangling: Vec<(String, String)> = Vec::new();
@@ -282,6 +284,7 @@ impl AssemblyDocument {
         if truth.mates.iter().any(|m| m.known().is_none()) {
             return Err("unknown_mate: the assembly holds a mate this version cannot solve".into());
         }
+        check_configurations(truth).map_err(|r| r.to_string())?;
         let mut bodies = BTreeMap::new();
         let mut constraints = Vec::new();
         let place = |c: ComponentId| truth.component(c).map(|x| x.placement).ok_or(format!("no component {c}"));
@@ -357,6 +360,8 @@ impl AssemblyDocument {
     fn measure(&mut self, a: &FaceEndpoint, b: &FaceEndpoint) -> Result<PlaneMeasurement, MateRefusal> {
         let invalid = || MateRefusal::invalid("this version measures the root's own components");
         let (ca, cb) = (a.component().ok_or_else(invalid)?, b.component().ok_or_else(invalid)?);
+        check_endpoint(a)?;
+        check_endpoint(b)?;
         let (ra, rb) = (Self::part_source(&self.assembly, ca)?, Self::part_source(&self.assembly, cb)?);
         let (pa, pb) = (self.prove(&ra, &a.face)?, self.prove(&rb, &b.face)?);
         let at = |c: ComponentId| self.assembly.component(c).map(|x| x.placement).unwrap_or_default();
