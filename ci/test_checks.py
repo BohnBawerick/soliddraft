@@ -32,6 +32,17 @@ def jobs(text):
 
 
 class Inventory(unittest.TestCase):
+    def test_known_gaps_render_release_notes(self):
+        spec = importlib.util.spec_from_file_location('release', ROOT / 'packaging/release.py')
+        release = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(release)
+        gaps = read('known-over-budget.json')
+        lines = release.known_gap_notes()
+        self.assertEqual(lines[0], '## Known gaps')
+        self.assertIn(gaps['follow_up'], lines[2])
+        self.assertEqual(sum(line.startswith('- ') for line in lines),
+                         len({step['scenario'] for step in gaps['steps']}))
+
     def test_inventory_matches_files_and_has_owners(self):
         entries = read('scenario-inventory.json')['scenarios']
         self.assertEqual(len(entries), len({e['file'] for e in entries}))
@@ -56,7 +67,7 @@ class Routing(unittest.TestCase):
         cls.sources = staticmethod(lambda p: [selector.content(ROOT, p, 'HEAD'), selector.content(ROOT, p)])
 
     def test_frozen_fixtures(self):
-        for name, sha in [('routing-cases.json', '5d14248b62ec7ffeeb6937679129be99732570c4c76542b06b39be7f5b92fd21'),
+        for name, sha in [('routing-cases.json', '6dcefda6a31b4d35e1cc0a69267bc96b78a475022753b6971c0bbad20eac09a1'),
                           ('gate-cases.json', 'c66b54349c735d237663849692c9df802caabf8b9f33d6e03940134d89d23c05')]:
             self.assertEqual(hashlib.sha256((ROOT / 'ci' / name).read_bytes()).hexdigest(), sha)
         for name, sha in read('routing-cases.json')['snapshots'].items():
@@ -101,6 +112,20 @@ class Routing(unittest.TestCase):
         candidate = selector.select(case['changes'], case['event'], '', self.packages, sources)
         self.assertEqual(selector.with_base_rules(candidate.copy(), '', case['changes'], case['event'], '',
                                                   self.packages, sources), candidate)
+
+    def test_multiline_runner_changes_keep_full_checks(self):
+        for runner in ('\n      - ubuntu-latest', ' |\n      ubuntu-latest',
+                       ' [self-hosted,\n      ubuntu-latest]', ' "runner\n      ubuntu-latest"',
+                       ' runner\n      ubuntu-latest'):
+            base = ('name: Hosted CI\non: pull_request\njobs:\n  test-linux:\n    runs-on:' + runner
+                    + '\n    steps:\n      - run: cargo test --workspace\n')
+            case = {'changes': [['M', '.github/workflows/hosted.yml']],
+                    'sources': {'.github/workflows/hosted.yml': [
+                        {'text': base}, {'text': base.replace('ubuntu-latest', 'windows-latest')}]}}
+            with self.subTest(runner=runner):
+                selected = selector.select(case['changes'], 'pull_request', '', self.packages,
+                                           self.case_sources(case))
+                self.assertEqual(set(selected), selector.UNITS | selector.PACKAGES)
 
     def test_every_platform_file_selects_platform_checks(self):
         tracked = selector.git(ROOT, 'ls-files', '-z').decode().split('\0')

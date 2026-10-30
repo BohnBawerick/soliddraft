@@ -117,16 +117,6 @@ def catallax_manifest_move(sources):
     return manifests[0] == manifests[1] and revisions[0] != revisions[1]
 
 
-def catallax_inventory_move(sources):
-    inventories = [json.loads(text) for text in sources]
-    revisions = []
-    for inventory in inventories:
-        revisions.append({i: entry.pop('catallax_revision') for i, entry in enumerate(inventory['scenarios'])
-                          if 'catallax_revision' in entry})
-    return (inventories[0] == inventories[1] and revisions[0] != revisions[1]
-            and all(re.fullmatch(r'[0-9a-f]{40}', pin) for pin in revisions[1].values()))
-
-
 def workflow_jobs(text):
     lines = text.splitlines(keepends=True)
     markers = [i for i, line in enumerate(lines) if line.rstrip('\r\n') == 'jobs:']
@@ -197,8 +187,21 @@ def one_linux_job(sources):
     name = changed[0]
     runners = []
     for body in (old[name], new[name]):
-        runners.append(re.findall(r'^    runs-on:.*$', body, re.M))
-        if (len(runners[-1]) != 1 or 'matrix' in body
+        lines = body.splitlines()
+        runner_lines = [i for i, line in enumerate(lines) if line.startswith('    runs-on:')]
+        if len(runner_lines) != 1:
+            return None
+        index = runner_lines[0]
+        runner = lines[index]
+        # Only single-line labels and expressions have an unambiguous runner value here.
+        if not re.fullmatch(r'    runs-on: (?:[A-Za-z0-9_-]+|\$\{\{.*\}\})[ \t]*(?:#.*)?', runner):
+            return None
+        following = next((line for line in lines[index + 1:]
+                          if line.strip() and not line.lstrip().startswith('#')), '')
+        if following and len(following) - len(following.lstrip()) > 4:
+            return None
+        runners.append(runner)
+        if ('matrix' in body
                 or re.search(r'^\s*strategy:', body, re.M) or shared_yaml_node(body)):
             return None
     return name if runners[0] == runners[1] else None
@@ -208,8 +211,7 @@ def narrow_units(path, sources):
     try:
         name = pathlib.PurePosixPath(path).name
         if ((name == 'Cargo.lock' and catallax_lock_move(sources))
-                or (name == 'Cargo.toml' and catallax_manifest_move(sources))
-                or (path == 'ci/scenario-inventory.json' and catallax_inventory_move(sources))):
+                or (name == 'Cargo.toml' and catallax_manifest_move(sources))):
             return LINUX
         if path == '.github/workflows/hosted.yml':
             job = one_linux_job(sources)
@@ -235,6 +237,11 @@ def select(changes, event, ref, packages, read_sources):
         add(LINUX, 'main Linux selection audit')
     for change in changes:
         for path in change[1:]:
+            if (path in {'ci/run-scenarios.py', 'ci/test_scenarios.py', 'ci/known-over-budget.json',
+                         'ci/fake_mcp_server.py', 'ci/scenario-inventory.json'}
+                    or re.fullmatch(r'ci/scenarios/[^/]+\.json', path)):
+                add({'lint', 'application-loop'}, f'Linux scenario harness: {path}')
+                continue
             sources = read_sources(path)
             narrow = narrow_units(path, sources) if change[0] == 'M' else None
             if narrow:
