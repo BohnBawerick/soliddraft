@@ -1221,12 +1221,13 @@ impl AssemblyDocument {
     pub fn refresh_references(&mut self, open: Vec<OpenDocument>) {
         self.options.open = open;
         let resolver = self.resolver();
-        let freshness: Vec<_> = self
+        let freshness: HashMap<_, _> = self
             .assembly
             .sources
             .iter()
-            .map(|source| {
+            .filter_map(|source| {
                 let r = &source.document;
+                let key = key_of(r)?;
                 let state = match resolver.resolve(r) {
                     Resolution::Found(t) => match t.revision() {
                         Some(now) if *now != r.pinned => crate::Freshness::NewerAvailable { now: now.clone() },
@@ -1234,24 +1235,16 @@ impl AssemblyDocument {
                     },
                     Resolution::Missing(_) => crate::Freshness::Missing,
                 };
-                (key_of(r), state)
+                Some((key, state))
             })
             .collect();
-        for (key, state) in freshness {
-            let Some(key) = key else { continue };
-            let definitions: Vec<_> = self
-                .store
-                .iter()
-                .filter(|(_, d)| {
-                    d.key.document == key.document
-                        && d.key.configuration == key.configuration
-                        && d.key.revision == key.revision
-                })
-                .map(|(i, _)| i)
-                .collect();
-            for i in definitions {
-                self.store.get_mut(i).freshness = state.clone();
-            }
+        let definitions: Vec<_> = self
+            .store
+            .iter()
+            .filter_map(|(i, d)| freshness.get(&d.key.at(None)).map(|state| (i, state.clone())))
+            .collect();
+        for (i, state) in definitions {
+            self.store.get_mut(i).freshness = state;
         }
     }
 
