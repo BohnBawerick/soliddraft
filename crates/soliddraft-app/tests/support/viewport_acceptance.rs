@@ -535,7 +535,7 @@ pub fn readout(app: &App) -> Option<(f32, f32)> {
     let label = node.accesskit_node().value().unwrap_or_default();
     let figure = |name: &str| -> f32 {
         let (_, rest) = label.split_once(name).unwrap_or_else(|| panic!("no {name} in {label:?}"));
-        rest.trim().split_whitespace().next().unwrap().trim_end_matches(',').parse().expect("a number")
+        rest.split_whitespace().next().unwrap().trim_end_matches(',').parse().expect("a number")
     };
     let spacing = (figure("minor"), figure("major"));
     assert!(spacing.0 > 0.0 && spacing.0.is_finite() && spacing.1 > spacing.0, "{label}");
