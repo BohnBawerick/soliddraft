@@ -121,6 +121,181 @@
           "tolerance": 0.005
         }
       ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              30,
+              20,
+              5
+            ],
+            "diameter": 16
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13734.682744,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Boss-Extrude1 \u00b7 End cap",
+        "points": [
+          [
+            30,
+            34,
+            5
+          ]
+        ],
+        "diameter": 4,
+        "countersink": {
+          "diameter": 8,
+          "angle": 90
+        }
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13638.340569,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole2",
+        "diameter": 5
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13615.302223,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Hole2 \u00b7 Hole 1 countersink"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cone"
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Hole2 \u00b7 Hole 1 wall"
+        },
+        {
+          "pointer": "/result/faces/1/surface",
+          "equals": "cylinder"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/countersink-boss.dwprt"
+      },
+      "files": [
+        "{bundle}/countersink-boss.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/countersink-boss.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13615.302223,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 11,
+      "checked_step_export": "{bundle}/countersink-boss.dwprt"
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Hole2 \u00b7 Hole 1 countersink"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cone"
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Hole2 \u00b7 Hole 1 wall"
+        },
+        {
+          "pointer": "/result/faces/1/surface",
+          "equals": "cylinder"
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Boss-Extrude2 \u00b7 End cap",
+        "points": [
+          [
+            30,
+            26,
+            15
+          ]
+        ],
+        "diameter": 3,
+        "countersink": {
+          "diameter": 8,
+          "angle": 90
+        }
+      },
+      "refusal": "intersect.traced-pair-required",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 13615.302223,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 14
     }
   ]
 }

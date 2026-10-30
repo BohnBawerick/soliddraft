@@ -553,6 +553,24 @@ def checked_step_export(binary, part, directory, evidence, timeout):
     checks.extend(output_files([directory / "part.step"]))
     checks.append(cli(sys.executable, [pathlib.Path(__file__).with_name("check-step.py"),
         directory / "part.step", directory / "step-report.json"], directory, "check-step", timeout))
+    if not checks[-1]["pass"]:
+        return checks
+    root = pathlib.Path(__file__).resolve().parent.parent
+    # Use the kernel gate's direct translator, with its own OCP 8 binding.
+    program = """import importlib.metadata, json, pathlib, subprocess, sys
+root, revision, step = sys.argv[1:]
+assert importlib.metadata.version("cadquery-ocp") == "8.0.1.1.0", "raw STEP check requires OCP 8.0.1.1.0"
+actual = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+assert actual == revision, "raw STEP checker checkout differs from the adapter pin"
+sys.path.insert(0, str(pathlib.Path(root) / "tools/checks"))
+from raw_step import valid
+passed = valid(step)
+print(json.dumps({"catallax_revision": actual, "raw_valid": passed}))
+sys.exit(0 if passed else 1)
+"""
+    checks.append(cli(str(root / ".ci-ocp8/bin/python"),
+        ["-c", program, root / ".ci-catallax", pinned_revision(), directory / "part.step"],
+        directory, "raw-step", timeout))
     return checks
 
 
