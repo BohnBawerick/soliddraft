@@ -70,6 +70,8 @@ struct Cached {
     request: Request,
     geometry: soliddraft_document::ContentHash,
     result: Result<Value, String>,
+    /// A picked midpoint's coordinates, shown beside its edge's length.
+    point: Option<Result<Value, String>>,
 }
 
 /// Failing checks use the application's error colour.
@@ -116,8 +118,7 @@ fn request(state: &mut AppState) -> Option<Request> {
 fn prove(state: &AppState, request: Request) -> Result<Value, String> {
     let doc = &state.doc;
     match request {
-        Request::Single(s) => super::measure(doc, s),
-        Request::Midpoint(s) => super::midpoint(doc, s),
+        Request::Single(s) | Request::Midpoint(s) => super::measure(doc, s),
         Request::Pair(a, b, q) => super::pair(doc, a, b, q).and_then(|source| super::measure_pair(doc, &source)),
     }
 }
@@ -134,9 +135,8 @@ fn track(state: &mut AppState, request: Request) {
         state.measure.name.trim().into()
     };
     let source = match request {
-        Request::Single(s) => super::source(&state.doc, s),
+        Request::Single(s) | Request::Midpoint(s) => super::source(&state.doc, s),
         Request::Pair(a, b, q) => super::pair(&state.doc, a, b, q),
-        Request::Midpoint(_) => Err("a midpoint is a coordinate readout; pick a second entity to track".into()),
     };
     let check = (!state.measure.check.trim().is_empty()).then(|| state.measure.check.trim().into());
     let result = source.and_then(|source| state.doc.apply(Command::Track { name, source, check }));
@@ -152,7 +152,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 || state.doc.proof_pending()
             {
                 let result = prove(state, request);
-                state.measure.cached = Some(Cached { request, geometry, result });
+                let point = match request {
+                    Request::Midpoint(s) => Some(super::midpoint(&state.doc, s)),
+                    _ => None,
+                };
+                state.measure.cached = Some(Cached { request, geometry, result, point });
             }
             if let Request::Pair(..) = request {
                 for (i, pick) in state.measure.picks.clone().into_iter().enumerate() {
@@ -166,30 +170,31 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                     }
                 });
             }
+            match state.measure.cached.as_ref().and_then(|c| c.point.as_ref()) {
+                Some(Ok(point)) => {
+                    let c = |i: usize| point["coordinates"][i]["value"].as_f64().unwrap_or(f64::NAN);
+                    let exact = (0..3).all(|i| point["coordinates"][i]["certainty"] == "exact");
+                    let how = if exact { "exact" } else { "bounded" };
+                    ui.label(format!("Midpoint {}, {how}", super::hover::format([c(0), c(1), c(2)])));
+                }
+                Some(Err(error)) => {
+                    ui.colored_label(theme::error(), error);
+                }
+                None => {}
+            }
             match state.measure.cached.as_ref().map(|c| &c.result) {
                 Some(Ok(value)) => {
-                    if let Request::Midpoint(_) = request {
-                        let c = |i: usize| value["coordinates"][i]["value"].as_f64().unwrap_or(f64::NAN);
-                        ui.label(format!("Midpoint {}", super::hover::format([c(0), c(1), c(2)])));
-                        let exact = (0..3).all(|i| value["coordinates"][i]["certainty"] == "exact");
-                        ui.label(if exact { "exact" } else { "bounded" });
-                    } else {
-                        ui.label(number(&value["value"], &value["unit"]));
-                        ui.label(value["certainty"].as_str().unwrap_or(""));
-                        ui.add(egui::TextEdit::singleline(&mut state.measure.name).hint_text("Value name"))
-                            .widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tracked value name")
-                            });
-                        ui.add(
-                            egui::TextEdit::singleline(&mut state.measure.check)
-                                .hint_text("Optional check, e.g. < 12 mm"),
-                        )
-                        .widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Measurement check")
-                        });
-                        if ui.button("Track this").clicked() {
-                            track(state, request);
-                        }
+                    ui.label(number(&value["value"], &value["unit"]));
+                    ui.label(value["certainty"].as_str().unwrap_or(""));
+                    ui.add(egui::TextEdit::singleline(&mut state.measure.name).hint_text("Value name")).widget_info(
+                        || egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tracked value name"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut state.measure.check).hint_text("Optional check, e.g. < 12 mm"),
+                    )
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Measurement check"));
+                    if ui.button("Track this").clicked() {
+                        track(state, request);
                     }
                 }
                 Some(Err(error)) => {
