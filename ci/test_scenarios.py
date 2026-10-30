@@ -67,6 +67,20 @@ class Checks(unittest.TestCase):
         known["x"] = "y"
         self.assertTrue(scenarios.references_kept(known, [], [], True)["pass"], "its feature was deleted")
 
+    def test_new_part_starts_its_own_reference_history(self):
+        ref = {"feature_id": "F1", "feature": "Sketch1", "slot": "sketch plane", "origin": "Top plane",
+            "resolved": True, "kernel_origins": [], "matches_origin": True}
+        known = {}
+        self.assertTrue(scenarios.references_kept(known, [ref], [], False)["pass"])
+        # A refused replacement retains the old document and its reference checks.
+        self.assertFalse(scenarios.references_kept(known, [], [], False, replaced=False)["pass"])
+        self.assertTrue(scenarios.references_kept(known, [], [], False, replaced=True)["pass"])
+        self.assertEqual(known, {})
+        other = dict(ref, origin="Front plane")
+        self.assertTrue(scenarios.references_kept(known, [other], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [ref], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [], [], False)["pass"])
+
     def test_bundle_paths(self):
         self.assertEqual(scenarios.substitute({"path": "{bundle}/a.dwprt", "n": [1, "{bundle}"]}, "/run"),
             {"path": "/run/a.dwprt", "n": [1, "/run"]})
@@ -800,6 +814,42 @@ class CrossStepChecks(unittest.TestCase):
         self.assertFalse(scenarios.check({"revision": 8}, spec, {25: {"revision": 7}})["pass"])
         self.assertFalse(scenarios.check({"revision": 7}, spec, {})["pass"])
         self.assertFalse(scenarios.check({"revision": 7}, {**spec, "same_as_step": 26}, {25: {"revision": 7}})["pass"])
+
+
+class InspectionChecks(unittest.TestCase):
+    def test_comparisons_use_this_step_or_a_prior_step_and_fail_closed(self):
+        for kind in ("same_as", "differs_from"):
+            for earlier in (False, True):
+                for other in (7, 8):
+                    target = {"pointer": "/other", **({"step": 3} if earlier else {})}
+                    rule = {"pointer": "/value", kind: target}
+                    result = scenarios.check({"value": 7, "other": other}, rule, {3: {"other": other}})
+                    self.assertEqual(result["pass"], (other == 7) == (kind == "same_as"))
+                for current, previous in (({"value": 7}, {}), ({}, {3: {"other": 7}})):
+                    self.assertFalse(scenarios.check(current, rule, previous)["pass"])
+
+    def test_inspect_parses_json_and_fails_on_a_nonzero_exit_or_bad_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = pathlib.Path(temp)
+            with mock.patch.object(scenarios.subprocess, "run", return_value=
+                                   scenarios.subprocess.CompletedProcess([], 0, '{"revision": "R0"}', '')) as run:
+                result = scenarios.inspect("soliddraft", {"part": ["doc", "info", "{step}/part.dwprt", "{bundle}"]},
+                                           directory, directory, 5)
+                self.assertEqual(result, {"part": {"revision": "R0"}})
+                self.assertEqual(run.call_args.args[0], ["soliddraft", "doc", "info", str(directory / "part.dwprt"), str(directory)])
+            for code, stdout, error in ((1, '{}', RuntimeError), (0, 'not JSON', ValueError)):
+                with mock.patch.object(scenarios.subprocess, "run", return_value=
+                                       scenarios.subprocess.CompletedProcess([], code, stdout, 'failure')):
+                    with self.assertRaises(error):
+                        scenarios.inspect("soliddraft", {"part": []}, directory, directory, 5)
+
+    def test_folders_exist_before_steps_and_cannot_escape_the_bundle(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bundle = pathlib.Path(temp)
+            scenarios.scenario_folders(bundle, ["work", "work/nested"])
+            self.assertTrue((bundle / "work/nested").is_dir())
+            with self.assertRaises(ValueError):
+                scenarios.scenario_folders(bundle, ["../escape"])
 
 
 class Trends(unittest.TestCase):

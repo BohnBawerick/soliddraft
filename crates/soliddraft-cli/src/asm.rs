@@ -639,6 +639,9 @@ fn tree(file: &Path, a: &Args) -> Result<bool, String> {
 fn rebuild(file: &Path, a: &Args) -> Result<bool, String> {
     let mut doc = open(file, a)?;
     let report = doc.rebuild();
+    if let Some(refusal) = &report.refusal {
+        return Err(refusal.clone());
+    }
     doc.finish_loading();
     let saved = doc.save(None).map_err(|e| e.to_string())?;
     if a.json {

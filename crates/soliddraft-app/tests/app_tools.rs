@@ -15,11 +15,12 @@ use soliddraft_document::DocumentId;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-/// The undo depths of the part and of the open drawing, and which part it is.
+/// The undo depths of the open documents, with identities for replacement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Depths {
     part: usize,
     drawing: Option<usize>,
+    assembly: Option<(DocumentId, usize)>,
     part_id: DocumentId,
 }
 
@@ -27,6 +28,7 @@ fn depths(st: &AppState) -> Depths {
     Depths {
         part: st.doc.undo_depth(),
         drawing: st.drawing.session.as_ref().map(|s| s.doc.undo_depth()),
+        assembly: st.assembly.session.as_ref().map(|s| (s.doc.id(), s.doc.undo_depth())),
         part_id: st.doc.model().id(),
     }
 }
@@ -34,22 +36,34 @@ fn depths(st: &AppState) -> Depths {
 /// Whether the change in depths is what `undo` says a command does.
 fn undoes_as_said(undo: Undo, before: Depths, after: Depths) -> bool {
     let drawing = |d: Depths| d.drawing.unwrap_or(0);
+    let assembly = |d: Depths| d.assembly.map(|(_, depth)| depth).unwrap_or(0);
+    let same_assembly = before.assembly.map(|(id, _)| id) == after.assembly.map(|(id, _)| id);
     let part_moved = after.part as isize - before.part as isize;
     let drawing_moved = drawing(after) as isize - drawing(before) as isize;
+    let assembly_moved = assembly(after) as isize - if same_assembly { assembly(before) as isize } else { 0 };
     let same_drawing = before.drawing.is_some() == after.drawing.is_some();
     match undo {
         Undo::None => before == after,
-        Undo::Step => same_drawing && matches!((part_moved, drawing_moved), (1, 0) | (0, 1)),
-        Undo::Steps => same_drawing && part_moved == 0 && drawing_moved >= 1,
-        Undo::Moves => same_drawing && (part_moved.abs() + drawing_moved.abs()) == 1,
+        Undo::Step => {
+            same_drawing && matches!((part_moved, drawing_moved, assembly_moved), (1, 0, 0) | (0, 1, 0) | (0, 0, 1))
+        }
+        Undo::Steps => same_assembly && same_drawing && part_moved == 0 && assembly_moved == 0 && drawing_moved >= 1,
+        Undo::Moves => {
+            same_assembly && same_drawing && (part_moved.abs() + drawing_moved.abs() + assembly_moved.abs()) == 1
+        }
         // A raw journal command: its own op says.
         Undo::Carried => true,
-        // Another part with an empty undo stack, or another drawing, or none.
+        // Opening a document replaces its history; the other documents stay put.
         Undo::Replaces => {
             let same_part = before.part == after.part && before.part_id == after.part_id;
-            (after.part == 0 && before.part_id != after.part_id && before.drawing == after.drawing)
-                || (after.drawing == Some(0) && before.drawing != Some(0) && same_part)
-                || (after.drawing.is_none() && before.drawing.is_some() && same_part)
+            (before.assembly == after.assembly
+                && ((after.part == 0 && before.part_id != after.part_id && before.drawing == after.drawing)
+                    || (after.drawing == Some(0) && before.drawing != Some(0) && same_part)
+                    || (after.drawing.is_none() && before.drawing.is_some() && same_part)))
+                || (same_part
+                    && before.drawing == after.drawing
+                    && after.assembly.is_some_and(|(_, depth)| depth == 0)
+                    && before.assembly != after.assembly)
         }
     }
 }
@@ -319,6 +333,32 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("undo", json!({}));
     s.call("open", json!({ "path": part }));
     assert!(s.state.doc.features.iter().any(|f| f.name == "Hole"), "the saved part opens with its features");
+
+    // Assembly tools use a small block and keep their own undo history.
+    s.call("new_part", json!({}));
+    s.call(
+        "sketch",
+        json!({ "plane": "top", "shapes": [{
+        "shape": "rectangle", "center": [0,0,0], "width": 40, "height": 30
+    }] }),
+    );
+    s.call("extrude", json!({ "sketch": "Sketch1", "depth": 10, "flip": false }));
+    let linked_part = s.path("linked.dwprt");
+    s.call("save", json!({ "path": linked_part }));
+    let made = s.call("make_assembly", json!({}));
+    assert_eq!(made["assembly"]["components"].as_array().unwrap().len(), 1);
+    s.call("assembly_show_part", json!({}));
+    s.call("rename", json!({ "feature": "Boss-Extrude1", "name": "Linked block" }));
+    s.call("save", json!({ "path": linked_part }));
+    s.call("show_assembly", json!({}));
+    let updated = s.call("assembly_update", json!({}));
+    assert_eq!(updated["updated"], 1);
+    s.call("undo", json!({}));
+    s.call("redo", json!({}));
+    let assembly_file = s.path("rig.dwasm");
+    s.call("assembly_save", json!({ "path": assembly_file }));
+    s.call("open", json!({ "path": assembly_file }));
+    assert_eq!(s.call("model_summary", json!({}))["assembly"]["active"], true);
 
     let tools: BTreeSet<String> = tool_specs(Surface::Mcp).into_iter().map(|t| t.name).collect();
     let missed: Vec<_> = tools.difference(&s.ran).collect();

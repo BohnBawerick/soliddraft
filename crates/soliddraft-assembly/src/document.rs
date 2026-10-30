@@ -972,6 +972,11 @@ impl AssemblyDocument {
         self.start_loading(lookup);
     }
 
+    /// How many accepted edits this assembly can undo.
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
+    }
+
     /// The label of the step undo would revert.
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|r| r.label.as_str())
@@ -1217,57 +1222,156 @@ impl AssemblyDocument {
             .with_open(self.options.open.iter().cloned())
     }
 
-    /// Re-pins every source of the root at its document's current revision, rereads
-    /// the structure and loads what changed. Sub-assemblies show their own pins: run
-    /// Rebuild in a sub-assembly to move its parts on. One undo step.
+    /// Refreshes root source status without changing pins, truth or undo history.
+    /// Before the first save, only matching open documents can be checked.
+    pub fn refresh_references(&mut self, open: Vec<OpenDocument>) {
+        self.options.open = open;
+        let resolver = self.resolver();
+        let freshness: HashMap<_, _> = self
+            .assembly
+            .sources
+            .iter()
+            .filter_map(|source| {
+                let r = &source.document;
+                let key = key_of(r)?;
+                let state = if self.path.is_none()
+                    && !self.options.open.iter().any(|d| Some(d.id) == r.id && d.kind == r.kind)
+                {
+                    crate::Freshness::Unchecked
+                } else {
+                    match resolver.resolve(r) {
+                        Resolution::Found(t) => match t.revision() {
+                            Some(now) if *now != r.pinned => crate::Freshness::NewerAvailable { now: now.clone() },
+                            _ => crate::Freshness::Current,
+                        },
+                        Resolution::Missing(_) => crate::Freshness::Missing,
+                    }
+                };
+                Some((key, state))
+            })
+            .collect();
+        let definitions: Vec<_> = self
+            .store
+            .iter()
+            .filter_map(|(i, d)| freshness.get(&d.key.at(None)).map(|state| (i, state.clone())))
+            .collect();
+        for (i, state) in definitions {
+            self.store.get_mut(i).freshness = state;
+        }
+    }
+
+    /// Accepts every root source together, only after its proposed revision can be
+    /// shown. A refusal keeps the accepted truth, display and undo history.
     pub fn rebuild(&mut self) -> RebuildReport {
         let started = std::time::Instant::now();
         self.finish_loading();
         let resolver = self.resolver();
-        let mut before = self.image(&[], &[]);
-        before.sources = self.assembly.sources.iter().map(|s| (s.id, Some(s.clone()))).collect();
+        let mut proposed = self.assembly.clone();
         let mut report = RebuildReport::default();
-        for s in &mut self.assembly.sources {
-            let old = s.document.pinned.clone();
-            let label = label_of(&s.document);
-            match resolver.resolve(&s.document) {
+        let mut problems = Vec::new();
+        for source in &mut proposed.sources {
+            let r = &mut source.document;
+            let before = r.pinned.clone();
+            let label = label_of(r);
+            let (status, moved) = match resolver.resolve(r) {
                 Resolution::Found(t) => {
                     let moved = t.new_path.clone();
-                    repin(&mut s.document, &t);
-                    let status = if s.document.pinned == old { RefChange::Unchanged } else { RefChange::Updated };
-                    report.sources.push(SourceReport {
-                        source: s.id,
-                        label,
-                        before: old,
-                        after: s.document.pinned.clone(),
-                        status,
-                        moved,
-                    });
+                    repin(r, &t);
+                    (if r.pinned == before { RefChange::Unchanged } else { RefChange::Updated }, moved)
                 }
-                Resolution::Missing(_) => report.sources.push(SourceReport {
-                    source: s.id,
-                    label,
-                    before: old.clone(),
-                    after: old,
-                    status: RefChange::Missing,
-                    moved: None,
-                }),
+                Resolution::Missing(_) => {
+                    problems.push(format!("{}: missing", r.path));
+                    (RefChange::Missing, None)
+                }
+            };
+            report.sources.push(SourceReport {
+                source: source.id,
+                label,
+                before,
+                after: r.pinned.clone(),
+                status,
+                moved,
+            });
+        }
+        if problems.is_empty() {
+            let mut candidate = AssemblyDocument::from_parts(
+                self.path.clone(),
+                self.id,
+                proposed,
+                self.packages.clone(),
+                self.options.clone(),
+            );
+            candidate.store = self.store.clone();
+            let mut lookup = Lookup::with_packages(self.packages.clone(), self.path.as_deref(), &self.options);
+            match candidate.restructure(&mut lookup) {
+                Err(error) => problems.push(format!(
+                    "{}: {error}",
+                    self.assembly.sources.iter().map(|s| s.document.path.as_str()).collect::<Vec<_>>().join(", ")
+                )),
+                Ok(()) => {
+                    candidate.start_loading(lookup);
+                    candidate.finish_loading();
+                    for (i, definition) in candidate.store.iter() {
+                        if i == candidate.root {
+                            continue;
+                        }
+                        let showable = match definition.kind {
+                            DocKind::Part => {
+                                matches!(definition.state, LoadState::DisplayReady | LoadState::ExactReady)
+                            }
+                            _ => !matches!(definition.state, LoadState::Failed | LoadState::Stale),
+                        };
+                        if !showable {
+                            let label = candidate.refs.get(&i).map(|r| r.path.as_str()).unwrap_or(&definition.label);
+                            problems.push(format!("{label}: cannot be shown at the proposed revision"));
+                        }
+                    }
+                    if problems.is_empty()
+                        && report.sources.iter().any(|s| s.status == RefChange::Updated || s.moved.is_some())
+                    {
+                        let mut before = self.image(&[], &[]);
+                        before.sources = self.assembly.sources.iter().map(|s| (s.id, Some(s.clone()))).collect();
+                        self.assembly = candidate.assembly;
+                        self.store = candidate.store;
+                        self.table = candidate.table;
+                        self.root = candidate.root;
+                        self.refs = candidate.refs;
+                        self.parents = candidate.parents;
+                        self.packages = candidate.packages;
+                        self.levels = None;
+                        self.exact.clear();
+                        self.bvh = None;
+                        self.bvh_job = None;
+                        self.bvh_moved.clear();
+                        self.generation += 1;
+                        self.changes = Changes { structure: true, ..Changes::default() };
+                        let after = self.reimage(&before);
+                        self.undo.push(Record {
+                            label: "Update".into(),
+                            before,
+                            after,
+                            rows_before: Vec::new(),
+                            rows_after: Vec::new(),
+                            added: Vec::new(),
+                            removed: Vec::new(),
+                        });
+                        self.redo.clear();
+                    }
+                }
             }
         }
-        if report.sources.iter().any(|s| s.status == RefChange::Updated || s.moved.is_some()) {
-            self.reflatten();
-            let after = self.reimage(&before);
-            self.undo.push(Record {
-                label: "Rebuild".into(),
-                before,
-                after,
-                rows_before: Vec::new(),
-                rows_after: Vec::new(),
-                added: Vec::new(),
-                removed: Vec::new(),
-            });
-            self.redo.clear();
+        if !problems.is_empty() {
+            report.refusal = Some(format!("Update refused: {}; the accepted revisions are kept", problems.join("; ")));
+            for source in &mut report.sources {
+                source.after = source.before.clone();
+                source.moved = None;
+                if source.status == RefChange::Updated {
+                    source.status = RefChange::Unchanged;
+                }
+            }
         }
+        let open = self.options.open.clone();
+        self.refresh_references(open);
         report.elapsed = started.elapsed();
         report
     }
@@ -1276,7 +1380,7 @@ impl AssemblyDocument {
 /// What a Rebuild did to one source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RefChange {
-    /// Already at the document's current revision.
+    /// The accepted pin did not change.
     Unchanged,
     /// Re-pinned at a newer revision.
     Updated,
@@ -1306,7 +1410,9 @@ pub struct SourceReport {
 pub struct RebuildReport {
     /// Every source of the root.
     pub sources: Vec<SourceReport>,
-    /// How long re-pinning and rereading the structure took (meshes load after).
+    /// Why Update was refused, with the blocking source paths.
+    pub refusal: Option<String>,
+    /// How long resolution and loading took.
     pub elapsed: std::time::Duration,
 }
 

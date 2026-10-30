@@ -11,7 +11,7 @@ module = ["app_tools"]
 name = "app.assembly"
 owner = "V4"
 crate = "soliddraft-app"
-paths = ["crates/soliddraft-app/src/assembly.rs"]
+paths = ["crates/soliddraft-app/src/assembly.rs", "crates/soliddraft-app/src/assembly/"]
 module = ["assembly"]
 
 [[areas]]
@@ -377,3 +377,10 @@ owner = "V2"
 crate = "soliddraft-model"
 paths = ["crates/soliddraft-model/src/tracked.rs"]
 module = ["tracked"]
+
+[[areas]]
+name = "v4.assembly_crate"
+owner = "V4"
+crate = "soliddraft-assembly"
+paths = ["crates/soliddraft-assembly/"]
+module = []
