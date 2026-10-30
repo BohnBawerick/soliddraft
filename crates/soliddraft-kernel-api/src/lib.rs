@@ -28,7 +28,7 @@ pub mod contract;
 pub mod counting;
 pub mod drawing;
 pub mod measure;
-pub use measure::{Certainty, Measurement};
+pub use measure::{Certainty, Measurement, PairEndpoint, PairQuantity, PointProof};
 mod edit;
 mod geometry;
 mod history;
@@ -885,6 +885,24 @@ pub trait Kernel: Send + Sync {
     /// Proven area of one trimmed face.
     fn face_area(&self, _body: BodyId, _face: FaceId) -> KernelResult<Measurement> {
         Err(KernelError::Unsupported("proven face area".into()))
+    }
+
+    /// Proven arc-length midpoint of one edge. Display polylines and pick rays cannot
+    /// answer this query.
+    fn edge_midpoint(&self, _body: BodyId, _edge: EdgeId) -> KernelResult<PointProof> {
+        Err(KernelError::Unsupported("proven edge midpoint".into()))
+    }
+
+    /// Proven scalar between two entities of one body, in its part frame. A domain the
+    /// backend cannot prove is refused, never estimated.
+    fn measure_pair(
+        &self,
+        _body: BodyId,
+        _a: PairEndpoint,
+        _b: PairEndpoint,
+        _quantity: PairQuantity,
+    ) -> KernelResult<Measurement> {
+        Err(KernelError::Unsupported("proven pair measurement".into()))
     }
 
     /// The records of every operation that produced `body`, oldest first.

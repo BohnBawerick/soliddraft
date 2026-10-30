@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Measurement};
+use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Measurement, PairEndpoint, PairQuantity};
 
 use crate::{Document, EdgeRef, FaceRef};
 
@@ -20,6 +20,60 @@ pub enum Source {
         /// Persistent reference.
         reference: FaceRef,
     },
+    /// One scalar between two sources of the same part.
+    Pair {
+        /// The requested scalar.
+        quantity: PairQuantity,
+        /// First source.
+        a: Box<Endpoint>,
+        /// Second source.
+        b: Box<Endpoint>,
+    },
+}
+
+/// One end of a pair request.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Endpoint {
+    /// A whole edge.
+    Edge {
+        /// Persistent reference.
+        reference: EdgeRef,
+    },
+    /// A whole face.
+    Face {
+        /// Persistent reference.
+        reference: FaceRef,
+    },
+    /// An edge's arc-length midpoint.
+    EdgeMidpoint {
+        /// Persistent reference to the edge.
+        reference: EdgeRef,
+    },
+}
+
+impl Endpoint {
+    /// The label saved when the reference was created.
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Edge { reference } | Self::EdgeMidpoint { reference } => &reference.label,
+            Self::Face { reference } => &reference.label,
+        }
+    }
+
+    /// The point selector, if this end is a point of its entity.
+    pub fn point(&self) -> Option<&'static str> {
+        matches!(self, Self::EdgeMidpoint { .. }).then_some("midpoint")
+    }
+
+    fn resolve(&self, doc: &Document, body: BodyId) -> Result<PairEndpoint, String> {
+        match self {
+            Self::Edge { reference } => doc.resolve_edge(reference, body).map(PairEndpoint::Edge),
+            Self::Face { reference } => doc.resolve_face(reference, body).map(PairEndpoint::Face),
+            Self::EdgeMidpoint { reference } => doc.resolve_edge(reference, body).map(PairEndpoint::EdgeMidpoint),
+        }
+        .map_err(|e| format!("{}: {}", self.label(), e.message))
+    }
 }
 
 /// A resolved entity on the current part body.
@@ -28,14 +82,17 @@ pub enum Entity {
     Edge(EdgeId),
     /// A face area.
     Face(FaceId),
+    /// A pair scalar.
+    Pair(PairQuantity, PairEndpoint, PairEndpoint),
 }
 
 impl Source {
-    /// The label saved when the reference was created.
-    pub fn label(&self) -> &str {
+    /// The label saved when the reference was created. A pair names both sources.
+    pub fn label(&self) -> String {
         match self {
-            Self::Edge { reference } => &reference.label,
-            Self::Face { reference } => &reference.label,
+            Self::Edge { reference } => reference.label.clone(),
+            Self::Face { reference } => reference.label.clone(),
+            Self::Pair { a, b, .. } => format!("{} and {}", a.label(), b.label()),
         }
     }
 
@@ -44,6 +101,7 @@ impl Source {
         match self {
             Self::Edge { .. } => "edge_length",
             Self::Face { .. } => "face_area",
+            Self::Pair { quantity, .. } => quantity.name(),
         }
     }
 
@@ -52,6 +110,20 @@ impl Source {
         match self {
             Self::Edge { .. } => "mm",
             Self::Face { .. } => "mm2",
+            Self::Pair { quantity, .. } => quantity.unit(),
+        }
+    }
+
+    /// Refuses a pair whose point selectors do not suit its quantity. A point distance
+    /// joins two midpoints; the other quantities measure whole entities.
+    pub fn validate(&self) -> Result<(), String> {
+        let Self::Pair { quantity, a, b } = self else { return Ok(()) };
+        let points = (a.point().is_some(), b.point().is_some());
+        match (quantity, points) {
+            (PairQuantity::PointDistance, (true, true)) => Ok(()),
+            (PairQuantity::PointDistance, _) => Err("point_distance needs a midpoint on both sources".into()),
+            (_, (false, false)) => Ok(()),
+            _ => Err(format!("{} measures whole entities and takes no midpoint", quantity.name())),
         }
     }
 
@@ -60,6 +132,9 @@ impl Source {
         match self {
             Self::Edge { reference } => doc.resolve_edge(reference, body).map(Entity::Edge),
             Self::Face { reference } => doc.resolve_face(reference, body).map(Entity::Face),
+            Self::Pair { quantity, a, b } => {
+                return Ok(Entity::Pair(*quantity, a.resolve(doc, body)?, b.resolve(doc, body)?));
+            }
         }
         .map_err(|e| format!("{}: {}", self.label(), e.message))
     }
@@ -152,6 +227,7 @@ impl Document {
         {
             return Err(format!("the name {name} is already taken"));
         }
+        source.validate()?;
         let check = check.map(|text| Check::parse(text, source.unit())).transpose()?;
         self.measure_source(source)?;
         state.tracked.push(Row { name: name.into(), source: source.clone(), check });
@@ -172,6 +248,7 @@ impl Document {
         match source.resolve(self, body)? {
             Entity::Edge(edge) => self.kernel.edge_length(body, edge),
             Entity::Face(face) => self.kernel.face_area(body, face),
+            Entity::Pair(quantity, a, b) => self.kernel.measure_pair(body, a, b, quantity),
         }
         .map_err(|e| format!("{} could not be measured: {e}", source.label()))
     }
@@ -215,7 +292,7 @@ impl Document {
                 && o.geometry.as_ref() == geometry.as_ref();
             let reason = if current { None } else { Some(o.reason.as_deref().unwrap_or("proof pending")) };
             let m = o.measurement;
-            rows.push(json!({"name": row.name, "expression": null, "value": m.map(|m| m.value),
+            let mut row_json = json!({"name": row.name, "expression": null, "value": m.map(|m| m.value),
             "unit": row.source.unit(), "tracked": {
                 "quantity": row.source.quantity(), "source": row.source.label(),
                 "state": if current { "current" } else { "stale" }, "reason": reason,
@@ -223,7 +300,12 @@ impl Document {
                 "frame": "part", "geometry": o.geometry,
                 "check": row.check.as_ref().map(|c| json!({"text": c.text,
                     "state": c.state(if current { m.as_ref() } else { None })}))
-            }}));
+            }});
+            if let Source::Pair { a, b, .. } = &row.source {
+                row_json["tracked"]["sources"] =
+                    json!([a, b].map(|e| json!({"source": e.label(), "point": e.point()})));
+            }
+            rows.push(row_json);
         }
         Value::Array(rows)
     }

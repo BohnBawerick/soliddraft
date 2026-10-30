@@ -122,6 +122,18 @@ impl Kernel for Gated {
     fn face_area(&self, body: BodyId, face: FaceId) -> KernelResult<Measurement> {
         self.inner.face_area(body, face)
     }
+    fn edge_midpoint(&self, body: BodyId, edge: EdgeId) -> KernelResult<PointProof> {
+        self.inner.edge_midpoint(body, edge)
+    }
+    fn measure_pair(
+        &self,
+        body: BodyId,
+        a: PairEndpoint,
+        b: PairEndpoint,
+        quantity: PairQuantity,
+    ) -> KernelResult<Measurement> {
+        self.inner.measure_pair(body, a, b, quantity)
+    }
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
         self.inner.history(body)
     }

@@ -6,6 +6,7 @@ pub(crate) mod tools;
 
 use crate::document::{Document, Selection};
 use serde_json::{Value, json};
+use soliddraft_kernel_api::PairEndpoint;
 use soliddraft_model::tracked::{Entity, Source};
 
 /// Names a persistent source using the interface label only as a fallback.
@@ -43,16 +44,28 @@ pub fn measure(doc: &Document, selection: Selection) -> Result<Value, String> {
 pub fn values(doc: &Document) -> Value {
     let mut values = doc.model().values_summary();
     if let Some(body) = doc.model().body() {
+        let title = |s: Selection| doc.describe(s).map(|i| i.title);
+        let end = |e: PairEndpoint| match e {
+            PairEndpoint::Edge(edge) | PairEndpoint::EdgeMidpoint(edge) => title(Selection::Edge(edge)),
+            PairEndpoint::Face(face) => title(Selection::Face(face)),
+        };
         for row in doc.model().tracked() {
-            let selection = row.source.resolve(doc.model(), body).ok().map(|e| match e {
-                Entity::Edge(edge) => Selection::Edge(edge),
-                Entity::Face(face) => Selection::Face(face),
-            });
-            if let Some(info) = selection.and_then(|s| doc.describe(s))
-                && let Some(rows) = values.as_array_mut()
-                && let Some(value) = rows.iter_mut().find(|v| v["name"] == row.name)
-            {
-                value["tracked"]["source"] = info.title.into();
+            let Some(value) = values.as_array_mut().and_then(|rows| rows.iter_mut().find(|v| v["name"] == row.name))
+            else {
+                continue;
+            };
+            let titles = match row.source.resolve(doc.model(), body) {
+                Ok(Entity::Edge(edge)) => vec![title(Selection::Edge(edge))],
+                Ok(Entity::Face(face)) => vec![title(Selection::Face(face))],
+                Ok(Entity::Pair(_, a, b)) => vec![end(a), end(b)],
+                Err(_) => continue,
+            };
+            let Some(titles) = titles.into_iter().collect::<Option<Vec<String>>>() else { continue };
+            value["tracked"]["source"] = titles.join(" and ").into();
+            if titles.len() == 2 {
+                for (i, t) in titles.into_iter().enumerate() {
+                    value["tracked"]["sources"][i]["source"] = t.into();
+                }
             }
         }
     }
