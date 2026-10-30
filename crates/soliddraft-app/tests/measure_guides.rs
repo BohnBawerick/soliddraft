@@ -91,11 +91,11 @@ fn midpoint_guide_toggle_commits_the_seen_relation() {
 
     let after = sketch(&h, id);
     assert_eq!(after.entities.len(), before.entities.len() + 1, "exactly one new line");
-    let line = after.entities.last().unwrap().clone();
+    let line = *after.entities.last().unwrap();
     assert!(line.construction);
     let EntityKind::Line { a, b } = line.kind else { panic!("{line:?}") };
     assert!(a.dist(P2::new(0.0, -15.0)) < 1e-9 && b.u.abs() < 1e-9 && (b.v + 5.0).abs() < 0.5, "{a:?} {b:?}");
-    let added: Vec<_> = after.constraints[before.constraints.len()..].iter().map(|c| c.kind.clone()).collect();
+    let added: Vec<_> = after.constraints[before.constraints.len()..].iter().map(|c| c.kind).collect();
     assert_eq!(
         added,
         [
