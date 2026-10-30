@@ -267,6 +267,16 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(s.state.doc.features.is_empty());
     s.call("sketch", json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}));
     s.call("extrude", json!({"sketch":"Sketch1","depth":12,"flip":false}));
+    let area = s.call("measure_entity", json!({"entity":"Boss-Extrude1 · End cap"}));
+    assert_eq!(area["quantity"], "face_area");
+    assert_eq!(area["value"], 1200.0);
+    assert_eq!(area["unit"], "mm2");
+    s.call("track", json!({"name":"plate_area","entity":"Boss-Extrude1 · End cap","check":"> 1000"}));
+    let values = s.call("model_summary", json!({}))["values"].clone();
+    assert_eq!(values[0]["name"], "plate_area");
+    assert_eq!(values[0]["tracked"]["check"]["state"], "pass");
+    s.call("undo", json!({}));
+    assert!(s.call("model_summary", json!({}))["values"].as_array().unwrap().is_empty());
     s.call("set_value", json!({"name":"part_depth","expression":"12"}));
     s.call("drive", json!({"feature":"Boss-Extrude1","parameter":"depth","expression":"part_depth"}));
     s.call("rename_value", json!({"name":"part_depth","to":"plate_depth"}));
