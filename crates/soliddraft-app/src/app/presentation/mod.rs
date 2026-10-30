@@ -2,17 +2,17 @@
 
 pub(super) mod docks;
 
+use crate::command_line::{Status, StatusNote};
 use crate::commands;
 use crate::document::Selection;
 use crate::file;
 use crate::icons::{self, Icon};
 use crate::panels::{self, Side};
-use crate::state::{AppAction, AppState, NoteKind};
+use crate::state::{AppAction, AppState, EditorParams, NoteKind};
 use crate::theme;
 use crate::viewport::look::Preset;
 use crate::viewport::render::DisplayMode;
 use egui::{Align2, CornerRadius, Key, Rect, Sense, Stroke, pos2, vec2};
-use std::time::Duration;
 
 use super::workspace::SolidDraftApp;
 use docks::{Panels, show_dock, strip};
@@ -252,85 +252,17 @@ impl SolidDraftApp {
         });
     }
 
-    pub(super) fn status_bar(&mut self, ui: &mut egui::Ui) {
-        if self.state.assembly.is_active() {
-            crate::assembly::status_bar(ui, &mut self.state);
-            return;
-        }
-        if self.state.drawing.is_active() {
-            crate::drawing::status_bar(ui, &mut self.state);
-            return;
-        }
-        let st = &mut self.state;
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 18.0;
-            ui.add_space(4.0);
-            let errors = st.doc.error_count();
-            let repairs = st.doc.repair_count();
-            if let Some((message, kind)) = st.edit_status() {
-                ui.label(
-                    egui::RichText::new(message)
-                        .family(theme::semibold())
-                        .size(11.5)
-                        .color(if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() }),
-                );
-            } else if errors == 0 && repairs == 0 {
-                ui.label(egui::RichText::new("Rebuild OK").family(theme::semibold()).size(11.5).color(theme::ok()));
-            } else if errors > 0 {
-                ui.label(
-                    egui::RichText::new(format!("{errors} rebuild error{}", if errors == 1 { "" } else { "s" }))
-                        .family(theme::semibold())
-                        .size(11.5)
-                        .color(theme::error()),
-                );
-            } else {
-                ui.label(
-                    egui::RichText::new(format!("{repairs} feature{} to repair", if repairs == 1 { "" } else { "s" }))
-                        .family(theme::semibold())
-                        .size(11.5)
-                        .color(theme::warn()),
-                );
-            }
-            let n = st.doc.features.len();
-            ui.label(
-                egui::RichText::new(format!("{n} feature{}", if n == 1 { "" } else { "s" }))
-                    .size(11.5)
-                    .color(theme::muted()),
-            );
-            ui.label(
-                egui::RichText::new(format!("{} triangles", st.doc.triangle_count())).size(11.5).color(theme::muted()),
-            );
-            let mode = match (&st.sketch, &st.editor) {
-                (Some(s), _) => {
-                    let name = st.doc.feature(s.feature).map(|f| f.name.clone()).unwrap_or("sketch".into());
-                    format!("Editing {name} · {}", s.sketch.status.label())
-                }
-                (None, Some(e)) => format!("Editing {}", e.title()),
-                _ => "Editing part".to_owned(),
-            };
-            ui.label(egui::RichText::new(mode).size(11.5).color(theme::muted()));
-            if let Some(note) = &st.note
-                && note.at.elapsed() < Duration::from_secs(6)
-            {
-                let color = match note.kind {
-                    NoteKind::Info => theme::muted(),
-                    NoteKind::Ok => theme::ok(),
-                    NoteKind::Error => theme::error(),
-                };
-                ui.label(egui::RichText::new(&note.text).size(11.5).color(color));
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_space(10.0);
-                let coords = match (st.sketch.as_ref().and_then(|s| s.cursor), st.hover_point) {
-                    (Some(c), _) => format!("u {:.1}   v {:.1} mm", c.u, c.v),
-                    (None, Some(p)) => format!("x {:.1}   y {:.1}   z {:.1} mm", p.x, p.y, p.z),
-                    _ => "mm".to_owned(),
-                };
-                ui.label(egui::RichText::new(coords).size(11.5).color(theme::muted()));
-                ui.label(egui::RichText::new(format!("{:.1} ms", st.frame_ms)).size(11.5).color(theme::muted()))
-                    .on_hover_text("Frame time, smoothed");
-            });
-        });
+    /// What the bottom bar says about the active document.
+    pub(super) fn status(&self) -> Status {
+        let st = &self.state;
+        let other = if st.assembly.is_active() {
+            crate::assembly::status(st)
+        } else if st.drawing.is_active() {
+            crate::drawing::status(st)
+        } else {
+            None
+        };
+        other.unwrap_or_else(|| part_status(st))
     }
 
     /// The side area: a resizable panel while shown, a strip with its title while
@@ -506,6 +438,51 @@ impl SolidDraftApp {
                 Act::Save => st.save_provider_settings(),
             }
         }
+    }
+}
+
+/// The part's status: how the last rebuild went, what is being edited, how big the model
+/// is and where the pointer is.
+fn part_status(st: &AppState) -> Status {
+    let errors = st.doc.error_count();
+    let repairs = st.doc.repair_count();
+    let headline = if let Some((message, kind)) = st.edit_status() {
+        (message.to_owned(), if matches!(kind, NoteKind::Error) { theme::error() } else { theme::muted() })
+    } else if errors > 0 {
+        (format!("{errors} rebuild error{}", if errors == 1 { "" } else { "s" }), theme::error())
+    } else if repairs > 0 {
+        (format!("{repairs} feature{} to repair", if repairs == 1 { "" } else { "s" }), theme::warn())
+    } else {
+        ("Rebuild OK".to_owned(), theme::ok())
+    };
+    let mode = match (&st.sketch, &st.editor) {
+        (Some(s), _) => {
+            let name = st.doc.feature(s.feature).map(|f| f.name.clone()).unwrap_or("sketch".into());
+            format!("Editing {name} · {}", s.sketch.status.label())
+        }
+        (None, Some(e)) => match e.params {
+            EditorParams::Extrude(_) => "Editing Extrude".to_owned(),
+            EditorParams::Cut(_) => "Editing Cut".to_owned(),
+            _ => format!("Editing {}", e.title().trim_start_matches("Edit ")),
+        },
+        _ => "Editing part".to_owned(),
+    };
+    let n = st.doc.features.len();
+    let position = match (st.sketch.as_ref().and_then(|s| s.cursor), st.hover_point) {
+        (Some(c), _) => format!("u {:.1}   v {:.1} mm", c.u, c.v),
+        (None, Some(p)) => format!("x {:.1}   y {:.1}   z {:.1} mm", p.x, p.y, p.z),
+        _ => "mm".to_owned(),
+    };
+    Status {
+        headline,
+        note: st.note.as_ref().map(StatusNote::of),
+        details: vec![
+            mode,
+            format!("{n} feature{}", if n == 1 { "" } else { "s" }),
+            format!("{} triangles", st.doc.triangle_count()),
+            format!("{:.1} ms", st.frame_ms),
+        ],
+        position,
     }
 }
 

@@ -393,7 +393,7 @@ impl eframe::App for SolidDraftApp {
             .and_then(|sel| self.state.doc.describe(sel));
         self.state.hover_point = self.state.viewport.hover_point;
 
-        // The menu and status bars are chrome; the ribbon paints its own strip and body.
+        // The menu bar is chrome; the ribbon paints its own strip and body.
         let chrome_frame = egui::Frame::new().fill(theme::chrome()).inner_margin(egui::Margin::ZERO);
         let panel_frame = egui::Frame::new().fill(theme::panel()).inner_margin(egui::Margin::ZERO);
         egui::Panel::top("menu")
@@ -406,12 +406,8 @@ impl eframe::App for SolidDraftApp {
             .frame(panel_frame)
             .show_separator_line(false)
             .show(root, |ui| ribbon::show(ui, &mut self.state));
-        egui::Panel::bottom("status")
-            .exact_size(theme::STATUS_HEIGHT)
-            .frame(chrome_frame)
-            .show_separator_line(true)
-            .show(root, |ui| self.status_bar(ui));
-        crate::command_line::panel(root, &mut self.state);
+        let status = self.status();
+        crate::command_line::panel(root, &mut self.state, &status);
         let window_width = root.available_width();
         self.side_panel(root, Side::Tree, window_width);
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::chrome())).show(root, |ui| {
@@ -439,7 +435,7 @@ impl eframe::App for SolidDraftApp {
         }
         self.autosave(ctx);
         self.automation_step(ctx, frame);
-        if self.state.note.as_ref().is_some_and(|n| n.at.elapsed() < Duration::from_secs(6)) {
+        if self.state.note.as_ref().is_some_and(|n| n.at.elapsed() < crate::command_line::NOTE_ON_BAR) {
             ctx.request_repaint_after(Duration::from_millis(500));
         }
         let title = format!("{}{} - SolidDraft", self.state.doc.name, if self.state.doc.dirty { " •" } else { "" });

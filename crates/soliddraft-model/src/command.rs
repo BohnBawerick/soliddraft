@@ -391,6 +391,11 @@ impl Document {
         self.undo.len()
     }
 
+    /// How many entries the redo stack holds.
+    pub fn redo_depth(&self) -> usize {
+        self.redo.len()
+    }
+
     /// Joins the undo entries recorded since the stack was `depth` deep into one entry
     /// called `label`, so commands run one at a time undo and redo as one. An assistant
     /// proposal needs this: its later commands read features its earlier ones made, so

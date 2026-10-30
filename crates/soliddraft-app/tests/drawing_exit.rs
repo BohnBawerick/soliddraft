@@ -380,7 +380,7 @@ fn bracket_drawing_dimensioned_exported_updated_and_repaired() {
     assert!(matches!(dimensions(&harness).iter().find(|d| d.0 == boss_dia).unwrap().1, DimensionKind::Diameter));
     // Slot length and height in the left view.
     // Placements must clear other entities: a click on a curve adds it to the pick.
-    let slot_len = smart_dimension(&mut harness, left, &[Vec3::new(0.0, 45.0, 25.0)], vec2(0.0, -30.0));
+    let slot_len = smart_dimension(&mut harness, left, &[Vec3::new(0.0, 45.0, 25.0)], vec2(0.0, -40.0));
     let (v, _) = value_of(&harness, slot_len);
     assert!((v - 40.0).abs() < 1e-6, "slot length {v}");
     let slot_h = smart_dimension(&mut harness, left, &[Vec3::new(0.0, 25.0, 31.0)], vec2(25.0, 0.0));

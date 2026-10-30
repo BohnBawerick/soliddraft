@@ -331,7 +331,6 @@ pub const WINDOW_RADIUS: u8 = 6;
 pub const MENU_HEIGHT: f32 = 30.0;
 pub const RIBBON_TABS_HEIGHT: f32 = 26.0;
 pub const RIBBON_BODY_HEIGHT: f32 = 92.0;
-pub const STATUS_HEIGHT: f32 = 24.0;
 pub const COMMAND_LINE_HEIGHT: f32 = 32.0;
 pub const ROW_HEIGHT: f32 = 22.0;
 

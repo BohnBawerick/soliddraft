@@ -112,7 +112,7 @@ fn side_areas_toggle_resize_and_come_back_next_run() {
     let full = viewport_rect(&harness);
     assert!((full.left() - Side::Tree.default_width()).abs() < 2.0, "tree at its default width: {full:?}");
     assert!(full.right() >= 1440.0 - 1.0, "nothing right of the viewport: {full:?}");
-    let bottom = 900.0 - theme::STATUS_HEIGHT - theme::COMMAND_LINE_HEIGHT;
+    let bottom = 900.0 - theme::COMMAND_LINE_HEIGHT;
     assert!((full.bottom() - bottom).abs() < 3.0, "the command line sits under the viewport: {full:?}");
     save(&mut harness, "p01-default");
 
