@@ -331,7 +331,7 @@
       ],
       "catallax_revision": "1556d52678efa27af32a32914723cad5e222746f",
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
-      "supported_limits": "One part with named-value overrides only; widths 120, 140 and 152.4 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm",
+      "supported_limits": "One part with named-value overrides only; widths 120, 140 and 152.4 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; rows Default, Narrow, Wide, Zero and Void; Zero rejects zero depth, Void rejects the empty cut with flange_d 5 mm and hole_d 200 mm, then repairs with hole_d 12 mm",
       "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; narrow.dwprt; wide.dwprt; commands/0024 and commands/0028/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
     }
   ]
