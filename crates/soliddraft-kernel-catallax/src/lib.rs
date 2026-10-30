@@ -777,7 +777,11 @@ impl Kernel for CatallaxKernel {
     }
 
     fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
-        self.observe("lattice", || self.build_field(tag, body, params))
+        self.observe("lattice", || self.build_lattice(tag, body, params))
+    }
+
+    fn gyroid(&self, tag: &OpTag, body: BodyId, params: &Gyroid) -> KernelResult<OpResult> {
+        self.observe("gyroid", || self.build_gyroid(tag, body, params))
     }
 
     fn export_field_stl(&self, body: BodyId) -> KernelResult<FieldExport> {

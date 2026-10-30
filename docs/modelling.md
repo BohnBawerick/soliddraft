@@ -266,6 +266,14 @@ With a finished body, choose Lattice on the Features ribbon. Cell size and densi
 
 The lattice stays last. Edit an earlier feature to rebuild it, or return before the lattice to continue CAD work without losing its settings. The `lattice` and `edit_lattice` agent verbs use the same document commands. Old two-setting lattice files open with their earlier body visible and a message naming the missing cell size and density. Configure those inputs to build the field.
 
+## Terminal network gyroid
+
+With a finished body, choose Gyroid on the Features ribbon. The body becomes the part of it where `sin X cos Y + sin Y cos Z + sin Z cos X` is at most the level, with `X = 2πx/a` and `a` the period. Period, accuracy and minimum detail are in millimetres. The level is a dimensionless constant, not a wall thickness or a volume fraction, and zero and negative levels are valid. The gyroid uses the part's origin and axes. The viewport and tree label the displayed mesh as an unproved preview, and the part has no field volume or mass.
+
+A gyroid stays last like a lattice, and a part has one terminal field. The `gyroid` and `edit_gyroid` agent verbs use the same document commands. Only the network with a constant level is available. Sheet gyroids, graded levels and position functions come later.
+
+Export can refuse a valid gyroid. The certified STL must be one closed, connected surface, and some levels leave separate pieces. At period 10 mm and level 1/2, the box from (-10, -10, -5) to (10, 10, 15) leaves a separate corner piece, so the export refuses instead of dropping it.
+
 ## Named values
 
 The `set_value` tool creates or changes a named expression. `drive` binds a sketch

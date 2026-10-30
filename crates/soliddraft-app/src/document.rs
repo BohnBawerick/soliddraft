@@ -391,6 +391,7 @@ pub enum FeatureKind {
     Shell(model::ShellFeature),
     ImportStep(model::ImportStepFeature),
     Lattice(model::LatticeFeature),
+    Gyroid(model::GyroidFeature),
 }
 
 impl FeatureKind {
@@ -412,6 +413,7 @@ impl FeatureKind {
             FeatureKind::Shell(_) => "Shell",
             FeatureKind::ImportStep(_) => "Import",
             FeatureKind::Lattice(_) => "Lattice",
+            FeatureKind::Gyroid(_) => "Gyroid",
         }
     }
 
@@ -434,6 +436,7 @@ impl FeatureKind {
             FeatureKind::Shell(_) => "shell",
             FeatureKind::ImportStep(_) => "import",
             FeatureKind::Lattice(_) => "lattice",
+            FeatureKind::Gyroid(_) => "gyroid",
         }
     }
 
@@ -484,6 +487,7 @@ impl FeatureKind {
             FeatureKind::Shell(s) => model::FeatureKind::Shell(s.clone()),
             FeatureKind::ImportStep(i) => model::FeatureKind::ImportStep(i.clone()),
             FeatureKind::Lattice(l) => model::FeatureKind::Lattice(*l),
+            FeatureKind::Gyroid(g) => model::FeatureKind::Gyroid(*g),
         }
     }
 
@@ -557,6 +561,7 @@ impl FeatureKind {
             model::FeatureKind::Shell(s) => FeatureKind::Shell(s.clone()),
             model::FeatureKind::ImportStep(i) => FeatureKind::ImportStep(i.clone()),
             model::FeatureKind::Lattice(l) => FeatureKind::Lattice(*l),
+            model::FeatureKind::Gyroid(g) => FeatureKind::Gyroid(*g),
         }
     }
 }
@@ -682,6 +687,7 @@ impl Feature {
             FeatureKind::Shell(s) => format!("{} mm wall", fmt_mm(s.thickness)),
             FeatureKind::ImportStep(i) => i.source_name.clone(),
             FeatureKind::Lattice(l) => format!("unproved preview · ±{} mm", fmt_mm(l.accuracy_mm)),
+            FeatureKind::Gyroid(g) => format!("unproved preview · ±{} mm", fmt_mm(g.accuracy_mm)),
         }
     }
 
@@ -2643,7 +2649,7 @@ impl Document {
     }
 
     pub fn bounds(&self) -> Option<(Vec3, Vec3)> {
-        if self.model.active_lattice().is_some() {
+        if self.model.active_field().is_some() {
             let bounds = self.kernel().topology(self.display_body()?).ok()?.bbox;
             return Some((kv(bounds.min), kv(bounds.max)));
         }
@@ -2787,6 +2793,12 @@ impl Document {
                     FeatureKind::Lattice(l) => {
                         details.push(("Accuracy".to_owned(), format!("{} mm", fmt_mm(l.accuracy_mm))));
                         details.push(("Minimum detail".to_owned(), format!("{} mm", fmt_mm(l.min_detail_mm))));
+                    }
+                    FeatureKind::Gyroid(g) => {
+                        details.push(("Period".to_owned(), format!("{} mm", fmt_mm(g.period_mm))));
+                        details.push(("Level".to_owned(), fmt_mm(g.level)));
+                        details.push(("Accuracy".to_owned(), format!("{} mm", fmt_mm(g.accuracy_mm))));
+                        details.push(("Minimum detail".to_owned(), format!("{} mm", fmt_mm(g.min_detail_mm))));
                     }
                     FeatureKind::ImportStep(i) => {
                         details.push(("File".to_owned(), i.source_name.clone()));

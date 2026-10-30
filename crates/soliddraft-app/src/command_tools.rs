@@ -217,6 +217,20 @@ pub enum Line {
         #[serde(default)]
         min_detail: Option<f64>,
     },
+    /// Replaces the finished body with a terminal network gyroid.
+    Gyroid { kind: soliddraft_kernel_api::GyroidKind, period: f64, level: f64, accuracy: f64, min_detail: f64 },
+    /// Edits only the supplied gyroid settings.
+    EditGyroid {
+        feature: String,
+        #[serde(default)]
+        period: Option<f64>,
+        #[serde(default)]
+        level: Option<f64>,
+        #[serde(default)]
+        accuracy: Option<f64>,
+        #[serde(default)]
+        min_detail: Option<f64>,
+    },
     /// Hollows the part, leaving named faces open.
     Shell {
         /// Faces left open; empty requests a closed shell.
@@ -554,6 +568,26 @@ pub fn edit_lattice_params() -> Vec<(&'static str, Value)> {
     let mut params = vec![feature_param()];
     params.extend(
         lattice_params().into_iter().filter(|(key, _)| *key != "cell").map(|(key, value)| (key, optional(value))),
+    );
+    params
+}
+
+/// The `gyroid` verb's parameters.
+pub fn gyroid_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("kind", constant("network")),
+        ("period", number("Length of one period in millimetres")),
+        ("level", number("Constant dimensionless level of the gyroid function, which may be zero or negative")),
+        ("accuracy", number("Certified export accuracy in millimetres")),
+        ("min_detail", number("Minimum preserved detail in millimetres")),
+    ]
+}
+
+/// The `edit_gyroid` verb's parameters.
+pub fn edit_gyroid_params() -> Vec<(&'static str, Value)> {
+    let mut params = vec![feature_param()];
+    params.extend(
+        gyroid_params().into_iter().filter(|(key, _)| *key != "kind").map(|(key, value)| (key, optional(value))),
     );
     params
 }
@@ -1246,6 +1280,36 @@ impl Line {
                 }
                 run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Lattice(lattice) })?;
             }
+            Line::Gyroid { kind, period, level, accuracy, min_detail } => {
+                let gyroid = soliddraft_model::GyroidFeature {
+                    kind: *kind,
+                    period_mm: positive("period", *period)?,
+                    level: *level,
+                    accuracy_mm: *accuracy,
+                    min_detail_mm: *min_detail,
+                    ..Default::default()
+                };
+                run.apply(doc, Command::AddFeature(FeatureKind::Gyroid(gyroid)))?;
+            }
+            Line::EditGyroid { feature, period, level, accuracy, min_detail } => {
+                let id = feature_by_name(doc, feature)?;
+                let Some(FeatureKind::Gyroid(mut gyroid)) = doc.feature(id).map(|f| f.kind.clone()) else {
+                    return Err(format!("{feature} is not a gyroid"));
+                };
+                if let Some(v) = period {
+                    gyroid.period_mm = positive("period", *v)?;
+                }
+                if let Some(v) = level {
+                    gyroid.level = *v;
+                }
+                if let Some(v) = accuracy {
+                    gyroid.accuracy_mm = *v;
+                }
+                if let Some(v) = min_detail {
+                    gyroid.min_detail_mm = *v;
+                }
+                run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Gyroid(gyroid) })?;
+            }
             Line::Shell { open_faces, thickness } => {
                 let shell = soliddraft_model::ShellFeature {
                     open_faces: open_faces.iter().map(|f| face_ref_by_name(doc, f)).collect::<Result<Vec<_>, _>>()?,
@@ -1401,6 +1465,8 @@ impl Line {
             Line::Draft { .. } => "draft",
             Line::Lattice { .. } => "lattice",
             Line::EditLattice { .. } => "edit_lattice",
+            Line::Gyroid { .. } => "gyroid",
+            Line::EditGyroid { .. } => "edit_gyroid",
             Line::Shell { .. } => "shell",
             Line::EditShell { .. } => "edit_shell",
             Line::EditHole { .. } => "edit_hole",
@@ -1505,6 +1571,10 @@ impl Line {
                 ("Lattice".into(), format!("Cubic cell {} mm, beam radius {} mm", fmt_mm(*cell_size), fmt_mm(*radius)))
             }
             Line::EditLattice { feature, .. } => (format!("Edit {feature}"), "Change lattice settings".into()),
+            Line::Gyroid { period, level, .. } => {
+                ("Gyroid".into(), format!("Network, period {} mm, level {}", fmt_mm(*period), fmt_mm(*level)))
+            }
+            Line::EditGyroid { feature, .. } => (format!("Edit {feature}"), "Change gyroid settings".into()),
             Line::Shell { open_faces, thickness } => (
                 "Shell".into(),
                 format!(
@@ -2198,6 +2268,11 @@ fn params_json(doc: &Document, kind: &FeatureKind) -> Value {
             "frame": l.frame, "accuracy_mm": l.accuracy_mm, "min_detail_mm": l.min_detail_mm,
             "display": "unproved preview",
         }),
+        FeatureKind::Gyroid(g) => json!({
+            "type": "gyroid", "kind": g.kind, "period_mm": g.period_mm, "level": g.level,
+            "frame": g.frame, "accuracy_mm": g.accuracy_mm, "min_detail_mm": g.min_detail_mm,
+            "display": "unproved preview",
+        }),
         FeatureKind::ImportStep(i) => json!({
             "type": "import_step", "source_name": i.source_name, "sha256": i.sha256,
             "bytes": i.source.len(), "decisions": i.decisions,
@@ -2212,7 +2287,7 @@ impl CommandTools<'_> {
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
         let proof = doc.proof_state();
         let current = proof.current_proved_display();
-        let mass = if current && doc.model().active_lattice().is_none() { cached_body_mass(doc) } else { None };
+        let mass = if current && doc.model().active_field().is_none() { cached_body_mass(doc) } else { None };
         json!({
             "part": doc.name,
             "units": "mm",

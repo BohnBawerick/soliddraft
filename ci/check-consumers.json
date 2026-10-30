@@ -5,6 +5,7 @@
     "ci/cargo-cache.sh": [],
     "ci/check-consumers.json": "all",
     "ci/check-gate.py": "all",
+    "ci/check-gyroid-stl.py": ["application-loop"],
     "ci/check-lattice-stl.py": ["application-loop"],
     "ci/check-ownership.py": ["lint"],
     "ci/check-registry.json": "all",

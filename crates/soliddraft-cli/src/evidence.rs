@@ -153,7 +153,7 @@ impl<'a> Evidence<'a> {
         let root = self.directory.as_ref().ok_or("scenario view requires --bundle")?;
         let dir = root.join(format!("{:04}", self.sequence));
         let doc = &self.host.state.doc;
-        if doc.model().active_lattice().is_some() {
+        if doc.model().active_field().is_some() {
             return Err("drawings of field parts are coming soon".into());
         }
         let body = doc.display_body().ok_or("part has no displayed solid")?;
@@ -277,7 +277,8 @@ fn references(doc: &soliddraft_model::Document) -> Value {
             FeatureKind::Pattern(_)
             | FeatureKind::Revolve(_)
             | FeatureKind::ImportStep(_)
-            | FeatureKind::Lattice(_) => Vec::new(),
+            | FeatureKind::Lattice(_)
+            | FeatureKind::Gyroid(_) => Vec::new(),
         };
         if refs.is_empty() {
             continue;

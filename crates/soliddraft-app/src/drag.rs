@@ -60,6 +60,7 @@ impl Dimension {
             | FeatureKind::Shell(_)
             | FeatureKind::ImportStep(_)
             | FeatureKind::Lattice(_)
+            | FeatureKind::Gyroid(_)
             | FeatureKind::Revolve(_) => None,
         }
     }
@@ -110,7 +111,9 @@ pub fn edit_command(id: FeatureId, kind: FeatureKind) -> Option<Command> {
         | FeatureKind::Draft(_)
         | FeatureKind::Shell(_)
         | FeatureKind::Revolve(_)) => Command::EditFeature { id, kind },
-        FeatureKind::Sketch(_) | FeatureKind::ImportStep(_) | FeatureKind::Lattice(_) => return None,
+        FeatureKind::Sketch(_) | FeatureKind::ImportStep(_) | FeatureKind::Lattice(_) | FeatureKind::Gyroid(_) => {
+            return None;
+        }
     })
 }
 

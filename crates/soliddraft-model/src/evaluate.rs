@@ -4,15 +4,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FaceRole, Hole, HolePlacement, ImportOptions,
-    ImportStepRequest, ImportStepResult, KernelError, KernelResult, Lattice, Mirror, OpResult, OpTag, Origin,
-    PatternLayout, Plane, SurfaceKind, Vec3,
+    BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FaceRole, Gyroid, Hole, HolePlacement,
+    ImportOptions, ImportStepRequest, ImportStepResult, KernelError, KernelResult, Lattice, Mirror, OpResult, OpTag,
+    Origin, PatternLayout, Plane, SurfaceKind, Vec3,
 };
 
 use crate::feature::{
-    BlendFeature, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind, HoleFeature,
-    ImportStepFeature, LatticeFeature, MirrorFeature, PatternFeature, PatternSpec, PlaneRef, ProfileSource,
-    RevolveFeature, SketchFeature, SketchPlane,
+    BlendFeature, DraftFeature, EndCondition, ExtrudeFeature, ExtrudeOp, Feature, FeatureId, FeatureKind,
+    GyroidFeature, HoleFeature, ImportStepFeature, LatticeFeature, MirrorFeature, PatternFeature, PatternSpec,
+    PlaneRef, ProfileSource, RevolveFeature, SketchFeature, SketchPlane,
 };
 use crate::rebuild::BuildCache;
 use crate::reference::{self, Generator, NamedFace, ReferenceSlot, RepairNeeded, RepairReason, View};
@@ -217,6 +217,7 @@ impl Document {
             FeatureKind::Shell(s) => self.build_shell(f, s, current),
             FeatureKind::ImportStep(i) => self.build_import(f, i, current),
             FeatureKind::Lattice(l) => self.build_lattice(f, l, current),
+            FeatureKind::Gyroid(g) => self.build_gyroid(f, g, current),
         };
         cache.insert(key, built, &self.kernel)
     }
@@ -782,6 +783,25 @@ impl Document {
             min_detail_mm: l.min_detail_mm,
         };
         let result = self.kernel.lattice(&OpTag::new(format!("{}.lattice", f.id)), body, &params);
+        self.finish_field(result, current)
+    }
+
+    fn build_gyroid(&self, f: &Feature, g: &GyroidFeature, current: Option<BodyId>) -> Built {
+        let Some(body) = current else { return Built::failed(current, "there is no body for the gyroid") };
+        let params = Gyroid {
+            kind: g.kind,
+            period_mm: g.period_mm,
+            level: g.level,
+            frame: g.frame,
+            accuracy_mm: g.accuracy_mm,
+            min_detail_mm: g.min_detail_mm,
+        };
+        let result = self.kernel.gyroid(&OpTag::new(format!("{}.gyroid", f.id)), body, &params);
+        self.finish_field(result, current)
+    }
+
+    /// A terminal field names one display region and no analytic face.
+    fn finish_field(&self, result: KernelResult<OpResult>, current: Option<BodyId>) -> Built {
         self.finish(result, current, |r| {
             vec![NamedFace {
                 origin: Origin { tag: r.record.tag.clone(), role: FaceRole::Other },

@@ -2,8 +2,12 @@
 
 use egui::{Key, Modifiers, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
+use serde_json::json;
 use soliddraft_app::app::{Automation, SolidDraftApp};
+use soliddraft_app::app_tools::AppTools;
 use soliddraft_app::document::{Command, Document, ExtrudeParams, FeatureKind, ProfileKind};
+use soliddraft_assistant::Caller;
+use soliddraft_assistant::tools::call_checked;
 
 type App = Harness<'static, SolidDraftApp>;
 
@@ -76,6 +80,76 @@ fn ribbon_and_editor_create_a_terminal_unproved_lattice() {
     assert!(last.summary().contains("unproved preview"));
     let image = std::path::PathBuf::from(
         std::env::var_os("LATTICE_UI_EVIDENCE").unwrap_or_else(|| temporary.join("lattice.png").into_os_string()),
+    );
+    app.render().unwrap().save(image).unwrap();
+}
+
+#[test]
+fn ribbon_and_editor_create_a_terminal_unproved_gyroid() {
+    let instance = egui_wgpu::wgpu::Instance::default();
+    assert!(
+        !pollster::block_on(instance.enumerate_adapters(egui_wgpu::wgpu::Backends::all())).is_empty(),
+        "gyroid click acceptance requires a renderer"
+    );
+    let temporary = std::env::temp_dir().join(format!("soliddraft-gyroid-{}", std::process::id()));
+    std::fs::create_dir_all(&temporary).unwrap();
+    soliddraft_app::file::set_config_dir(Some(temporary.join("config")));
+    let mut doc = Some(Document::new("Gyroid UI", soliddraft_app::kernel()));
+    let mut app = Harness::builder()
+        .with_size(vec2(1440.0, 900.0))
+        .with_render_every_step(true)
+        .wgpu()
+        .build_eframe(move |cc| SolidDraftApp::new(cc, doc.take().unwrap(), Automation::default()));
+    // The body of G0, made by the verbs the scenario uses.
+    for (tool, arguments) in [
+        (
+            "sketch",
+            json!({"plane":"top", "offset":-5, "shapes":[
+                {"shape":"rectangle", "center":[0,0,-5], "width":20, "height":20}
+            ]}),
+        ),
+        ("extrude", json!({"sketch":"Sketch1", "depth":10, "flip":false})),
+    ] {
+        let caller = Caller::Mcp { client: "test".into() };
+        let out = call_checked(&mut AppTools { state: &mut app.state_mut().state }, tool, arguments, &caller);
+        assert!(!out.is_error, "{tool}: {}", out.content);
+    }
+    app.run_steps(5);
+    button(&mut app, "Gyroid");
+    assert!(app.state().state.editor.is_some());
+    // Seed other values so typing proves each control writes its parameter.
+    let soliddraft_app::state::EditorParams::Gyroid(g) = &mut app.state_mut().state.editor.as_mut().unwrap().params
+    else {
+        panic!("gyroid editor")
+    };
+    g.period_mm = 20.0;
+    g.level = 0.5;
+    app.run_steps(2);
+    field(&mut app, "Period value", "10");
+    field(&mut app, "Level (dimensionless) value", "0");
+    assert!(app.query_by_label("unproved preview").is_some());
+    button(&mut app, "OK (Enter)");
+    app.run_steps(12);
+    let last = app.state().state.doc.features.last().unwrap();
+    assert_eq!(last.name, "Gyroid1");
+    let FeatureKind::Gyroid(g) = last.kind else { panic!("last feature is gyroid") };
+    assert_eq!((g.period_mm, g.level), (10.0, 0.0));
+    assert_eq!(last.status, soliddraft_app::document::FeatureStatus::Ok);
+    assert!(last.summary().contains("unproved preview"));
+
+    button(&mut app, "Gyroid1");
+    button(&mut app, "Edit feature");
+    field(&mut app, "Level (dimensionless) value", "0.5");
+    button(&mut app, "OK (Enter)");
+    app.run_steps(12);
+    let last = app.state().state.doc.features.last().unwrap();
+    assert_eq!(last.name, "Gyroid1");
+    let FeatureKind::Gyroid(g) = last.kind else { panic!("last feature is gyroid") };
+    assert_eq!((g.period_mm, g.level), (10.0, 0.5));
+    assert_eq!(last.status, soliddraft_app::document::FeatureStatus::Ok);
+    assert!(app.query_by_label("unproved preview").is_some(), "the viewport keeps its label");
+    let image = std::path::PathBuf::from(
+        std::env::var_os("GYROID_UI_EVIDENCE").unwrap_or_else(|| temporary.join("gyroid.png").into_os_string()),
     );
     app.render().unwrap().save(image).unwrap();
 }

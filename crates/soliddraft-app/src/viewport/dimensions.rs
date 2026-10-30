@@ -178,6 +178,7 @@ fn values(kind: &FeatureKind) -> Vec<String> {
         | FeatureKind::Cut(_)
         | FeatureKind::Mirror(_)
         | FeatureKind::Lattice(_)
+        | FeatureKind::Gyroid(_)
         | FeatureKind::ImportStep(_) => Vec::new(),
     }
 }

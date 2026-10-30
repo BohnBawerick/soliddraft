@@ -311,7 +311,9 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         ),
         Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
         Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
-        Some(EditorParams::Lattice(_)) => (state.editor.as_ref().unwrap().title(), Icon::LinearPattern),
+        Some(EditorParams::Lattice(_) | EditorParams::Gyroid(_)) => {
+            (state.editor.as_ref().unwrap().title(), Icon::LinearPattern)
+        }
         Some(EditorParams::Shell(_)) => (state.editor.as_ref().unwrap().title(), Icon::Shell),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
         Some(EditorParams::Repair { .. }) => ("Repair references".to_owned(), Icon::Repair),
@@ -659,6 +661,36 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                     });
                 }
                 l.cell = Some(soliddraft_kernel_api::LatticeCell::Cubic);
+                ui.label("unproved preview");
+                if let Some(error) = &editor.error {
+                    error_row(ui, error);
+                }
+            }
+            EditorParams::Gyroid(g) => {
+                theme::section_label(ui, "Network gyroid");
+                hint(ui, "Fixed to the part origin. Unproved preview; export certifies the mesh.");
+                ui.horizontal(|ui| {
+                    ui.label("Period");
+                    let response = ui.add(egui::DragValue::new(&mut g.period_mm).speed(0.1).suffix(" mm"));
+                    response
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Period value"));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Level (dimensionless)");
+                    let response = ui.add(egui::DragValue::new(&mut g.level).speed(0.01));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Level (dimensionless) value")
+                    });
+                });
+                for (label, v) in [("Accuracy", &mut g.accuracy_mm), ("Minimum detail", &mut g.min_detail_mm)] {
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        let response = ui.add(egui::DragValue::new(v).speed(0.01).suffix(" mm"));
+                        response.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
+                        });
+                    });
+                }
                 ui.label("unproved preview");
                 if let Some(error) = &editor.error {
                     error_row(ui, error);
@@ -1142,7 +1174,10 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (Selection::Feature(_), Some(crate::document::FeatureKind::Draft(_))) => Icon::Draft,
         (Selection::Feature(_), Some(crate::document::FeatureKind::Shell(_))) => Icon::Shell,
         (Selection::Feature(_), Some(crate::document::FeatureKind::ImportStep(_))) => Icon::Import,
-        (Selection::Feature(_), Some(crate::document::FeatureKind::Lattice(_))) => Icon::LinearPattern,
+        (
+            Selection::Feature(_),
+            Some(crate::document::FeatureKind::Lattice(_) | crate::document::FeatureKind::Gyroid(_)),
+        ) => Icon::LinearPattern,
         (Selection::Feature(_), _) => Icon::Extrude,
         (Selection::Body, _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,

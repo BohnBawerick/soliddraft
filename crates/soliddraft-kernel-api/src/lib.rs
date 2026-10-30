@@ -220,13 +220,22 @@ pub enum LatticeCell {
     Cubic,
 }
 
-/// The lattice grid is fixed to the part origin and axes.
+/// A terminal field is fixed to the part origin and axes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum LatticeFrame {
-    /// The part frame, with a node at its origin.
+pub enum FieldFrame {
+    /// The part frame, with a lattice node at its origin.
     #[default]
     Part,
+}
+
+/// The supported gyroid kind.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GyroidKind {
+    /// The material where the gyroid function is at most the level.
+    #[default]
+    Network,
 }
 
 /// A certified, labelled field file and its proof report.
@@ -273,10 +282,27 @@ pub struct Lattice {
     /// Constant beam radius in millimetres.
     pub radius_mm: f64,
     /// Fixed part frame.
-    pub frame: LatticeFrame,
+    pub frame: FieldFrame,
     /// Accuracy the lattice is proven to, in millimetres.
     pub accuracy_mm: f64,
     /// The smallest detail the lattice keeps, in millimetres.
+    pub min_detail_mm: f64,
+}
+
+/// Parameters of the final gyroid stage.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Gyroid {
+    /// Gyroid kind.
+    pub kind: GyroidKind,
+    /// Length of one period in millimetres.
+    pub period_mm: f64,
+    /// Constant dimensionless level of the gyroid function, which may be negative.
+    pub level: f64,
+    /// Fixed part frame.
+    pub frame: FieldFrame,
+    /// Accuracy the gyroid is proven to, in millimetres.
+    pub accuracy_mm: f64,
+    /// The smallest detail the gyroid keeps, in millimetres.
     pub min_detail_mm: f64,
 }
 
@@ -751,6 +777,13 @@ pub trait Kernel: Send + Sync {
     fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
         let _ = (tag, body, params);
         Err(KernelError::Unsupported("lattice".into()))
+    }
+
+    /// Compiles a terminal gyroid and its unproved display. Labelled export certifies
+    /// closedness, connectivity and the requested two-sided distance bound.
+    fn gyroid(&self, tag: &OpTag, body: BodyId, params: &Gyroid) -> KernelResult<OpResult> {
+        let _ = (tag, body, params);
+        Err(KernelError::Unsupported("gyroid".into()))
     }
 
     /// Certifies an active field and writes its labelled STL.

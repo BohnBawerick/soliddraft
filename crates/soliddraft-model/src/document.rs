@@ -202,7 +202,7 @@ impl Document {
         if self.is_dirty() {
             return Err("the current part has not been rebuilt; wait for its rebuild before exporting".into());
         }
-        let field = self.active_lattice().is_some();
+        let field = self.active_field().is_some();
         if field && format != soliddraft_exchange::Format::Stl {
             return Err("field parts export as meshes; use labelled STL".into());
         }
