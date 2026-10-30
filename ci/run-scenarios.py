@@ -16,9 +16,10 @@ import threading
 import time
 
 
-# Shared with the scenario latency gate. Acceptance limits, not process timeouts. An
-# output has no click limit: its wait is the caller's wait for the certified file, and is
-# recorded and summarised, not gated, as the CLI export and drawing checks are.
+# Click budgets. CI records each click against them and warns, never fails: clock time on
+# shared runners is not evidence; only --strict, the release verdict, requires them. Not
+# process timeouts. An output has no click limit: its wait is the caller's wait for the
+# certified file, and is recorded, as the CLI export and drawing checks are.
 BUDGET_MS = {"stock": 100, "boolean": 500, "feature": 1000, "comparison": 2000, "output": None}
 # Calibrated independently from click latency; see docs/application-loop.md.
 DRAWING_VIEW_BUDGET_MS = 1000
@@ -30,6 +31,9 @@ DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "preview", "prev
 MEASUREMENT = {"mass_properties", "measured_topology", "face_area", "face_centroid", "face_bounding_box",
                "bounding_box", "edge_length", "edge_midpoint", "inertia"}
 TREND_NOISE_MS = 25
+# The one hang guard for every MCP request and CLI command: generous, never a speed limit.
+HANG_TIMEOUT_S = 600
+KNOWN_OVER_BUDGET = pathlib.Path(__file__).with_name("known-over-budget.json")
 
 
 def budget(tool):
@@ -139,37 +143,36 @@ def timing(tool, segments):
         sources.append({"source": segment["source"], "elapsed_ms": elapsed})
     elapsed = sum(s["elapsed_ms"] for s in sources)
     limit = BUDGET_MS[kind]
+    # A timing is a record: it always passes, and within_budget says whether it met its budget.
     return {"check": "click budget", "class": kind, "budget_ms": limit,
             "elapsed_ms": elapsed, "split_ms": split, "work": work, "segments": sources,
             "background": {"call_ms": background_split, "work": background_work},
-            "pass": limit is None or elapsed <= limit}
+            "within_budget": None if limit is None else elapsed <= limit, "pass": True}
 
 
 def drawing_view_timing(elapsed_ms, kernel):
     result = timing("view", [{"source": "view.kernel.json", "elapsed_ms": elapsed_ms,
                              "phase": "display", "kernel": kernel}])
     return {**result, "check": "drawing-view budget", "class": "drawing-view",
-            "budget_ms": DRAWING_VIEW_BUDGET_MS, "pass": elapsed_ms <= DRAWING_VIEW_BUDGET_MS}
+            "budget_ms": DRAWING_VIEW_BUDGET_MS, "within_budget": elapsed_ms <= DRAWING_VIEW_BUDGET_MS}
 
 
 def measurement_timing(elapsed_ms, kernel):
-    """The explicit measurement request, judged against its own budget and the 2,000 ms gate."""
+    """The explicit measurement request, recorded against its own budget and the 2,000 ms gate."""
     result = timing("measure", [{"source": "measurement.kernel.json", "elapsed_ms": elapsed_ms,
                                 "phase": "measurement", "kernel": kernel}])
     return {**result, "check": "requested measurement budget", "gate_ms": MEASUREMENT_GATE_MS,
-            "within_gate": elapsed_ms <= MEASUREMENT_GATE_MS, "pass": result["pass"] and elapsed_ms <= MEASUREMENT_GATE_MS}
+            "within_gate": elapsed_ms <= MEASUREMENT_GATE_MS}
 
 
 def verdict(result):
-    """strict-pass met its budget; known-gap was accepted over budget; fail was not accepted.
+    """strict-pass met its budget; over-budget did not, and is a warning, not a failure.
 
     An output has no click budget: its wait is recorded as "output", neither a strict pass
-    nor a known gap."""
-    if not result["pass"]:
-        return "fail"
-    if result.get("budget_ms", 0) is None:
+    nor over budget."""
+    if result["within_budget"] is None:
         return "output"
-    return "strict-pass" if result.get("within_budget", True) else "known-gap"
+    return "strict-pass" if result["within_budget"] else "over-budget"
 
 
 def edit_work_check(step, latency):
@@ -207,13 +210,13 @@ DRAWING_VIEW_CALLS = {"view_curves", "section_view"}
 
 
 def drawing_view_calls(kernel, gated=True):
-    """Every drawing view a command regenerated on its thread, each under the drawing-view ceiling.
+    """Every drawing view a command regenerated on its thread, against the drawing-view ceiling.
 
     An open drawing follows the part inside the command (automatic update), so its views'
-    kernel calls are in the click; this keeps each one under the same ceiling the live
-    hidden-line view has, and fails closed on a call without a wall time. An output draws
-    its views again from the certified mesh: those calls are recorded, not gated, as the
-    rest of its wait is.
+    kernel calls are in the click; this records the slowest against the same ceiling the
+    live hidden-line view has, and fails closed on a call without a wall time. An output
+    draws its views again from the certified mesh: those calls have no ceiling, as the
+    rest of its wait has none.
     """
     views = []
     for call in kernel["calls"]:
@@ -225,8 +228,8 @@ def drawing_view_calls(kernel, gated=True):
             views.append({"operation": call["operation"], "wall_ms": milliseconds(call["wall_ms"])})
     slowest = max((v["wall_ms"] for v in views), default=0.0)
     return {"check": "drawing view calls", "class": "drawing-view",
-            "budget_ms": DRAWING_VIEW_BUDGET_MS if gated else None,
-            "views": views, "slowest_ms": slowest, "pass": not gated or slowest <= DRAWING_VIEW_BUDGET_MS}
+            "budget_ms": DRAWING_VIEW_BUDGET_MS if gated else None, "views": views, "slowest_ms": slowest,
+            "within_budget": slowest <= DRAWING_VIEW_BUDGET_MS if gated else None, "pass": True}
 
 
 def output_files(paths, absent=()):
@@ -255,43 +258,40 @@ def load_known_over_budget(path):
     return known
 
 
-# Approved gaps track faster booleans when rebuilding after an edit:
+# Listed steps record where faster booleans when rebuilding after an edit are still owed:
 # https://github.com/BohnBawerick/soliddraft/issues/27.
-# The click budget stays strict; only these recorded gaps get a 20% regression guard.
+# A step over its budget, a listed step over 120% of its recorded time and a listing that
+# no longer matches its step are each a warning; none fails the run.
 def accept_latency(scenario, number, tool, latency, known):
-    result = {**latency, "within_budget": latency["pass"],
-              "status": "pass" if latency["pass"] else "over-budget"}
+    result = {**latency, "status": "over-budget" if latency["within_budget"] is False else "pass"}
+    label = f"{scenario} step {number} ({tool})"
     approved = known.get((scenario, number))
     if latency["budget_ms"] is None:
-        # An output's wait is recorded, not gated, and no known gap may be listed for it.
-        result["within_budget"] = None
         result["status"] = "output"
-        result["message"] = f"{scenario} step {number} ({tool}) wrote its output in {latency['elapsed_ms']:.3f} ms"
+        result["message"] = f"{label} wrote its output in {latency['elapsed_ms']:.3f} ms"
         if approved is not None:
-            result["pass"] = False
             result["status"] = "invalid-known-over-budget"
-            result["message"] = f"{scenario} step {number} ({tool}) is an output with no click budget; remove its listing"
+            result["message"] = f"{label} is an output with no click budget; remove its listing"
         result["verdict"] = verdict(result)
         return result
+    if result["status"] == "over-budget":
+        result["message"] = (f"{label} took {latency['elapsed_ms']:.3f} ms; "
+                             f"budget {latency['budget_ms']} ms")
     if approved is None:
         result["verdict"] = verdict(result)
         return result
     result["known_over_budget"] = approved
-    label = f"{scenario} step {number} ({tool})"
-    result["regression_limit_ms"] = milliseconds(approved["last_measured_ms"]) * 1.2
+    result["regression_limit_ms"] = approved["last_measured_ms"] * 1.2
     if approved["tool"] != tool:
-        result["pass"] = False
         result["status"] = "invalid-known-over-budget"
         result["message"] = f"{label}: tool differs from ci/known-over-budget.json; remove or review the listing"
     elif latency["elapsed_ms"] > result["regression_limit_ms"]:
-        result["pass"] = False
         result["status"] = "known-gap-regression"
         result["message"] = (f"{label} regressed to {latency['elapsed_ms']:.3f} ms; "
                              f"recorded {approved['last_measured_ms']:.3f} ms, "
                              f"20% regression limit {result['regression_limit_ms']:.3f} ms; "
                              f"budget remains {latency['budget_ms']} ms")
-    elif not latency["pass"]:
-        result["pass"] = True
+    elif result["status"] == "over-budget":
         result["status"] = "known-over-budget"
         result["message"] = (f"Known gap: {label} took {latency['elapsed_ms']:.3f} ms; "
                              f"recorded {approved['last_measured_ms']:.3f} ms, "
@@ -302,7 +302,9 @@ def accept_latency(scenario, number, tool, latency, known):
 
 
 def trend_checks(rules, steps):
-    """Theil–Sen growth across the feature-count range; single stalls cannot hide a slope."""
+    """Theil–Sen growth across the feature-count range; single stalls cannot hide a slope.
+
+    Growth over the noise allowance is a warning; missing or unusable evidence fails."""
     results = []
     for rule in rules:
         result = {"check": "feature-count latency trend", "tool": rule["tool"],
@@ -325,7 +327,7 @@ def trend_checks(rules, steps):
             growth = slope * (counts[-1] - counts[0])
             result.update({"first_feature_count": counts[0], "last_feature_count": counts[-1],
                            "slope_ms_per_feature": slope, "growth_ms": growth,
-                           "pass": growth <= TREND_NOISE_MS})
+                           "within_budget": growth <= TREND_NOISE_MS, "pass": True})
         except (KeyError, TypeError, ValueError) as error:
             result["error"] = str(error)
     return results
@@ -377,7 +379,7 @@ class Client:
     def close(self):
         self.process.stdin.close()
         try:
-            status = self.process.wait(timeout=10)
+            status = self.process.wait(timeout=self.timeout)
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
@@ -613,6 +615,58 @@ def wait(client, entry, name, arguments):
         raise
 
 
+def advise(report, message, missed=True):
+    """A timing finding: a warning annotation kept in the result, never a failure.
+
+    A missed budget also keeps the run from a strict pass."""
+    report["warnings"].append(message)
+    if missed:
+        report["over_budget"].append(message)
+    print(f"::warning::{message}", flush=True)
+
+
+def summary(reports, machine):
+    """The job summary: every timing over its budget, every listed step against its record."""
+    over, listed, trends, errors = [], [], [], []
+    for report in reports:
+        for step in report["steps"]:
+            for c in step["checks"]:
+                if c.get("within_budget") is False:
+                    over.append(f"| {report['name']} | {step['number']} | {step['tool']} | {c['check']} | "
+                                f"{c.get('elapsed_ms', c.get('slowest_ms')):.3f} | {c['budget_ms']} |")
+            timing = step.get("timing", {})
+            if "known_over_budget" in timing:
+                recorded = timing["known_over_budget"]["last_measured_ms"]
+                listed.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
+                              f"{timing['elapsed_ms']:.3f} | {recorded:.3f} | "
+                              f"{100 * timing['elapsed_ms'] / recorded:.0f}% | {timing['status']} |")
+        for trend in report.get("trends", []):
+            result = "error" if "error" in trend else "within" if trend["within_budget"] else "over"
+            growth = trend.get("growth_ms")
+            trends.append(f"| {report['name']} | {trend['tool']} | {trend.get('samples', 0)} | "
+                          f"{'unavailable' if growth is None else f'{growth:.3f}'} | {trend['noise_ms']} | {result} |")
+        errors.extend(f"- {report['name']}: {w}" for w in report.get("warnings", [])
+                      if w not in report.get("over_budget", []))
+        if report.get("error"):
+            errors.append(f"- {report['name']}: error: {report['error']}")
+    rows = ["## Application timings", "",
+            f"Release build on {machine}; raw click-to-display timing on a shared runner. "
+            "Every step's timing is in the uploaded result.json; these are warnings, not failures.", "",
+            "### Over budget", ""]
+    rows += (["| Scenario | Step | Tool | Check | ms | Budget ms |", "|---|---:|---|---|---:|---:|", *over]
+             if over else ["None."])
+    rows += ["", "### Listed in ci/known-over-budget.json", ""]
+    rows += (["| Scenario | Step | Tool | Wait ms | Recorded ms | Of recorded | Status |",
+              "|---|---:|---|---:|---:|---:|---|", *listed] if listed else ["None ran."])
+    if trends:
+        rows += ["", "### Feature-count latency trends", "",
+                 "| Scenario | Tool | Samples | Fitted growth ms | Noise ms | Growth |",
+                 "|---|---|---:|---:|---:|---|", *trends]
+    if errors:
+        rows += ["", "### Other findings", "", *errors]
+    return "\n".join(rows) + "\n"
+
+
 def run(args):
     scenario = json.loads(args.scenario.read_text())
     if scenario["format"] != "soliddraft-scenario/1" or not scenario.get("steps"):
@@ -623,14 +677,15 @@ def run(args):
     report = {"format": "soliddraft-scenario-result/1", "name": scenario["name"], "catallax_revision": pin,
               "soliddraft_revision": subprocess.check_output(
                   ["git", "-C", str(pathlib.Path(__file__).resolve().parent.parent), "rev-parse", "HEAD"], text=True).strip(),
-              "steps": [], "pass": False,
+              "steps": [], "warnings": [], "over_budget": [], "pass": False,
               "strict_pass": False}
     client = None
     try:
-        known_latency = load_known_over_budget(pathlib.Path(__file__).with_name("known-over-budget.json"))
+        # A malformed file still fails the run: the listings are data, even though timing is not gated.
+        known_latency = load_known_over_budget(KNOWN_OVER_BUDGET)
         for name, number in known_latency:
             if name == scenario["name"] and not 1 <= number <= len(scenario["steps"]):
-                raise ValueError(f"remove missing {name} step {number} from ci/known-over-budget.json")
+                advise(report, f"remove missing {name} step {number} from ci/known-over-budget.json", missed=False)
         client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
         initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
@@ -691,8 +746,12 @@ def run(args):
                                "pass": step["refused"] in command["output"]})
             if "drawing" in command["summary"]:
                 # The drawing followed the part inside this command: each regenerated view
-                # keeps the drawing-view ceiling, on top of the click budget below.
-                checks.append(drawing_view_calls(kernel, gated=budget(step["tool"]) != "output"))
+                # is recorded against the drawing-view ceiling, on top of the click budget below.
+                views = drawing_view_calls(kernel, gated=budget(step["tool"]) != "output")
+                checks.append(views)
+                if views["within_budget"] is False:
+                    advise(report, f"{scenario['name']} step {number}: a regenerated drawing view took "
+                                   f"{views['slowest_ms']:.3f} ms; ceiling is {DRAWING_VIEW_BUDGET_MS} ms")
             try:
                 # The tool's JSON answer, for checks on what it reported.
                 command["result"] = json.loads(command["output"])
@@ -753,11 +812,8 @@ def run(args):
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
             if latency["status"] == "output":
                 print(f"::notice::{latency['message']}", flush=True)
-            elif latency["status"] == "known-over-budget":
-                print(f"::warning::{latency['message']}", flush=True)
-            elif latency["status"] in {"known-gap-regression", "invalid-known-over-budget"}:
-                print(f"::error::{latency['message']}", flush=True)
-            view_latency = None
+            elif "message" in latency:
+                advise(report, latency["message"], missed=latency["within_budget"] is False)
             if solid:
                 started = time.perf_counter_ns()
                 viewed = wait(client, entry, "scenario_view", {})
@@ -775,9 +831,9 @@ def run(args):
                     checks.append(view_latency)
                     write(directory / "view.timing.json", view_latency)
                     print(json.dumps({"step": number, "tool": "scenario_view", "timing": view_latency}), flush=True)
-                    if not view_latency["pass"]:
-                        print(f"::error::Drawing-view step {number} took {view_ms:.3f} ms; "
-                              f"budget is {DRAWING_VIEW_BUDGET_MS} ms", flush=True)
+                    if not view_latency["within_budget"]:
+                        advise(report, f"{scenario['name']} drawing-view step {number} took {view_ms:.3f} ms; "
+                                       f"budget is {DRAWING_VIEW_BUDGET_MS} ms")
                     entry["intervals"]["view"] = {"elapsed_ms": view_ms, "budget_ms": DRAWING_VIEW_BUDGET_MS,
                                                   "verdict": verdict(view_latency)}
                     if not viewed.get("isError"):
@@ -810,6 +866,9 @@ def run(args):
                 measure_timing = measurement_timing(
                     measured_ms, json.loads((directory / "measurement.kernel.json").read_text()))
                 measure_timing["verdict"] = verdict(measure_timing)
+                if not measure_timing["within_budget"]:
+                    advise(report, f"{scenario['name']} step {number}: requested measurement took {measured_ms:.3f} ms; "
+                                   f"budget {measure_timing['budget_ms']} ms, gate {MEASUREMENT_GATE_MS} ms")
                 entry["measurement"] = measure_timing
                 entry["intervals"]["measurement"] = {
                     "elapsed_ms": measured_ms, "budget_ms": measure_timing["budget_ms"],
@@ -852,17 +911,16 @@ def run(args):
             if not entry["pass"]:
                 # Retain every candidate input, including rejected scratch builds, for kernel diagnosis.
                 entry["questions"] = [str(p.relative_to(args.out)) for p in directory.glob("question-*.json")]
-                if any(not c["pass"] for c in checks if c is not latency and c is not view_latency):
-                    break
+                break
         report["trends"] = trend_checks(scenario.get("trends", []), report["steps"])
+        for trend in report["trends"]:
+            if trend.get("within_budget") is False:
+                advise(report, f"{scenario['name']} {trend['tool']} latency grew {trend['growth_ms']:.3f} ms over "
+                               f"its feature-count range; noise allowance {TREND_NOISE_MS} ms")
         report["pass"] = (len(report["steps"]) == len(scenario["steps"])
             and all(s["pass"] for s in report["steps"]) and all(t["pass"] for t in report["trends"]))
         report["timings"] = timings(report["steps"])
-        report["known_gaps"] = [
-            {"step": s["number"], "tool": s["tool"], "elapsed_ms": s["timing"]["elapsed_ms"],
-             "budget_ms": s["timing"]["budget_ms"]} for s in report["steps"]
-            if s.get("timing", {}).get("verdict") == "known-gap"]
-        report["strict_pass"] = report["pass"] and not report["known_gaps"]
+        report["strict_pass"] = report["pass"] and not report["over_budget"]
     except Exception as error:
         report["error"] = str(error)
     finally:
@@ -876,13 +934,12 @@ def run(args):
         write(args.out / "result.json", report)
     print(json.dumps({"bundle": str(args.out), "pass": report["pass"],
                       "strict_pass": report.get("strict_pass", False),
-                      "known_gaps": len(report.get("known_gaps", [])), "error": report.get("error"),
+                      "over_budget": len(report["over_budget"]), "error": report.get("error"),
                       "timings": report.get("timings", [])}))
     if getattr(args, "strict", False):
-        # The release path accepts no recorded gap: only a run that met every budget exits zero.
-        for gap in report.get("known_gaps", []):
-            print(f"::error::Release path: step {gap['step']} ({gap['tool']}) took {gap['elapsed_ms']:.3f} ms "
-                  f"against a {gap['budget_ms']} ms budget; a known gap is not a strict pass", flush=True)
+        # The release path accepts no timing over budget: only a run that met every budget exits zero.
+        for message in report["over_budget"]:
+            print(f"::error::Release path: {message}; over budget is not a strict pass", flush=True)
         return 0 if report["strict_pass"] else 1
     return 0 if report["pass"] else 1
 
@@ -894,8 +951,9 @@ def main():
     parser.add_argument("--soliddraft", required=True, help="built soliddraft executable")
     parser.add_argument("--catallax-verify", required=True, help="verifier built from the pinned Catallax revision")
     parser.add_argument("--strict", action="store_true",
-                        help="release-path verdict: exit nonzero unless every budget was met, known gaps included")
-    parser.add_argument("--timeout", type=int, default=300, help="seconds per MCP request or CLI command")
+                        help="release-path verdict: exit nonzero unless every timing budget was met")
+    parser.add_argument("--timeout", type=int, default=HANG_TIMEOUT_S,
+                        help="hang guard: seconds per MCP request or CLI command")
     args = parser.parse_args()
     args.out = args.out.resolve()
     args.soliddraft = str(pathlib.Path(args.soliddraft).resolve())

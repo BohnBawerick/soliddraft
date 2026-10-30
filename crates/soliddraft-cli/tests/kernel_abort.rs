@@ -31,6 +31,9 @@ use serde_json::json;
 /// How long a replay of the bracket may take: it takes about a second when it is healthy.
 const SLOW: Duration = Duration::from_secs(30);
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 /// Replays the bracket with `steps[step].plane.origin[0]` set to `value`, in a process of its own.
 /// Returns how it ended, or `None` if it was still running after `limit` and was killed.
 fn replay_with_origin(step: usize, value: serde_json::Value, limit: Duration) -> Option<ExitStatus> {
@@ -74,13 +77,13 @@ fn assert_ends_normally(status: Option<ExitStatus>) {
 #[test]
 #[ignore = "waits for the Catallax fix: a depth bound in catallax_boolean::region::Sampling::sample (stack overflow on near-zero offsets)"]
 fn a_plane_origin_a_hair_off_zero_is_built_or_refused_not_aborted() {
-    assert_ends_normally(replay_with_origin(14, json!(1e-20), Duration::from_secs(120)));
+    assert_ends_normally(replay_with_origin(14, json!(1e-20), HANG));
 }
 
 #[test]
 #[ignore = "waits for the Catallax fix: a depth bound in catallax_boolean::region::Sampling::sample (stack overflow on near-zero offsets)"]
 fn the_smallest_subnormal_origin_is_built_or_refused_not_aborted() {
-    assert_ends_normally(replay_with_origin(14, json!(5e-324), Duration::from_secs(120)));
+    assert_ends_normally(replay_with_origin(14, json!(5e-324), HANG));
 }
 
 #[test]

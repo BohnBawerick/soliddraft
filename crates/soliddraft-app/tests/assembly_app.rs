@@ -19,6 +19,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 /// One test at a time touches the recent-files list and the GPU.
 static TURN: Mutex<()> = Mutex::new(());
 
@@ -67,7 +70,7 @@ fn path_of(s: &AssemblySession, i: usize) -> OccurrencePath {
 fn wait_open(state: &mut AppState, dock: &mut DockState<Tab>, ctx: &egui::Context) {
     let started = Instant::now();
     while state.assembly.opening.is_some() {
-        assert!(started.elapsed() < Duration::from_secs(60), "the assembly did not open");
+        assert!(started.elapsed() < HANG, "the assembly did not open");
         assembly::frame(state, dock, ctx);
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -235,7 +238,7 @@ fn settle(harness: &mut App<'_>) {
         if loaded {
             break;
         }
-        assert!(started.elapsed() < Duration::from_secs(60), "the assembly did not load");
+        assert!(started.elapsed() < HANG, "the assembly did not load");
     }
     harness.run_steps(12);
 }

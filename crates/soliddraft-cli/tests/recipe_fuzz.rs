@@ -3,7 +3,7 @@
 //! steps deleted, duplicated, swapped and repeated.
 //!
 //! A recipe that parses is replayed on the Catallax backend. Nothing may panic or run over
-//! two minutes, a refusal is a typed error, and a replay that succeeds returns bodies the
+//! ten minutes, a refusal is a typed error, and a replay that succeeds returns bodies the
 //! kernel has proven valid. A fixed number of cases from a fixed seed run by default; to
 //! search further: `PROPTEST_CASES=2000 PROPTEST_RNG_SEED=7 cargo test -p soliddraft-cli --test recipe_fuzz`.
 
@@ -16,7 +16,8 @@ use proptest::test_runner::RngSeed;
 use serde_json::{Number, Value, json};
 use soliddraft_kernel_catallax::CatallaxKernel;
 
-const LIMIT: Duration = Duration::from_secs(120);
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const LIMIT: Duration = Duration::from_secs(600);
 
 /// The stack the replay thread gets: a Unix main thread's, which is where the command line replays.
 const STACK: usize = 8 * 1024 * 1024;

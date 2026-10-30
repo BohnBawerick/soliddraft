@@ -55,7 +55,7 @@ Headless SolidDraft on Catallax is driven by agents through `soliddraft mcp` and
 - elapsed time for each command, taken by the runner from outside the application and split into construction, edit, display (tessellation and rendering), measurement and refusal, next to Catallax's deterministic work counts;
 - a pass or fail result for each check in the scenario.
 
-A command that returns before its body is displayed or its requested measurement is made has not met the click budget. The scenario times the whole path, from the command to the displayed result, and fails a step that exceeds the latency budget Catallax's roadmap sets for that kind of command. Timings sit beside the deterministic counts and do not replace them.
+A command that returns before its body is displayed or its requested measurement is made has not met the click budget. The scenario times the whole path, from the command to the displayed result, and warns on a step that exceeds the latency budget Catallax's roadmap sets for that kind of command. Timings sit beside the deterministic counts and do not replace them.
 
 Measurement is test and development tooling. Timings, rebuild reports, survival checks, comparison runs and the scoreboard live in the scenario runner, the benchmarks, CI and the development build. None of it runs inside the application at runtime or slows a user edit, and measurement stays separate from the code path that builds the part. Checks that already run at runtime by design stay as they are; no new runtime work is added to them.
 

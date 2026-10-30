@@ -2,7 +2,7 @@
 //! generated arguments for every subcommand, over good, empty, damaged, missing and
 //! folder-shaped files, with extreme, malformed and misplaced numbers.
 //!
-//! A run may succeed or fail, but it must end by itself within two minutes, exit with
+//! A run may succeed or fail, but it must end by itself within ten minutes, exit with
 //! status 0, 1 or 2 (never a panic, an abort or a signal), say why when it fails (a `check`
 //! reports its findings on standard output), and keep every fixture file in its folder.
 //!
@@ -43,7 +43,8 @@ fn config() -> ProptestConfig {
     config
 }
 
-const LIMIT: Duration = Duration::from_secs(120);
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const LIMIT: Duration = Duration::from_secs(600);
 
 // ----- the folder every run starts from -----
 

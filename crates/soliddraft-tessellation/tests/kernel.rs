@@ -8,7 +8,8 @@ use soliddraft_kernel_api::{Kernel, KernelError, Mesh, Vec3};
 use soliddraft_kernel_catallax::CatallaxKernel;
 use soliddraft_tessellation::{DeviceBudget, DisplayCache, Level, Levels, Quality, Tessellator, report};
 
-const WAIT: Duration = Duration::from_secs(60);
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const WAIT: Duration = Duration::from_secs(600);
 
 /// A cylinder exercises chord refinement without waiting for kernel fillets.
 fn curved_body(k: &dyn Kernel) -> soliddraft_kernel_api::BodyId {

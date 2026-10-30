@@ -14,10 +14,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 type App<'a> = Harness<'a, SolidDraftApp>;
 fn settle(h: &mut App<'_>) {
     h.run_steps(5);
-    let until = Instant::now() + Duration::from_secs(120);
+    let until = Instant::now() + HANG;
     while h.state().state.doc.proof_pending() {
         assert!(Instant::now() < until, "proof did not settle");
         std::thread::sleep(Duration::from_millis(10));

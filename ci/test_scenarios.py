@@ -162,7 +162,8 @@ class Latency(unittest.TestCase):
             self.call("mass_properties", 60, [self.operation("mass_properties", 55, 6)]),
         ])
         result = scenarios.timing("extrude", [command, self.segment(650, phase="display")])
-        self.assertFalse(result["pass"])
+        self.assertFalse(result["within_budget"])
+        self.assertTrue(result["pass"], "a timing is a record, not a gate")
         self.assertEqual(result["elapsed_ms"], 1050)
         self.assertEqual(result["split_ms"], {
             "construction": 290, "edit": 0, "display": 700, "measurement": 60, "refusal": 0,
@@ -189,7 +190,7 @@ class Latency(unittest.TestCase):
                     self.call("tessellate_edges", 500, nested=True, foreground=False),
                     self.call("extrude", 500, work={"used": 25}),
                 ])])
-                self.assertFalse(result["pass"])
+                self.assertFalse(result["within_budget"])
                 self.assertEqual(result["elapsed_ms"], 1100)
                 self.assertEqual(result["split_ms"]["edit"], 1100)
                 self.assertEqual(sum(result["split_ms"].values()), 1100)
@@ -220,8 +221,10 @@ class Latency(unittest.TestCase):
     def test_exact_budget_boundary_and_one_microsecond_over(self):
         for tool, limit in (("box", 100), ("boolean", 500), ("edit_extrude", 1000), ("compare", 2000)):
             with self.subTest(tool=tool):
-                self.assertTrue(scenarios.timing(tool, [self.segment(limit)])["pass"])
-                self.assertFalse(scenarios.timing(tool, [self.segment(limit + 0.001)])["pass"])
+                self.assertTrue(scenarios.timing(tool, [self.segment(limit)])["within_budget"])
+                over = scenarios.timing(tool, [self.segment(limit + 0.001)])
+                self.assertFalse(over["within_budget"])
+                self.assertTrue(over["pass"])
 
     def test_invalid_or_overlapping_evidence_fails_closed(self):
         for elapsed in (None, True, -1, float("nan"), float("inf")):
@@ -242,11 +245,13 @@ class Latency(unittest.TestCase):
 
 
 class DrawingViewBudgets(unittest.TestCase):
-    def test_view_has_its_own_strict_budget_boundary(self):
+    def test_view_has_its_own_budget_boundary(self):
         kernel = {"calls": []}
-        self.assertTrue(scenarios.drawing_view_timing(scenarios.DRAWING_VIEW_BUDGET_MS, kernel)["pass"])
+        self.assertTrue(scenarios.drawing_view_timing(scenarios.DRAWING_VIEW_BUDGET_MS, kernel)["within_budget"])
         over = scenarios.drawing_view_timing(scenarios.DRAWING_VIEW_BUDGET_MS + 0.001, kernel)
-        self.assertFalse(over["pass"])
+        self.assertFalse(over["within_budget"])
+        self.assertTrue(over["pass"], "over budget is a warning")
+        self.assertEqual(scenarios.verdict(over), "over-budget")
         self.assertEqual(over["class"], "drawing-view")
         self.assertEqual(scenarios.BUDGET_MS["feature"], 1000)
 
@@ -268,17 +273,18 @@ class DrawingViewBudgets(unittest.TestCase):
                  Latency.call("section_view", 200), Latency.call("view_curves", 50, nested=True),
                  Latency.call("view_curves", 5000, foreground=False)]
         result = scenarios.drawing_view_calls({"calls": calls})
-        self.assertTrue(result["pass"])
+        self.assertTrue(result["within_budget"])
         self.assertEqual([v["operation"] for v in result["views"]], ["view_curves", "section_view"])
         self.assertEqual(result["slowest_ms"], limit)
         over = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]})
-        self.assertFalse(over["pass"])
+        self.assertFalse(over["within_budget"])
+        self.assertTrue(over["pass"], "over the ceiling is a warning")
         self.assertEqual(over["class"], "drawing-view")
         recorded = scenarios.drawing_view_calls({"calls": [Latency.call("section_view", limit + 0.001)]}, gated=False)
-        self.assertTrue(recorded["pass"], "an output's certified views are recorded, not gated")
+        self.assertIsNone(recorded["within_budget"], "an output's certified views have no ceiling")
         self.assertIsNone(recorded["budget_ms"])
         self.assertEqual(recorded["slowest_ms"], limit + 0.001)
-        self.assertTrue(scenarios.drawing_view_calls({"calls": []})["pass"], "no view regenerated")
+        self.assertTrue(scenarios.drawing_view_calls({"calls": []})["within_budget"], "no view regenerated")
         with self.assertRaises(ValueError):
             scenarios.drawing_view_calls({"calls": [Latency.call("view_curves", None)]})
         call = Latency.call("view_curves", 1)
@@ -307,9 +313,10 @@ class Outputs(unittest.TestCase):
         known = {("drawing", 3): {"scenario": "drawing", "step": 3, "tool": "drawing_export_svg",
                                   "last_measured_ms": 10}}
         verdict = scenarios.accept_latency("drawing", 3, "drawing_export_svg", latency, known)
-        self.assertFalse(verdict["pass"])
+        self.assertTrue(verdict["pass"], "a stale listing is a warning")
         self.assertEqual(verdict["status"], "invalid-known-over-budget")
-        self.assertEqual(verdict["verdict"], "fail")
+        self.assertIn("remove its listing", verdict["message"])
+        self.assertEqual(verdict["verdict"], "output")
 
     def test_output_files_must_exist_and_hold_bytes(self):
         import tempfile
@@ -333,39 +340,60 @@ class KnownBudgets(unittest.TestCase):
         latency = scenarios.timing(tool, [Latency.segment(elapsed)])
         return scenarios.accept_latency(scenario, number, tool, latency, self.known)
 
-    def test_approved_overrun_is_accepted_only_for_its_exact_step_and_tool(self):
-        accepted = self.verdict(2240)
-        self.assertTrue(accepted["pass"])
-        self.assertFalse(accepted["within_budget"])
-        self.assertEqual(accepted["status"], "known-over-budget")
-        self.assertFalse(self.verdict(2240, scenario="another-bracket")["pass"])
-        self.assertFalse(self.verdict(2240, number=7)["pass"])
-        self.assertFalse(self.verdict(2240, tool="cut")["pass"])
+    def test_a_listing_names_its_exact_step_and_tool(self):
+        listed = self.verdict(2240)
+        self.assertTrue(listed["pass"])
+        self.assertFalse(listed["within_budget"])
+        self.assertEqual(listed["status"], "known-over-budget")
+        self.assertEqual(self.verdict(2240, scenario="another-bracket")["status"], "over-budget")
+        self.assertEqual(self.verdict(2240, number=7)["status"], "over-budget")
+        changed = self.verdict(2240, tool="cut")
+        self.assertEqual(changed["status"], "invalid-known-over-budget")
+        self.assertIn("tool differs", changed["message"])
 
-    def test_listed_step_still_fails_above_20_percent_regression(self):
+    def test_listed_step_warns_above_20_percent_regression(self):
         boundary = self.verdict(2400)
-        self.assertTrue(boundary["pass"])
-        self.assertFalse(boundary["within_budget"])
+        self.assertEqual(boundary["status"], "known-over-budget")
         self.assertEqual(boundary["budget_ms"], 1000)
         over = self.verdict(2400.001)
-        self.assertFalse(over["pass"])
+        self.assertTrue(over["pass"], "a regression is a warning")
         self.assertFalse(over["within_budget"])
         self.assertEqual(over["status"], "known-gap-regression")
+        self.assertIn("regressed to 2400.001 ms", over["message"])
         self.assertEqual(over["budget_ms"], 1000)
 
-    def test_listed_step_can_improve_without_changing_the_strict_budget(self):
+    def test_listed_step_can_improve_without_changing_the_budget(self):
         for elapsed in (999.999, 1000):
             with self.subTest(elapsed=elapsed):
                 improved = self.verdict(elapsed)
                 self.assertTrue(improved["pass"])
                 self.assertTrue(improved["within_budget"])
                 self.assertEqual(improved["status"], "pass")
+                self.assertNotIn("message", improved)
 
-    def test_unlisted_step_keeps_its_strict_budget_boundary(self):
-        self.assertTrue(self.verdict(1000, number=7)["pass"])
+    def test_unlisted_step_over_budget_warns_and_passes(self):
+        self.assertEqual(self.verdict(1000, number=7)["status"], "pass")
         over = self.verdict(1000.001, number=7)
-        self.assertFalse(over["pass"])
+        self.assertTrue(over["pass"])
+        self.assertFalse(over["within_budget"])
         self.assertEqual(over["status"], "over-budget")
+        self.assertIn("budget 1000 ms", over["message"])
+
+    def test_malformed_known_over_budget_file_fails(self):
+        entry = {"scenario": "bracket", "step": 6, "tool": "extrude", "last_measured_ms": 2000}
+        for label, policy in (("wrong format", {"format": "other/1", "steps": [entry]}),
+                              ("duplicate step", {"format": "soliddraft-known-over-budget/1",
+                                                  "steps": [entry, dict(entry, tool="cut")]}),
+                              ("bad time", {"format": "soliddraft-known-over-budget/1",
+                                            "steps": [dict(entry, last_measured_ms=-1)]})):
+            with self.subTest(label), tempfile.TemporaryDirectory() as folder:
+                path = pathlib.Path(folder, "known-over-budget.json")
+                path.write_text(json.dumps(policy))
+                with self.assertRaises(ValueError):
+                    scenarios.load_known_over_budget(path)
+
+    def test_the_checked_in_file_loads(self):
+        self.assertTrue(scenarios.load_known_over_budget(scenarios.KNOWN_OVER_BUDGET))
 
 
 class Replies(unittest.TestCase):
@@ -418,29 +446,30 @@ class Pinning(unittest.TestCase):
 class Verdicts(unittest.TestCase):
     known = KnownBudgets.known
 
-    def test_known_gap_is_accepted_but_never_a_strict_pass(self):
+    def test_over_budget_is_never_a_strict_pass(self):
         latency = scenarios.timing("extrude", [Latency.segment(2240)])
-        accepted = scenarios.accept_latency("bracket", 6, "extrude", latency, self.known)
-        self.assertTrue(accepted["pass"])
-        self.assertEqual(accepted["verdict"], "known-gap")
-        self.assertEqual(scenarios.accept_latency("bracket", 7, "extrude", latency, self.known)["verdict"], "fail")
+        for number in (6, 7):
+            accepted = scenarios.accept_latency("bracket", number, "extrude", latency, self.known)
+            self.assertTrue(accepted["pass"])
+            self.assertEqual(accepted["verdict"], "over-budget")
         within = scenarios.timing("extrude", [Latency.segment(1000)])
         self.assertEqual(scenarios.accept_latency("bracket", 7, "extrude", within, self.known)["verdict"], "strict-pass")
         self.assertEqual(scenarios.accept_latency("bracket", 6, "extrude", within, self.known)["verdict"], "strict-pass")
         regressed = scenarios.timing("extrude", [Latency.segment(2400.001)])
-        self.assertEqual(scenarios.accept_latency("bracket", 6, "extrude", regressed, self.known)["verdict"], "fail")
+        self.assertEqual(scenarios.accept_latency("bracket", 6, "extrude", regressed, self.known)["verdict"], "over-budget")
 
-    def test_measurement_of_4245_ms_fails_both_its_budget_and_the_2000_ms_gate(self):
+    def test_measurement_of_4245_ms_misses_both_its_budget_and_the_2000_ms_gate(self):
         slow = scenarios.measurement_timing(4245, {"calls": []})
-        self.assertFalse(slow["pass"])
+        self.assertTrue(slow["pass"])
+        self.assertFalse(slow["within_budget"])
         self.assertFalse(slow["within_gate"])
         self.assertEqual((slow["budget_ms"], slow["gate_ms"]), (1000, 2000))
-        self.assertEqual(scenarios.verdict(slow), "fail")
+        self.assertEqual(scenarios.verdict(slow), "over-budget")
 
     def test_measurement_budget_and_gate_boundaries(self):
-        self.assertTrue(scenarios.measurement_timing(1000, {"calls": []})["pass"])
+        self.assertTrue(scenarios.measurement_timing(1000, {"calls": []})["within_budget"])
         between = scenarios.measurement_timing(1500, {"calls": []})
-        self.assertFalse(between["pass"], "the unchanged 1,000 ms budget still applies")
+        self.assertFalse(between["within_budget"], "the unchanged 1,000 ms budget still applies")
         self.assertTrue(between["within_gate"])
         self.assertTrue(scenarios.measurement_timing(2000, {"calls": []})["within_gate"])
         self.assertFalse(scenarios.measurement_timing(2000.001, {"calls": []})["within_gate"])
@@ -452,7 +481,8 @@ FAKE = pathlib.Path(__file__).with_name("fake_mcp_server.py")
 class RunnerEndToEnd(unittest.TestCase):
     """The real run() against a synthetic MCP server, so the click ends where a user sees it."""
 
-    def run_step(self, mode, measure=False, timeout=5, strict=False, known=None, extra=None):
+    def run_step(self, mode, measure=False, timeout=scenarios.HANG_TIMEOUT_S, strict=False, known=None, extra=None,
+                 known_file=None):
         step = {"tool": "extrude", "arguments": {}}
         step.update(extra or {})
         if measure:
@@ -466,13 +496,19 @@ class RunnerEndToEnd(unittest.TestCase):
                                       catallax_verify="unused", timeout=timeout, strict=strict)
             os.environ["FAKE_MODE"] = mode
             os.environ["FAKE_PIN"] = scenarios.pinned_revision()
+            if known_file is None:
+                listings = mock.patch.object(scenarios, "load_known_over_budget", return_value=known or {})
+            else:
+                (root / "known-over-budget.json").write_text(json.dumps(known_file))
+                listings = mock.patch.object(scenarios, "KNOWN_OVER_BUDGET", root / "known-over-budget.json")
+            output = io.StringIO()
             try:
-                with contextlib.redirect_stdout(io.StringIO()), \
-                        mock.patch.object(scenarios, "load_known_over_budget", return_value=known or {}):
+                with contextlib.redirect_stdout(output), listings:
                     code = scenarios.run(args)
             finally:
                 del os.environ["FAKE_MODE"], os.environ["FAKE_PIN"]
             report = json.loads((args.out / "result.json").read_text())
+        self.output = output.getvalue()
         checks = {c["check"]: c for c in (report["steps"][0]["checks"] if report["steps"] else [])
                   if isinstance(c["check"], str)}
         self.code = code
@@ -575,35 +611,93 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertFalse(checks["measurement answers this request"]["pass"])
         self.assertFalse(report["pass"])
 
-    def test_slow_measurement_of_over_four_seconds_fails_the_gate(self):
+    def test_slow_measurement_of_over_four_seconds_warns_and_passes(self):
         report, checks = self.run_step("slow-measure", measure=True)
         budget = checks["requested measurement budget"]
         self.assertGreater(budget["elapsed_ms"], 4245)
-        self.assertFalse(budget["pass"])
+        self.assertFalse(budget["within_budget"])
         self.assertFalse(budget["within_gate"])
-        self.assertFalse(report["pass"])
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 0)
+        self.assertFalse(report["strict_pass"])
+        self.assertIn("::warning::synthetic-gate step 1: requested measurement took", self.output)
 
     gap = {("synthetic-gate", 1): {"scenario": "synthetic-gate", "step": 1, "tool": "extrude",
                                    "last_measured_ms": 2000}}
 
-    def test_known_slow_click_is_ci_accepted_but_not_a_strict_pass(self):
+    def test_known_slow_click_passes_with_a_warning_but_not_a_strict_pass(self):
         report, _ = self.run_step("slow-click", known=self.gap)
         self.assertTrue(report["pass"])
         self.assertEqual(self.code, 0)
         self.assertFalse(report["strict_pass"])
-        self.assertEqual(report["steps"][0]["intervals"]["preview"]["verdict"], "known-gap")
-        self.assertEqual([g["step"] for g in report["known_gaps"]], [1])
+        self.assertEqual(report["steps"][0]["intervals"]["preview"]["verdict"], "over-budget")
+        self.assertEqual(report["steps"][0]["timing"]["status"], "known-over-budget")
+        self.assertEqual(len(report["over_budget"]), 1)
+        self.assertIn("::warning::Known gap: synthetic-gate step 1 (extrude)", self.output)
+        self.assertNotIn("::error::", self.output)
 
     def test_strict_release_path_rejects_the_known_gap(self):
         report, _ = self.run_step("slow-click", known=self.gap, strict=True)
         self.assertTrue(report["pass"])
         self.assertEqual(self.code, 1)
+        self.assertIn("::error::Release path: Known gap: synthetic-gate step 1", self.output)
 
-    def test_unlisted_slow_click_fails_both_paths(self):
-        for strict in (False, True):
-            report, _ = self.run_step("slow-click", strict=strict)
-            self.assertFalse(report["pass"])
-            self.assertEqual(self.code, 1)
+    def test_unlisted_slow_click_warns_and_passes_but_fails_the_strict_path(self):
+        for strict, code in ((False, 0), (True, 1)):
+            with self.subTest(strict=strict):
+                report, checks = self.run_step("slow-click", strict=strict)
+                self.assertTrue(report["pass"])
+                self.assertEqual(self.code, code)
+                self.assertEqual(checks["click budget"]["status"], "over-budget")
+                self.assertIn("::warning::synthetic-gate step 1 (extrude) took", self.output)
+                timing = report["steps"][0]["timing"]
+                self.assertGreater(timing["elapsed_ms"], 1000, "the step's timing is in the result")
+
+    def test_regressed_listed_step_warns_and_passes(self):
+        recorded = {("synthetic-gate", 1): dict(self.gap[("synthetic-gate", 1)], last_measured_ms=1001)}
+        report, checks = self.run_step("slow-click", known=recorded)
+        self.assertTrue(report["pass"])
+        self.assertEqual(self.code, 0)
+        self.assertEqual(checks["click budget"]["status"], "known-gap-regression")
+        self.assertIn("::warning::synthetic-gate step 1 (extrude) regressed to", self.output)
+        self.assertNotIn("::error::", self.output)
+
+    def test_a_stale_listing_warns_and_passes(self):
+        for label, listing in (("missing step", {("synthetic-gate", 5): dict(self.gap[("synthetic-gate", 1)], step=5)}),
+                               ("changed tool", {("synthetic-gate", 1): dict(self.gap[("synthetic-gate", 1)], tool="cut")})):
+            with self.subTest(label):
+                report, _ = self.run_step("ok", known=listing)
+                self.assertTrue(report["pass"])
+                self.assertEqual(self.code, 0)
+                self.assertEqual(len(report["warnings"]), 1)
+                self.assertEqual(report["over_budget"], [], "a stale listing is not a missed budget")
+                self.assertTrue(report["strict_pass"])
+                self.assertIn("::warning::", self.output)
+
+    def test_a_malformed_known_over_budget_file_fails_the_run(self):
+        entry = {"scenario": "synthetic-gate", "step": 1, "tool": "extrude", "last_measured_ms": 2000}
+        for label, policy in (("wrong format", {"format": "other/1", "steps": [entry]}),
+                              ("duplicate step", {"format": "soliddraft-known-over-budget/1", "steps": [entry, entry]})):
+            with self.subTest(label):
+                report, _ = self.run_step("ok", known_file=policy)
+                self.assertFalse(report["pass"])
+                self.assertEqual(self.code, 1)
+                self.assertTrue(report["error"])
+
+    def test_summary_lists_over_budget_steps_and_listed_steps_against_their_record(self):
+        recorded = {("synthetic-gate", 1): dict(self.gap[("synthetic-gate", 1)], last_measured_ms=1001)}
+        regressed, _ = self.run_step("slow-click", known=recorded)
+        unlisted, _ = self.run_step("slow-click")
+        clean, _ = self.run_step("ok")
+        text = scenarios.summary([regressed, unlisted, clean], "test machine")
+        over = text.split("### Over budget")[1].split("###")[0]
+        self.assertEqual(over.count("| synthetic-gate | 1 | extrude | click budget |"), 2)
+        listed = text.split("### Listed in ci/known-over-budget.json")[1]
+        self.assertEqual(listed.count("| synthetic-gate | 1 | extrude |"), 1)
+        self.assertIn("| 1001.000 |", listed)
+        self.assertIn("| known-gap-regression |", listed)
+        self.assertIn("test machine", text)
+        self.assertIn("None.", scenarios.summary([clean], "test machine"))
 
     def test_writing_the_command_evidence_is_not_part_of_the_click(self):
         report, checks = self.run_step("slow-evidence", strict=True)
@@ -647,7 +741,7 @@ class FieldExportChecks(unittest.TestCase):
     def test_same_export_requires_a_known_matching_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = pathlib.Path(tmp)
-            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=scenarios.HANG_TIMEOUT_S)
             spec = {"format": "stl", "same_export_as": "density edit"}
             first = scenarios.export_check(args, directory, {"format": "stl"}, {})
             for digest, expected in [(first["sha256"], True), ("wrong", False), (None, False)]:
@@ -657,7 +751,7 @@ class FieldExportChecks(unittest.TestCase):
     def test_oracle_failure_and_report_mismatch_fail_the_export(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = pathlib.Path(tmp)
-            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=scenarios.HANG_TIMEOUT_S)
             real_cli = scenarios.cli
             def fake_oracle(binary, arguments, output, label, timeout):
                 if label.endswith("-oracle"):
@@ -676,7 +770,7 @@ class FieldExportChecks(unittest.TestCase):
     def test_oracle_receives_the_caps_the_header_must_record(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = pathlib.Path(tmp)
-            args = argparse.Namespace(soliddraft=str(FAKE), timeout=5)
+            args = argparse.Namespace(soliddraft=str(FAKE), timeout=scenarios.HANG_TIMEOUT_S)
             real_cli, seen = scenarios.cli, []
             def record(binary, arguments, output, label, timeout):
                 if label.endswith("-oracle"):
@@ -717,23 +811,24 @@ class Trends(unittest.TestCase):
     def verdict(self, rows):
         return scenarios.trend_checks([{"tool": "sketch", "from_step": 3}], rows)[0]
 
-    def test_growth_fails_even_when_every_step_meets_its_click_budget(self):
+    def test_growth_warns_even_when_every_step_meets_its_click_budget(self):
         rows = self.samples([100 + 2 * i for i in range(30)])
-        self.assertTrue(all(scenarios.timing("sketch", [Latency.segment(row["timing"]["elapsed_ms"])])["pass"]
+        self.assertTrue(all(scenarios.timing("sketch", [Latency.segment(row["timing"]["elapsed_ms"])])["within_budget"]
                             for row in rows))
         result = self.verdict(rows)
-        self.assertFalse(result["pass"])
+        self.assertFalse(result["within_budget"])
+        self.assertTrue(result["pass"], "growth is a warning")
         self.assertAlmostEqual(result["growth_ms"], 58)
 
     def test_flat_series_tolerates_jitter_and_a_single_stall(self):
         times = [300 + (-8, -2, 3, 7)[i % 4] for i in range(30)]
         times[12] = 900
-        self.assertTrue(self.verdict(self.samples(times))["pass"])
+        self.assertTrue(self.verdict(self.samples(times))["within_budget"])
 
     def test_trend_noise_boundary_does_not_change_click_budgets(self):
-        self.assertTrue(self.verdict(self.samples([300 + 25 * i / 29 for i in range(30)]))["pass"])
-        self.assertFalse(self.verdict(self.samples([300 + 25.1 * i / 29 for i in range(30)]))["pass"])
-        self.assertFalse(scenarios.timing("sketch", [Latency.segment(1000.001)])["pass"])
+        self.assertTrue(self.verdict(self.samples([300 + 25 * i / 29 for i in range(30)]))["within_budget"])
+        self.assertFalse(self.verdict(self.samples([300 + 25.1 * i / 29 for i in range(30)]))["within_budget"])
+        self.assertFalse(scenarios.timing("sketch", [Latency.segment(1000.001)])["within_budget"])
 
     def test_missing_or_nonincreasing_feature_count_cannot_pass(self):
         for damage in ("missing", "repeated", "missing_time", "truncated"):

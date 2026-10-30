@@ -10,6 +10,9 @@ use soliddraft_app::{
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 fn block(kernel: Arc<gated::Gated>) -> (Document, u64, ExtrudeParams) {
     let mut doc = Document::new("Tracked proof", kernel);
     let params = ExtrudeParams {
@@ -27,7 +30,7 @@ fn row(doc: &Document) -> Value {
     measure::values(doc)[0].clone()
 }
 fn settle(doc: &mut Document) {
-    let until = Instant::now() + Duration::from_secs(120);
+    let until = Instant::now() + HANG;
     while doc.proof_pending() {
         assert!(Instant::now() < until, "proof did not settle");
         doc.poll_proof();

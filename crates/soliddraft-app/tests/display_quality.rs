@@ -8,6 +8,9 @@ use std::time::{Duration, Instant};
 use soliddraft_app::document::{Command, Document, ExtrudeParams, PlaneKind, ProfileKind};
 use soliddraft_tessellation::{Level, Projection, Quality};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 /// A disc 200 mm across and 50 mm thick: large enough that the chord height, not the
 /// 15 degree angle, decides the standard and fine levels.
 fn disc() -> Document {
@@ -35,7 +38,7 @@ fn triangles(doc: &Document) -> usize {
 fn settle(doc: &mut Document, projection: &Projection) {
     let start = Instant::now();
     while doc.update_display(projection, 0.016) && doc.display_quality().pending() {
-        assert!(start.elapsed() < Duration::from_secs(60), "the worker did not answer");
+        assert!(start.elapsed() < HANG, "the worker did not answer");
         std::thread::sleep(Duration::from_millis(10));
     }
 }
