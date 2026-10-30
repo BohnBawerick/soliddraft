@@ -9,7 +9,27 @@ use soliddraft_kernel_api::*;
 
 use crate::{CatallaxKernel, Solid};
 
+/// Chord of a screen view of a fitted body: Catallax's default display chord, doubled because
+/// the adapter halves a requested chord. A fitted body's preview shares the certified display
+/// route, whose cost grows as the chord shrinks, and a view's automatic chord is far below a pixel.
+const FITTED_VIEW_CHORD: f64 = 0.02;
+
+/// The view a request means on this body. An exported view and an explicit tolerance stay as
+/// they are. The chord also sets the depth margin, so the two stay matched.
+pub(super) fn resolved_view(k: &CatallaxKernel, body: BodyId, spec: &ViewSpec) -> ViewSpec {
+    let fitted = k.solid(body).is_ok_and(|solid| {
+        let built = solid.app.checkpoint.built();
+        built.model.blend_base(built.result).is_some()
+    });
+    if spec.preview && spec.tolerance <= 0.0 && fitted {
+        ViewSpec { tolerance: FITTED_VIEW_CHORD, ..*spec }
+    } else {
+        *spec
+    }
+}
+
 pub(super) fn view_curves(k: &CatallaxKernel, body: BodyId, spec: &ViewSpec) -> KernelResult<ViewCurves> {
+    let spec = &resolved_view(k, body, spec);
     let mut view = mesh_hlr::view_curves(k, body, spec)?;
     let mut counts = BTreeMap::new();
     for curve in &view.curves {

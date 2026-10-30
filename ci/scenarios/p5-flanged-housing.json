@@ -1,0 +1,442 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "p5-flanged-housing",
+  "max_work": 20000000,
+  "steps": [
+    {
+      "tool": "sketch_geometry",
+      "arguments": {
+        "plane": "top",
+        "operations": [
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 8,
+                "v": 0
+              },
+              "b": {
+                "u": 22,
+                "v": 0
+              }
+            }
+          },
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 22,
+                "v": 0
+              },
+              "b": {
+                "u": 22,
+                "v": 5
+              }
+            }
+          },
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 22,
+                "v": 5
+              },
+              "b": {
+                "u": 12,
+                "v": 5
+              }
+            }
+          },
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 12,
+                "v": 5
+              },
+              "b": {
+                "u": 12,
+                "v": 30
+              }
+            }
+          },
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 12,
+                "v": 30
+              },
+              "b": {
+                "u": 8,
+                "v": 30
+              }
+            }
+          },
+          {
+            "tool": "add",
+            "construction": false,
+            "kind": {
+              "type": "line",
+              "a": {
+                "u": 8,
+                "v": 30
+              },
+              "b": {
+                "u": 8,
+                "v": 0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tool": "revolve",
+      "arguments": {
+        "sketch": "Sketch1",
+        "axis_origin": [
+          0,
+          0,
+          0
+        ],
+        "axis_direction": [
+          0,
+          1,
+          0
+        ],
+        "angle_deg": 360
+      },
+      "label": "P5 housing",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12880.529879718,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Revolve1 · Side of line 3",
+        "points": [
+          [
+            17,
+            5,
+            0
+          ],
+          [
+            0,
+            5,
+            17
+          ],
+          [
+            -17,
+            5,
+            0
+          ],
+          [
+            0,
+            5,
+            -17
+          ]
+        ],
+        "diameter": 4,
+        "countersink": {
+          "diameter": 8,
+          "angle": 90
+        }
+      },
+      "label": "P5 drilled",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12495.161180877803,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Revolve1 · Edge 4"
+        ],
+        "radius": 2
+      },
+      "label": "P5 junction fillet",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12558.681699123754,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 2.5
+      },
+      "label": "P5 junction fillet edit",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2.5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12558.681699123754,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/p5-flanged-housing.dwprt"
+      },
+      "files": [
+        "{bundle}/p5-flanged-housing.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/p5-flanged-housing.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 11,
+      "checked_step_export": "{bundle}/p5-flanged-housing.dwprt"
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2.5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 3.5
+      },
+      "refusal": "shapes.rolling-envelope",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2.5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    }
+  ]
+}

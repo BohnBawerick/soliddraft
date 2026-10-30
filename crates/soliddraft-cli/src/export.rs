@@ -220,6 +220,7 @@ mod tests {
             report: Report::Step(soliddraft_kernel_api::StepReport {
                 max_deviation: if within_tolerance { "0" } else { "0.001" }.into(),
                 max_deviation_mm: if within_tolerance { 0.0 } else { 0.001 },
+                fit_mm: 0.0,
                 within_tolerance,
                 solids: 1,
                 faces: 6,

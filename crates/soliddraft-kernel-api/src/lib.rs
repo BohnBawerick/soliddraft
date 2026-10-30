@@ -596,15 +596,24 @@ impl Default for StepOptions {
     }
 }
 
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
+}
+
 /// What a STEP export wrote and how far it is from the exact body.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StepReport {
-    /// Proven upper bound, in millimetres, on the distance between the written and the
-    /// exact geometry, as a decimal rounded up.
+    /// Proven upper bound, in millimetres, on the distance between the written geometry
+    /// and the body, as a decimal rounded up.
     pub max_deviation: String,
     /// The same bound as the nearest `f64` not below it.
     pub max_deviation_mm: f64,
-    /// True when the bound meets the requested tolerance.
+    /// Proven upper bound, in millimetres, on how far the body's fitted surfaces are from
+    /// their exact definitions. It adds to `max_deviation_mm`, and the requested tolerance
+    /// does not govern it. Zero for a body with no fitted surface.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fit_mm: f64,
+    /// True when `max_deviation` meets the requested tolerance.
     pub within_tolerance: bool,
     /// Solids written.
     pub solids: usize,

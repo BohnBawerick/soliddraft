@@ -111,6 +111,14 @@ class Checks(unittest.TestCase):
         self.assertFalse(scenarios.check({"body": {}}, rule)["pass"])
         self.assertFalse(scenarios.check({"body": {"volume": None}}, rule)["pass"])
 
+    def test_a_tally_counts_a_list_by_field(self):
+        faces = [{"name": "Blend", "surface": "torus"}, {"name": "Blend", "surface": "spline"}]
+        evidence = {"faces": faces}
+        rule = {"pointer": "/faces", "tally": {"surface": {"torus": 1, "spline": 1}, "name": {"Blend": 2}}}
+        self.assertTrue(scenarios.check(evidence, rule)["pass"])
+        self.assertFalse(scenarios.check(evidence, {"pointer": "/faces", "tally": {"surface": {"torus": 2}}})["pass"])
+        self.assertFalse(scenarios.check(evidence, {"pointer": "/faces", "tally": {"kind": {"torus": 2}}})["pass"])
+
     def test_invalid_or_ambiguous_comparisons_fail(self):
         for rule in ({"pointer": ""}, {"pointer": "", "equals": 3, "minimum": 1},
                      {"pointer": "bad", "equals": 3}):

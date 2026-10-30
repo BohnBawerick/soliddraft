@@ -2,12 +2,14 @@
 
 use catallax_app::EvaluatedApplicationBody;
 use catallax_numbers::Rational;
+use catallax_shapes::{SplineSupport, Surface};
 use soliddraft_kernel_api::{KernelError, KernelResult, StepExport, StepOptions, StepReport};
 
 use crate::{numerical, query_error};
 
-/// Writes the exact body as STEP. The deviation is Catallax's proven bound, rounded up to
-/// a decimal and to the next `f64`, never down.
+/// Writes the exact body as STEP. The deviation is Catallax's proven bound on the file
+/// against the represented body, rounded up to a decimal and to the next `f64`, never down.
+/// A rolling-envelope carrier's own fit to its exact definition is reported beside it.
 pub(super) fn export(app: &EvaluatedApplicationBody, options: &StepOptions) -> KernelResult<StepExport> {
     if !options.tolerance.is_finite() || options.tolerance <= 0.0 {
         return Err(KernelError::InvalidInput(format!(
@@ -34,12 +36,19 @@ pub(super) fn export(app: &EvaluatedApplicationBody, options: &StepOptions) -> K
         message: e.to_string(),
     })?;
     let report = answer.value;
+    let fit = built.model.faces_of_body(built.result).into_iter().fold(Rational::zero(), |worst, face| {
+        match built.model.geom().surface(built.model.face(face).surface) {
+            Surface::BSpline(SplineSupport::RollingEnvelope(envelope)) => worst.max(envelope.bound().upper.clone()),
+            _ => worst,
+        }
+    });
     let max_deviation = report.max_deviation.to_decimal_bounds(40).1;
     Ok(StepExport {
         text,
         report: StepReport {
             max_deviation_mm: f64_up(&report.max_deviation),
             max_deviation,
+            fit_mm: f64_up(&fit),
             within_tolerance: report.max_deviation <= tolerance,
             solids: report.solids,
             faces: report.faces,

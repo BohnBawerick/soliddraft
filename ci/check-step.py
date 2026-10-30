@@ -8,7 +8,8 @@ passes when OpenCASCADE reads the file into one valid solid whose face count equ
 the report's and the exact body's less the faces the report says the export removed, and
 whose volume is within the reported deviation of the exact volume. Each removed count
 must be a whole number from 0 to the exact body's count. A surface moved by at most d changes the enclosed volume by at most
-area * d to first order in d, so the allowance is area * d, plus OpenCASCADE's own
+area * d to first order in d, so the allowance is area * d, where d is the reported
+deviation plus any fitted surface's reported fit to its exact definition, plus OpenCASCADE's own
 estimate of its integration error, plus the exact volume's measurement width (a
 relative 1e-12 around Catallax's proven enclosure).
 
@@ -54,7 +55,7 @@ def check(step_path, report):
     props = GProp_GProps()
     integration_error = BRepGProp.VolumeProperties_s(shape, props, INTEGRATION_EPS)
     volume = props.Mass()
-    deviation = step["max_deviation_mm"]
+    deviation = step["max_deviation_mm"] + step.get("fit_mm", 0.0)
     allowance = exact["area"] * deviation + abs(integration_error * volume) + MEASUREMENT_WIDTH * exact["volume"]
     seen = {
         "solids": count(shape, TopAbs_SOLID),

@@ -114,8 +114,9 @@ A scenario is `soliddraft-scenario/1` with a name and ordered `steps`. Each step
 has `tool` and `arguments`, using the schemas printed by `soliddraft mcp --help`.
 Optional `checks` use JSON pointers into `command.json`, or `/measurement/...` for an
 explicit live-body measurement requested after the edit and display have been timed.
-Each check has exactly one of `equals`, `approx`, `minimum` or `contains`. `approx`
-accepts an absolute `tolerance`, default 0.001. Missing values fail. A step can request `drawing: true`
+Each check has exactly one of `equals`, `approx`, `minimum`, `tally` or `contains`. `approx`
+accepts an absolute `tolerance`, default 0.001. `tally` maps a field to the counts its values must
+have across a list, so a check does not depend on the list's order. Missing values fail. A step can request `drawing: true`
 for drawing output, `export` with a list of extensions (`step`, `stl`, `3mf`) for
 `soliddraft export` after the click is timed, or `refusal` with an expected stable kernel code.
 `refused` expects an application refusal instead: the tool must fail with that text, and no

@@ -2,6 +2,7 @@
 """Drive the installed application's MCP and CLI, retaining evidence on failure."""
 
 import argparse
+import collections
 import hashlib
 import json
 import math
@@ -417,7 +418,7 @@ def check(value, spec, previous=None):
                 return {"check": spec, "pass": spec["absent"]}
             return {"check": spec, "actual": actual, "pass": not spec["absent"]}
         actual = at(value, spec["pointer"])
-        comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "contains", "same_as_step", "same_as", "differs_from") if key in spec]
+        comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "tally", "contains", "same_as_step", "same_as", "differs_from") if key in spec]
         if len(comparisons) != 1:
             raise ValueError("a check needs exactly one comparison")
         kind = comparisons[0]
@@ -439,6 +440,9 @@ def check(value, spec, previous=None):
             passed = actual <= expected
         elif kind == "length":
             passed = isinstance(actual, list) and len(actual) == expected
+        elif kind == "tally":
+            passed = all(dict(collections.Counter(item[key] for item in actual)) == counts
+                         for key, counts in expected.items())
         else:
             passed = expected in actual
         return {"check": spec, "actual": actual, "pass": passed}
