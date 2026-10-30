@@ -94,3 +94,32 @@ fn u5_old_file_keeps_its_recorded_hashes_on_open_and_resave() {
     assert_eq!(saved.semantic_hash().to_string(), revision);
     assert_eq!(saved.geometry_hash().to_string(), geometry);
 }
+
+fn check_dependency_depth(reverse_creation: bool) {
+    let mut doc = empty();
+    if reverse_creation {
+        // Predeclare literals so reversed entry order needs no forward references.
+        for n in (1..=33).rev() {
+            set(&mut doc, &format!("v{n}"), "1");
+        }
+    } else {
+        set(&mut doc, "v1", "1");
+    }
+    for n in 2..=32 {
+        set(&mut doc, &format!("v{n}"), &format!("v{}", n - 1));
+    }
+    let values = doc.values().summary();
+    let boundary = values.as_array().unwrap().iter().find(|v| v["name"] == "v32").unwrap();
+    assert_eq!(boundary["value"], serde_json::json!(1.0));
+    refused(&mut doc, Command::SetValue { name: "v33".into(), expression: "v32".into() }, "too deep");
+}
+
+#[test]
+fn dependency_depth_boundary_in_creation_order_is_atomic() {
+    check_dependency_depth(false);
+}
+
+#[test]
+fn dependency_depth_boundary_in_reverse_creation_order_is_atomic() {
+    check_dependency_depth(true);
+}

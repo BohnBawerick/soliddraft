@@ -7,6 +7,8 @@ use soliddraft_sketch::{ConstraintId, ConstraintKind, SolveStatus};
 
 use crate::{Document, Feature, FeatureId, FeatureKind};
 
+const MAX_DEPENDENCY_DEPTH: usize = 32;
+
 /// A driven feature input, identified independently of its display name.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -174,29 +176,37 @@ impl Values {
             values: &Values,
             id: u32,
             visiting: &mut Vec<u32>,
-            done: &mut BTreeMap<u32, Quantity>,
-        ) -> Result<Quantity, String> {
-            if let Some(q) = done.get(&id) {
-                return Ok(*q);
+            done: &mut BTreeMap<u32, (Quantity, usize)>,
+        ) -> Result<(Quantity, usize), String> {
+            if let Some(cached) = done.get(&id) {
+                return Ok(*cached);
             }
             if visiting.contains(&id) {
                 return Err("value cycle".into());
             }
-            if visiting.len() >= 32 {
+            if visiting.len() >= MAX_DEPENDENCY_DEPTH {
                 return Err("value graph is too deep".into());
             }
             let v = values.entries.iter().find(|v| v.id == id).ok_or("missing value reference")?;
             visiting.push(id);
-            let q = evaluate(&v.expression.tree, &mut |other| visit(values, other, visiting, done))?;
+            let mut depth = 1;
+            let q = evaluate(&v.expression.tree, &mut |other| {
+                let (quantity, dependency_depth) = visit(values, other, visiting, done)?;
+                depth = depth.max(dependency_depth + 1);
+                Ok(quantity)
+            })?;
             visiting.pop();
-            done.insert(id, q);
-            Ok(q)
+            if depth > MAX_DEPENDENCY_DEPTH {
+                return Err("value graph is too deep".into());
+            }
+            done.insert(id, (q, depth));
+            Ok((q, depth))
         }
         let mut done = BTreeMap::new();
         for v in &self.entries {
             visit(self, v.id, &mut Vec::new(), &mut done)?;
         }
-        Ok(done)
+        Ok(done.into_iter().map(|(id, (quantity, _))| (id, quantity)).collect())
     }
 
     /// Named values in creation order, with resolved document units.
