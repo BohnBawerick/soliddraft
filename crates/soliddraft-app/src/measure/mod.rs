@@ -1,5 +1,7 @@
 //! Proven picked quantities and tracked checks.
 
+pub mod guides;
+pub mod hover;
 pub mod panel;
 pub(crate) mod registry;
 pub(crate) mod tools;

@@ -1,23 +1,73 @@
 //! Picked measurement and tracked value rows in the property panel.
 
+use super::hover::{Pick, Proven};
 use crate::{
     document::{Command, Selection},
     state::AppState,
     theme,
 };
 use serde_json::Value;
+use soliddraft_kernel_api::{EdgeId, PairQuantity};
 
-#[derive(Default)]
 pub struct State {
     pub open: bool,
     cached: Option<Cached>,
     name: String,
     check: String,
     error: Option<String>,
+    /// Up to two picks, in order. A third replaces the second.
+    pub picks: Vec<Pick>,
+    /// The scalar asked of two picks.
+    pub quantity: PairQuantity,
+    /// The selection seen last frame, so a selection made elsewhere restarts the picks.
+    seen: Option<Selection>,
+    /// The hovered edge's proven midpoint the pointer is on this frame.
+    pub target: Option<(EdgeId, [f64; 3])>,
+    pub(super) proven: Vec<Proven>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            open: false,
+            cached: None,
+            name: String::new(),
+            check: String::new(),
+            error: None,
+            picks: Vec::new(),
+            quantity: PairQuantity::MinimumDistance,
+            seen: None,
+            target: None,
+            proven: Vec::new(),
+        }
+    }
+}
+
+impl State {
+    /// Adds a viewport pick. Two midpoints ask for their distance; otherwise the minimum.
+    pub fn pick(&mut self, pick: Pick) {
+        if self.picks.len() == 2 {
+            self.picks[1] = pick;
+        } else {
+            self.picks.push(pick);
+        }
+        if let [a, b] = self.picks[..] {
+            self.quantity =
+                if a.midpoint && b.midpoint { PairQuantity::PointDistance } else { PairQuantity::MinimumDistance };
+        }
+    }
+}
+
+/// What the panel proves. Switching quantity or picks never reuses another request's number.
+#[derive(Clone, Copy, PartialEq)]
+enum Request {
+    Single(Selection),
+    Midpoint(Selection),
+    Pair(Selection, Selection, PairQuantity),
 }
 
 struct Cached {
-    selection: Selection,
+    request: Request,
     geometry: soliddraft_document::ContentHash,
     result: Result<Value, String>,
 }
@@ -34,52 +84,112 @@ fn number(value: &Value, unit: &Value) -> String {
     }
 }
 
+const QUANTITIES: [(PairQuantity, &str); 3] = [
+    (PairQuantity::MinimumDistance, "Minimum distance"),
+    (PairQuantity::PointDistance, "Midpoint distance"),
+    (PairQuantity::DirectionAngle, "Direction angle"),
+];
+
+/// The request the current picks make, after following a selection made elsewhere.
+fn request(state: &mut AppState) -> Option<Request> {
+    let selection = state.doc.selection;
+    let m = &mut state.measure;
+    if selection != m.seen {
+        m.seen = selection;
+        match selection {
+            Some(s @ (Selection::Edge(_) | Selection::Face(_))) => {
+                if !m.picks.iter().any(|p| p.selection == s) {
+                    m.picks = vec![Pick { selection: s, midpoint: false }];
+                }
+            }
+            _ => m.picks.clear(),
+        }
+    }
+    match m.picks[..] {
+        [a, b] => Some(Request::Pair(a.selection, b.selection, m.quantity)),
+        [a] if a.midpoint => Some(Request::Midpoint(a.selection)),
+        [a] => Some(Request::Single(a.selection)),
+        _ => None,
+    }
+}
+
+fn prove(state: &AppState, request: Request) -> Result<Value, String> {
+    let doc = &state.doc;
+    match request {
+        Request::Single(s) => super::measure(doc, s),
+        Request::Midpoint(s) => super::midpoint(doc, s),
+        Request::Pair(a, b, q) => super::pair(doc, a, b, q).and_then(|source| super::measure_pair(doc, &source)),
+    }
+}
+
+fn track(state: &mut AppState, request: Request) {
+    let name = if state.measure.name.trim().is_empty() {
+        let mut n = 1;
+        let values = super::values(&state.doc);
+        while values.as_array().is_some_and(|rows| rows.iter().any(|r| r["name"] == format!("measure_{n}"))) {
+            n += 1;
+        }
+        format!("measure_{n}")
+    } else {
+        state.measure.name.trim().into()
+    };
+    let source = match request {
+        Request::Single(s) => super::source(&state.doc, s),
+        Request::Pair(a, b, q) => super::pair(&state.doc, a, b, q),
+        Request::Midpoint(_) => Err("a midpoint is a coordinate readout; pick a second entity to track".into()),
+    };
+    let check = (!state.measure.check.trim().is_empty()).then(|| state.measure.check.trim().into());
+    let result = source.and_then(|source| state.doc.apply(Command::Track { name, source, check }));
+    state.measure.error = result.err();
+}
+
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     if state.measure.open {
         theme::section_label(ui, "Measure");
-        let selection = state.doc.selection;
-        if let Some(selection @ (Selection::Edge(_) | Selection::Face(_))) = selection {
+        if let Some(request) = request(state) {
             let geometry = state.doc.model().geometry_hash();
-            if state.measure.cached.as_ref().is_none_or(|c| c.selection != selection || c.geometry != geometry)
+            if state.measure.cached.as_ref().is_none_or(|c| c.request != request || c.geometry != geometry)
                 || state.doc.proof_pending()
             {
-                state.measure.cached =
-                    Some(Cached { selection, geometry, result: super::measure(&state.doc, selection) });
+                let result = prove(state, request);
+                state.measure.cached = Some(Cached { request, geometry, result });
+            }
+            if let Request::Pair(..) = request {
+                for (i, pick) in state.measure.picks.clone().into_iter().enumerate() {
+                    let title = state.doc.describe(pick.selection).map(|d| d.title).unwrap_or_default();
+                    let point = if pick.midpoint { " midpoint" } else { "" };
+                    ui.label(format!("{}: {title}{point}", if i == 0 { "From" } else { "To" }));
+                }
+                ui.horizontal_wrapped(|ui| {
+                    for (q, label) in QUANTITIES {
+                        ui.selectable_value(&mut state.measure.quantity, q, label);
+                    }
+                });
             }
             match state.measure.cached.as_ref().map(|c| &c.result) {
                 Some(Ok(value)) => {
-                    ui.label(number(&value["value"], &value["unit"]));
-                    ui.label(value["certainty"].as_str().unwrap_or(""));
-                    ui.add(egui::TextEdit::singleline(&mut state.measure.name).hint_text("Value name")).widget_info(
-                        || egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tracked value name"),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut state.measure.check).hint_text("Optional check, e.g. < 12 mm"),
-                    )
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Measurement check"));
-                    if ui.button("Track this").clicked() {
-                        let name = if state.measure.name.trim().is_empty() {
-                            let mut n = 1;
-                            let values = super::values(&state.doc);
-                            while values
-                                .as_array()
-                                .is_some_and(|rows| rows.iter().any(|r| r["name"] == format!("measure_{n}")))
-                            {
-                                n += 1;
-                            }
-                            format!("measure_{n}")
-                        } else {
-                            state.measure.name.trim().into()
-                        };
-                        let result = super::source(&state.doc, selection).and_then(|source| {
-                            state.doc.apply(Command::Track {
-                                name,
-                                source,
-                                check: (!state.measure.check.trim().is_empty())
-                                    .then(|| state.measure.check.trim().into()),
-                            })
+                    if let Request::Midpoint(_) = request {
+                        let c = |i: usize| value["coordinates"][i]["value"].as_f64().unwrap_or(f64::NAN);
+                        ui.label(format!("Midpoint {}", super::hover::format([c(0), c(1), c(2)])));
+                        let exact = (0..3).all(|i| value["coordinates"][i]["certainty"] == "exact");
+                        ui.label(if exact { "exact" } else { "bounded" });
+                    } else {
+                        ui.label(number(&value["value"], &value["unit"]));
+                        ui.label(value["certainty"].as_str().unwrap_or(""));
+                        ui.add(egui::TextEdit::singleline(&mut state.measure.name).hint_text("Value name"))
+                            .widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tracked value name")
+                            });
+                        ui.add(
+                            egui::TextEdit::singleline(&mut state.measure.check)
+                                .hint_text("Optional check, e.g. < 12 mm"),
+                        )
+                        .widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Measurement check")
                         });
-                        state.measure.error = result.err();
+                        if ui.button("Track this").clicked() {
+                            track(state, request);
+                        }
                     }
                 }
                 Some(Err(error)) => {
@@ -88,7 +198,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 None => {}
             }
         } else {
-            ui.label("Pick an edge or a face to measure.");
+            ui.label("Pick an edge or a face to measure, or a second one for a distance or angle.");
         }
         if let Some(error) = &state.measure.error {
             ui.colored_label(theme::error(), error);

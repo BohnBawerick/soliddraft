@@ -255,7 +255,8 @@ pub fn run(
         if drawing {
             let prev = s.pending.last().map(|(p, _)| *p);
             let ignore: Vec<EntityId> = Vec::new();
-            if let Some((p, snaps)) = infer(&frame, &s.sketch, pos, prev, &ignore) {
+            if let (Some(raw), Some(inferred)) = (frame.plane_at(pos), infer(&frame, &s.sketch, pos, prev, &ignore)) {
+                let (p, snaps) = crate::measure::guides::offered(s.auto_relations, raw, inferred);
                 snapped = Some(p);
                 s.snaps = snaps;
             }
@@ -314,6 +315,7 @@ pub fn run(
     paint_snaps(&painter, &frame, s, hover_pos, snapped);
     dim_editor(ui, s, &frame, &mut actions);
     paint_status(ui, s, rect);
+    crate::measure::guides::switches(ui, s, rect);
     actions
 }
 
@@ -437,7 +439,7 @@ fn tool_click(s: &mut SketchSession, p: P2, snaps: Vec<Snap>, double: bool, acti
                         s.pending.push((a, a_snaps));
                         return;
                     }
-                    let id = s.sketch.add(EntityKind::Line { a, b: p }, false);
+                    let id = s.sketch.add(EntityKind::Line { a, b: p }, s.construction);
                     apply_snaps(&mut s.sketch, PointRef::new(id, 0), &a_snaps, Some(id));
                     apply_snaps(&mut s.sketch, PointRef::new(id, 1), &snaps, Some(id));
                     solve::solve(&mut s.sketch, None, true);
@@ -461,8 +463,9 @@ fn tool_click(s: &mut SketchSession, p: P2, snaps: Vec<Snap>, double: bool, acti
                     return;
                 }
                 let c = [a, P2::new(p.u, a.v), p, P2::new(a.u, p.v)];
-                let ids: Vec<EntityId> =
-                    (0..4).map(|i| s.sketch.add(EntityKind::Line { a: c[i], b: c[(i + 1) % 4] }, false)).collect();
+                let ids: Vec<EntityId> = (0..4)
+                    .map(|i| s.sketch.add(EntityKind::Line { a: c[i], b: c[(i + 1) % 4] }, s.construction))
+                    .collect();
                 for i in 0..4 {
                     s.sketch.constrain(ConstraintKind::Coincident {
                         a: PointRef::new(ids[i], 1),
@@ -490,7 +493,7 @@ fn tool_click(s: &mut SketchSession, p: P2, snaps: Vec<Snap>, double: bool, acti
                     s.pending.push((c, c_snaps));
                     return;
                 }
-                let id = s.sketch.add(EntityKind::Circle { center: c, radius: r }, false);
+                let id = s.sketch.add(EntityKind::Circle { center: c, radius: r }, s.construction);
                 apply_snaps(&mut s.sketch, PointRef::new(id, 0), &c_snaps, None);
                 if let Some(Snap::Point(r)) = snaps.iter().find(|x| matches!(x, Snap::Point(_))) {
                     s.sketch.constrain(ConstraintKind::PointOn { point: *r, entity: id });
@@ -521,7 +524,7 @@ fn tool_click(s: &mut SketchSession, p: P2, snaps: Vec<Snap>, double: bool, acti
             } else {
                 (end, start, snaps, start_snaps)
             };
-            let id = s.sketch.add(EntityKind::Arc { center: c, start: a, end: b }, false);
+            let id = s.sketch.add(EntityKind::Arc { center: c, start: a, end: b }, s.construction);
             apply_snaps(&mut s.sketch, PointRef::new(id, 0), &c_snaps, None);
             apply_snaps(&mut s.sketch, PointRef::new(id, 1), &a_snaps, None);
             apply_snaps(&mut s.sketch, PointRef::new(id, 2), &b_snaps, None);
@@ -541,12 +544,17 @@ fn tool_click(s: &mut SketchSession, p: P2, snaps: Vec<Snap>, double: bool, acti
             }
             let n = d.normalized().perp();
             let r = p.sub(c0).dot(n).abs().max(d.len() * 0.05);
-            let top = s.sketch.add(EntityKind::Line { a: c0.add(n.scale(r)), b: c1.add(n.scale(r)) }, false);
-            let right =
-                s.sketch.add(EntityKind::Arc { center: c1, start: c1.sub(n.scale(r)), end: c1.add(n.scale(r)) }, false);
-            let bottom = s.sketch.add(EntityKind::Line { a: c1.sub(n.scale(r)), b: c0.sub(n.scale(r)) }, false);
-            let left =
-                s.sketch.add(EntityKind::Arc { center: c0, start: c0.add(n.scale(r)), end: c0.sub(n.scale(r)) }, false);
+            let top = s.sketch.add(EntityKind::Line { a: c0.add(n.scale(r)), b: c1.add(n.scale(r)) }, s.construction);
+            let right = s.sketch.add(
+                EntityKind::Arc { center: c1, start: c1.sub(n.scale(r)), end: c1.add(n.scale(r)) },
+                s.construction,
+            );
+            let bottom =
+                s.sketch.add(EntityKind::Line { a: c1.sub(n.scale(r)), b: c0.sub(n.scale(r)) }, s.construction);
+            let left = s.sketch.add(
+                EntityKind::Arc { center: c0, start: c0.add(n.scale(r)), end: c0.sub(n.scale(r)) },
+                s.construction,
+            );
             let axis = s.sketch.add(EntityKind::Line { a: c0, b: c1 }, true);
             for (a, b) in [
                 (PointRef::new(top, 1), PointRef::new(right, 2)),

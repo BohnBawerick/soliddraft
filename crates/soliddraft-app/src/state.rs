@@ -407,6 +407,10 @@ pub struct SketchSession {
     pub dim_second: Option<SketchSel>,
     pub was_orthographic: bool,
     pub message: Option<(String, Instant)>,
+    /// Whether the pointer infers relations; see [`crate::measure::guides`].
+    pub auto_relations: bool,
+    /// Whether new entities are drawn as construction geometry.
+    pub construction: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -435,6 +439,8 @@ impl SketchSession {
             dim_second: None,
             was_orthographic,
             message: None,
+            auto_relations: true,
+            construction: false,
         }
     }
 
@@ -782,6 +788,12 @@ impl AppState {
         let id = self.selected_feature()?;
         let f = self.doc.feature(id)?;
         if f.is_sketch() { Some(id) } else { f.kind.sketch() }
+    }
+
+    /// Work the part viewport's own frame leaves to the panels: Measure's midpoint target
+    /// and picks.
+    pub fn after_viewport(&mut self, ui: &mut egui::Ui, events: &crate::viewport::ViewportEvents) {
+        crate::measure::hover::frame(ui, self, events);
     }
 
     pub fn in_sketch(&self) -> bool {
