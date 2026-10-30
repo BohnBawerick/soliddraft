@@ -156,13 +156,25 @@ impl Camera {
 
     pub fn set_view(&mut self, view: StandardView) {
         let (yaw, pitch) = view.angles();
-        self.view_name = view.label();
+        self.turn_to(view.label(), yaw, pitch);
+    }
+
+    /// Turns, animated, to look from `yaw` and `pitch` degrees, and names the view.
+    pub fn turn_to(&mut self, name: &'static str, yaw: f32, pitch: f32) {
+        self.view_name = name;
         self.goal = Some(Goal {
             yaw: yaw.to_radians(),
             pitch: pitch.to_radians(),
             target: self.target,
             distance: self.distance,
         });
+    }
+
+    /// Where the view looks from once any transition ends: [`Camera::direction`] at the
+    /// goal.
+    pub fn heading(&self) -> Vec3 {
+        let (yaw, pitch) = self.goal.map_or((self.yaw, self.pitch), |g| (g.yaw, g.pitch));
+        Vec3::new(pitch.cos() * yaw.cos(), pitch.cos() * yaw.sin(), pitch.sin())
     }
 
     /// Looks straight at a plane from the side its normal points to, animated.

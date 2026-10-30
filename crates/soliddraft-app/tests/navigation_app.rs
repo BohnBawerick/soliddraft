@@ -659,3 +659,261 @@ fn wheel_direction_is_global_and_independent() {
         assert!(cam(&app).3 > d0, "{preset}: inverted, a forward turn zooms out");
     }
 }
+
+/// Uses a view-key profile through the app's settings path.
+fn use_view_keys(app: &mut App, profile: &str) {
+    let mut nav = app.state().state.navigation.clone();
+    soliddraft_app::navigation::view_keys::apply_to(&mut nav, profile).unwrap();
+    app.state_mut().state.set_navigation(nav).unwrap();
+    app.run_steps(1);
+}
+
+fn top_face(app: &App) -> Selection {
+    let doc = &app.state().state.doc;
+    Selection::Face(doc.faces.iter().find(|f| (f.centroid.z - 20.0).abs() < 1e-9).unwrap().id)
+}
+
+fn view_name(app: &App) -> &'static str {
+    app.state().state.viewport.camera.view_name
+}
+
+fn direction(app: &App) -> Vec3 {
+    app.state().state.viewport.camera.direction()
+}
+
+fn ribbon_button(app: &mut App, label: &str) {
+    app.state_mut().state.ribbon_tab = soliddraft_app::state::RibbonTab::View;
+    app.run_steps(2);
+    app.get_all_by_role_and_label(egui::accesskit::Role::Button, label)
+        .next()
+        .unwrap_or_else(|| panic!("the View ribbon has {label}"))
+        .click();
+    app.run_steps(40);
+}
+
+#[test]
+fn inventor_held_keys_and_wheel_direction() {
+    let (_guard, _dir) = config_dir("inventor");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "inventor");
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let none = Modifiers::NONE;
+    let shift_m = effect(&mut app, "inventor-shift-middle", |app| {
+        drag(app, PointerButton::Middle, c, c + vec2(40.0, 20.0), Modifiers::SHIFT)
+    });
+    assert_eq!(shift_m, ORBIT);
+    assert_eq!(
+        effect(&mut app, "inventor-middle", |app| drag(app, PointerButton::Middle, c, c + vec2(40.0, 20.0), none)),
+        PAN
+    );
+    for (key, name, want) in [
+        (Key::F4, "inventor-f4-left", ORBIT),
+        (Key::F2, "inventor-f2-left", PAN),
+        (Key::F3, "inventor-f3-left", (false, false, true)),
+    ] {
+        let got = effect(&mut app, name, |app| {
+            app.key_down(key);
+            app.step();
+            drag(app, PointerButton::Primary, c, c + vec2(30.0, -40.0), none);
+            app.key_up(key);
+            app.run_steps(2);
+        });
+        let got = if want.2 { (false, false, got.2) } else { got };
+        assert_eq!(got, want, "{name}");
+    }
+    app.hover_at(viewport(&app).center());
+    app.run_steps(2);
+    let d0 = cam(&app).3;
+    app.event(wheel_event(egui::MouseWheelUnit::Line, 1.0, none));
+    app.run_steps(3);
+    let d1 = cam(&app).3;
+    assert!(d1 > d0, "the wheel forward zooms out: {d0} to {d1}");
+    app.event(wheel_event(egui::MouseWheelUnit::Line, -1.0, none));
+    app.run_steps(3);
+    assert!(cam(&app).3 < d1, "backward zooms in");
+    let feature = app.state().state.doc.features[0].id;
+    app.state_mut().state.doc.selection = Some(Selection::Feature(feature));
+    app.key_down(Key::F2);
+    app.step();
+    app.key_up(Key::F2);
+    app.run_steps(3);
+    assert!(app.state().state.rename.is_some(), "an F2 tap renames");
+}
+
+#[test]
+fn f_conflict_does_not_steal_front_or_fillet() {
+    let (_guard, _dir) = config_dir("f-conflict");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "solidworks");
+    use_view_keys(&mut app, "solidworks");
+    app.state_mut().state.push(AppAction::SetView(soliddraft_app::viewport::camera::StandardView::Isometric));
+    app.run_steps(40);
+    app.hover_at(viewport(&app).center());
+    app.run_steps(2);
+    app.event(wheel_event(egui::MouseWheelUnit::Line, -6.0, Modifiers::NONE));
+    app.run_steps(3);
+    let far = cam(&app).3;
+    app.key_press(Key::F);
+    app.run_steps(40);
+    assert_eq!(view_name(&app), "Front", "F with nothing selected is Front");
+    assert!((cam(&app).3 - far).abs() < 1e-3, "and only Front: the view was not fitted");
+    assert!(app.state().state.editor.is_none());
+
+    let edge = {
+        let doc = &app.state().state.doc;
+        doc.edges.iter().find(|e| (e.midpoint.z - 20.0).abs() < 1e-9).unwrap().id
+    };
+    app.state_mut().state.doc.selection = Some(Selection::Edge(edge));
+    app.state_mut().state.push(AppAction::SetView(soliddraft_app::viewport::camera::StandardView::Isometric));
+    app.run_steps(40);
+    app.key_press(Key::F);
+    app.run_steps(10);
+    assert!(app.state().state.editor.is_some(), "F with an edge selected is Fillet");
+    assert_eq!(view_name(&app), "Isometric", "and only Fillet");
+    app.key_press(Key::Escape);
+    app.run_steps(5);
+    app.state_mut().state.doc.selection = None;
+    app.run_steps(2);
+
+    // Every command in the conflict, and the other views, keep their buttons.
+    ribbon_button(&mut app, "Fit");
+    assert!(cam(&app).3 < far, "the View ribbon's Fit fits");
+    for (label, name) in [("Front", "Front"), ("Top", "Top"), ("Right", "Right"), ("Isometric", "Isometric")] {
+        ribbon_button(&mut app, label);
+        assert_eq!(view_name(&app), name, "{label} still works from its button");
+    }
+    app.state_mut().state.doc.selection = Some(top_face(&app));
+    ribbon_button(&mut app, "Normal to");
+    assert!(direction(&app).dot(Vec3::Z) > 0.999, "Normal to still works from its button");
+    assert_eq!(app.state().state.navigation.keyboard_profile, "solidworks", "the profile stayed applied throughout");
+}
+
+#[test]
+fn view_keys_fit_normal_reverse_and_principal_views() {
+    let (_guard, _dir) = config_dir("view-keys");
+    if skip_without_gpu() {
+        return;
+    }
+    use soliddraft_app::viewport::camera::StandardView;
+    let mut app = gesture_app(box_document(), "solidworks");
+    use_view_keys(&mut app, "solidworks");
+    // Ctrl+8: with a face, normal to it; with none, a note and no move.
+    app.state_mut().state.doc.selection = Some(top_face(&app));
+    app.key_press_modifiers(Modifiers::CTRL, Key::Num8);
+    app.run_steps(60);
+    assert!(direction(&app).dot(Vec3::Z) > 0.999, "Ctrl+8 looks along the face");
+    app.state_mut().state.doc.selection = None;
+    app.run_steps(2);
+    let before = cam(&app);
+    app.key_press_modifiers(Modifiers::CTRL, Key::Num8);
+    app.run_steps(30);
+    assert_eq!(cam(&app), before, "no face, no move");
+    assert!(app.state().state.note.as_ref().is_some_and(|n| n.text.contains("planar face")));
+    // Ctrl+1 to Ctrl+7.
+    let views = [
+        (Key::Num1, StandardView::Front),
+        (Key::Num2, StandardView::Back),
+        (Key::Num3, StandardView::Left),
+        (Key::Num4, StandardView::Right),
+        (Key::Num5, StandardView::Top),
+        (Key::Num6, StandardView::Bottom),
+        (Key::Num7, StandardView::Isometric),
+    ];
+    let axis = |v: StandardView| {
+        let (yaw, pitch) = v.angles();
+        let (y, p) = (yaw.to_radians(), pitch.to_radians());
+        Vec3::new(p.cos() * y.cos(), p.cos() * y.sin(), p.sin())
+    };
+    for (key, view) in views {
+        app.key_press_modifiers(Modifiers::CTRL, key);
+        app.run_steps(60);
+        assert_eq!(view_name(&app), view.label(), "Ctrl+{key:?}");
+        assert!(direction(&app).dot(axis(view)) > 0.999, "Ctrl+{key:?} looks from {}", view.label());
+    }
+    // Onshape Shift+1 to Shift+7, from the physical digit even when the key is "!".
+    use_view_keys(&mut app, "onshape");
+    for (key, view) in views {
+        app.event(egui::Event::Key {
+            key: if key == Key::Num1 { Key::Exclamationmark } else { key },
+            physical_key: Some(key),
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::SHIFT,
+        });
+        app.run_steps(60);
+        assert_eq!(view_name(&app), view.label(), "Shift+{key:?}");
+    }
+    // Onshape N, then N again: normal, then reversed, one action per press.
+    app.state_mut().state.doc.selection = Some(top_face(&app));
+    app.key_press(Key::N);
+    app.run_steps(60);
+    let first = direction(&app);
+    app.key_press(Key::N);
+    app.run_steps(60);
+    let second = direction(&app);
+    assert!(first.dot(Vec3::Z) > 0.999 && first.dot(second) < -0.99, "{first:?} then {second:?}");
+    app.state_mut().state.doc.selection = None;
+
+    let zoomed_out = |app: &mut App| {
+        app.hover_at(viewport(app).center());
+        app.run_steps(2);
+        app.event(wheel_event(egui::MouseWheelUnit::Line, -8.0, Modifiers::NONE));
+        app.run_steps(3);
+        cam(app).3
+    };
+    for (profile, key, m) in [
+        ("fusion", Key::F6, Modifiers::NONE),
+        ("inventor", Key::Home, Modifiers::NONE),
+        ("blender", Key::Home, Modifiers::NONE),
+    ] {
+        use_view_keys(&mut app, profile);
+        let far = zoomed_out(&mut app);
+        app.key_press_modifiers(m, key);
+        app.run_steps(60);
+        assert!(cam(&app).3 < far * 0.8, "{profile} {key:?} fits");
+    }
+    // Solid Edge: a middle double click fits.
+    use_preset(&mut app, "solid_edge");
+    let far = zoomed_out(&mut app);
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    for _ in 0..2 {
+        press(&mut app, PointerButton::Middle, c, Modifiers::NONE);
+        app.event(egui::Event::PointerButton {
+            pos: c,
+            button: PointerButton::Middle,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        });
+        app.step();
+    }
+    app.run_steps(60);
+    assert!(cam(&app).3 < far * 0.8, "Solid Edge's middle double click fits");
+    // Creo Ctrl+D and NX End: the default and isometric views.
+    use_view_keys(&mut app, "creo");
+    app.key_press(Key::F);
+    app.run_steps(40);
+    app.key_press_modifiers(Modifiers::CTRL, Key::D);
+    app.run_steps(60);
+    assert_eq!(view_name(&app), "Isometric", "Creo's Ctrl+D");
+    use_view_keys(&mut app, "nx12");
+    app.key_press(Key::F);
+    app.run_steps(40);
+    app.key_press(Key::End);
+    app.run_steps(60);
+    assert_eq!(view_name(&app), "Isometric", "NX End");
+    // NX F8: normal to a face, or with none the nearest standard view.
+    app.state_mut().state.doc.selection = Some(top_face(&app));
+    app.key_press(Key::F8);
+    app.run_steps(60);
+    assert!(direction(&app).dot(Vec3::Z) > 0.999, "F8 with a face");
+    app.state_mut().state.doc.selection = None;
+    app.state_mut().state.viewport.camera.look_along(Vec3::new(0.95, 0.2, 0.15));
+    app.run_steps(60);
+    app.key_press(Key::F8);
+    app.run_steps(60);
+    assert_eq!(view_name(&app), "Right", "F8 with nothing selected snaps to the nearest view");
+}

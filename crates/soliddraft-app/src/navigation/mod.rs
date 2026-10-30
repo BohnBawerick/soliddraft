@@ -12,6 +12,7 @@
 mod presets;
 mod router;
 mod settings;
+pub mod view_keys;
 
 pub use router::{
     Motion, NAV_DRAG_THRESHOLD, NavEvent, Outcome, Routed, Router, RouterConfig, Supports, TrackpadProfile,
@@ -254,6 +255,18 @@ pub enum Action {
     Isometric,
     /// The application's default orientation.
     DefaultView,
+    Front,
+    Back,
+    Left,
+    Right,
+    Top,
+    Bottom,
+    Dimetric,
+    Trimetric,
+    /// Between perspective and parallel projection.
+    ProjectionToggle,
+    /// Top view turned so the selected face's normal points at the viewer.
+    AlignTopToFace,
     /// An action a newer SolidDraft named. Never runs.
     #[serde(other)]
     Unknown,
@@ -273,6 +286,16 @@ impl Action {
             Action::NormalOrNearest => "Normal to, or nearest standard view",
             Action::Isometric => "Isometric",
             Action::DefaultView => "Default view",
+            Action::Front => "Front",
+            Action::Back => "Back",
+            Action::Left => "Left",
+            Action::Right => "Right",
+            Action::Top => "Top",
+            Action::Bottom => "Bottom",
+            Action::Dimetric => "Dimetric",
+            Action::Trimetric => "Trimetric",
+            Action::ProjectionToggle => "Perspective or parallel",
+            Action::AlignTopToFace => "Align view to the active face",
             Action::Unknown => "Unknown",
         }
     }
@@ -773,6 +796,8 @@ pub enum Refusal {
     UnknownPreset(String),
     /// The preset is known but not offered yet, for the reason given.
     Withheld { id: String, reason: &'static str },
+    /// No view-key profile has this id.
+    UnknownProfile(String),
     /// The preset has no row with this id.
     UnknownBinding { preset: String, binding: String },
     /// The change would leave the preset's rows invalid.
@@ -786,6 +811,7 @@ impl std::fmt::Display for Refusal {
         match self {
             Refusal::UnknownPreset(id) => write!(f, "there is no navigation preset {id}"),
             Refusal::Withheld { id, reason } => write!(f, "the {id} preset is not offered yet: {reason}"),
+            Refusal::UnknownProfile(id) => write!(f, "there is no view-key profile {id}"),
             Refusal::UnknownBinding { preset, binding } => write!(f, "the {preset} preset has no {binding} binding"),
             Refusal::Invalid(errors) => {
                 let text: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
