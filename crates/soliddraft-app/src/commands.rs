@@ -451,7 +451,7 @@ fn desktop_only(_: &AppState) -> Option<String> {
 }
 
 impl CommandSpec {
-    fn new(id: &'static str, label: &'static str, icon: Icon, doc: &'static str) -> Self {
+    pub(crate) fn new(id: &'static str, label: &'static str, icon: Icon, doc: &'static str) -> Self {
         CommandSpec {
             id,
             label,
@@ -539,7 +539,12 @@ impl CommandSpec {
         self
     }
 
-    fn agents(mut self, agents: Agents, details: &'static str, params: fn() -> Vec<(&'static str, Value)>) -> Self {
+    pub(crate) fn agents(
+        mut self,
+        agents: Agents,
+        details: &'static str,
+        params: fn() -> Vec<(&'static str, Value)>,
+    ) -> Self {
         self.agents = agents;
         self.details = details;
         self.params = params;
@@ -552,7 +557,7 @@ impl CommandSpec {
         self
     }
 
-    fn undo(mut self, undo: Undo) -> Self {
+    pub(crate) fn undo(mut self, undo: Undo) -> Self {
         self.undo = undo;
         self
     }
@@ -902,7 +907,7 @@ fn registry() -> Vec<CommandSpec> {
         cmd("model_summary", "Model summary", Icon::Tree, "The part as it is now").agents(
             Agents::Tool,
             "Every feature in tree order with its parameters and status, the body's bounding box, volume and \
-             area, the selection, pending proposals and what undo would undo.",
+             area, values and tracked checks, the selection, pending proposals and what undo would undo. Tracked rows request an entity proof after each accepted rebuild.",
             Vec::new,
         ),
         cmd("feature", "Feature details", Icon::Props, "One feature in detail").agents(
@@ -1269,10 +1274,11 @@ fn registry() -> Vec<CommandSpec> {
         // Evaluate.
         cmd("measure", "Measure", Icon::Measure, "Distance between two entities' reference points")
             .on(Evaluate, "Measure", Large)
+            .run(|_| AppAction::MeasureEntity)
             .agents(
                 Agents::Tool,
                 concat!(
-                    "A reference point is a face's centroid, an edge's midpoint, a vertex's position or a feature's \
+                    "The Measure panel proves a picked edge length or face area and can track it. This two-entity tool reports reference-point offsets. A reference point is a face's centroid, an edge's midpoint, a vertex's position or a feature's \
                  centre of mass; the result has the x, y and z offsets, and for two parallel planar faces also the \
                  gap between them. ",
                     names_help!()
@@ -1311,7 +1317,7 @@ fn registry() -> Vec<CommandSpec> {
 .agents(
             Agents::Tool,
             "Calculate volume in mm³, surface area in mm² and centre of mass after the named feature. \
-             Editing and model_summary do not calculate these quantities; they report only previously requested results.",
+             Editing and model_summary report previously requested body properties. Tracked rows are standing requests for their own entity proofs.",
             tools::feature_params,
         ),
         cmd("check", "Check", Icon::Check, "Check the body for geometry faults").on(Evaluate, "Check", Large),
@@ -1699,6 +1705,7 @@ fn registry() -> Vec<CommandSpec> {
     ]
     .into_iter()
     .chain(drawing_registry())
+    .chain(crate::measure::registry::commands())
     .collect()
 }
 

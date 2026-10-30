@@ -784,6 +784,11 @@ impl DisplayMesh {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Command {
+    Track {
+        name: String,
+        source: model::tracked::Source,
+        check: Option<String>,
+    },
     SetValue {
         name: String,
         expression: String,
@@ -873,6 +878,7 @@ impl Command {
         match self {
             Command::AddSketch { .. } => "Add sketch".into(),
             Command::EditSketch { .. } => "Edit sketch".into(),
+            Command::Track { .. } => "Track this".into(),
             Command::SetValue { .. } => "Set value".into(),
             Command::Drive { .. } => "Drive input".into(),
             Command::RenameValue { .. } => "Rename value".into(),
@@ -1495,6 +1501,7 @@ impl Document {
         if let Some(worker) = &mut self.worker {
             worker.protect(None);
         }
+        self.model.stale_tracked(&message);
         self.proof_failure = Some(message);
         self.provisional = None;
         self.mesh_version += 1;
@@ -1909,6 +1916,7 @@ impl Document {
         let edit =
             |id: FeatureId, kind: &FeatureKind| model::Command::EditFeature { id: model_id(id), kind: kind.to_model() };
         Ok(match command {
+            Command::Track { name, source, check } => vec![model::Command::Track { name, source, check }],
             Command::SetValue { name, expression } => vec![model::Command::SetValue { name, expression }],
             Command::Drive { input, expression } => vec![model::Command::Drive { input, expression }],
             Command::RenameValue { name, to } => vec![model::Command::RenameValue { name, to }],

@@ -42,6 +42,8 @@ impl Input {
 pub struct Values {
     entries: Vec<NamedValue>,
     bindings: Vec<Binding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) tracked: Vec<crate::tracked::Row>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,13 +95,16 @@ impl Quantity {
 impl Values {
     /// Whether there is no value data to persist.
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty() && self.bindings.is_empty()
+        self.entries.is_empty() && self.bindings.is_empty() && self.tracked.is_empty()
     }
 
     pub(crate) fn set(&mut self, name: &str, text: &str) -> Result<(), String> {
         check_name(name)?;
+        if self.tracked.iter().any(|r| r.name == name) {
+            return Err(format!("{name} is tracked and cannot be set"));
+        }
         if !self.entries.iter().any(|v| v.name == name) {
-            if self.entries.len() >= 256 {
+            if self.entries.len() + self.tracked.len() >= 256 {
                 return Err("at most 256 named values are supported".into());
             }
             let id = self
@@ -134,6 +139,16 @@ impl Values {
 
     pub(crate) fn rename(&mut self, name: &str, to: &str) -> Result<(), String> {
         check_name(to)?;
+        if self.tracked.iter().any(|r| r.name == to && r.name != name) {
+            return Err(format!("the name {to} is already taken"));
+        }
+        if let Some(row) = self.tracked.iter_mut().find(|r| r.name == name) {
+            if self.entries.iter().any(|v| v.name == to) {
+                return Err(format!("the name {to} is already taken"));
+            }
+            row.name = to.into();
+            return Ok(());
+        }
         let index = self.entries.iter().position(|v| v.name == name).ok_or_else(|| format!("no value named {name}"))?;
         if self.entries.iter().enumerate().any(|(i, v)| i != index && v.name == to) {
             return Err(format!("the name {to} is already taken"));
@@ -261,7 +276,19 @@ impl Values {
             ids.push(v.id);
             names.push(v.name.as_str());
         }
-        if ids.len() > 256 {
+        for row in &self.tracked {
+            check_name(&row.name)?;
+            if names.contains(&row.name.as_str()) {
+                return Err(format!("duplicate value name {}", row.name));
+            }
+            names.push(&row.name);
+            if let Some(check) = &row.check
+                && crate::tracked::Check::parse(&check.text, row.source.unit())? != *check
+            {
+                return Err("check text and resolved limit disagree".into());
+            }
+        }
+        if names.len() > 256 {
             return Err("too many named values".into());
         }
         let mut inputs = Vec::new();
@@ -403,14 +430,14 @@ fn unit(text: &str) -> Option<(i128, i32, i32, i32)> {
     }
 }
 
-fn check_name(name: &str) -> Result<(), String> {
+pub(crate) fn check_name(name: &str) -> Result<(), String> {
     let mut bytes = name.bytes();
     if !bytes.next().is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
         || !bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
         || name.len() > 128
         || unit(name).is_some()
     {
-        return Err("a value name must be an identifier and cannot be a unit".into());
+        return Err(format!("{name}: a value name must be an identifier and cannot be a unit"));
     }
     Ok(())
 }
@@ -519,6 +546,9 @@ impl Parser<'_> {
                     }
                     Ok(Expr::Number(value, 0, 0))
                 } else {
+                    if self.values.tracked.iter().any(|r| r.name == token) {
+                        return Err(format!("{token} is tracked and cannot drive an expression"));
+                    }
                     self.values
                         .entries
                         .iter()
@@ -548,4 +578,24 @@ fn convert_decimal(text: &str, factor: i128, scale: i32) -> Result<f64, String> 
         return Err(fail());
     }
     Ok(value)
+}
+
+/// Parses a single check limit using the value parser's units and decimal conversion.
+pub(crate) fn parse_limit(text: &str, unit: &str) -> Result<f64, String> {
+    let expression = Values::default().parse(text)?;
+    fn literal(tree: &Expr) -> bool {
+        match tree {
+            Expr::Number(..) => true,
+            Expr::Neg(inner) => literal(inner),
+            _ => false,
+        }
+    }
+    if !literal(&expression.tree) {
+        return Err("a check needs one literal limit".into());
+    }
+    let q = evaluate(&expression.tree, &mut |_| Err("a check cannot read values".into()))?;
+    if !bare_literal(&expression.tree) && (q.length, q.angle) != (if unit == "mm" { 1 } else { 2 }, 0) {
+        return Err(format!("the check needs a {} limit", if unit == "mm" { "length" } else { "area" }));
+    }
+    Ok(q.value)
 }

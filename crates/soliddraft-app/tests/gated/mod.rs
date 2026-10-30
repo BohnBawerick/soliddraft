@@ -93,6 +93,12 @@ impl Kernel for Gated {
     fn topology(&self, body: BodyId) -> KernelResult<Topology> {
         self.inner.topology(body)
     }
+    fn edge_length(&self, body: BodyId, edge: EdgeId) -> KernelResult<Measurement> {
+        self.inner.edge_length(body, edge)
+    }
+    fn face_area(&self, body: BodyId, face: FaceId) -> KernelResult<Measurement> {
+        self.inner.face_area(body, face)
+    }
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
         self.inner.history(body)
     }

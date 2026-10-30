@@ -31,6 +31,8 @@ After a deliberate Catallax pin change, manually dispatch Hosted CI with `refres
 
 `ci/scenario-inventory.json` registers every application scenario and its owners. The `bracket` acceptance scenario runs MCP document commands through the real adapter at Catallax `75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4`. Its 32 steps check measured geometry, suffix rebuilds, width editing, undo/redo, save/reopen, drawing generation and checked STEP export. A refused zero-depth edit preserves revision and features. The result records the app checkout revision and kernel pin. The 25 existing steps and their accepted click-budget gaps stay unchanged. All scenarios still run when `application-loop` is selected. Finer scenario selection, a separate nightly audit and broader packaged edit/reopen checks remain follow-up work.
 
+The `measure` acceptance scenario checks picked edge length and face area, tracked checks, upstream edits, stale sources, undo, reopen and a checked STEP export; `measure_panel` drives the same path through a real viewport pick in each interactive job.
+
 Run CI tooling checks with `python3 -m unittest discover -s ci -p 'test_*.py'`. The lint job always runs this suite, including the frozen designer routing and gate fixtures.
 
 ## CI file consumers

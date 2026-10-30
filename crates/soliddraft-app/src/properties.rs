@@ -1116,6 +1116,7 @@ fn sketch_panel(ui: &mut egui::Ui, state: &mut AppState) {
 }
 
 fn selection(ui: &mut egui::Ui, state: &mut AppState) {
+    crate::measure::panel::show(ui, state);
     let Some(sel) = state.doc.selection else {
         ui.add_space(30.0);
         ui.vertical_centered(|ui| {

@@ -44,7 +44,7 @@ class OwnershipTests(unittest.TestCase):
     def test_slices_cannot_import_other_slices(self):
         for name, source in (('grid', 'use crate::measure::Track;\n'), ('measure', 'pub struct Track;\n')):
             directory = self.root / 'crates/soliddraft-app/src' / name
-            directory.mkdir()
+            directory.mkdir(exist_ok=True)
             (directory / 'mod.rs').write_text(source)
         result = self.run_check()
         self.assertEqual(result.returncode, 1)
@@ -65,7 +65,7 @@ class OwnershipTests(unittest.TestCase):
             ('soliddraft-model', 'configs', 'pub struct Variant;\n'),
         ):
             directory = self.root / 'crates' / crate / 'src' / module
-            directory.mkdir()
+            directory.mkdir(exist_ok=True)
             (directory / 'mod.rs').write_text(source)
         result = self.run_check()
         self.assertEqual(result.returncode, 1)

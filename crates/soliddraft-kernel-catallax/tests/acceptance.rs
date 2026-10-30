@@ -551,3 +551,8 @@ fn other_unsupported_controls_stay_labelled_with_an_edge_length() {
     assert!(mesh.unavailable_controls.iter().any(|c| c.starts_with("curve_angle_deg")));
     assert!(mesh.unavailable_controls.iter().all(|c| !c.starts_with("max_edge_length")));
 }
+
+#[test]
+fn measures_say_how_they_are_known() {
+    contract::measures_say_how_they_are_known(&CatallaxKernel::new());
+}
