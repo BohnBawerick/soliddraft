@@ -11,7 +11,7 @@ SolidDraft exports a part as STEP AP242, STL, 3MF or OBJ. The code is the `solid
 | 3MF (`.3mf`, core specification) | the same mesh, which must be closed | the export chord height |
 | OBJ (`.obj`, Wavefront) | the display mesh, retaining face groups and normals | the export chord height |
 
-STEP writes exact planes, cylinders, cones, spheres, tori, lines and circles. Intersection curves that have no exact STEP form are fitted splines, and the report counts them. The requested tolerance is 0.0000001 mm. If decimal rounding or spline fitting cannot meet it, the export still writes the file. The report then says the bound is over the tolerance and carries Catallax's warning, and the app shows the message as an error.
+STEP writes exact planes, cylinders, cones, spheres, tori, lines and circles. Intersection curves that have no exact STEP form are fitted splines, and the report counts them. The requested tolerance is 0.0000001 mm. If decimal rounding or spline fitting cannot meet it, the CLI refuses the whole export batch before writing any file. The app still writes the file, reports the bound over tolerance with Catallax's warning, and shows the message as an error.
 
 Meshes use the export tolerance in the part's `settings.json`, 0.01 mm and 10 degrees by default; see [tessellation.md](tessellation.md#the-four-tolerances). The chord height is proven after rounding to the file's 32-bit coordinates. Catallax stage 1 certifies the chord height only, so the report lists the angle as a control it could not guarantee.
 
@@ -27,7 +27,7 @@ OBJ writes the part name in an `o` record and the source face IDs in `g face_<id
 
 ## Refusals
 
-A part with a feature that needs a repair, is blocked or failed is refused, so no file shows a body the part does not have. Suppressed and rolled-back features are fine; the export is the body the tree shows. A refused export writes no file.
+A part with a feature that needs a repair, is blocked or failed is refused, so no file shows a body the part does not have. Suppressed and rolled-back features are fine; the export is the body the tree shows. A refused export writes no file. The CLI also refuses a batch containing any over-tolerance STEP report before creating or replacing any destination, including other formats in that batch.
 
 ## Where to export
 

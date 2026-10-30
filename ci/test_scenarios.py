@@ -67,6 +67,40 @@ class Checks(unittest.TestCase):
         self.assertEqual(scenarios.at({"a/b": [{"~": 2}]}, "/a~1b/0/~0"), 2)
 
 
+class SavedGeometry(unittest.TestCase):
+    def test_recipe_hash_equality_and_missing_hash_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folders = [pathlib.Path(temp) / name for name in ("before", "after")]
+            for folder in folders:
+                folder.mkdir()
+            for hashes, expected in ((["a" * 64, "a" * 64], True),
+                                     (["a" * 64, "b" * 64], False), ([None, None], False)):
+                replies = [scenarios.subprocess.CompletedProcess([], 0,
+                           json.dumps({"geometry_hash": value}), "") for value in hashes]
+                with mock.patch.object(scenarios.subprocess, "run", side_effect=replies):
+                    result = scenarios.same_geometry("soliddraft", folders[1], folders[0], 5)
+                self.assertEqual(result["pass"], expected)
+
+    def test_checked_step_fails_when_opencascade_or_validity_check_fails(self):
+        evidence = {"summary": {"body": {"faces": 6}},
+                    "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
+        report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True}
+        with tempfile.TemporaryDirectory() as temp:
+            directory = pathlib.Path(temp)
+            (directory / "part.step").write_bytes(b"STEP bytes")
+            for error in ("ModuleNotFoundError: No module named 'OCP'", "FAIL: invalid solid"):
+                replies = [scenarios.subprocess.CompletedProcess([], 0, json.dumps({"report": report}), ""),
+                           scenarios.subprocess.CompletedProcess([], 1, "", error)]
+                with mock.patch.object(scenarios.subprocess, "run", side_effect=replies) as run:
+                    checks = scenarios.checked_step_export("soliddraft", "saved.dwprt", directory, evidence, 5)
+                self.assertFalse(all(c["pass"] for c in checks))
+                self.assertEqual(checks[-1]["check"], "check-step")
+                self.assertEqual((directory / "check-step.stderr").read_text(), error)
+                self.assertEqual(run.call_args_list[0].args[0][1:3], ["export", "saved.dwprt"])
+                self.assertEqual(json.loads((directory / "step-report.json").read_text()), {
+                    "report": report, "body": {"faces": 6, "volume": 1000, "area": 600}})
+
+
 class Latency(unittest.TestCase):
     @staticmethod
     def call(name, elapsed, operations=(), *, nested=False, refused=False, work=None, foreground=True):
