@@ -196,17 +196,18 @@ fn draw_item(ui: &mut egui::Ui, item: &Item, rect: Rect, key: (usize, usize)) ->
     } else {
         theme::ink()
     };
+    let treatment = if enabled { icons::Treatment::Normal } else { icons::Treatment::Disabled };
     match item.size {
         Size::Large => {
             let icon_rect = Rect::from_center_size(pos2(rect.center().x, rect.top() + 22.0), vec2(24.0, 24.0));
-            icons::paint(painter, item.command.icon, icon_rect, color);
+            icons::paint_as(painter, item.command.icon, icon_rect, color, treatment);
             let galley = painter.layout(item.label.clone(), theme::font(11.0), color, rect.width() - 6.0);
             let size = galley.size();
             painter.galley(pos2(rect.center().x - size.x / 2.0, rect.bottom() - 6.0 - size.y), galley, color);
         }
         Size::Small => {
             let icon_rect = Rect::from_center_size(pos2(rect.left() + 13.0, rect.center().y), vec2(15.0, 15.0));
-            icons::paint(painter, item.command.icon, icon_rect, color);
+            icons::paint_as(painter, item.command.icon, icon_rect, color, treatment);
             painter.text(
                 pos2(rect.left() + 25.0, rect.center().y),
                 Align2::LEFT_CENTER,

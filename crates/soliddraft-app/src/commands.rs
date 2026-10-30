@@ -926,7 +926,7 @@ fn registry() -> Vec<CommandSpec> {
             tools::rollback_params,
         ),
         // Edit.
-        cmd("undo", "Undo", Icon::Undo, "Undo the last change to the active document")
+        cmd("undo", "Undo", Icon::Glyph("undo"), "Undo the last change to the active document")
             .both()
             .on(DrawingTab::Views, "Edit", Small)
             .on(DrawingTab::Annotate, "Edit", Small)
@@ -943,7 +943,7 @@ fn registry() -> Vec<CommandSpec> {
                 Vec::new,
             )
 .undo(Undo::Moves),
-        cmd("redo", "Redo", Icon::Redo, "Redo the last undone change")
+        cmd("redo", "Redo", Icon::Glyph("redo"), "Redo the last undone change")
             .both()
             .on(DrawingTab::Views, "Edit", Small)
             .on(DrawingTab::Annotate, "Edit", Small)
@@ -957,7 +957,7 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Mcp, "", Vec::new)
 .undo(Undo::Moves),
         // Sketch.
-        cmd("sketch", "Sketch", Icon::Sketch, "Sketch on a plane or a planar face")
+        cmd("sketch", "Sketch", Icon::Cad("sketch"), "Sketch on a plane or a planar face")
             .on(Solid, "Sketch", Large)
             .on(Sketch, "Sketch", Large)
             .key(Scope::Model, none, Key::S)
@@ -981,47 +981,47 @@ fn registry() -> Vec<CommandSpec> {
                 tools::sketch_geometry_params,
             )
 .undo(Undo::Step),
-        cmd("exit_sketch", "Exit", Icon::Check, "Exit the sketch")
+        cmd("exit_sketch", "Exit", Icon::Cad("exit_sketch"), "Exit the sketch")
             .on(Sketch, "Sketch", Large)
             .run(|_| AppAction::ExitSketch(None))
             .when(AppState::in_sketch)
 .app_only(EDITOR),
-        cmd("sketch_line", "Line", Icon::Line, "Line: click points; right-click ends the chain")
+        cmd("sketch_line", "Line", Icon::Cad("line"), "Line: click points; right-click ends the chain")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::L)
             .run(|_| AppAction::SketchTool(Tool::Line))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Line))
 .app_only(SKETCHER),
-        cmd("sketch_circle", "Circle", Icon::Circle, "Circle: centre, then a point on it")
+        cmd("sketch_circle", "Circle", Icon::Cad("circle"), "Circle: centre, then a point on it")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::C)
             .run(|_| AppAction::SketchTool(Tool::Circle))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Circle))
 .app_only(SKETCHER),
-        cmd("sketch_rectangle", "Rectangle", Icon::Rectangle, "Corner rectangle")
+        cmd("sketch_rectangle", "Rectangle", Icon::Cad("rect"), "Corner rectangle")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::R)
             .run(|_| AppAction::SketchTool(Tool::Rectangle))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Rectangle))
 .app_only(SKETCHER),
-        cmd("sketch_arc", "Arc", Icon::Arc, "Centre-point arc: centre, start, end")
+        cmd("sketch_arc", "Arc", Icon::Cad("arc"), "Centre-point arc: centre, start, end")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::A)
             .run(|_| AppAction::SketchTool(Tool::Arc))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Arc))
 .app_only(SKETCHER),
-        cmd("sketch_slot", "Slot", Icon::Slot, "Straight slot: two centres, then the width")
+        cmd("sketch_slot", "Slot", Icon::Cad("slot_sketch"), "Straight slot: two centres, then the width")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::S)
             .run(|_| AppAction::SketchTool(Tool::Slot))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Slot))
 .app_only(SKETCHER),
-        cmd("sketch_point", "Point", Icon::Point, "Point")
+        cmd("sketch_point", "Point", Icon::Cad("sk_point"), "Point")
             .on(Sketch, "Draw", Small)
             .key(Scope::Sketch, none, Key::P)
             .run(|_| AppAction::SketchTool(Tool::Point))
@@ -1034,24 +1034,24 @@ fn registry() -> Vec<CommandSpec> {
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Select))
 .app_only(SKETCHER),
-        cmd("smart_dimension", "Smart dim", Icon::SmartDim, "Dimension a line, arc, circle, point or pair")
+        cmd("smart_dimension", "Smart dim", Icon::Cad("smart_dim"), "Dimension a line, arc, circle, point or pair")
             .on(Sketch, "Constrain", Large)
             .key(Scope::Sketch, none, Key::D)
             .run(|_| AppAction::SketchTool(Tool::Dimension))
             .when(AppState::in_sketch)
             .lit(|s| tool_is(s, Tool::Dimension))
 .app_only(SKETCHER),
-        cmd("construction", "Construction", Icon::Construction, "Toggle construction geometry on the selection")
+        cmd("construction", "Construction", Icon::Cad("construction"), "Toggle construction geometry on the selection")
             .on(Sketch, "Constrain", Small)
             .key(Scope::Sketch, none, Key::X)
             .run(|_| AppAction::ToggleConstruction)
             .when(AppState::in_sketch)
 .app_only(SKETCHER),
-        cmd("relations", "Relations", Icon::Relation, "Relations between sketch entities")
+        cmd("relations", "Relations", Icon::Cad("relations"), "Relations between sketch entities")
             .on(Sketch, "Constrain", Small)
             .hint(|_| Some("Relations for the selection are in the property panel".into())),
         // Boss.
-        cmd("extrude", "Extrude", Icon::Extrude, "Add material: extrude a sketch and join it to the part")
+        cmd("extrude", "Extrude", Icon::Cad("extrude"), "Add material: extrude a sketch and join it to the part")
             .on(Solid, "Create", Large)
             .on(Sketch, "Use sketch", Large)
             .key(Scope::Model, none, Key::E)
@@ -1063,7 +1063,7 @@ fn registry() -> Vec<CommandSpec> {
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Extrude(_))))
             .agents(Agents::Verb, "Every profile of the sketch extrudes along its normal.", tools::extrude_params)
 .undo(Undo::Step),
-        cmd("revolve", "Revolve", Icon::Revolve, "Add material: revolve a sketch about an axis")
+        cmd("revolve", "Revolve", Icon::Cad("revolve"), "Add material: revolve a sketch about an axis")
             .on(Solid, "Create", Large)
             .on(Sketch, "Use sketch", Large)
             .run(|s| if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Revolve)) } else { AppAction::StartRevolve })
@@ -1077,10 +1077,10 @@ fn registry() -> Vec<CommandSpec> {
         cmd("edit_revolve", "Edit revolve", Icon::Revolve, "Change a revolution angle")
             .agents(Agents::Verb, "Preserves the sketch and axis.", tools::edit_revolve_params)
             .undo(Undo::Step),
-        cmd("sweep", "Sweep", Icon::Sweep, "Add material: sweep a profile along a path").on(Solid, "Create", Small),
-        cmd("loft", "Loft", Icon::Loft, "Add material: loft between profiles").on(Solid, "Create", Small),
+        cmd("sweep", "Sweep", Icon::Cad("sweep"), "Add material: sweep a profile along a path").on(Solid, "Create", Small),
+        cmd("loft", "Loft", Icon::Cad("loft"), "Add material: loft between profiles").on(Solid, "Create", Small),
         // Cut.
-        cmd("cut", "Cut", Icon::Cut, "Remove material: cut a sketch into the part")
+        cmd("cut", "Cut", Icon::Cad("cut"), "Remove material: cut a sketch into the part")
             .on(Solid, "Remove", Large)
             .on(Sketch, "Use sketch", Large)
             .key(Scope::Model, none, Key::X)
@@ -1103,7 +1103,7 @@ fn registry() -> Vec<CommandSpec> {
                 tools::cut_params,
             )
             .undo(Undo::Step),
-        cmd("hole", "Hole", Icon::Hole, "Drill holes into a planar face, with a counterbore or countersink")
+        cmd("hole", "Hole", Icon::Cad("hole"), "Drill holes into a planar face, with a counterbore or countersink")
             .on(Solid, "Remove", Large)
             .run(|_| AppAction::StartHole)
             .when(has_body)
@@ -1116,9 +1116,9 @@ fn registry() -> Vec<CommandSpec> {
                 tools::hole_params,
             )
             .undo(Undo::Step),
-        cmd("slot", "Slot", Icon::Slot, "Cut a slot").on(Solid, "Remove", Large),
+        cmd("slot", "Slot", Icon::Cad("slot"), "Cut a slot").on(Solid, "Remove", Large),
         // Finish.
-        cmd("fillet", "Fillet", Icon::Fillet, "Round edges with a circular fillet of one radius")
+        cmd("fillet", "Fillet", Icon::Cad("fillet"), "Round edges with a circular fillet of one radius")
             .on(Solid, "Modify", Large)
             .key(Scope::Edge, none, Key::F)
             .run(|_| AppAction::StartFillet)
@@ -1127,7 +1127,7 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Fillet needs a body".into()))
             .agents(Agents::Verb, "", tools::fillet_params)
 .undo(Undo::Step),
-        cmd("chamfer", "Chamfer", Icon::Chamfer, "Bevel edges with a flat chamfer of one distance")
+        cmd("chamfer", "Chamfer", Icon::Cad("chamfer"), "Bevel edges with a flat chamfer of one distance")
             .on(Solid, "Modify", Large)
             .key(Scope::Model, none, Key::C)
             .run(|_| AppAction::StartChamfer)
@@ -1136,7 +1136,7 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Chamfer needs a body".into()))
             .agents(Agents::Verb, "", tools::chamfer_params)
 .undo(Undo::Step),
-        cmd("lattice", "Lattice", Icon::LinearPattern, "Make a terminal cubic lattice")
+        cmd("lattice", "Lattice", Icon::Cad("lattice"), "Make a terminal cubic lattice")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartLattice)
             .when(has_body)
@@ -1144,10 +1144,10 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Lattice needs a body".into()))
             .agents(Agents::Verb, "Density is the constant beam radius. The preview is unproved; export certifies the mesh.", tools::lattice_params)
             .undo(Undo::Step),
-        cmd("edit_lattice", "Edit lattice", Icon::LinearPattern, "Change lattice density and output settings")
+        cmd("edit_lattice", "Edit lattice", Icon::Cad("lattice"), "Change lattice density and output settings")
             .agents(Agents::Verb, "Only supplied settings change.", tools::edit_lattice_params)
             .undo(Undo::Step),
-        cmd("gyroid", "Gyroid", Icon::LinearPattern, "Make a terminal network gyroid")
+        cmd("gyroid", "Gyroid", Icon::Cad("lattice"), "Make a terminal network gyroid")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartGyroid)
             .when(has_body)
@@ -1155,10 +1155,10 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Gyroid needs a body".into()))
             .agents(Agents::Verb, "The level is dimensionless, not a thickness, and may be zero or negative. The preview is unproved; export certifies the mesh.", tools::gyroid_params)
             .undo(Undo::Step),
-        cmd("edit_gyroid", "Edit gyroid", Icon::LinearPattern, "Change gyroid period, level and output settings")
+        cmd("edit_gyroid", "Edit gyroid", Icon::Cad("lattice"), "Change gyroid period, level and output settings")
             .agents(Agents::Verb, "Only supplied settings change.", tools::edit_gyroid_params)
             .undo(Undo::Step),
-        cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
+        cmd("shell", "Shell", Icon::Cad("shell"), "Hollow the part, leaving walls of one thickness")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartShell)
             .when(has_body)
@@ -1166,7 +1166,7 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Shell needs a body".into()))
             .agents(Agents::Verb, "Selected faces are left open. An empty list makes a closed shell.", tools::shell_params)
             .undo(Undo::Step),
-        cmd("draft", "Draft", Icon::Draft, "Taper faces by an angle about a neutral plane")
+        cmd("draft", "Draft", Icon::Cad("draft"), "Taper faces by an angle about a neutral plane")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartDraft)
             .when(has_body)
@@ -1180,7 +1180,7 @@ fn registry() -> Vec<CommandSpec> {
             )
             .undo(Undo::Step),
         // Pattern.
-        cmd("linear_pattern", "Linear", Icon::LinearPattern, "Copy the part's body along a direction")
+        cmd("linear_pattern", "Linear", Icon::Cad("linear"), "Copy the part's body along a direction")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartPattern { circular: false })
             .when(has_body)
@@ -1188,7 +1188,7 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
             .agents(Agents::Verb, "The copies unite with the body.", tools::linear_pattern_params)
             .undo(Undo::Step),
-        cmd("circular_pattern", "Circular", Icon::CircularPattern, "Copy the part's body around an axis")
+        cmd("circular_pattern", "Circular", Icon::Cad("circular"), "Copy the part's body around an axis")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartPattern { circular: true })
             .when(has_body)
@@ -1196,7 +1196,7 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
             .agents(Agents::Verb, "The copies unite with the body.", tools::circular_pattern_params)
             .undo(Undo::Step),
-        cmd("mirror", "Mirror", Icon::Mirror, "Mirror the part's body in a plane")
+        cmd("mirror", "Mirror", Icon::Cad("mirror"), "Mirror the part's body in a plane")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartMirror)
             .when(has_body)
@@ -1205,14 +1205,14 @@ fn registry() -> Vec<CommandSpec> {
             .agents(Agents::Verb, "", tools::mirror_params)
             .undo(Undo::Step),
         // Reference geometry.
-        cmd("reference_plane", "Plane", Icon::Plane, "Add a reference plane").on(Solid, "Reference", Small),
-        cmd("reference_axis", "Axis", Icon::Axis, "Add a reference axis").on(Solid, "Reference", Small),
-        cmd("reference_point", "Point", Icon::Point, "Add a reference point").on(Solid, "Reference", Small),
+        cmd("reference_plane", "Plane", Icon::Cad("plane"), "Add a reference plane").on(Solid, "Reference", Small),
+        cmd("reference_axis", "Axis", Icon::Cad("axis"), "Add a reference axis").on(Solid, "Reference", Small),
+        cmd("reference_point", "Point", Icon::Cad("refpoint"), "Add a reference point").on(Solid, "Reference", Small),
         // Drawing.
         cmd(
             "make_drawing",
             "Make drawing",
-            Icon::Rectangle,
+            Icon::Cad("drawing"),
             "Make a 2D drawing of this part: template, scale and views",
         )
         .key(Scope::Part, ctrl_shift, Key::D)
@@ -1227,7 +1227,7 @@ fn registry() -> Vec<CommandSpec> {
              and redo work on it until drawing_show_part.",
             app::make_drawing_params,
         ).undo(Undo::Replaces),
-        cmd("show_drawing", "Open drawings", Icon::Open, "Bring the open drawing forward")
+        cmd("show_drawing", "Open drawings", Icon::Cad("open_drawings"), "Bring the open drawing forward")
             .run(|_| AppAction::Drawing(DrawingAction::ShowDrawing))
             .when(|s| s.drawing.session.is_some())
 .agents(Agents::Mcp, "Undo and redo then work on the drawing.", Vec::new),
@@ -1268,7 +1268,7 @@ fn registry() -> Vec<CommandSpec> {
             .lit(|s| s.chat.book.auto_apply)
 .app_only("It sets what the app's own assistant may do this session; MCP clients and scripts run commands directly"),
         // Inspect.
-        cmd("measure", "Measure", Icon::Measure, "Distance between two entities' reference points")
+        cmd("measure", "Measure", Icon::Cad("measure"), "Distance between two entities' reference points")
             .on(Inspect, "Measure", Large)
             .run(|_| AppAction::MeasureEntity)
             .agents(
@@ -1305,7 +1305,7 @@ fn registry() -> Vec<CommandSpec> {
         cmd(
             "mass_properties",
             "Mass props",
-            Icon::Mass,
+            Icon::Cad("mass"),
             "Calculate mass properties of the selected feature",
         )
         .on(Inspect, "Measure", Large)
@@ -1316,17 +1316,17 @@ fn registry() -> Vec<CommandSpec> {
              Editing and model_summary report previously requested body properties. Tracked rows are standing requests for their own entity proofs.",
             tools::feature_params,
         ),
-        cmd("check", "Check", Icon::Check, "Check the body for geometry faults").on(Inspect, "Check", Large),
-        cmd("section", "Section", Icon::Section, "Cut the view open on a plane").on(Inspect, "Check", Small),
-        cmd("draft_check", "Draft check", Icon::Draft, "Show which faces have enough draft")
+        cmd("check", "Check", Icon::Cad("check"), "Check the body for geometry faults").on(Inspect, "Check", Large),
+        cmd("section", "Section", Icon::Cad("section"), "Cut the view open on a plane").on(Inspect, "Check", Small),
+        cmd("draft_check", "Draft check", Icon::Cad("draft_check"), "Show which faces have enough draft")
             .on(Inspect, "Surface quality", Small),
         // View.
-        cmd("view_isometric", "Isometric", Icon::Home, "Isometric view")
+        cmd("view_isometric", "Isometric", Icon::Glyph("iso"), "Isometric view")
             .on(View, "Orientation", Large)
             .key(Scope::Model, none, Key::I)
             .run(|_| AppAction::SetView(StandardView::Isometric))
 .app_only(CAMERA),
-        cmd("zoom_fit", "Fit", Icon::Fit, "Zoom to fit")
+        cmd("zoom_fit", "Fit", Icon::Glyph("fit"), "Zoom to fit")
             .both()
             .on(View, "Orientation", Large)
             .on(DrawingTab::View, "Zoom", Large)
@@ -1345,32 +1345,32 @@ fn registry() -> Vec<CommandSpec> {
                 }
             })
 .app_only(CAMERA),
-        cmd("view_front", "Front", Icon::Plane, "Front view")
+        cmd("view_front", "Front", Icon::Glyph("iso"), "Front view")
             .on(View, "Orientation", Small)
             .key(Scope::Model, none, Key::F)
             .run(|_| AppAction::SetView(StandardView::Front))
 .app_only(CAMERA),
-        cmd("view_top", "Top", Icon::Plane, "Top view")
+        cmd("view_top", "Top", Icon::Glyph("iso"), "Top view")
             .on(View, "Orientation", Small)
             .key(Scope::Model, none, Key::T)
             .run(|_| AppAction::SetView(StandardView::Top))
 .app_only(CAMERA),
-        cmd("view_right", "Right", Icon::Plane, "Right view")
+        cmd("view_right", "Right", Icon::Glyph("iso"), "Right view")
             .on(View, "Orientation", Small)
             .key(Scope::Model, none, Key::R)
             .run(|_| AppAction::SetView(StandardView::Right))
 .app_only(CAMERA),
-        cmd("normal_to", "Normal to", Icon::OnPlane, "Look straight at the sketch plane or the selected face")
+        cmd("normal_to", "Normal to", Icon::Cad("normal_to"), "Look straight at the sketch plane or the selected face")
             .on(Sketch, "View", Large)
             .on(View, "Orientation", Small)
             .key(Scope::Part, none, Key::N)
             .run(|_| AppAction::NormalTo)
 .app_only(CAMERA),
-        cmd("view_back", "Back", Icon::Plane, "Back view").run(|_| AppAction::SetView(StandardView::Back))
+        cmd("view_back", "Back", Icon::Glyph("iso"), "Back view").run(|_| AppAction::SetView(StandardView::Back))
 .app_only(CAMERA),
-        cmd("view_left", "Left", Icon::Plane, "Left view").run(|_| AppAction::SetView(StandardView::Left))
+        cmd("view_left", "Left", Icon::Glyph("iso"), "Left view").run(|_| AppAction::SetView(StandardView::Left))
 .app_only(CAMERA),
-        cmd("view_bottom", "Bottom", Icon::Plane, "Bottom view").run(|_| AppAction::SetView(StandardView::Bottom))
+        cmd("view_bottom", "Bottom", Icon::Glyph("iso"), "Bottom view").run(|_| AppAction::SetView(StandardView::Bottom))
 .app_only(CAMERA),
         cmd("display_shaded_edges", "Shaded, edges", Icon::Views, "Shaded with edges")
             .on(View, "Display", Large)
@@ -1440,11 +1440,11 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::ResetLayout)
 .app_only(PANELS),
         // Files.
-        cmd("new_part", "New part", Icon::Props, "Start a new, empty part")
+        cmd("new_part", "New part", Icon::Glyph("new"), "Start a new, empty part")
             .key(Scope::Part, ctrl, Key::N)
             .run(|_| AppAction::NewPart)
 .agents(Agents::Mcp, "In place of the open part, which is not saved first.", Vec::new).undo(Undo::Replaces),
-        cmd("open", "Open", Icon::Open, "Open a part, drawing or assembly; a drawing opens its part too")
+        cmd("open", "Open", Icon::Glyph("open"), "Open a part, drawing or assembly; a drawing opens its part too")
             .key(Scope::Part, ctrl, Key::O)
             .run(|_| AppAction::Open(None))
             .agents(
@@ -1455,11 +1455,11 @@ fn registry() -> Vec<CommandSpec> {
                 app::open_params,
             )
 .undo(Undo::Replaces),
-        cmd("save", "Save", Icon::Save, "Save the part")
+        cmd("save", "Save", Icon::Glyph("save"), "Save the part")
             .key(Scope::Part, ctrl, Key::S)
             .run(|_| AppAction::Save)
             .agents(Agents::Mcp, "Saves the part to the file.", tools::part_path_params),
-        cmd("save_as", "Save as", Icon::Save, "Save the part under a new name")
+        cmd("save_as", "Save as", Icon::Glyph("save"), "Save the part under a new name")
             .key(Scope::Part, ctrl_shift, Key::S)
             .run(|_| AppAction::SaveAs(None))
 .agents(Agents::Mcp, "Saves the part to the file, as save does.", tools::part_path_params),

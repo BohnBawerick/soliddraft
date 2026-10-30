@@ -1,9 +1,37 @@
-//! Procedural icon set. Every glyph is drawn with the egui painter on a 16 by
-//! 16 grid so it scales crisply, follows the text colour and carries no
-//! third-party artwork.
+//! The icon set, none of it third-party artwork. Operations use the catalogue under
+//! `assets/icons`, which `scripts/generate_cad_icons.py` writes: CAD drawings in their own
+//! colours, and line glyphs that follow the text colour. They are rasterized at the
+//! physical size they are shown at. Everything else is drawn with the egui painter on a
+//! 16 by 16 grid.
 
-use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2, pos2, vec2};
+use egui::{Color32, ColorImage, Painter, Pos2, Rect, Stroke, TextureHandle, TextureOptions, Vec2, pos2, vec2};
+use resvg::{tiny_skia, usvg};
+use std::collections::HashMap;
 use std::f32::consts::TAU;
+use std::sync::LazyLock;
+
+mod catalogue {
+    include!("../assets/icons/catalogue.rs");
+}
+
+pub use catalogue::{CAD, GLYPHS};
+
+/// How far a disabled drawing fades towards grey, and how much of it stays.
+const DISABLED_GREY: f32 = 0.85;
+const DISABLED_ALPHA: f32 = 0.55;
+
+/// The colours that sit on the bare background, such as arrows, axes, lattice struts and
+/// point clouds, and what each becomes on a dark panel. Ink on a fill stays as drawn.
+const DARK: [(&str, &str); 8] = [
+    ("#3A4658", "#C3CCD9"),
+    ("#17408E", "#8FB4FF"),
+    ("#0E6F67", "#5FD3C6"),
+    ("#0E7C72", "#4FD1C2"),
+    ("#1D9A8D", "#7BE8DB"),
+    ("#0B5F58", "#39BFAF"),
+    ("#C9EEE7", "#1F6B63"),
+    ("#2F67DD", "#7FA8FF"),
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Icon {
@@ -65,6 +93,101 @@ pub enum Icon {
     Rollback,
     Relation,
     Suppress,
+    /// A CAD drawing of the catalogue, by its key, in its own colours.
+    Cad(&'static str),
+    /// A line glyph of the catalogue, by its key, in the colour it is painted with.
+    Glyph(&'static str),
+}
+
+/// How a catalogue drawing is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Treatment {
+    Normal,
+    /// Grey and faded, for a command that cannot run now.
+    Disabled,
+}
+
+/// One rasterized drawing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct Raster {
+    key: &'static str,
+    glyph: bool,
+    px: u32,
+    dark: bool,
+    treatment: Treatment,
+}
+
+static SVG_OPTIONS: LazyLock<usvg::Options<'static>> = LazyLock::new(|| {
+    let mut options = usvg::Options { font_family: "Inter".to_owned(), ..Default::default() };
+    options.fontdb_mut().load_font_data(include_bytes!("../assets/fonts/Inter-SemiBold.ttf").to_vec());
+    options
+});
+
+impl Raster {
+    fn source(&self) -> Option<&'static str> {
+        let table: &[(&str, &str)] = if self.glyph { &GLYPHS } else { &CAD };
+        table.iter().find(|(key, _)| *key == self.key).map(|(_, svg)| *svg)
+    }
+
+    /// The drawing at its size. A glyph comes out white, and the painter tints it.
+    fn image(&self, source: &str) -> ColorImage {
+        let svg = if self.glyph {
+            source.replace("currentColor", "#ffffff")
+        } else if self.dark {
+            DARK.iter().fold(source.to_owned(), |svg, (light, dark)| svg.replace(light, dark))
+        } else {
+            source.to_owned()
+        };
+        let tree = usvg::Tree::from_str(&svg, &SVG_OPTIONS).expect("a catalogue icon parses");
+        let mut pixmap = tiny_skia::Pixmap::new(self.px, self.px).expect("an icon has a size");
+        let scale = self.px as f32 / tree.size().width();
+        resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+        let mut pixels = pixmap.take();
+        if self.treatment == Treatment::Disabled {
+            for px in pixels.as_chunks_mut::<4>().0 {
+                let grey = 0.3 * f32::from(px[0]) + 0.59 * f32::from(px[1]) + 0.11 * f32::from(px[2]);
+                for channel in &mut px[..3] {
+                    let c = f32::from(*channel);
+                    *channel = ((c + (grey - c) * DISABLED_GREY) * DISABLED_ALPHA) as u8;
+                }
+                px[3] = (f32::from(px[3]) * DISABLED_ALPHA) as u8;
+            }
+        }
+        ColorImage::from_rgba_premultiplied([self.px as usize, self.px as usize], &pixels)
+    }
+
+    /// The texture, made on first use so that no frame shows a blank.
+    fn texture(&self, ctx: &egui::Context, source: &str) -> TextureHandle {
+        let id = egui::Id::new("icon_rasters");
+        if let Some(found) =
+            ctx.data_mut(|d| d.get_temp_mut_or_default::<HashMap<Raster, TextureHandle>>(id).get(self).cloned())
+        {
+            return found;
+        }
+        let texture = ctx.load_texture(format!("icon-{self:?}"), self.image(source), TextureOptions::LINEAR);
+        ctx.data_mut(|d| {
+            d.get_temp_mut_or_default::<HashMap<Raster, TextureHandle>>(id).insert(*self, texture.clone())
+        });
+        texture
+    }
+}
+
+/// Paints a catalogue drawing on the pixel grid, so it stays sharp at any scale. Nothing is
+/// painted for a key the catalogue does not have.
+fn paint_raster(painter: &Painter, key: &'static str, glyph: bool, rect: Rect, tint: Color32, treatment: Treatment) {
+    let ppp = painter.pixels_per_point();
+    let px = (rect.width().min(rect.height()) * ppp).round().max(1.0);
+    let dark = crate::theme::mode().is_dark();
+    let raster = Raster { key, glyph, px: px as u32, dark, treatment };
+    let Some(source) = raster.source() else {
+        debug_assert!(false, "no icon {key}");
+        return;
+    };
+    let side = Vec2::splat(px / ppp);
+    let min = ((rect.center() - side / 2.0).to_vec2() * ppp).round() / ppp;
+    let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+    let texture = raster.texture(painter.ctx(), source);
+    painter.image(texture.id(), Rect::from_min_size(min.to_pos2(), side), uv, tint);
 }
 
 struct Grid {
@@ -122,14 +245,29 @@ impl Grid {
     }
 }
 
-/// Paints `icon` inside `rect` (use a square) in `color`.
+/// Paints `icon` inside `rect` (use a square) in `color`. A CAD drawing keeps its own
+/// colours.
 pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
+    paint_as(painter, icon, rect, color, Treatment::Normal);
+}
+
+/// Paints `icon` as [`paint`] does, with a treatment for a CAD drawing.
+pub fn paint_as(painter: &Painter, icon: Icon, rect: Rect, color: Color32, treatment: Treatment) {
+    match icon {
+        Icon::Cad(key) => paint_raster(painter, key, false, rect, Color32::WHITE, treatment),
+        Icon::Glyph(key) => paint_raster(painter, key, true, rect, color, Treatment::Normal),
+        _ => paint_drawn(painter, icon, rect, color),
+    }
+}
+
+fn paint_drawn(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
     let side = rect.width().min(rect.height());
     let rect = Rect::from_center_size(rect.center(), Vec2::splat(side));
     let width = (side / 16.0 * 1.35).max(1.0);
     let g = Grid { rect, stroke: Stroke::new(width, color) };
     let p = painter;
     match icon {
+        Icon::Cad(_) | Icon::Glyph(_) => {}
         Icon::Sketch => {
             g.line(p, &[(3.0, 13.0), (11.0, 5.0), (13.0, 7.0), (5.0, 15.0), (2.5, 15.5)]);
             g.line(p, &[(2.5, 15.5), (3.0, 13.0)]);

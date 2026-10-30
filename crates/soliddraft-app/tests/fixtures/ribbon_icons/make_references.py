@@ -3,8 +3,8 @@
 
 source_icons.py is a byte copy of the prototype's icon set, and rsvg-convert shares no code
 with the app's renderer, so a light reference cannot drift with the product. The prototype has
-no dark form: dark references apply the documented change to the free ink, which only the
-committed assets mark. Run this only to change the design on purpose.
+no dark form: dark references apply the documented change to the free colours, which only
+the committed assets mark. Run this only to change the design on purpose.
 """
 import hashlib
 import json
@@ -18,7 +18,16 @@ import source_icons as source
 HERE = pathlib.Path(__file__).resolve().parent
 FONTS = HERE.parents[2] / "assets/fonts"
 SIZE = 96
-FREE_INK = ("#3A4658", "#C3CCD9")
+DARK = {
+    "#3A4658": "#C3CCD9",
+    "#17408E": "#8FB4FF",
+    "#0E6F67": "#5FD3C6",
+    "#0E7C72": "#4FD1C2",
+    "#1D9A8D": "#7BE8DB",
+    "#0B5F58": "#39BFAF",
+    "#C9EEE7": "#1F6B63",
+    "#2F67DD": "#7FA8FF",
+}
 ASSETS = HERE.parents[2] / "assets/icons/cad"
 
 
@@ -43,7 +52,9 @@ def main():
         cad[key] = view
         svg = f'<svg {ns} viewBox="{view}">{body}</svg>'
         render(svg, HERE / "light/cad" / f"{key}.png", env)
-        dark = (ASSETS / f"{key}.svg").read_text().replace(*FREE_INK)
+        dark = (ASSETS / f"{key}.svg").read_text()
+        for light, shade in DARK.items():
+            dark = dark.replace(light, shade)
         render(dark, HERE / "dark/cad" / f"{key}.png", env)
     for key, body in source.LINE.items():
         svg = (
