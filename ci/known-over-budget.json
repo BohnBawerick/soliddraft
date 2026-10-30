@@ -1,25 +1,15 @@
 {
   "format": "soliddraft-known-over-budget/1",
   "follow_up": "https://github.com/BohnBawerick/soliddraft/issues/27",
-  "comment": "faster booleans when rebuilding after an edit; budgets stay 1000 ms, and only these sixteen gaps are accepted up to 120 percent of their recorded time. The two drawing steps were added for the 0.1.0 release and were measured on the hosted ubuntu-latest runner in https://github.com/BohnBawerick/soliddraft/actions/runs/40823628229. Across six sampled hosted runs, step 24 took 1755 to 2590 ms and step 35 took 1587 to 2209 ms: 1755 to 2427 and 1587 to 2159 on main at the earlier kernel pin, 2571 to 2590 and 2182 to 2209 at Catallax 6142450b. The captain approved bracket steps 35 and 43 for V1 merge 2, using the first hosted measurements in https://github.com/BohnBawerick/soliddraft/actions/runs/41008941098",
+  "comment": "Legacy timing inventory. Wall-clock budgets and the former 120 percent regression limits are advisory under the 30 October policy; work caps remain hard. The six retained entries keep their original recorded times. References and original bracket records use the local work-PC baseline identified below; drawing step 24 retains its hosted release record from https://github.com/BohnBawerick/soliddraft/actions/runs/40823628229, and bracket steps 35 and 43 retain their captain-approved first records from https://github.com/BohnBawerick/soliddraft/actions/runs/41008941098. Ten entries were removed using sample 1 of https://github.com/BohnBawerick/soliddraft/actions/runs/41036690172; each was below 1000 ms raw and 900 ms after slow-class projection.",
   "measured_run": "https://github.com/BohnBawerick/soliddraft/actions/runs/40167997912",
   "measured_on": "local work-PC Linux x64 runner, ci-linux-local",
   "steps": [
-    {"scenario": "references", "step": 16, "tool": "cut", "last_measured_ms": 1150},
     {"scenario": "references", "step": 17, "tool": "edit_extrude", "last_measured_ms": 2450.378498},
     {"scenario": "references", "step": 18, "tool": "edit_dimension", "last_measured_ms": 2685.202890},
-    {"scenario": "references", "step": 25, "tool": "suppress", "last_measured_ms": 1568.713553},
-    {"scenario": "references", "step": 30, "tool": "open", "last_measured_ms": 2572.192352},
-    {"scenario": "bracket", "step": 14, "tool": "cut", "last_measured_ms": 1016},
-    {"scenario": "bracket", "step": 16, "tool": "cut", "last_measured_ms": 1189.068388},
-    {"scenario": "bracket", "step": 18, "tool": "cut", "last_measured_ms": 1440.274654},
-    {"scenario": "bracket", "step": 19, "tool": "edit_extrude", "last_measured_ms": 2929.871620},
-    {"scenario": "bracket", "step": 22, "tool": "edit_cut", "last_measured_ms": 1452.985577},
-    {"scenario": "bracket", "step": 25, "tool": "rollback", "last_measured_ms": 3223.575548},
     {"scenario": "bracket", "step": 27, "tool": "edit_dimension", "last_measured_ms": 2381.346},
     {"scenario": "bracket", "step": 35, "tool": "drive", "last_measured_ms": 1892.423282},
     {"scenario": "bracket", "step": 43, "tool": "set_value", "last_measured_ms": 1945.130604},
-    {"scenario": "drawing", "step": 24, "tool": "edit_extrude", "last_measured_ms": 2571.201994},
-    {"scenario": "drawing", "step": 35, "tool": "edit_extrude", "last_measured_ms": 2182.117028}
+    {"scenario": "drawing", "step": 24, "tool": "edit_extrude", "last_measured_ms": 2571.201994}
   ]
 }

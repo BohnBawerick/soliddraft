@@ -281,6 +281,7 @@
     },
     {
       "tool": "edit_extrude",
+      "max_edit_work": 4823140,
       "arguments": {
         "feature": "Boss-Extrude1",
         "depth": 12,
@@ -289,6 +290,7 @@
     },
     {
       "tool": "edit_dimension",
+      "max_edit_work": 5108179,
       "arguments": {
         "sketch": "Sketch3",
         "dimension": 1,
