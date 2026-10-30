@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Select conservative crate consumers and platform checks from both sides of a diff."""
 import argparse
+from collections import Counter
 import json
 import pathlib
 import re
@@ -12,6 +13,8 @@ LINUX = {'lint', 'kernel', 'step-opencascade', 'test-linux', 'web', 'msrv', 'int
 PLATFORM = {'test-macos', 'test-windows', 'interactive-macos'}
 PACKAGES = {'package-linux', 'package-windows', 'package-macos', 'package-web'}
 UNITS = LINUX | PLATFORM
+CATALLAX_GIT = 'https://github.com/BohnBawerick/catallax'
+CATALLAX_SOURCE = re.compile(r'git\+https://github\.com/BohnBawerick/catallax\?rev=([0-9a-f]{40})#\1')
 OWNERS = {
     'kernel': {'soliddraft-kernel-catallax', 'soliddraft-recipe'},
     'step-opencascade': {'soliddraft-cli', 'soliddraft-exchange'},
@@ -66,6 +69,160 @@ def graph(root, base=None):
     return packages
 
 
+def catallax_lock_move(sources):
+    base, head = [tomllib.loads(text) for text in sources]
+    if {k: v for k, v in base.items() if k != 'package'} != {
+            k: v for k, v in head.items() if k != 'package'}:
+        return False
+    grouped = []
+    for manifest in (base, head):
+        catallax, other = {}, []
+        for package in manifest['package']:
+            if CATALLAX_SOURCE.fullmatch(package.get('source', '')):
+                name = package['name']
+                if name in catallax:
+                    return False
+                catallax[name] = package
+            else:
+                other.append(json.dumps(package, sort_keys=True))
+        grouped.append((catallax, Counter(other)))
+    (old, old_other), (new, new_other) = grouped
+    if old.keys() != new.keys() or old_other != new_other:
+        return False
+    for name in old:
+        reduced = []
+        for packages in (old, new):
+            package = packages[name]
+            reduced.append({k: v for k, v in package.items() if k not in {'source', 'dependencies'}})
+            reduced[-1]['dependencies'] = Counter(
+                d for d in package.get('dependencies', []) if d.split(' ', 1)[0] not in packages)
+        if reduced[0] != reduced[1]:
+            return False
+    return any(old[name]['source'] != new[name]['source'] for name in old)
+
+
+def catallax_manifest_move(sources):
+    manifests = [tomllib.loads(text) for text in sources]
+    revisions = []
+    for manifest in manifests:
+        pins = {}
+        tables = [('', manifest), ('workspace', manifest.get('workspace', {}))]
+        tables.extend((f'target.{key}', table) for key, table in manifest.get('target', {}).items())
+        for prefix, table in tables:
+            for kind in ('dependencies', 'dev-dependencies', 'build-dependencies'):
+                for name, dependency in table.get(kind, {}).items():
+                    if isinstance(dependency, dict) and dependency.get('git') == CATALLAX_GIT:
+                        pins[prefix, kind, name] = dependency.pop('rev', None)
+        revisions.append(pins)
+    return manifests[0] == manifests[1] and revisions[0] != revisions[1]
+
+
+def workflow_jobs(text):
+    lines = text.splitlines(keepends=True)
+    markers = [i for i, line in enumerate(lines) if line.rstrip('\r\n') == 'jobs:']
+    if len(markers) != 1:
+        return None
+    index = markers[0]
+    jobs = {}
+    current = None
+    for line in lines[index + 1:]:
+        if not line.strip() or line.lstrip().startswith('#'):
+            if current is not None:
+                jobs[current] += line
+            continue
+        if not line.startswith((' ', '\t')):
+            return None
+        match = re.fullmatch(r'  ([A-Za-z0-9_-]+):[ \t]*\r?\n?', line)
+        if match:
+            current = match[1]
+            if current in jobs:
+                return None
+            jobs[current] = line
+        elif current is None or re.match(r'^  \S', line):
+            return None
+        else:
+            jobs[current] += line
+    return ''.join(lines[:index]), jobs
+
+
+def shared_yaml_node(body):
+    scalar_column = None
+    for line in body.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if scalar_column is not None and indent > scalar_column:
+            continue
+        scalar_column = None
+        value = line.lstrip()
+        column = indent
+        while value.startswith('- '):
+            value = value[2:].lstrip()
+            column = len(line) - len(value)
+        key = re.match(r'([^:]+):(?:[ \t]+|$)(.*)', value)
+        if key:
+            if key[1].strip(' \t\'"') == '<<':
+                return True
+            value = key[2].lstrip()
+            if re.fullmatch(r'[|>][+\-1-9]*(?:\s+#.*)?\s*', value):
+                scalar_column = column
+                continue
+        if value.startswith(('&', '*', '!')):
+            return True
+        if value.startswith(('[', '{')) and re.search(r'(?:[\[{,]\s*|:\s+)[&*]', value):
+            return True
+    return False
+
+
+def one_linux_job(sources):
+    parsed = [workflow_jobs(text) for text in sources]
+    if any(part is None for part in parsed):
+        return None
+    (old_preamble, old), (new_preamble, new) = parsed
+    if old_preamble != new_preamble or list(old) != list(new):
+        return None
+    changed = [name for name in old if old[name] != new[name]]
+    if len(changed) != 1 or changed[0] not in LINUX:
+        return None
+    name = changed[0]
+    runners = []
+    for body in (old[name], new[name]):
+        lines = body.splitlines()
+        runner_lines = [i for i, line in enumerate(lines) if line.startswith('    runs-on:')]
+        if len(runner_lines) != 1:
+            return None
+        index = runner_lines[0]
+        runner = lines[index]
+        # Only single-line labels and expressions have an unambiguous runner value here.
+        if not re.fullmatch(r'    runs-on: (?:[A-Za-z0-9_-]+|\$\{\{.*\}\})[ \t]*(?:#.*)?', runner):
+            return None
+        following = next((line for line in lines[index + 1:]
+                          if line.strip() and not line.lstrip().startswith('#')), '')
+        if following and len(following) - len(following.lstrip()) > 4:
+            return None
+        runners.append(runner)
+        if ('matrix' in body
+                or re.search(r'^\s*strategy:', body, re.M) or shared_yaml_node(body)):
+            return None
+    return name if runners[0] == runners[1] else None
+
+
+def narrow_units(path, sources):
+    try:
+        name = pathlib.PurePosixPath(path).name
+        if ((name == 'Cargo.lock' and catallax_lock_move(sources))
+                or (name == 'Cargo.toml' and catallax_manifest_move(sources))):
+            return LINUX
+        if path == '.github/workflows/hosted.yml':
+            job = one_linux_job(sources)
+            if job:
+                return {job}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        # Malformed or unfamiliar data keeps the broad rules.
+        pass
+    return None
+
+
 def select(changes, event, ref, packages, read_sources):
     reasons = {'lint': ['always: formatting, lint and CI unit tests']}
 
@@ -80,7 +237,16 @@ def select(changes, event, ref, packages, read_sources):
         add(LINUX, 'main Linux selection audit')
     for change in changes:
         for path in change[1:]:
+            if (path in {'ci/run-scenarios.py', 'ci/test_scenarios.py', 'ci/known-over-budget.json',
+                         'ci/fake_mcp_server.py', 'ci/scenario-inventory.json'}
+                    or re.fullmatch(r'ci/scenarios/[^/]+\.json', path)):
+                add({'lint', 'application-loop'}, f'Linux scenario harness: {path}')
+                continue
             sources = read_sources(path)
+            narrow = narrow_units(path, sources) if change[0] == 'M' else None
+            if narrow:
+                add(narrow, f'revision-only Catallax move or one Linux job: {path}')
+                continue
             if platform_path(path, sources):
                 add(PLATFORM | {'interactive-linux', 'test-linux'}, f'platform: {path}')
             if path.startswith('packaging/') or path in {'.github/workflows/release.yml', 'docs/RELEASING.md'}:
@@ -126,6 +292,16 @@ def changes_between(root, base, head):
         return None
 
 
+def with_base_rules(result, base_script, changes, event, ref, packages, sources):
+    # Execute the accepted selector as well. A change cannot narrow its own obligations.
+    if base_script:
+        namespace = {'__name__': 'base_selector', '__file__': str(ROOT / 'ci/select-checks.py')}
+        exec(compile(base_script, '<base selector>', 'exec'), namespace)
+        for unit, reasons in namespace['select'](changes, event, ref, packages, sources).items():
+            result.setdefault(unit, []).extend(f'base: {reason}' for reason in reasons)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', type=pathlib.Path, default=ROOT)
@@ -139,13 +315,8 @@ def main():
     packages = graph(args.root, args.base if changes is not None else None)
     sources = lambda path: [content(args.root, path, args.base), content(args.root, path, args.head)]
     result = select(changes, args.event, args.ref, packages, sources)
-    # Execute the accepted selector as well. A change cannot narrow its own obligations.
     base_script = content(args.root, 'ci/select-checks.py', args.base)
-    if base_script:
-        namespace = {'__name__': 'base_selector', '__file__': str(args.root / 'ci/select-checks.py')}
-        exec(compile(base_script, '<base selector>', 'exec'), namespace)
-        for unit, reasons in namespace['select'](changes, args.event, args.ref, packages, sources).items():
-            result.setdefault(unit, []).extend(f'base: {reason}' for reason in reasons)
+    result = with_base_rules(result, base_script, changes, args.event, args.ref, packages, sources)
     args.output.write_text(json.dumps({'selected': sorted(result), 'reasons': result}, indent=2) + '\n')
 
 

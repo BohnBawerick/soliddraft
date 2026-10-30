@@ -1,0 +1,537 @@
+name: Hosted CI
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      refresh_catallax_views:
+        description: Generate Catallax view and drawing baselines as artifacts for review
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Workspace test binaries must fit on GitHub-hosted runners.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_INCREMENTAL: 0
+
+permissions:
+  contents: read
+
+# Superseded feature runs cancel. Main and release branch runs retain their exact-commit
+# evidence even while development continues on main.
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.run_id || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
+
+# Linux jobs run on the self-hosted runners while the repository variable USE_LOCAL_RUNNERS is
+# 'true', and on ubuntu-latest otherwise. Pull requests from forks always stay hosted. Windows and
+# macOS legs are always hosted.
+jobs:
+  select:
+    name: Select affected checks
+    runs-on: ubuntu-latest
+    outputs:
+      selected: ${{ steps.select.outputs.selected }}
+      packaging: ${{ steps.select.outputs.packaging }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/check-selection"
+          python3 ci/select-checks.py --base "$BASE_SHA" --event "$EVENT" --ref "$REF" --output "$RUNNER_TEMP/check-selection/selection.json"
+          python3 - "$RUNNER_TEMP/check-selection/selection.json" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
+          import json, sys
+          result = json.load(open(sys.argv[1]))
+          with open(sys.argv[2], "a") as output:
+              output.write("selected=" + json.dumps(result["selected"]) + "\n")
+              output.write("packaging=" + str(any(u.startswith("package-") for u in result["selected"])).lower() + "\n")
+          with open(sys.argv[3], "a") as summary:
+              summary.write("## Selected checks\n\n")
+              for unit, reasons in sorted(result["reasons"].items()):
+                  summary.write(f"- {unit}: {'; '.join(reasons)}\n")
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        with:
+          name: check-selection
+          path: ${{ runner.temp }}/check-selection
+          if-no-files-found: error
+
+  # Formatting and lints.
+  lint:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'lint')
+    name: Lint (fmt, clippy)
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Check that superseded runs are cancelled and main's are not
+        run: python3 -m unittest discover -s ci -p 'test_*.py'
+
+  kernel:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'kernel')
+    name: Catallax adapter and recipes
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p soliddraft-kernel-catallax -p soliddraft-recipe --all-features --locked --no-fail-fast
+      - name: Generate the requested Catallax view and drawing baselines
+        if: inputs.refresh_catallax_views
+        env:
+          SOLIDDRAFT_BLESS: "1"
+        run: |
+          cargo test -p soliddraft-cli --test view_exit_test bracket_catallax_views_match_golden_across_runs --locked -- --exact
+          cargo test -p soliddraft-cli --test draw_exit_test bracket_drawing_exports_and_follows_the_part --locked -- --exact
+          cargo test -p soliddraft-cli --test d3_exit_test bracket_sections_details_and_sheets --locked -- --exact
+      - uses: actions/upload-artifact@v4
+        if: inputs.refresh_catallax_views
+        with:
+          name: catallax-view-baseline
+          path: recipes/golden/catallax-*
+          if-no-files-found: error
+
+  # The bracket's STEP opens in OpenCASCADE with the exact body's face count and a volume
+  # within the reported deviation. OpenCASCADE is a test tool; the application never links it.
+  step-opencascade:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'step-opencascade')
+    name: Bracket STEP in OpenCASCADE
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install cadquery-ocp==7.9.3.1.1
+      - run: cargo build --locked -p soliddraft-cli
+      - name: Export the bracket and check its STEP in OpenCASCADE
+        run: |
+          out="$RUNNER_TEMP/bracket-export"
+          mkdir -p "$out"
+          target/debug/soliddraft export recipes/bracket.json --json \
+            --out "$out/cli-bracket.step" --out "$out/bracket.stl" --out "$out/bracket.3mf" \
+            --out "$out/bracket.obj" > "$out/reports.jsonl"
+          cat "$out/reports.jsonl"
+          SOLIDDRAFT_STEP_PROOF_DIR="$out" cargo test --locked -p soliddraft-exchange --test bracket \
+            step_carries_the_proven_deviation_and_the_body_faces -- --exact
+          python3 ci/check-step.py "$out/cli-bracket.step" "$out/step-report.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bracket-export
+          path: ${{ runner.temp }}/bracket-export
+
+  # Every platform builds and tests the Catallax-only workspace from a fresh checkout.
+  test-linux:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'test-linux')
+    name: Workspace (ubuntu-latest)
+    env:
+      # Workspace numeric code must share the dependency optimization level.
+      CARGO_PROFILE_TEST_OPT_LEVEL: 2
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter for rendered workspace tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$RUNNER_TEMP/soliddraft-runtime"
+          chmod 700 "$RUNNER_TEMP/soliddraft-runtime"
+          echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/soliddraft-runtime" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+      - run: cargo test --workspace --all-features --locked --no-fail-fast
+
+  test-macos:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'test-macos')
+    name: Workspace (macos-latest)
+    env:
+      # Workspace numeric code must share the dependency optimization level.
+      CARGO_PROFILE_TEST_OPT_LEVEL: 2
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter for rendered workspace tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$RUNNER_TEMP/soliddraft-runtime"
+          chmod 700 "$RUNNER_TEMP/soliddraft-runtime"
+          echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/soliddraft-runtime" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+      - run: cargo test --workspace --all-features --locked --no-fail-fast
+
+  test-windows:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'test-windows')
+    name: Workspace (windows-latest)
+    env:
+      # Workspace numeric code must share the dependency optimization level.
+      CARGO_PROFILE_TEST_OPT_LEVEL: 2
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter for rendered workspace tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$RUNNER_TEMP/soliddraft-runtime"
+          chmod 700 "$RUNNER_TEMP/soliddraft-runtime"
+          echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/soliddraft-runtime" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+      - run: cargo test --workspace --all-features --locked --no-fail-fast
+
+  # Catallax is compiled into the application WebAssembly module.
+  web:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'web')
+    name: Web build (wasm32)
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p soliddraft-web --target wasm32-unknown-unknown --locked
+      - name: Install trunk
+        run: |
+          curl --fail --location https://github.com/trunk-rs/trunk/releases/download/v0.22.0/trunk-x86_64-unknown-linux-gnu.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Package the browser application
+        working-directory: crates/soliddraft-web
+        run: trunk build --locked --dist ../../target/web-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-application
+          path: target/web-dist
+          if-no-files-found: error
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Exercise full-storage journal recovery in Chromium
+        env:
+          CHROME_DEVTOOLS_AXI_SESSION: journal-recovery
+          CHROME_DEVTOOLS_AXI_EXECUTABLE_PATH: /usr/bin/google-chrome
+          CHROME_DEVTOOLS_AXI_CHROME_ARGS: --no-sandbox --enable-unsafe-webgpu --enable-unsafe-swiftshader --use-angle=swiftshader
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tools" chrome-devtools-axi@0.1.44 chrome-devtools-mcp@1.12.0
+          export PATH="$RUNNER_TEMP/browser-tools/node_modules/.bin:$PATH"
+          export CHROME_DEVTOOLS_AXI_MCP_PATH="$RUNNER_TEMP/browser-tools/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+          python3 -m http.server 8766 --bind 127.0.0.1 --directory target/web-dist > "$RUNNER_TEMP/browser-server.log" 2>&1 &
+          server=$!
+          trap 'chrome-devtools-axi stop; kill "$server"' EXIT
+          chrome-devtools-axi open http://127.0.0.1:8766/
+          chrome-devtools-axi run < ci/browser-journal.js
+
+  msrv:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'msrv')
+    name: Minimum Rust version (Rust-only crates)
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p soliddraft-kernel-api -p soliddraft-recipe -p soliddraft-drawing -p soliddraft-sketch -p soliddraft-assistant -p soliddraft-materials -p soliddraft-assembly --all-features
+
+  interactive-linux:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'interactive-linux')
+    name: Catallax bracket (ubuntu-latest)
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    env:
+      WGPU_BACKEND: vulkan
+      SOLIDDRAFT_REQUIRE_GPU: "1"
+      XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter
+        if: runner.os == 'Linux'
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test shell_tool -- --nocapture
+      - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview_interface -- --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: catallax-drawing-workspace-ubuntu-latest
+          path: target/exit-test/
+
+  interactive-macos:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'interactive-macos')
+    name: Catallax bracket (macos-latest)
+    runs-on: macos-latest
+    env:
+      WGPU_BACKEND: metal
+      SOLIDDRAFT_REQUIRE_GPU: "1"
+      XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the software Vulkan adapter
+        if: runner.os == 'Linux'
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - run: cargo test -p soliddraft-app --test catallax_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test shell_tool -- --nocapture
+      - run: cargo test -p soliddraft-app --test drawing_exit -- --nocapture
+      - run: cargo test -p soliddraft-app --test exit_test bracket_by_hand_saved_reopened_rebuilt_and_repaired -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview -- --nocapture
+      - run: cargo test -p soliddraft-app --test drag_preview_interface -- --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: catallax-drawing-workspace-macos-latest
+          path: target/exit-test/
+
+  application-loop:
+    needs: select
+    if: contains(fromJSON(needs.select.outputs.selected), 'application-loop')
+    name: Application scenarios (MCP, viewport, kernel replay)
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 90
+    env:
+      WGPU_BACKEND: vulkan
+      XDG_RUNTIME_DIR: /tmp/soliddraft-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: application-loop-release
+      - name: Read the application's pinned Catallax revision
+        id: catallax
+        run: |
+          revision=$(sed -n 's/^pub const CATALLAX_REVISION: &str = "\(.*\)";/\1/p' crates/soliddraft-kernel-catallax/src/lib.rs)
+          test -n "$revision"
+          python3 - "$revision" <<'PY'
+          import pathlib, sys, tomllib
+          manifest = tomllib.loads(pathlib.Path("crates/soliddraft-kernel-catallax/Cargo.toml").read_text())
+          dependencies = [d for d in manifest["dependencies"].values() if d.get("git", "").endswith("/catallax")]
+          assert dependencies and all(d["rev"] == sys.argv[1] for d in dependencies)
+          PY
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: BohnBawerick/catallax
+          ref: ${{ steps.catallax.outputs.revision }}
+          path: .ci-catallax
+          persist-credentials: false
+      - name: Install the software Vulkan adapter
+        run: |
+          printf 'http://archive.ubuntu.com/ubuntu\n' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+      - run: python3 -m unittest discover -s ci -p 'test_scenarios.py'
+      - name: Build the release application used for click budgets
+        run: cargo build --release --locked -p soliddraft-cli
+      - name: Capture the live document without saved inputs
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop/live-display" <<'PYTHON'
+          import importlib.util, json, pathlib, sys
+          spec = importlib.util.spec_from_file_location("scenarios", "ci/run-scenarios.py")
+          scenarios = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(scenarios)
+          root = pathlib.Path(sys.argv[1])
+          root.mkdir(parents=True)
+          client = scenarios.Client(str(pathlib.Path("target/release/soliddraft").resolve()), root / "commands", 100_000_000, 300)
+          try:
+              client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                  "clientInfo": {"name": "live-display-check", "version": "1"}})
+              client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+              def call(name, arguments):
+                  result = client.request("tools/call", {"name": name, "arguments": arguments})
+                  assert not result.get("isError"), result
+              call("scenario_prepare", {})
+              call("sketch", {"plane": "top", "shapes": [
+                  {"shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30}]})
+              call("extrude", {"sketch": "Sketch1", "depth": 10, "flip": False})
+              directory = root / "commands/0002"
+              # The command's evidence is written after its click, so nothing is saved yet.
+              saved = ("part.dwprt", "part.json", "recipe.json")
+              assert not any((directory / name).exists() for name in saved), sorted(directory.iterdir())
+              call("scenario_display", {})
+              assert (directory / "viewport.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+              assert not (directory / "view.svg").exists()
+              display_log = json.loads((directory / "display.kernel.json").read_text())
+              assert all(call["operation"] != "view_curves" for call in display_log["calls"]), display_log
+              call("scenario_evidence", {})
+              for name in saved:
+                  (directory / name).unlink()
+              call("scenario_view", {})
+              assert "<path " in (directory / "view.svg").read_text()
+              view_log = json.loads((directory / "view.kernel.json").read_text())
+              assert all(call["operation"] not in {"extrude", "boolean", "create_body_from_profile"}
+                  for call in display_log["calls"] + view_log["calls"]), (display_log, view_log)
+              print("Viewport captured before any saved input existed, hidden-line SVG after deleting them; no reconstruction calls.")
+          finally:
+              client.close()
+              scenarios.write(root / "protocol.json", client.transcript)
+          PYTHON
+      - name: Build the verifier from the same pinned revision
+        run: cargo build --release --locked --manifest-path .ci-catallax/Cargo.toml -p catallax-cli --bin catallax-verify --target-dir target
+      - name: Replay the captured slot and full slot-cut questions
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop" <<'PYTHON'
+          import json, pathlib, subprocess, sys
+          binary = pathlib.Path("target/release/catallax-verify").resolve()
+          about = json.loads(subprocess.check_output([binary, "about"], text=True))
+          assert about["default_work"] == 100_000_000, about
+          for name in ("slot", "slot-cut"):
+              directory = pathlib.Path(sys.argv[1]) / f"{name}-replay"
+              directory.mkdir(parents=True, exist_ok=True)
+              question = json.loads(pathlib.Path(f"crates/soliddraft-kernel-catallax/tests/fixtures/{name}-native-question.json").read_text())
+              question["max_work"] = about["default_work"]
+              (directory / "about.json").write_text(json.dumps(about))
+              (directory / "question.json").write_text(json.dumps(question))
+              with (directory / "response.json").open("w") as output:
+                  subprocess.run([binary, "replay", directory / "question.json", "--out", directory / "evidence"], stdout=output, check=True)
+              response = json.loads((directory / "response.json").read_text())
+              assert response["manifest"]["status"] == "answered", response["manifest"]
+              assert response["work"]["limit"] == 100_000_000, response["work"]
+              print(f"{name} answered with its original geometry: {response['work']}")
+          PYTHON
+      - name: Run every application scenario and the feature-count latency trends
+        run: |
+          status=0
+          for scenario in ci/scenarios/*.json; do
+            name=$(basename "$scenario" .json)
+            python3 ci/run-scenarios.py "$scenario" --soliddraft target/release/soliddraft --catallax-verify target/release/catallax-verify --out "$RUNNER_TEMP/application-loop/$name" || status=1
+          done
+          exit "$status"
+      - name: Publish click-budget and trend evidence
+        if: always()
+        run: |
+          python3 - "$RUNNER_TEMP/application-loop" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
+          import json, pathlib, sys
+          rows = ["## Application click budgets", "",
+                  "Release build on ${{ runner.environment }}/${{ runner.os }}/${{ runner.arch }}; raw click-to-display timing, not a matched-core baseline.", "",
+                  "| Scenario | Step | Tool | Wait ms | Budget ms | Result |",
+                  "|---|---:|---|---:|---:|---|"]
+          trends, views = [], []
+          for path in sorted(pathlib.Path(sys.argv[1]).glob("*/result.json")):
+              report = json.loads(path.read_text())
+              for step in report["steps"]:
+                  timing = step.get("timing")
+                  if timing:
+                      budget = "none" if timing["budget_ms"] is None else timing["budget_ms"]
+                      rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
+                          f"{timing['elapsed_ms']:.3f} | {budget} | {timing['status']} |")
+                  view = step.get("drawing_view")
+                  if view:
+                      views.append(f"| {report['name']} | {step['number']} | {view['elapsed_ms']:.3f} | "
+                          f"{view['budget_ms']} | {'pass' if view['pass'] else 'OVER BUDGET'} |")
+              for trend in report.get("trends", []):
+                  trends.append(f"| {report['name']} | {trend['tool']} | {trend.get('samples', 0)} | "
+                      f"{trend.get('growth_ms', 'unavailable')} | {trend['noise_ms']} | "
+                      f"{'pass' if trend['pass'] else 'fail'} |")
+              if report.get("error"):
+                  rows.extend(["", f"{report['name']}: {report['error']}"])
+          if views:
+              rows.extend(["", "## Drawing-view budgets", "",
+                  "| Scenario | Step | Hidden-line SVG ms | Budget ms | Result |",
+                  "|---|---:|---:|---:|---|", *views])
+          if trends:
+              rows.extend(["", "## Feature-count latency trends", "",
+                  "| Scenario | Tool | Samples | Fitted growth ms | Noise ms | Result |",
+                  "|---|---|---:|---:|---:|---|", *trends])
+          with open(sys.argv[2], "a") as summary:
+              summary.write("\n".join(rows) + "\n")
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: application-loop
+          path: ${{ runner.temp }}/application-loop
+          if-no-files-found: error
+
+  packaging:
+    needs: select
+    if: needs.select.outputs.packaging == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/packages.yml
+
+  gate:
+    name: Merge gate
+    if: always()
+    needs: [select, lint, kernel, step-opencascade, test-linux, test-macos, test-windows, web, msrv, interactive-linux, interactive-macos, application-loop, packaging]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        if: needs.select.result == 'success'
+        with:
+          name: check-selection
+          path: ${{ runner.temp }}/check-selection
+      - name: Require every selected check on this candidate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          printf '%s' "$NEEDS" > "$RUNNER_TEMP/check-needs.json"
+          if ! git show "$BASE_SHA:ci/check-registry.json" > "$RUNNER_TEMP/base-registry.json"; then
+            # Before R2, all eleven hosted units existed without a registry.
+            python3 - "$RUNNER_TEMP/base-registry.json" <<'PYTHON'
+          import json, sys
+          units = ["select", "lint", "kernel", "step-opencascade", "test-linux", "test-macos", "test-windows", "web", "msrv", "interactive-linux", "interactive-macos", "application-loop"]
+          json.dump({"jobs": dict.fromkeys(units)}, open(sys.argv[1], "w"))
+          PYTHON
+          fi
+          python3 ci/check-gate.py --registry ci/check-registry.json --base-registry "$RUNNER_TEMP/base-registry.json" --selection "$RUNNER_TEMP/check-selection/selection.json" --needs "$RUNNER_TEMP/check-needs.json" > "$RUNNER_TEMP/gate-verdict.json" || failed=1
+          cat "$RUNNER_TEMP/gate-verdict.json"
+          cat "$RUNNER_TEMP/gate-verdict.json" >> "$GITHUB_STEP_SUMMARY"
+          exit "${failed:-0}"
