@@ -76,8 +76,10 @@ impl SolidDraftApp {
         crate::web::set_context(&cc.egui_ctx);
         let mut state = AppState::new(doc);
         state.viewport.camera.fit(state.doc.bounds());
-        let preset = automation.preset.unwrap_or_else(crate::settings::default_preset);
+        let view = crate::settings::view();
+        let preset = automation.preset.unwrap_or(view.preset);
         state.viewport.preset = preset;
+        state.viewport.references = view.references;
         if !preset.shows_edges() {
             state.viewport.display = DisplayMode::Shaded;
         }

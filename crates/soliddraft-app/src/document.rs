@@ -136,6 +136,15 @@ impl AxisKind {
     }
 }
 
+/// A fixed reference of every part: the origin, a reference plane or an origin axis.
+/// No part file stores one, and none has a pick id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reference {
+    Origin,
+    Plane(PlaneKind),
+    Axis(AxisKind),
+}
+
 /// Where a sketch lies: a reference plane or a planar face of the body so far.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SketchPlane {
@@ -713,6 +722,9 @@ pub enum Selection {
     Face(FaceId),
     Edge(EdgeId),
     Vertex(VertexKey),
+    /// The origin, a reference plane or an origin axis. Selecting one shows the origin
+    /// axes.
+    Reference(Reference),
 }
 
 /// What the tree, the property panel and the agent tools call the part's body.
@@ -2368,6 +2380,7 @@ impl Document {
             }
             Selection::Feature(id) => self.feature(id).map(|_| sel),
             Selection::Body => None,
+            Selection::Reference(_) => Some(sel),
         };
     }
 
@@ -2719,6 +2732,14 @@ impl Document {
             });
         }
         match sel {
+            Selection::Reference(reference) => {
+                let title = match reference {
+                    Reference::Origin => "Origin".to_owned(),
+                    Reference::Plane(plane) => self.model().datum_name(plane.to_model()).to_owned(),
+                    Reference::Axis(axis) => axis.label().to_owned(),
+                };
+                Some(EntityInfo { title, feature: None, details: Vec::new() })
+            }
             Selection::Body => {
                 self.display_body()?;
                 let end = self.rollback.unwrap_or(self.features.len()).min(self.features.len());

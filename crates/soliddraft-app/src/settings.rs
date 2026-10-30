@@ -3,7 +3,8 @@
 //! shown and how wide, the command line's chips and session height, the pinned and recent
 //! commands, File locations: the folders and
 //! files where reference files are found (`soliddraft_document::locations`), the
-//! viewport's default look, the interface's light or dark [`Appearance`], and autosave,
+//! viewport's default look and [`ReferenceDisplay`], the interface's light or dark
+//! [`Appearance`], and autosave,
 //! recovery and backups ([`DocumentSettings`]), and navigation: the mouse preset, the
 //! wheel, the view keys and the camera ([`NavigationSettings`]). The user's own
 //! material library sits beside it ([`user_library_path`]).
@@ -156,26 +157,81 @@ pub fn user_library() -> Result<Library, String> {
     Ok(lib)
 }
 
-/// Viewport settings: the look the viewport starts in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
+/// What the viewport shows of the part's reference geometry without being asked. Display
+/// choices of the user, not of the document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct ReferenceDisplay {
+    pub show_grid: bool,
+    pub show_origin_planes: bool,
+    /// Keeps the origin axes on with nothing selected. A selected reference shows them
+    /// either way.
+    pub always_show_origin_axes: bool,
+}
+
+impl Default for ReferenceDisplay {
+    fn default() -> Self {
+        Self { show_grid: true, show_origin_planes: true, always_show_origin_axes: false }
+    }
+}
+
+/// Viewport settings: the look the viewport starts in and the reference geometry it
+/// shows. Each key of the `view` section falls back on its own, so a value this build
+/// cannot read costs only that value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize)]
 pub struct ViewSettings {
     pub preset: Preset,
+    #[serde(flatten)]
+    pub references: ReferenceDisplay,
+}
+
+/// The viewport settings, or the defaults when the file is missing or unreadable.
+pub fn view() -> ViewSettings {
+    crate::file::config_read_file("settings.json").map(|f| view_in(&f)).unwrap_or_default()
 }
 
 /// The look the viewport starts in, Studio when the file does not say.
 pub fn default_preset() -> Preset {
-    crate::file::config_read_file("settings.json").map(|f| view_in(&f)).unwrap_or_default().preset
+    view().preset
 }
 
 /// Saves the look the viewport starts in.
 pub fn save_default_preset(preset: Preset) -> Result<(), String> {
     let Some(file) = settings_file() else { return Err("no config directory".into()) };
-    save_section_in(&file, "view", &ViewSettings { preset })
+    save_view_keys_in(&file, serde_json::json!({ "preset": preset }))
+}
+
+/// Saves what the viewport shows of the reference geometry.
+pub fn save_reference_display(references: &ReferenceDisplay) -> Result<(), String> {
+    let Some(file) = settings_file() else { return Err("no config directory".into()) };
+    save_view_keys_in(&file, references)
 }
 
 fn view_in(file: &Path) -> ViewSettings {
-    serde_json::from_value(read(file)["view"].clone()).unwrap_or_default()
+    let all = read(file);
+    let view = &all["view"];
+    let shown = ReferenceDisplay::default();
+    let flag = |key: &str, default| view[key].as_bool().unwrap_or(default);
+    ViewSettings {
+        preset: serde_json::from_value(view["preset"].clone()).unwrap_or_default(),
+        references: ReferenceDisplay {
+            show_grid: flag("show_grid", shown.show_grid),
+            show_origin_planes: flag("show_origin_planes", shown.show_origin_planes),
+            always_show_origin_axes: flag("always_show_origin_axes", shown.always_show_origin_axes),
+        },
+    }
+}
+
+/// Rewrites `keys` of the `view` section and keeps the section's other keys, so saving the
+/// look cannot drop a display choice, or a key a newer build wrote.
+fn save_view_keys_in(file: &Path, keys: impl serde::Serialize) -> Result<(), String> {
+    let mut view = match read(&readable(file)).get("view") {
+        Some(Value::Object(section)) => section.clone(),
+        _ => Default::default(),
+    };
+    if let Value::Object(keys) = serde_json::to_value(keys).map_err(|e| e.to_string())? {
+        view.extend(keys);
+    }
+    save_section_in(file, "view", &view)
 }
 
 /// Appearance: light or dark interface. The `appearance` key of the settings file.
@@ -415,7 +471,7 @@ mod tests {
         assert_eq!(view_in(&file).preset, Preset::Studio);
         std::fs::write(&file, r#"{"view":{"preset":"cinema"},"theme":"dark"}"#).unwrap();
         assert_eq!(view_in(&file).preset, Preset::Studio, "an unknown look falls back to the default");
-        save_section_in(&file, "view", &ViewSettings { preset: Preset::Realistic }).unwrap();
+        save_section_in(&file, "view", &ViewSettings { preset: Preset::Realistic, ..Default::default() }).unwrap();
         assert_eq!(view_in(&file).preset, Preset::Realistic);
         let all: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(all["view"]["preset"], "realistic");

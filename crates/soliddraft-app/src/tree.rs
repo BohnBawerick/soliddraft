@@ -3,7 +3,9 @@
 //! double-click edits, F2 or a slow second click renames, drag reorders,
 //! right-click offers the rest.
 
-use crate::document::{AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Selection, SketchPlane};
+use crate::document::{
+    AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Reference, Selection, SketchPlane,
+};
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, EditorParams, NoteKind, Rename};
 use crate::theme;
@@ -85,6 +87,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         if open {
             for plane in [PlaneKind::Front, PlaneKind::Top, PlaneKind::Right] {
                 let name = state.doc.model().datum_name(plane.to_model());
+                let reference = Selection::Reference(Reference::Plane(plane));
                 let r = row(
                     ui,
                     RowSpec {
@@ -92,7 +95,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         icon: Icon::Plane,
                         name,
                         dim: !picking_plane,
-                        selected: false,
+                        selected: state.doc.selection == Some(reference),
                         ..RowSpec::plain()
                     },
                 );
@@ -101,11 +104,14 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 } else {
                     "Double-click to sketch on this plane"
                 });
-                if (picking_plane && r.clicked()) || r.double_clicked() {
+                if r.double_clicked() && !state.in_sketch() {
                     actions.push(AppAction::StartSketchOn(SketchPlane::Reference { plane, offset: 0.0 }));
+                } else if r.clicked() {
+                    actions.push(AppAction::Select(Some(reference)));
                 }
             }
             for axis in AxisKind::ALL {
+                let reference = Selection::Reference(Reference::Axis(axis));
                 let r = row(
                     ui,
                     RowSpec {
@@ -114,17 +120,30 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         icon_color: Some(theme::axis_color(axis)),
                         name: axis.label(),
                         dim: !picking_axis,
+                        selected: state.doc.selection == Some(reference),
                         ..RowSpec::plain()
                     },
                 );
-                if picking_axis
-                    && r.on_hover_text("Click to use this axis").clicked()
-                    && let Some(editor) = state.editor.as_mut()
-                {
-                    use_axis(&mut editor.params, axis);
+                let r = if picking_axis { r.on_hover_text("Click to use this axis") } else { r };
+                if r.clicked() {
+                    actions.push(AppAction::Select(Some(reference)));
                 }
             }
-            row(ui, RowSpec { indent: 1, icon: Icon::Point, name: "Origin", dim: true, ..RowSpec::plain() });
+            let reference = Selection::Reference(Reference::Origin);
+            let r = row(
+                ui,
+                RowSpec {
+                    indent: 1,
+                    icon: Icon::Point,
+                    name: "Origin",
+                    dim: true,
+                    selected: state.doc.selection == Some(reference),
+                    ..RowSpec::plain()
+                },
+            );
+            if r.clicked() {
+                actions.push(AppAction::Select(Some(reference)));
+            }
         }
         row(ui, RowSpec { indent: 0, icon: Icon::Material, name: "Material", sub: "Not set", ..RowSpec::plain() });
         // The body row: selecting it shows every dimension that builds the body.
@@ -551,26 +570,6 @@ impl RowSpec<'static> {
             suppressed: false,
             drop_above: false,
         }
-    }
-}
-
-/// Points the open revolve or pattern along an origin axis, through the origin.
-fn use_axis(params: &mut EditorParams, axis: AxisKind) {
-    let d = axis.direction();
-    let dir = soliddraft_kernel_api::Vec3::new(d.x.into(), d.y.into(), d.z.into());
-    match params {
-        EditorParams::Revolve(r) => {
-            r.axis_origin = [0.0; 3];
-            r.axis_direction = [dir.x, dir.y, dir.z];
-        }
-        EditorParams::Pattern(p) => match &mut p.layout {
-            soliddraft_model::PatternSpec::Linear { direction, .. } => *direction = dir,
-            soliddraft_model::PatternSpec::Circular { axis_origin, axis_direction, .. } => {
-                *axis_origin = soliddraft_kernel_api::Vec3::ZERO;
-                *axis_direction = dir;
-            }
-        },
-        _ => {}
     }
 }
 

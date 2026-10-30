@@ -100,7 +100,7 @@ pub struct Palette {
     pub viewport_bottom: Color32,
     /// The drawing canvas around the sheet; the sheet itself stays paper white.
     pub canvas_bg: Color32,
-    /// The world axes of the triad.
+    /// The origin axes.
     pub axis_x: Color32,
     pub axis_y: Color32,
     pub axis_z: Color32,
@@ -306,7 +306,7 @@ pub fn axis_y() -> Color32 {
 pub fn axis_z() -> Color32 {
     palette().axis_z
 }
-/// The colour of an origin axis, in the viewport, the triad and the feature tree.
+/// The colour of an origin axis, in the viewport and the feature tree.
 pub fn axis_color(axis: crate::document::AxisKind) -> Color32 {
     match axis {
         crate::document::AxisKind::X => axis_x(),
