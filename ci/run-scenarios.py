@@ -487,6 +487,16 @@ def substitute(value, bundle):
     return value
 
 
+def step_arguments(step, bundle, previous):
+    """Bind arguments to evidence returned by an earlier step."""
+    arguments = substitute(step.get("arguments", {}), bundle)
+    for name, source in step.get("arguments_from", {}).items():
+        if name in arguments:
+            raise ValueError(f"argument {name} has both a literal and an evidence source")
+        arguments[name] = at(previous[source["step"]], source["pointer"])
+    return arguments
+
+
 def cli(binary, arguments, directory, label, timeout):
     start = time.perf_counter_ns()
     result = subprocess.run([binary, *map(str, arguments)], capture_output=True, text=True, timeout=timeout)
@@ -766,7 +776,7 @@ def run(args):
             if "label" in step:
                 entry["label"] = step["label"]
             report["steps"].append(entry)
-            arguments = substitute(step.get("arguments", {}), args.out)
+            arguments = step_arguments(step, args.out, previous)
             started = time.perf_counter_ns()
             result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000

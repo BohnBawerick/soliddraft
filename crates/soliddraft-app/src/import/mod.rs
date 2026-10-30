@@ -5,13 +5,17 @@ use std::path::Path;
 use serde_json::{Value, json};
 use soliddraft_assistant::tools::schema::{array, optional, string};
 use soliddraft_kernel_api::{Approval, Disposition, ImportOptions, ProposalSet};
-use soliddraft_model::ImportStepFeature;
+use soliddraft_model::{ImportStepFeature, sha256_hex};
 
 use crate::document::{Command, Document, FeatureId, FeatureKind};
 use crate::state::{AppState, NoteKind};
 
 pub fn params() -> Vec<(&'static str, Value)> {
     let mut params = preview_params();
+    params.push((
+        "preview_token",
+        string("The token returned by preview_import for this source and its repair questions."),
+    ));
     params.push(("decline", optional(array(string("Gap id to decline, such as g0."), "Repairs to leave open."))));
     params
 }
@@ -49,9 +53,20 @@ impl Preview {
         Ok(Self { feature, proposals, revision: doc.revision(), document: doc.model().id() })
     }
 
+    pub fn token(&self) -> String {
+        let reviewed = serde_json::to_vec(&(
+            "soliddraft-import-review/1",
+            &self.feature.source_name,
+            &self.feature.sha256,
+            &self.proposals,
+        ))
+        .expect("import previews serialize");
+        sha256_hex(&reviewed)
+    }
+
     pub fn summary(&self) -> Value {
         json!({"source_name": self.feature.source_name, "source_sha256": self.feature.sha256,
-               "proposals": self.proposals.proposals})
+               "proposals": self.proposals.proposals, "token": self.token()})
     }
 }
 

@@ -43,7 +43,13 @@
           "equals": null
         }
       ],
-      "refused": "2 solids; a part holds one body"
+      "refused": "2 solids; a part holds one body",
+      "arguments_from": {
+        "preview_token": {
+          "step": 1,
+          "pointer": "/result/token"
+        }
+      }
     },
     {
       "tool": "preview_import",
@@ -189,6 +195,12 @@
       ],
       "failed": {
         "Import1": "not imported until the gap is resolved"
+      },
+      "arguments_from": {
+        "preview_token": {
+          "step": 3,
+          "pointer": "/result/token"
+        }
       }
     },
     {
@@ -398,7 +410,13 @@
           "approx": 10.004,
           "tolerance": 0.0005
         }
-      ]
+      ],
+      "arguments_from": {
+        "preview_token": {
+          "step": 3,
+          "pointer": "/result/token"
+        }
+      }
     },
     {
       "tool": "save",

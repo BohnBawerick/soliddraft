@@ -2525,7 +2525,16 @@ impl ToolHost for CommandTools<'_> {
                 Ok(preview.summary())
             })(),
             "import_step" if mcp => (|| {
+                let expected = input["preview_token"]
+                    .as_str()
+                    .filter(|token| !token.is_empty())
+                    .ok_or("preview_token is required; review the source with preview_import first")?;
                 let preview = crate::import::Preview::read(self.doc, &crate::import::source_path(&input)?)?;
+                if preview.token() != expected {
+                    return Err(
+                        "the STEP source or repair questions changed since review; run preview_import again".into()
+                    );
+                }
                 let decline: Vec<String> = serde_json::from_value(input.get("decline").cloned().unwrap_or(json!([])))
                     .map_err(|e| format!("bad decline list: {e}"))?;
                 crate::import::commit(self.doc, &preview, &decline)?;

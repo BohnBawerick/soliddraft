@@ -145,6 +145,22 @@ class Checks(unittest.TestCase):
         self.assertEqual(scenarios.at({"a/b": [{"~": 2}]}, "/a~1b/0/~0"), 2)
 
 
+class ReviewedArguments(unittest.TestCase):
+    def test_token_is_copied_from_the_preview_evidence(self):
+        step = {"arguments": {"path": "{bundle}/source.step"},
+                "arguments_from": {"preview_token": {"step": 3, "pointer": "/result/token"}}}
+        previous = {3: {"result": {"token": "reviewed source and questions"}}}
+        self.assertEqual(scenarios.step_arguments(step, "/run", previous),
+                         {"path": "/run/source.step", "preview_token": "reviewed source and questions"})
+        with self.assertRaises(KeyError):
+            scenarios.step_arguments(step, "/run", {})
+        with self.assertRaises(KeyError):
+            scenarios.step_arguments(step, "/run", {3: {"result": {}}})
+        step["arguments"]["preview_token"] = "ambiguous literal"
+        with self.assertRaises(ValueError):
+            scenarios.step_arguments(step, "/run", previous)
+
+
 class ExpectedFailedFeature(unittest.TestCase):
     def test_absent_derivative_and_present_digest(self):
         self.assertTrue(scenarios.check({}, {"pointer": "/derivative", "absent": True})["pass"])
