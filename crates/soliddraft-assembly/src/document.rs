@@ -972,6 +972,11 @@ impl AssemblyDocument {
         self.start_loading(lookup);
     }
 
+    /// How many accepted edits this assembly can undo.
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
+    }
+
     /// The label of the step undo would revert.
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|r| r.label.as_str())
@@ -1218,6 +1223,7 @@ impl AssemblyDocument {
     }
 
     /// Refreshes root source status without changing pins, truth or undo history.
+    /// Before the first save, only matching open documents can be checked.
     pub fn refresh_references(&mut self, open: Vec<OpenDocument>) {
         self.options.open = open;
         let resolver = self.resolver();
@@ -1228,12 +1234,18 @@ impl AssemblyDocument {
             .filter_map(|source| {
                 let r = &source.document;
                 let key = key_of(r)?;
-                let state = match resolver.resolve(r) {
-                    Resolution::Found(t) => match t.revision() {
-                        Some(now) if *now != r.pinned => crate::Freshness::NewerAvailable { now: now.clone() },
-                        _ => crate::Freshness::Current,
-                    },
-                    Resolution::Missing(_) => crate::Freshness::Missing,
+                let state = if self.path.is_none()
+                    && !self.options.open.iter().any(|d| Some(d.id) == r.id && d.kind == r.kind)
+                {
+                    crate::Freshness::Unchecked
+                } else {
+                    match resolver.resolve(r) {
+                        Resolution::Found(t) => match t.revision() {
+                            Some(now) if *now != r.pinned => crate::Freshness::NewerAvailable { now: now.clone() },
+                            _ => crate::Freshness::Current,
+                        },
+                        Resolution::Missing(_) => crate::Freshness::Missing,
+                    }
                 };
                 Some((key, state))
             })

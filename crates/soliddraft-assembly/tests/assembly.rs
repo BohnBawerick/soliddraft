@@ -336,3 +336,46 @@ fn an_update_whose_new_revision_cannot_be_shown_keeps_the_old_one() {
     assert_eq!(doc.store().get(doc.table().definition(row)).state, LoadState::DisplayReady);
     assert!((doc.table().bounds(row).max.x - 20.0).abs() < 1e-3);
 }
+
+#[test]
+fn the_first_save_changes_only_the_stored_path() {
+    use soliddraft_document::{CacheOnlyStore, RevisionStore};
+    let dir = folder("save-revision");
+    let part = dir.join("a.dwprt");
+    let root = dir.join("rig.dwasm");
+    save_block(&part, 40.0, 10.0);
+    let identity = identify_file(&part).unwrap();
+    let revisions = Arc::new(CacheOnlyStore::new());
+    revisions.record(identity.id, &identity.revision, &std::fs::read(&part).unwrap());
+    let mut doc = AssemblyDocument::new_with("Rig", OpenOptions { revisions: Some(revisions), ..with_kernel() });
+    let reference = DocRef::new(identity.id, identity.kind, part.to_string_lossy(), identity.revision);
+    doc.insert(reference, Placement::IDENTITY).unwrap();
+    doc.finish_loading();
+    assert!(doc.store().iter().any(|(_, d)| d.kind == DocKind::Part && d.state == LoadState::DisplayReady));
+    let before = doc.assembly().clone();
+    let start = doc.revision();
+    doc.save(Some(&root)).unwrap();
+    let source = &doc.assembly().sources[0];
+    assert_eq!(source.document.path, "a.dwprt");
+    assert_eq!(source.id, before.sources[0].id);
+    assert_eq!(source.document.id, before.sources[0].document.id);
+    assert_eq!(source.document.pinned, before.sources[0].document.pinned);
+    assert_eq!(doc.assembly().geometry_hash(), before.geometry_hash());
+    assert_ne!(doc.revision(), start);
+    assert!(!doc.is_dirty());
+    assert_eq!(identify_file(&root).unwrap().revision, doc.revision());
+    let mut restored = doc.assembly().clone();
+    restored.sources[0].document.path = before.sources[0].document.path.clone();
+    assert_eq!(restored.semantic_hash(), start);
+    let saved = doc.revision();
+    doc.save(None).unwrap();
+    assert_eq!(doc.revision(), saved);
+    doc.save(Some(&dir.join("copy.dwasm"))).unwrap();
+    assert_eq!(doc.revision(), saved);
+    let subfolder = dir.join("nested");
+    std::fs::create_dir_all(&subfolder).unwrap();
+    doc.save(Some(&subfolder.join("rig.dwasm"))).unwrap();
+    assert_eq!(doc.assembly().sources[0].document.path, "../a.dwprt");
+    assert_ne!(doc.revision(), saved);
+    assert_eq!(doc.assembly().geometry_hash(), before.geometry_hash());
+}

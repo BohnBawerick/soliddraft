@@ -610,13 +610,38 @@
           }
         },
         {
+          "pointer": "/inspect/rig/references/0/id",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/inspect/rig/references/0/path",
+          "equals": "a.dwprt"
+        },
+        {
           "pointer": "/inspect/rig/revision",
           "same_as": {
             "pointer": "/summary/assembly/revision"
           }
         },
         {
+          "pointer": "/inspect/rig/geometry_hash",
+          "same_as": {
+            "step": 16,
+            "pointer": "/summary/assembly/geometry_hash"
+          }
+        },
+        {
           "pointer": "/summary/assembly/revision",
+          "differs_from": {
+            "step": 16,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/name",
           "same_as_step": 16
         },
         {

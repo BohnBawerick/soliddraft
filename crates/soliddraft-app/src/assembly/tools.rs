@@ -32,7 +32,7 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
     }).collect();
     Some(json!({
         "active": state.assembly.active, "name": s.doc.assembly().name, "path": s.doc.path(),
-        "revision": s.doc.revision(), "dirty": s.doc.is_dirty(), "undo": s.doc.undo_label(),
+        "revision": s.doc.revision(), "geometry_hash": s.doc.assembly().geometry_hash(), "dirty": s.doc.is_dirty(), "undo": s.doc.undo_label(),
         "components": components,
     }))
 }
