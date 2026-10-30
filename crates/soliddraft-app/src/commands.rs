@@ -1535,6 +1535,15 @@ fn registry() -> Vec<CommandSpec> {
             tools::rename_plane_params,
         )
 .undo(Undo::Step),
+        cmd("set_value", "Set value", Icon::Props, "Create or change a named value").agents(
+            Agents::Verb, "Values drive bound dimensions; cycles and incompatible units are refused.", tools::set_value_params,
+        ).undo(Undo::Step),
+        cmd("drive", "Drive input", Icon::Props, "Drive a dimension or extrusion depth with an expression").agents(
+            Agents::Verb, "Choose a sketch dimension or an extrusion depth.", tools::drive_params,
+        ).undo(Undo::Step),
+        cmd("rename_value", "Rename value", Icon::Props, "Rename a value and its references").agents(
+            Agents::Verb, "Expressions keep their references when a value is renamed.", tools::rename_value_params,
+        ).undo(Undo::Step),
         cmd("edit_dimension", "Edit dimension", Icon::Props, "Change a dimension of a sketch").agents(
             Agents::Mcp,
             "The sketch solves again and everything after it rebuilds.",

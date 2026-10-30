@@ -267,6 +267,9 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(s.state.doc.features.is_empty());
     s.call("sketch", json!({"plane":"top","shapes":[{"shape":"rectangle","center":[0,0,0],"width":40,"height":30}]}));
     s.call("extrude", json!({"sketch":"Sketch1","depth":12,"flip":false}));
+    s.call("set_value", json!({"name":"part_depth","expression":"12"}));
+    s.call("drive", json!({"feature":"Boss-Extrude1","parameter":"depth","expression":"part_depth"}));
+    s.call("rename_value", json!({"name":"part_depth","to":"plate_depth"}));
     s.call("shell", json!({"open_faces":["Boss-Extrude1 · End cap"],"thickness":2}));
     s.call("edit_shell", json!({"feature":"Shell1","thickness":1.5}));
     s.call("new_part", json!({}));

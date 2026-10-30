@@ -356,3 +356,10 @@ owner = "V4"
 crate = "soliddraft-app"
 paths = ["crates/soliddraft-app/src/tabs/"]
 module = ["tabs"]
+
+[[areas]]
+name = "model.values"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/values.rs"]
+module = ["values"]

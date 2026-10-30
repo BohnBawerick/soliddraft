@@ -784,6 +784,18 @@ impl DisplayMesh {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Command {
+    SetValue {
+        name: String,
+        expression: String,
+    },
+    Drive {
+        input: model::values::Input,
+        expression: String,
+    },
+    RenameValue {
+        name: String,
+        to: String,
+    },
     AddSketch {
         plane: SketchPlane,
     },
@@ -861,6 +873,9 @@ impl Command {
         match self {
             Command::AddSketch { .. } => "Add sketch".into(),
             Command::EditSketch { .. } => "Edit sketch".into(),
+            Command::SetValue { .. } => "Set value".into(),
+            Command::Drive { .. } => "Drive input".into(),
+            Command::RenameValue { .. } => "Rename value".into(),
             Command::AddExtrude { .. } => "Add extrude".into(),
             Command::EditExtrude { .. } => "Edit extrude".into(),
             Command::AddCut { .. } => "Add cut".into(),
@@ -1887,6 +1902,9 @@ impl Document {
         let edit =
             |id: FeatureId, kind: &FeatureKind| model::Command::EditFeature { id: model_id(id), kind: kind.to_model() };
         Ok(match command {
+            Command::SetValue { name, expression } => vec![model::Command::SetValue { name, expression }],
+            Command::Drive { input, expression } => vec![model::Command::Drive { input, expression }],
+            Command::RenameValue { name, to } => vec![model::Command::RenameValue { name, to }],
             Command::AddSketch { plane } => {
                 let mut sketch = Sketch::new();
                 sketch::solve::solve(&mut sketch, None, true);

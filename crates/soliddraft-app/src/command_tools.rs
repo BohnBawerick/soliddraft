@@ -68,6 +68,37 @@ pub enum Shape {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Line {
+    /// Creates or changes a named value.
+    SetValue {
+        /// The value identifier.
+        name: String,
+        /// Authored expression text.
+        expression: String,
+    },
+    /// Renames a value and its expression references.
+    RenameValue {
+        /// The existing identifier.
+        name: String,
+        /// The new identifier.
+        to: String,
+    },
+    /// Drives a sketch dimension or an extrusion depth.
+    Drive {
+        /// Sketch name, for a dimension.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sketch: Option<String>,
+        /// Dimension number from 1.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dimension: Option<usize>,
+        /// Extrusion name, for a depth.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        feature: Option<String>,
+        /// The parameter name, depth.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parameter: Option<String>,
+        /// Authored driver text.
+        expression: String,
+    },
     /// A sketch of closed shapes on a reference plane or a planar face.
     Sketch {
         /// `top`, `front`, `right`, or a planar face's name.
@@ -638,6 +669,27 @@ pub fn rename_plane_params() -> Vec<(&'static str, Value)> {
     vec![("plane", string("top, front, right, or the plane's current name")), ("name", string("The new display name"))]
 }
 
+/// Parameters for a named value expression.
+pub fn set_value_params() -> Vec<(&'static str, Value)> {
+    vec![("name", string("Value identifier")), ("expression", string("Expression in document units"))]
+}
+
+/// Parameters for renaming a value.
+pub fn rename_value_params() -> Vec<(&'static str, Value)> {
+    vec![("name", string("Existing value name")), ("to", string("New identifier"))]
+}
+
+/// Parameters for binding a sketch dimension or extrusion depth.
+pub fn drive_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("sketch", optional(string("Sketch name"))),
+        ("dimension", optional(integer("Dimension number from 1"))),
+        ("feature", optional(string("Extrude name"))),
+        ("parameter", optional(string("depth"))),
+        ("expression", string("Driver expression")),
+    ]
+}
+
 /// The `edit_dimension` tool's parameters.
 pub fn edit_dimension_params() -> Vec<(&'static str, Value)> {
     vec![
@@ -969,10 +1021,66 @@ impl Run {
     }
 }
 
+fn value_command(doc: &Document, name: &str, input: &Value) -> Result<Command, String> {
+    match name {
+        "set_value" => {
+            let name = input["name"].as_str().ok_or("missing name")?.to_owned();
+            let expression = input["expression"].as_str().ok_or("missing expression")?.to_owned();
+            Ok(Command::SetValue { name, expression })
+        }
+        "rename_value" => {
+            let name = input["name"].as_str().ok_or("missing name")?.to_owned();
+            let to = input["to"].as_str().ok_or("missing to")?.to_owned();
+            Ok(Command::RenameValue { name, to })
+        }
+        "drive" => {
+            let expression = input["expression"].as_str().ok_or("missing expression")?.to_owned();
+            let target = if let Some(sketch) = input["sketch"].as_str() {
+                if input.get("feature").is_some() || input.get("parameter").is_some() {
+                    return Err("choose a sketch or feature input".into());
+                }
+                let id = feature_by_name(doc, sketch)?;
+                let Some(FeatureKind::Sketch(s)) = doc.feature(id).map(|f| &f.kind) else {
+                    return Err("not a sketch".into());
+                };
+                let number = input["dimension"]
+                    .as_u64()
+                    .and_then(|n| usize::try_from(n).ok())
+                    .filter(|n| *n > 0)
+                    .ok_or("dimension must be a positive index")?;
+                let constraint =
+                    dimensions(&s.sketch).nth(number - 1).map(|c| c.id).ok_or("dimension number is out of range")?;
+                soliddraft_model::values::Input::Dimension {
+                    feature: soliddraft_model::FeatureId(id as u32),
+                    constraint,
+                }
+            } else {
+                if input.get("dimension").is_some() || input.get("sketch").is_some() {
+                    return Err("choose a sketch or feature input".into());
+                }
+                let feature = input["feature"].as_str().ok_or("missing feature")?;
+                if input["parameter"].as_str() != Some("depth") {
+                    return Err("parameter must be depth".into());
+                }
+                soliddraft_model::values::Input::Depth {
+                    feature: soliddraft_model::FeatureId(feature_by_name(doc, feature)? as u32),
+                }
+            };
+            Ok(Command::Drive { input: target, expression })
+        }
+        _ => Err("unknown value command".into()),
+    }
+}
+
 impl Line {
     /// Runs the line on `doc` through the command layer.
     fn run(&self, doc: &mut Document, run: &mut Run) -> Result<(), String> {
         match self {
+            Line::SetValue { .. } | Line::RenameValue { .. } | Line::Drive { .. } => {
+                let input = serde_json::to_value(self).map_err(|e| e.to_string())?;
+                let command = value_command(doc, self.op(), &input)?;
+                run.apply(doc, command)?;
+            }
             Line::Sketch { plane, offset, shapes } => {
                 if shapes.is_empty() {
                     return Err("a sketch needs at least one shape".into());
@@ -1271,6 +1379,9 @@ impl Line {
     /// The line's `op`: the id of its verb in the command registry.
     pub fn op(&self) -> &'static str {
         match self {
+            Line::SetValue { .. } => "set_value",
+            Line::RenameValue { .. } => "rename_value",
+            Line::Drive { .. } => "drive",
             Line::Sketch { .. } => "sketch",
             Line::SketchGeometry { .. } => "sketch_geometry",
             Line::Extrude { .. } => "extrude",
@@ -1432,6 +1543,11 @@ impl Line {
             }
             Line::Chamfer { edges, distance } => {
                 ("Chamfer".into(), format!("{} mm on {}", fmt_mm(*distance), edges.join(", ")))
+            }
+            Line::SetValue { name, expression } => (format!("Set {name}"), expression.clone()),
+            Line::RenameValue { name, to } => (format!("Rename {name}"), to.clone()),
+            Line::Drive { sketch, feature, expression, .. } => {
+                (format!("Drive {}", sketch.as_deref().or(feature.as_deref()).unwrap_or("input")), expression.clone())
             }
             Line::EditExtrude { feature, depth, flip } => (format!("Edit {feature}"), end(false, *depth, *flip)),
             Line::EditCut { feature, through_all, depth, flip } => {
@@ -2100,10 +2216,15 @@ impl CommandTools<'_> {
         json!({
             "part": doc.name,
             "units": "mm",
+            "values": doc.model().values().summary(),
             "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {
                 let mut v = params_json(doc, &f.kind);
+                if let Some(feature) = doc.model().feature(soliddraft_model::FeatureId(f.id as u32)) {
+                    let expressions = doc.model().values().expressions(feature);
+                    if !expressions.is_empty() { v["expressions"] = json!(expressions); }
+                }
                 v["name"] = f.name.clone().into();
                 v["status"] = status_text(doc, f.id).into();
                 if f.via_assistant {
@@ -2255,6 +2376,12 @@ impl CommandTools<'_> {
         Ok(json!({ "sketch": name, "dimension": number, "value": value }))
     }
 
+    fn value_command(&mut self, name: &str, input: &Value) -> Result<Value, String> {
+        let command = value_command(self.doc, name, input)?;
+        self.doc.apply(command)?;
+        Ok(self.summary())
+    }
+
     fn names(&self, ids: &[FeatureId]) -> Vec<String> {
         ids.iter().filter_map(|id| self.doc.feature(*id)).map(|f| f.name.clone()).collect()
     }
@@ -2330,6 +2457,7 @@ impl ToolHost for CommandTools<'_> {
                 self.doc.apply(Command::RenamePlane { plane, name: name.clone() })?;
                 Ok(json!({ "renamed_plane": name }))
             })(),
+            "set_value" | "rename_value" | "drive" if mcp => self.value_command(name, &input),
             "edit_dimension" if mcp => self.edit_dimension(&input),
             "save" if mcp => (|| {
                 let path = part_path(&input)?;
@@ -2514,6 +2642,29 @@ mod tests {
         let pi = std::f64::consts::PI;
         let expected = 120.0 * 90.0 * 10.0 + 120.0 * 10.0 * 50.0 + pi * 144.0 * 24.0 - pi * 36.0 * 34.0;
         assert!((v - expected).abs() < 50.0, "volume {v}, expected {expected}");
+    }
+
+    #[test]
+    fn assistant_values_require_a_proposal_and_explicit_apply() {
+        let mut doc = Document::new("Part1", crate::kernel());
+        let mut book = ProposalBook::default();
+        let mut tools = CommandTools { doc: &mut doc, book: &mut book, surface: Surface::Assistant, drawing: None };
+        let arguments = json!({"name":"plate_w","expression":"140"});
+        assert!(call_checked(&mut tools, "set_value", arguments, &assistant()).is_error);
+        let proposed = call_checked(
+            &mut tools,
+            "propose",
+            json!({
+                "summary":"Name the width", "commands":[{"op":"set_value","name":"plate_w","expression":"140"}]
+            }),
+            &assistant(),
+        );
+        assert!(!proposed.is_error, "{}", proposed.content);
+        assert!(tools.doc.model().values().is_empty());
+        assert!(call_checked(&mut tools, "apply", json!({"proposal_id":"P1"}), &assistant()).is_error);
+        assert!(tools.doc.model().values().is_empty());
+        tools.book.apply(tools.doc, "P1").unwrap();
+        assert_eq!(tools.doc.model().values().summary()[0]["value"], json!(140.0));
     }
 
     #[test]
