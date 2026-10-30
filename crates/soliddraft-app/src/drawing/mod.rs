@@ -28,6 +28,7 @@ use soliddraft_drawing::measure::{Pick, Proposal};
 use soliddraft_drawing::project::{self, Projected};
 
 use crate::app::Tab;
+use crate::command_line::{Status, StatusNote};
 use crate::state::{AppState, NoteKind};
 use egui_dock::DockState;
 use soliddraft_document::DocumentId;
@@ -41,6 +42,9 @@ use soliddraft_kernel_api::drawing::StandardView;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use web_time::Instant;
+
+/// How long a drawing's message stays on the bottom bar.
+const MESSAGE_ON_BAR: std::time::Duration = std::time::Duration::from_secs(8);
 
 /// The drawing's ribbon tabs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1843,82 +1847,62 @@ pub(crate) fn save_session(
     Ok((path, warning))
 }
 
-/// The status bar while the drawing is active: sheet, size, scale, projection, view
-/// count and whether the sheet is up to date with the part.
-pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
+/// The bottom bar's status while the drawing is active: whether the sheet is up to date
+/// with the part, then sheet, size, scale, projection and view count.
+pub fn status(state: &AppState) -> Option<Status> {
     use crate::theme;
-    let Some(s) = state.drawing.session.as_ref() else { return };
+    let s = state.drawing.session.as_ref()?;
     let sheet = s.sheet();
-    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::muted());
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 18.0;
-        ui.add_space(4.0);
-        ui.label(muted(format!("Sheet {} of {}", s.sheet + 1, s.doc.drawing.sheets.len())));
-        let projection = match sheet.projection {
-            Projection::FirstAngle => "first angle",
-            Projection::ThirdAngle => "third angle",
-        };
-        ui.label(muted(format!("{} · {} · {projection}", sheet.size.name, sheet.scale)));
-        let n = sheet.views.len();
-        ui.label(muted(format!("{n} view{}", if n == 1 { "" } else { "s" })));
-        let part = &s.doc.drawing.meta.title;
-        let rev = s.doc.drawing.model.pinned.short();
-        let dangling = s.doc.dangling_count();
-        let changed = s.doc.attention_count() - dangling;
-        if s.link_state() == LinkState::Missing {
-            ui.label(
-                egui::RichText::new(format!("{part} not found · repair the reference"))
-                    .family(theme::semibold())
-                    .size(11.5)
-                    .color(theme::error()),
-            );
-        } else if s.doc.is_stale() {
-            ui.label(
-                egui::RichText::new(format!("Newer version of {part} available · showing rev {rev} (Ctrl+B rebuilds)"))
-                    .family(theme::semibold())
-                    .size(11.5)
-                    .color(theme::warn()),
-            );
-        } else if dangling > 0 || changed > 0 {
-            let mut parts = Vec::new();
-            if dangling > 0 {
-                parts.push(format!("{dangling} dangling"));
-            }
-            if changed > 0 {
-                parts.push(format!("{changed} changed"));
-            }
-            ui.label(
-                egui::RichText::new(format!("Updated to {part} rev {rev} · {}", parts.join(" · ")))
-                    .family(theme::semibold())
-                    .size(11.5)
-                    .color(if dangling > 0 { theme::error() } else { theme::warn() }),
-            );
-        } else {
-            ui.label(
-                egui::RichText::new(format!("Up to date with {part} rev {rev}"))
-                    .family(theme::semibold())
-                    .size(11.5)
-                    .color(theme::ok()),
-            );
+    let part = &s.doc.drawing.meta.title;
+    let rev = s.doc.drawing.model.pinned.short();
+    let dangling = s.doc.dangling_count();
+    let changed = s.doc.attention_count() - dangling;
+    let headline = if s.link_state() == LinkState::Missing {
+        (format!("{part} not found · repair the reference"), theme::error())
+    } else if s.doc.is_stale() {
+        (format!("Newer version of {part} available · showing rev {rev} (Ctrl+B rebuilds)"), theme::warn())
+    } else if dangling > 0 || changed > 0 {
+        let mut parts = Vec::new();
+        if dangling > 0 {
+            parts.push(format!("{dangling} dangling"));
         }
-        if s.tool != DrawingTool::Select {
-            ui.label(muted(s.tool.label().to_owned()));
+        if changed > 0 {
+            parts.push(format!("{changed} changed"));
         }
-        if let Some((text, at)) = &s.message
-            && at.elapsed() < std::time::Duration::from_secs(8)
-        {
-            ui.label(muted(text.clone()));
-        }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(10.0);
-            let coords = match s.cursor {
-                Some(c) => format!("x {:.1}   y {:.1} mm", c.u, c.v),
-                None => "mm".to_owned(),
-            };
-            ui.label(muted(coords));
-            ui.label(muted(format!("{:.1} ms", state.frame_ms))).on_hover_text("Frame time, smoothed");
-        });
+        let color = if dangling > 0 { theme::error() } else { theme::warn() };
+        (format!("Updated to {part} rev {rev} · {}", parts.join(" · ")), color)
+    } else {
+        (format!("Up to date with {part} rev {rev}"), theme::ok())
+    };
+    let projection = match sheet.projection {
+        Projection::FirstAngle => "first angle",
+        Projection::ThirdAngle => "third angle",
+    };
+    let n = sheet.views.len();
+    let mut details = vec![
+        format!("Sheet {} of {}", s.sheet + 1, s.doc.drawing.sheets.len()),
+        format!("{} · {} · {projection}", sheet.size.name, sheet.scale),
+        format!("{n} view{}", if n == 1 { "" } else { "s" }),
+    ];
+    if s.tool != DrawingTool::Select {
+        details.push(s.tool.label().to_owned());
+    }
+    details.push(format!("{:.1} ms", state.frame_ms));
+    let message = s.message.as_ref().map(|(text, at)| StatusNote {
+        text: text.clone(),
+        color: theme::muted(),
+        fresh: at.elapsed() < MESSAGE_ON_BAR,
     });
+    let position = match s.cursor {
+        Some(c) => format!("x {:.1}   y {:.1} mm", c.u, c.v),
+        None => "mm".to_owned(),
+    };
+    Some(Status {
+        headline,
+        note: message.filter(|m| m.fresh).or_else(|| state.note.as_ref().map(StatusNote::of)),
+        details,
+        position,
+    })
 }
 
 /// The part's dimensions brought into the views of sheet `sheet`, once: those the sheet

@@ -1818,6 +1818,11 @@ impl Document {
         self.model.undo_depth()
     }
 
+    /// How many steps the redo stack holds.
+    pub fn redo_depth(&self) -> usize {
+        self.model.redo_depth()
+    }
+
     /// Joins the undo steps recorded since the stack was `depth` deep into one step
     /// called `label`, so the commands of an assistant proposal undo together.
     pub fn group_undo(&mut self, depth: usize, label: String) {

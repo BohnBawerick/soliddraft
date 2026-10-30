@@ -5,10 +5,11 @@
 //! holds the session the window shows and draws it with the part viewport's renderer.
 //!
 //! Hooks into the shell are small: `Tab::Assembly` in `app.rs`, one arm each in
-//! `ribbon.rs`, the tree and property tabs and the status bar, one `AppAction::Assembly`
+//! `ribbon.rs`, the tree and property tabs and the bottom status, one `AppAction::Assembly`
 //! variant and one `AssemblyState` field in `state.rs`.
 
 use crate::app::Tab;
+use crate::command_line::{Status, StatusNote};
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, NoteKind};
 use crate::theme;
@@ -764,32 +765,24 @@ pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
     }
 }
 
-/// The status bar while the assembly is active.
-pub fn status_bar(ui: &mut egui::Ui, state: &mut AppState) {
-    let Some(s) = state.assembly.session.as_ref() else { return };
-    let muted = |t: String| egui::RichText::new(t).size(11.5).color(theme::muted());
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 18.0;
-        ui.add_space(4.0);
-        let counts = s.doc.table().counts();
-        if s.doc.is_loading() {
-            ui.label(egui::RichText::new("Loading parts…").family(theme::semibold()).size(11.5).color(theme::muted()));
-        } else {
-            ui.label(egui::RichText::new("Assembly").family(theme::semibold()).size(11.5).color(theme::ok()));
-        }
-        let n = s.components().len();
-        ui.label(muted(format!("{n} component{}", plural(n))));
-        ui.label(muted(format!("{} part{} placed", counts.parts, plural(counts.parts))));
-        ui.label(muted("Editing assembly".to_owned()));
-        if let Some(note) = &state.note
-            && note.at.elapsed() < Duration::from_secs(6)
-        {
-            let color = match note.kind {
-                NoteKind::Info => theme::muted(),
-                NoteKind::Ok => theme::ok(),
-                NoteKind::Error => theme::error(),
-            };
-            ui.label(egui::RichText::new(&note.text).size(11.5).color(color));
-        }
-    });
+/// The bottom bar's status while the assembly is active.
+pub fn status(state: &AppState) -> Option<Status> {
+    let s = state.assembly.session.as_ref()?;
+    let headline = if s.doc.is_loading() {
+        ("Loading parts…".to_owned(), theme::muted())
+    } else {
+        ("Assembly".to_owned(), theme::ok())
+    };
+    let counts = s.doc.table().counts();
+    let n = s.components().len();
+    Some(Status {
+        headline,
+        note: state.note.as_ref().map(StatusNote::of),
+        details: vec![
+            "Editing assembly".to_owned(),
+            format!("{n} component{}", plural(n)),
+            format!("{} part{} placed", counts.parts, plural(counts.parts)),
+        ],
+        position: "mm".to_owned(),
+    })
 }

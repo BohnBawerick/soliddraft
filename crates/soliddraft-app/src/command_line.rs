@@ -1,11 +1,14 @@
 //! The command line along the bottom of the window, and the assistant session that opens
 //! above it.
 //!
-//! The bar holds a row of tool chips and a prompt where a typed command runs, as on
-//! AutoCAD's command line: a command's id or label runs it, Tab completes the name, Up and
-//! Down walk back through what was typed, and Enter on an empty line repeats the last one.
-//! The names come from the command registry ([`crate::commands`]), so a typed command runs
-//! exactly what its ribbon button runs.
+//! The bar holds a row of tool chips, a prompt where a typed command runs, as on AutoCAD's
+//! command line, and the status of the active document: a command's id or label runs it,
+//! Tab completes the name, Up and Down walk back through what was typed, and Enter on an
+//! empty line repeats the last one. The names come from the command registry
+//! ([`crate::commands`]), so a typed command runs exactly what its ribbon button runs.
+//!
+//! The status keeps its headline and units on the bar and shows the rest while there is
+//! room. A click on it lists everything, whatever the width of the window.
 //!
 //! [`AI_COMMAND`] opens the assistant session: a terminal-like pane that grows upward from
 //! the bar. A line there that is a command's name, or starts with `/`, runs the command;
@@ -20,10 +23,13 @@ use crate::chat::{ChatMessage, Role, ToolActivity, ToolState};
 use crate::command_tools::{Proposal, ProposalStatus};
 use crate::commands::{self, CommandSpec, Context, History};
 use crate::icons::{self, Icon};
-use crate::state::{AppAction, AppState, NoteKind};
+use crate::state::{AppAction, AppState, Note, NoteKind};
 use crate::theme;
-use egui::{Align2, Color32, CornerRadius, Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::text::{LayoutJob, TextWrapping};
+use egui::{Align2, Color32, CornerRadius, Key, Modifiers, Rect, RectAlign, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 
 /// The typed command that opens the assistant session. The name lives here alone.
 pub const AI_COMMAND: &str = "ai";
@@ -40,6 +46,14 @@ pub const SESSION_DEFAULT_HEIGHT: f32 = 320.0;
 const SESSION_MAX_HEIGHT: f32 = 2000.0;
 /// How many typed lines Up and Down go back through.
 const HISTORY: usize = 100;
+/// How long a note stays on the bar. The status details keep the latest one after that.
+pub const NOTE_ON_BAR: Duration = Duration::from_secs(6);
+/// What the bar keeps for the prompt, its `Command:` mark included, and for the status,
+/// however many chips there are.
+const PROMPT_MIN_WIDTH: f32 = 220.0;
+const STATUS_MIN_WIDTH: f32 = 200.0;
+/// Coordinates at their widest, so the details do not come and go as the pointer moves.
+const WIDEST_POSITION: &str = "x -000.0   y -000.0   z -000.0 mm";
 
 /// The egui id of the bar while the session is closed.
 pub fn bar_id() -> egui::Id {
@@ -110,6 +124,38 @@ impl BarSettings {
 
     pub fn remove(&mut self, id: &str) {
         self.tools.retain(|t| t != id);
+    }
+}
+
+/// What the bar says about the active document. Each workspace fills one in.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Status {
+    /// The state to see at a glance, such as `Rebuild OK`. Always on the bar.
+    pub headline: (String, Color32),
+    pub note: Option<StatusNote>,
+    /// The rest, the most useful first. On the bar while they fit.
+    pub details: Vec<String>,
+    /// Where the pointer is, or the units. Always on the bar.
+    pub position: String,
+}
+
+/// The latest message for the user.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatusNote {
+    pub text: String,
+    pub color: Color32,
+    /// Still new enough for the bar.
+    pub fresh: bool,
+}
+
+impl StatusNote {
+    pub fn of(note: &Note) -> Self {
+        let color = match note.kind {
+            NoteKind::Info => theme::muted(),
+            NoteKind::Ok => theme::ok(),
+            NoteKind::Error => theme::error(),
+        };
+        Self { text: note.text.clone(), color, fresh: note.at.elapsed() < NOTE_ON_BAR }
     }
 }
 
@@ -431,7 +477,7 @@ fn submit_session(state: &mut AppState, line: String) {
 /// The bottom of the window: the bar, with the session above it while it is open. Dragging
 /// the bar's top edge up opens the session; dragging the session down past its minimum
 /// closes it.
-pub fn panel(root: &mut egui::Ui, state: &mut AppState) {
+pub fn panel(root: &mut egui::Ui, state: &mut AppState, status: &Status) {
     let max = (root.available_height() - 220.0).max(SESSION_MIN_HEIGHT);
     let frame = egui::Frame::new().fill(theme::command_line()).inner_margin(egui::Margin::ZERO);
     let collapsed = egui::Panel::bottom(bar_id()).resizable(true).exact_size(theme::COMMAND_LINE_HEIGHT).frame(frame);
@@ -449,9 +495,9 @@ pub fn panel(root: &mut egui::Ui, state: &mut AppState) {
             let top = Rect::from_min_max(full.min, pos2(full.right(), split));
             let bottom = Rect::from_min_max(pos2(full.left(), split), full.max);
             ui.scope_builder(egui::UiBuilder::new().max_rect(top), |ui| session(ui, state));
-            ui.scope_builder(egui::UiBuilder::new().max_rect(bottom), |ui| bar(ui, state, true));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(bottom), |ui| bar(ui, state, status, true));
         } else {
-            bar(ui, state, false);
+            bar(ui, state, status, false);
         }
     });
     if open != before {
@@ -466,26 +512,110 @@ pub fn panel(root: &mut egui::Ui, state: &mut AppState) {
 }
 
 /// The bar: the chips, then the prompt, or while the session is open a line saying the
-/// typing happens above.
-fn bar(ui: &mut egui::Ui, state: &mut AppState, session_open: bool) {
+/// typing happens above, then the status. The chips scroll sideways once they would crowd
+/// out the other two.
+fn bar(ui: &mut egui::Ui, state: &mut AppState, status: &Status, session_open: bool) {
     let rect = ui.max_rect();
     ui.painter().hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::line()));
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         ui.add_space(8.0);
-        chips(ui, state);
+        egui::ScrollArea::horizontal()
+            .id_salt("chip_row")
+            .max_width(ui.available_width() - PROMPT_MIN_WIDTH - STATUS_MIN_WIDTH)
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+            .scroll_source(egui::scroll_area::ScrollSource::MOUSE_WHEEL)
+            .show(ui, |ui| ui.horizontal_centered(|ui| chips(ui, state)));
         ui.add_space(6.0);
         let x = ui.cursor().left();
         ui.painter().vline(x, rect.y_range().shrink(7.0), Stroke::new(1.0, theme::line()));
         ui.add_space(10.0);
-        if session_open {
-            let text = format!("Typing goes to the session above · Esc or {} closes it", CLOSE_WORDS[0]);
-            ui.label(egui::RichText::new(text).font(theme::mono(11.5)).color(theme::muted()));
-        } else {
-            ui.label(egui::RichText::new("Command:").font(theme::mono(12.5)).color(theme::command_prompt()));
-            prompt(ui, state, false);
-        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(6.0);
+            status_row(ui, status, ui.available_width() - PROMPT_MIN_WIDTH);
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                if session_open {
+                    let text = format!("Typing goes to the session above · Esc or {} closes it", CLOSE_WORDS[0]);
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(text).font(theme::mono(11.5)).color(theme::muted()))
+                            .truncate(),
+                    );
+                } else {
+                    ui.label(egui::RichText::new("Command:").font(theme::mono(12.5)).color(theme::command_prompt()));
+                    prompt(ui, state, false);
+                }
+            });
+        });
     });
+}
+
+/// One line of status text, cut short with an ellipsis past `width`.
+fn status_text(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32, width: f32) -> Arc<egui::Galley> {
+    let mut job = LayoutJob::simple_singleline(text.to_owned(), font, color);
+    job.wrap = TextWrapping::truncate_at_width(width.max(1.0));
+    ui.painter().layout_job(job)
+}
+
+/// The status on the bar, at most `room` wide: the headline and the position first, then
+/// a fresh note and as many details as fit. A click lists all of it.
+fn status_row(ui: &mut egui::Ui, status: &Status, room: f32) {
+    const GAP: f32 = 14.0;
+    const MARGIN: f32 = 6.0;
+    let room = room.max(STATUS_MIN_WIDTH) - 2.0 * MARGIN;
+    let small = egui::FontId::proportional(11.5);
+    let (headline, color) = &status.headline;
+    let headline = status_text(ui, headline, theme::font_semibold(11.5), *color, room * 0.6);
+    let position = status_text(ui, &status.position, small.clone(), theme::muted(), room - headline.size().x - GAP);
+    let widest = ui.painter().layout_no_wrap(WIDEST_POSITION.to_owned(), small.clone(), theme::muted()).size().x;
+    let mut left = room - headline.size().x - GAP - widest.max(position.size().x);
+    let mut middle = Vec::new();
+    if let Some(note) = status.note.as_ref().filter(|n| n.fresh && left > GAP + 40.0) {
+        let galley = status_text(ui, &note.text, small.clone(), note.color, left - GAP);
+        left -= GAP + galley.size().x;
+        middle.push(galley);
+    }
+    for detail in &status.details {
+        let galley = ui.painter().layout_no_wrap(detail.clone(), small.clone(), theme::muted());
+        if GAP + galley.size().x > left {
+            break;
+        }
+        left -= GAP + galley.size().x;
+        middle.push(galley);
+    }
+    let width = headline.size().x + GAP + position.size().x + middle.iter().map(|g| GAP + g.size().x).sum::<f32>();
+    let (rect, resp) = ui.allocate_exact_size(vec2(width + 2.0 * MARGIN, 24.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Status details"));
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(theme::RADIUS), theme::hover());
+    }
+    let mut x = rect.left() + MARGIN;
+    for galley in std::iter::once(&headline).chain(&middle).chain(std::iter::once(&position)) {
+        let at = pos2(x, rect.center().y - galley.size().y / 2.0);
+        ui.painter().galley(at, galley.clone(), theme::ink());
+        x += galley.size().x + GAP;
+    }
+    let resp = resp.on_hover_text("Click for the full status");
+    egui::Popup::menu(&resp)
+        .align(RectAlign::TOP_END)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| status_details(ui, status));
+}
+
+/// Everything the status has to say, one line each.
+fn status_details(ui: &mut egui::Ui, status: &Status) {
+    ui.set_min_width(220.0);
+    let row = |ui: &mut egui::Ui, text: &str, color: Color32| {
+        ui.add(egui::Label::new(egui::RichText::new(text).size(11.5).color(color)).wrap());
+    };
+    let (headline, color) = &status.headline;
+    ui.label(egui::RichText::new(headline).family(theme::semibold()).size(11.5).color(*color));
+    if let Some(note) = &status.note {
+        row(ui, &note.text, note.color);
+    }
+    for detail in &status.details {
+        row(ui, detail, theme::muted());
+    }
+    row(ui, &status.position, theme::muted());
 }
 
 /// The prompt's text field, with Tab, Up, Down, Enter and Escape taken before it sees them.
