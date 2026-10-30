@@ -85,11 +85,11 @@ impl Configurations {
         Ok(features)
     }
 
-    pub(crate) fn capture_edits(&mut self, before: &[Feature], after: &[Feature]) {
+    pub(crate) fn capture_edits(&mut self, before: &[Feature], after: &[Feature]) -> bool {
         if self.is_empty() {
-            return;
+            return false;
         }
-        self.base = after
+        let next: Vec<_> = after
             .iter()
             .map(|f| {
                 let mut base = f.clone();
@@ -101,6 +101,9 @@ impl Configurations {
                 base
             })
             .collect();
+        let changed = next != self.base;
+        self.base = next;
+        changed
     }
 }
 

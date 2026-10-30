@@ -227,3 +227,50 @@ fn m9_damaged_configuration_truth_is_invalid() {
         assert!(matches!(Document::from_part_json(&truth.to_string(), kernel()), Err(FileError::Invalid(_))));
     }
 }
+
+fn narrow_for_feature_edit() -> Document {
+    let mut doc = part();
+    add(&mut doc, "Narrow");
+    override_value(&mut doc, "Narrow", "plate_w", "120");
+    activate(&mut doc, "Narrow");
+    numbers(&doc, 120.0, 60.0);
+    doc
+}
+
+fn flip_flange(doc: &Document) -> Command {
+    let feature = &doc.features()[3];
+    let mut kind = feature.kind.clone();
+    let soliddraft_model::FeatureKind::Extrude(extrude) = &mut kind else { panic!("flange extrusion") };
+    extrude.reverse = !extrude.reverse;
+    Command::EditFeature { id: feature.id, kind }
+}
+
+#[test]
+fn regression_feature_edit_undo_restores_configuration_truth() {
+    let mut doc = narrow_for_feature_edit();
+    let before = (doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth());
+    // The app wraps each ordinary feature edit in a batch.
+    let edit = Command::Batch { label: "Flip flange".into(), commands: vec![flip_flange(&doc)] };
+    doc.execute(edit).unwrap();
+    let edited = (doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth());
+    assert_ne!(edited.0, before.0);
+    doc.undo().unwrap();
+    assert_eq!((doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth()), before);
+    doc.redo().unwrap();
+    assert_eq!((doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth()), edited);
+}
+
+#[test]
+fn regression_failed_batch_restores_configuration_truth() {
+    let mut doc = narrow_for_feature_edit();
+    let before = (doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth());
+    let batch = Command::Batch {
+        label: "Refused edit".into(),
+        commands: vec![
+            flip_flange(&doc),
+            Command::RenameFeature { id: soliddraft_model::FeatureId(u32::MAX), name: "Missing".into() },
+        ],
+    };
+    assert!(doc.execute(batch).is_err());
+    assert_eq!((doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth()), before);
+}

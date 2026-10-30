@@ -688,10 +688,16 @@ impl Document {
             return self.apply_configuration(command);
         }
         let capture = !self.configurations.is_empty() && !matches!(command, Command::Batch { .. });
-        let before = if capture { self.features.clone() } else { Vec::new() };
-        let applied = self.apply_inner(command)?;
-        if capture {
-            self.configurations.capture_edits(&before, &self.features);
+        let before =
+            capture.then(|| (Box::new(self.configurations.clone()), self.values.clone(), self.features.clone()));
+        let mut applied = self.apply_inner(command)?;
+        if let Some((state, values, features)) = before
+            && self.configurations.capture_edits(&features, &self.features)
+        {
+            applied.inverse = Command::Batch {
+                label: applied.label.clone(),
+                commands: vec![applied.inverse, Command::RestoreConfigurations { state, values, features }],
+            };
         }
         Ok(applied)
     }
