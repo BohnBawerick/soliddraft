@@ -88,6 +88,17 @@ fn click_at(harness: &mut App<'_>, pos: Pos2) {
 }
 
 /// Clicks the first button with this label; ribbon items come before panel buttons.
+/// Window, Open drawings. A menu entry's name ends with its shortcut column, empty here.
+fn open_drawings(harness: &mut App<'_>) {
+    click_button(harness, "Window");
+    click_button(harness, "Open drawings ");
+}
+
+fn make_drawing(harness: &mut App<'_>) {
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::D);
+    harness.run_steps(4);
+}
+
 fn click_button(harness: &mut App<'_>, label: &str) {
     harness
         .get_all_by_role_and_label(egui::accesskit::Role::Button, label)
@@ -319,8 +330,8 @@ fn bracket_drawing_dimensioned_exported_updated_and_repaired() {
     settle(&mut harness);
     save(&mut harness, "d00-bracket");
 
-    // 1. Make drawing from the Features tab opens the New drawing PropertyManager.
-    click_button(&mut harness, "Make drawing");
+    // 1. Make drawing opens the New drawing PropertyManager.
+    make_drawing(&mut harness);
     assert!(harness.state().state.drawing.new.is_some(), "the New drawing PropertyManager should open");
     save(&mut harness, "d01-new-drawing");
     click_button(&mut harness, "Create drawing (Enter)");
@@ -483,7 +494,7 @@ fn bracket_drawing_dimensioned_exported_updated_and_repaired() {
         assert!(r.dangling.is_empty());
         assert!(s.is_up_to_date());
     }
-    click_button(&mut harness, "Open drawings");
+    open_drawings(&mut harness);
     settle(&mut harness);
     assert!(harness.state().state.drawing.is_active());
     save(&mut harness, "d04-thickness-12");
@@ -505,7 +516,7 @@ fn bracket_drawing_dimensioned_exported_updated_and_repaired() {
         let r = s.doc.last_update.as_ref().unwrap();
         assert_eq!(r.dangling.len(), 2);
     }
-    click_button(&mut harness, "Open drawings");
+    open_drawings(&mut harness);
     settle(&mut harness);
     assert!(harness.get_all_by_role_and_label(egui::accesskit::Role::Button, "Reattach…").count() >= 2, "two cards");
     save(&mut harness, "d05-dangling");
@@ -626,7 +637,7 @@ fn bracket_d3_sections_details_sheets_and_symbols() {
     soliddraft_app::file::set_config_dir(Some(dir.join("config")));
     let mut harness = harness(bracket_document());
     harness.run_steps(6);
-    click_button(&mut harness, "Make drawing");
+    make_drawing(&mut harness);
     click_button(&mut harness, "Create drawing (Enter)");
     settle(&mut harness);
     assert!(harness.state().state.drawing.is_active());

@@ -26,7 +26,7 @@ const USAGE: &str =
 The assistant runs on OpenRouter or on the Anthropic API. It reads the key from
 OPENROUTER_API_KEY or ANTHROPIC_API_KEY, or from the OS keychain (store one with
 `soliddraft key set openrouter` or `soliddraft key set anthropic`), and uses the provider
-that has a key unless Provider on the Assistant tab or SOLIDDRAFT_PROVIDER picks one.
+that has a key unless Tools, Assistant, Provider or SOLIDDRAFT_PROVIDER picks one.
 Without a key the app works and says so.";
 
 // The web build starts from crates/soliddraft-web instead.

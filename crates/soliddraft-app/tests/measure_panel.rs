@@ -89,7 +89,7 @@ fn pick_measure_track_and_edit() {
         .wgpu()
         .build_eframe(|cc| SolidDraftApp::new(cc, doc, Automation::default()));
     settle(&mut h);
-    button(&mut h, "Evaluate tab");
+    button(&mut h, "Inspect tab");
     button(&mut h, "Measure");
     assert!(h.state().state.measure.open);
     h.key_press(Key::Z);

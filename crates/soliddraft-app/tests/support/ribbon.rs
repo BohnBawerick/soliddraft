@@ -7,15 +7,18 @@
 
 #![allow(dead_code)]
 
-use egui::{Key, Modifiers, Pos2, Rect, Shape, Vec2, vec2};
+use egui::{Key, Modifiers, Pos2, Rect, Shape, Vec2, pos2, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::{By, Queryable};
+use egui_kittest::kittest::{By, NodeT, Queryable};
 use soliddraft_app::app::{Automation, SolidDraftApp};
 use soliddraft_app::command_line;
-use soliddraft_app::document::{Command, Document, ExtrudeParams, FeatureId, ProfileKind, Selection};
+use soliddraft_app::document::{
+    Command, Document, ExtrudeParams, FeatureId, PlaneKind, ProfileKind, Selection, SketchPlane,
+};
 use soliddraft_app::state::{EditorParams, Tool};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 pub type App = Harness<'static, SolidDraftApp>;
 
@@ -23,6 +26,8 @@ pub type App = Harness<'static, SolidDraftApp>;
 pub const TOLERANCE: f32 = 1.0;
 
 pub const WINDOW: Vec2 = vec2(1440.0, 900.0);
+
+const HANG_GUARD: Duration = Duration::from_secs(600);
 
 /// The rendered harnesses share one adapter and the process-wide config; one at a time.
 static GPU: Mutex<()> = Mutex::new(());
@@ -111,6 +116,26 @@ pub fn plate() -> Document {
     doc
 }
 
+/// One Top-plane sketch of a closed 60 by 40 rectangle, with nothing extruded from it.
+pub fn sketch() -> Document {
+    let mut doc = blank();
+    let plane = SketchPlane::Reference { plane: PlaneKind::Top, offset: 0.0 };
+    let sketch = doc.apply(Command::AddSketch { plane }).unwrap().unwrap();
+    let mut drawing = soliddraft_sketch::Sketch::new();
+    drawing.rectangle(soliddraft_sketch::P2::new(0.0, 0.0), 60.0, 40.0).unwrap();
+    doc.apply(Command::EditSketch { id: sketch, sketch: drawing }).unwrap();
+    doc
+}
+
+/// Steps until a condition holds, with the ten-minute hang guard.
+pub fn until(app: &mut App, what: &str, done: impl Fn(&App) -> bool) {
+    let start = Instant::now();
+    while !done(app) {
+        assert!(start.elapsed() < HANG_GUARD, "still waiting for {what}");
+        app.step();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Input.
 
@@ -153,6 +178,73 @@ pub fn window(app: &App) -> Rect {
     app.ctx.content_rect()
 }
 
+/// A button as assistive technology reads it.
+#[derive(Clone, Copy, Debug)]
+pub struct Control {
+    pub rect: Rect,
+    pub enabled: bool,
+    pub selected: bool,
+}
+
+/// The one button of that name in a region.
+pub fn control(app: &App, label: &str, within: Rect) -> Control {
+    let found: Vec<Control> = app
+        .get_all_by_role_and_label(egui::accesskit::Role::Button, label)
+        .filter(|n| within.intersects(n.rect()))
+        .map(|n| {
+            let node = n.accesskit_node();
+            let selected = node.toggled() == Some(egui::accesskit::Toggled::True);
+            Control { rect: n.rect(), enabled: !node.is_disabled(), selected }
+        })
+        .collect();
+    assert_eq!(found.len(), 1, "one button {label} in {within:?}: {found:?}");
+    found[0]
+}
+
+/// A ribbon tab, by the name it shows.
+pub fn tab(app: &App, name: &str) -> Control {
+    control(app, &format!("{name} tab"), window(app))
+}
+
+/// Clicks a ribbon tab.
+pub fn click_tab(app: &mut App, name: &str) {
+    let rect = tab(app, name).rect;
+    click_at(app, rect.center());
+    app.run_steps(4);
+}
+
+/// Everything above the side panels: the menus, the tabs and the ribbon.
+pub fn ribbon_region(app: &App) -> Rect {
+    let panels = painted(app).iter().filter(|p| p.text.ends_with(" tree")).map(|p| p.rect.top()).fold(0.0, f32::max);
+    let window = window(app);
+    Rect::from_min_max(window.min, pos2(window.right(), panels))
+}
+
+/// A ribbon button, by the name it shows.
+pub fn ribbon_button(app: &App, label: &str) -> Control {
+    control(app, label, ribbon_region(app))
+}
+
+/// Clicks a ribbon button where it is drawn.
+pub fn click_ribbon(app: &mut App, label: &str) {
+    let rect = ribbon_button(app, label).rect;
+    click_at(app, rect.center());
+    app.run_steps(4);
+}
+
+/// Rests the pointer on a control until its tooltip shows, and returns what the tooltip
+/// added to the frame.
+pub fn tooltip(app: &mut App, rect: Rect) -> String {
+    let before: Vec<String> = painted(app).into_iter().map(|p| p.text).collect();
+    app.hover_at(rect.center());
+    app.run_steps(36);
+    let said: Vec<String> = painted(app).into_iter().map(|p| p.text).filter(|t| !before.contains(t)).collect();
+    let rest = window(app).center();
+    app.hover_at(rest);
+    app.run_steps(2);
+    said.join("\n")
+}
+
 /// Opens a top menu and clicks an entry.
 pub fn menu(app: &mut App, name: &str, entry: &str) {
     let area = window(app);
@@ -168,6 +260,42 @@ pub fn menu(app: &mut App, name: &str, entry: &str) {
 pub fn document_tab(app: &mut App, title: &str) {
     let rect = title_rect(app, title);
     click_at(app, rect.center());
+    app.run_steps(4);
+}
+
+/// Two quick presses at a point, as a pointer makes them.
+pub fn double_click_at(app: &mut App, point: Pos2) {
+    app.hover_at(point);
+    app.run_steps(3);
+    for pressed in [true, false, true, false] {
+        app.event(egui::Event::PointerButton {
+            pos: point,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::default(),
+        });
+        app.step();
+    }
+    app.run_steps(3);
+}
+
+/// Clicks a world point in the viewport, as a user picks a face or an edge.
+pub fn click_world(app: &mut App, world: glam::Vec3) {
+    let point = {
+        let state = &app.state().state;
+        state.viewport.camera.project(world, state.viewport.rect).expect("the point is on screen")
+    };
+    click_at(app, point);
+}
+
+/// Types a value into a numeric field: click, select all, type, Enter.
+pub fn type_field(app: &mut App, label: &str, value: &str) {
+    let rect = app.get_by_label(label).rect();
+    click_at(app, rect.center());
+    app.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    app.get_by_label(label).type_text(value);
+    app.run_steps(3);
+    app.key_press(Key::Enter);
     app.run_steps(4);
 }
 
@@ -245,6 +373,44 @@ pub fn status_lines(app: &mut App) -> Vec<String> {
     lines
 }
 
+/// The group captions of the open ribbon tab, left to right: the lowest row of its text.
+pub fn captions(app: &App) -> Vec<Painted> {
+    let text = painted_in(app, ribbon_region(app));
+    let lowest = text.iter().map(|p| p.rect.center().y).fold(0.0, f32::max);
+    let mut row: Vec<Painted> = text.into_iter().filter(|p| p.rect.center().y >= lowest - TOLERANCE).collect();
+    row.sort_by(|a, b| a.rect.left().total_cmp(&b.rect.left()));
+    row
+}
+
+/// The caption names of the open ribbon tab.
+pub fn caption_names(app: &App) -> Vec<String> {
+    captions(app).into_iter().map(|p| p.text).collect()
+}
+
+/// The open tab has exactly these groups in this order, each with its commands visible
+/// over its caption. The groups run left to right and do not overlap.
+pub fn groups_in_order(app: &App, groups: &[(&str, &[&str])]) {
+    let names: Vec<&str> = groups.iter().map(|(name, _)| *name).collect();
+    assert_eq!(caption_names(app), names, "the group captions");
+    let mut right = 0.0_f32;
+    for ((name, labels), caption) in groups.iter().zip(captions(app)) {
+        let mut bounds = Rect::NOTHING;
+        for label in *labels {
+            let rect = ribbon_button(app, label).rect;
+            let seen = painted_in(app, rect).iter().any(|p| p.text == *label);
+            assert!(seen, "{name}: the label {label} is painted on its button {rect:?}");
+            bounds = bounds.union(rect);
+        }
+        let x = caption.rect.center().x;
+        assert!(
+            x >= bounds.left() - TOLERANCE && x <= bounds.right() + TOLERANCE,
+            "{name}: the caption at {x} is over its commands {bounds:?}"
+        );
+        assert!(bounds.left() >= right - TOLERANCE, "{name} starts after the group before it: {bounds:?} {right}");
+        right = bounds.right();
+    }
+}
+
 /// The panel titles a user reads, by name.
 pub fn title_rect(app: &App, title: &str) -> Rect {
     painted(app).into_iter().find(|p| p.text == title).unwrap_or_else(|| panic!("no title {title} in the frame")).rect
@@ -267,6 +433,7 @@ pub struct Fingerprint {
     pub editor: Option<(Option<FeatureId>, EditorParams)>,
     pub sketch_tool: Option<Tool>,
     pub history: Vec<String>,
+    pub recent: Vec<String>,
 }
 
 impl Fingerprint {
@@ -274,6 +441,7 @@ impl Fingerprint {
     /// recent commands free to have recorded it.
     pub fn without_history(mut self) -> Self {
         self.history.clear();
+        self.recent.clear();
         self
     }
 }
@@ -294,5 +462,6 @@ pub fn fingerprint(app: &App) -> Fingerprint {
         editor: state.editor.as_ref().map(|e| (e.target, e.params.clone())),
         sketch_tool: state.sketch.as_ref().map(|s| s.tool),
         history: state.command_line.history.clone(),
+        recent: state.commands.recent.clone(),
     }
 }

@@ -221,11 +221,24 @@ impl SolidDraftApp {
             ui.menu_button("Tools", |ui| {
                 menu_command(ui, st, "measure", "Measure");
                 menu_command(ui, st, "check", "Check");
+                if !st.drawing.is_active() && !st.assembly.is_active() {
+                    ui.menu_button("Assistant", |ui| {
+                        menu_command(ui, st, "ask", "Ask");
+                        menu_command(ui, st, "check_model", "Check model");
+                        menu_command(ui, st, "explain", "Explain");
+                        menu_command(ui, st, "summarise", "Summarise");
+                        menu_command(ui, st, "find_issues", "Find issues");
+                        ui.separator();
+                        menu_command(ui, st, "provider_settings", "Provider…");
+                        menu_command(ui, st, "auto_apply", "Auto-apply");
+                    });
+                }
                 ui.separator();
                 menu_command(ui, st, "file_locations", "File locations…");
             });
             ui.menu_button("Window", |ui| {
                 menu_command(ui, st, "reset_layout", "Reset panel layout");
+                menu_command(ui, st, "show_drawing", "Open drawings");
                 menu_command(ui, st, "ask", "Assistant");
                 menu_command(ui, st, "command_palette", "Command palette");
             });
@@ -234,7 +247,11 @@ impl SolidDraftApp {
                 menu_command(ui, st, "about", "About SolidDraft");
             });
 
-            ui.add_space(14.0);
+            ui.add_space(8.0);
+            if !st.drawing.is_active() && !st.assembly.is_active() {
+                quick_access(ui, st);
+            }
+            ui.add_space(6.0);
             // Command search.
             let search_w = 270.0_f32.min(ui.available_width() - 180.0).max(120.0);
             let frame = egui::Frame::new()
@@ -520,6 +537,29 @@ fn menu_command(ui: &mut egui::Ui, st: &mut AppState, id: &str, label: &str) {
     if ui.add_enabled(command.is_enabled(st), button).on_hover_text(command.tip(st)).clicked() {
         st.run_command(command);
         ui.close();
+    }
+}
+
+/// Undo and Redo beside the menus. The part's ribbon has no Edit group; the drawing's and
+/// the assembly's do.
+fn quick_access(ui: &mut egui::Ui, st: &mut AppState) {
+    for (id, icon) in [("undo", Icon::Undo), ("redo", Icon::Redo)] {
+        let Some(command) = commands::get(id) else {
+            debug_assert!(false, "no command {id}");
+            continue;
+        };
+        let enabled = command.is_enabled(st);
+        let sense = if enabled { Sense::click() } else { Sense::hover() };
+        let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 22.0), sense);
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, command.label));
+        if enabled && resp.hovered() {
+            ui.painter().rect_filled(rect, CornerRadius::same(theme::RADIUS), theme::hover());
+        }
+        let color = if enabled { theme::ink() } else { theme::muted().gamma_multiply(0.55) };
+        icons::paint(ui.painter(), icon, Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), color);
+        if resp.on_hover_text(command.tip(st)).clicked() {
+            st.run_command(command);
+        }
     }
 }
 
