@@ -1,0 +1,259 @@
+{
+  "format": "soliddraft-scenario-inventory/1",
+  "scenarios": [
+    {
+      "id": "boss-on-face",
+      "file": "ci/scenarios/boss-on-face.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "bracket",
+      "file": "ci/scenarios/bracket.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "6142450b05b4f79e86e2f14afdb29f290f3cee5a",
+      "route": "MCP document commands -> Catallax adapter -> pinned kernel",
+      "supported_limits": "Prismatic and cylindrical features on top and right planes; volume tolerance 0.005 mm^3; known click gaps in ci/known-over-budget.json",
+      "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; step 25 drawing.dwdrw and drawing.svg"
+    },
+    {
+      "id": "chamfer",
+      "file": "ci/scenarios/chamfer.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "collar",
+      "file": "ci/scenarios/collar.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "countersink",
+      "file": "ci/scenarios/countersink.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "datum-offset",
+      "file": "ci/scenarios/datum-offset.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "draft",
+      "file": "ci/scenarios/draft.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "drawing",
+      "file": "ci/scenarios/drawing.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "drill-point",
+      "file": "ci/scenarios/drill-point.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "end-conditions",
+      "file": "ci/scenarios/end-conditions.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "fillet",
+      "file": "ci/scenarios/fillet.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "hole",
+      "file": "ci/scenarios/hole.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "mirror",
+      "file": "ci/scenarios/mirror.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "p3-rounded-boss",
+      "file": "ci/scenarios/p3-rounded-boss.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "pattern",
+      "file": "ci/scenarios/pattern.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "progressive",
+      "file": "ci/scenarios/progressive.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "references",
+      "file": "ci/scenarios/references.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "refusal",
+      "file": "ci/scenarios/refusal.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-circular-pattern",
+      "file": "ci/scenarios/sketch-circular-pattern.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-extend",
+      "file": "ci/scenarios/sketch-extend.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-linear-pattern",
+      "file": "ci/scenarios/sketch-linear-pattern.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-mirror",
+      "file": "ci/scenarios/sketch-mirror.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-offset",
+      "file": "ci/scenarios/sketch-offset.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-polygon",
+      "file": "ci/scenarios/sketch-polygon.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    },
+    {
+      "id": "sketch-trim",
+      "file": "ci/scenarios/sketch-trim.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ]
+    }
+  ]
+}
