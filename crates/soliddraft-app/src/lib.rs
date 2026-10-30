@@ -25,6 +25,7 @@ pub mod journal;
 pub mod journal_browser;
 pub mod locations;
 pub mod measure;
+pub mod navigation;
 pub mod palette;
 pub mod panels;
 pub mod platform;

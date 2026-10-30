@@ -64,6 +64,7 @@ pub struct SolidDraftApp {
 
 impl SolidDraftApp {
     pub fn new(cc: &eframe::CreationContext<'_>, doc: Document, automation: Automation) -> Self {
+        crate::settings::capture_install_kind();
         theme::install(&cc.egui_ctx, automation.theme.unwrap_or_else(|| crate::settings::appearance().theme));
         if let Some(rs) = cc.wgpu_render_state.as_ref() {
             let tier = Tier::of(rs.adapter.get_info().backend);

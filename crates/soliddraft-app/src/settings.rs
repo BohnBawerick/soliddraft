@@ -4,14 +4,16 @@
 //! commands, File locations: the folders and
 //! files where reference files are found (`soliddraft_document::locations`), the
 //! viewport's default look, the interface's light or dark [`Appearance`], and autosave,
-//! recovery and backups ([`DocumentSettings`]). The user's own material library sits
-//! beside it ([`user_library_path`]).
+//! recovery and backups ([`DocumentSettings`]), and navigation: the mouse preset, the
+//! wheel, the view keys and the camera ([`NavigationSettings`]). The user's own
+//! material library sits beside it ([`user_library_path`]).
 //!
 //! Saving rewrites only the sections the app knows and keeps every other key, so a
 //! file written by a newer build survives an older one.
 
 use crate::command_line::BarSettings;
 use crate::commands::History;
+use crate::navigation::SaveError;
 use crate::panels::Layout;
 use crate::viewport::look::Preset;
 use serde_json::Value;
@@ -233,15 +235,106 @@ fn documents_in(file: &Path) -> DocumentSettings {
     serde_json::from_value(read(file)["documents"].clone()).unwrap_or_default()
 }
 
-/// Rewrites one section atomically and keeps the others as they are.
-fn save_section_in(file: &Path, key: &str, value: &impl serde::Serialize) -> Result<(), String> {
-    let source = if settings_file().as_deref() == Some(file) {
+pub use crate::navigation::NavigationSettings;
+
+/// Whether this installation had been used before this start. A new one starts on the
+/// Fusion navigation preset; an existing one keeps SolidDraft's original controls until
+/// the user picks another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InstallKind {
+    New,
+    Existing,
+}
+
+impl InstallKind {
+    /// Existing when the config directory holds a settings file or a recent-files list,
+    /// this version's or the old name's.
+    pub fn detect() -> Self {
+        let exists = |name| crate::file::config_read_file(name).is_some_and(|f| f.exists());
+        if exists("settings.json") || exists("recent.json") { InstallKind::Existing } else { InstallKind::New }
+    }
+}
+
+static INSTALL: std::sync::Mutex<Option<InstallKind>> = std::sync::Mutex::new(None);
+
+/// Decides at startup, before anything writes the settings file, whether this is a new
+/// installation. From then on every save of the settings file also records the preset
+/// that decision gave, so writing some other setting first cannot make a new
+/// installation look like an old one at the next start.
+pub fn capture_install_kind() -> InstallKind {
+    let kind = InstallKind::detect();
+    *INSTALL.lock().unwrap() = Some(kind);
+    kind
+}
+
+/// The kind captured at startup, or found now when nothing captured it.
+pub fn install_kind() -> InstallKind {
+    INSTALL.lock().unwrap().unwrap_or_else(InstallKind::detect)
+}
+
+/// The navigation settings, or the defaults for `install` when the file has none.
+/// Reading never writes the file.
+pub fn navigation(install: InstallKind) -> NavigationSettings {
+    match crate::file::config_read_file("settings.json") {
+        Some(f) => navigation_in(&f, install),
+        None => NavigationSettings::new(install),
+    }
+}
+
+/// Saves the navigation settings. Refused when they, or the file's, come from a newer
+/// SolidDraft.
+pub fn save_navigation(settings: &NavigationSettings) -> Result<(), SaveError> {
+    let Some(file) = settings_file() else { return Err(SaveError::NoConfigDir) };
+    save_navigation_in(&file, settings)
+}
+
+fn navigation_in(file: &Path, install: InstallKind) -> NavigationSettings {
+    NavigationSettings::from_json(&read(file)["navigation"], install)
+}
+
+fn save_navigation_in(file: &Path, settings: &NavigationSettings) -> Result<(), SaveError> {
+    if settings.read_only {
+        return Err(SaveError::NewerVersion { found: settings.version });
+    }
+    let on_disk = read(&readable(file))["navigation"]["version"].as_u64().unwrap_or(0);
+    if on_disk > crate::navigation::VERSION {
+        return Err(SaveError::NewerVersion { found: on_disk });
+    }
+    save_section_in(file, "navigation", &settings.to_json()).map_err(SaveError::Write)
+}
+
+/// Records the captured installation's preset in a file that has none yet.
+fn record_install_preset(all: &mut Value) {
+    let Some(kind) = *INSTALL.lock().unwrap() else { return };
+    let preset = crate::navigation::default_preset(kind);
+    match all["navigation"].as_object_mut() {
+        None => all["navigation"] = NavigationSettings::new(kind).to_json(),
+        Some(nav) => {
+            let newer = nav.get("version").and_then(Value::as_u64).unwrap_or(0) > crate::navigation::VERSION;
+            if !newer && !nav.get("preset_id").is_some_and(Value::is_string) {
+                nav.insert("preset_id".into(), preset.into());
+            }
+        }
+    }
+}
+
+/// The file to read `file`'s current contents from: the old name's when this is the
+/// settings file and only the old one exists.
+fn readable(file: &Path) -> PathBuf {
+    if settings_file().as_deref() == Some(file) {
         crate::file::config_read_file("settings.json").unwrap_or_else(|| file.to_owned())
     } else {
         file.to_owned()
-    };
-    let mut all = read(&source);
+    }
+}
+
+/// Rewrites one section atomically and keeps the others as they are.
+fn save_section_in(file: &Path, key: &str, value: &impl serde::Serialize) -> Result<(), String> {
+    let mut all = read(&readable(file));
     all[key] = serde_json::to_value(value).map_err(|e| e.to_string())?;
+    if key != "navigation" {
+        record_install_preset(&mut all);
+    }
     let text = serde_json::to_string_pretty(&all).map_err(|e| e.to_string())?;
     soliddraft_document::save_atomic(file, text.as_bytes()).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
