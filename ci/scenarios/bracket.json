@@ -410,13 +410,27 @@
     },
     {
       "tool": "edit_extrude",
-      "arguments": {"feature": "Boss-Extrude2", "depth": 0, "flip": false},
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "depth": 0,
+        "flip": false
+      },
       "label": "refused zero depth",
       "refused": "depth must be greater than 0",
       "checks": [
-        {"pointer": "/measurement/volume_mm3", "approx": 162110.17672705388, "tolerance": 0.005},
-        {"pointer": "/revision", "same_as_step": 25},
-        {"pointer": "/summary/features", "same_as_step": 25}
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 162110.17672705388,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 25
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 25
+        }
       ]
     },
     {
@@ -522,6 +536,453 @@
       ],
       "same_geometry_as_step": 27,
       "checked_step_export": "{bundle}/bracket-140.dwprt"
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "plate_w",
+        "expression": "140"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "plate_w"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "expression": "plate_w"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0/expressions/1",
+          "equals": "plate_w"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "parameter": "depth",
+        "expression": "plate_w / 2"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/3/depth",
+          "equals": 70
+        },
+        {
+          "pointer": "/summary/features/3/expressions/depth",
+          "equals": "plate_w / 2"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178310.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 44914.7785033677,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 44.9986227268,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45.0,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 15.470448946,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 70,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 180110.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/features/3",
+          "same_as_step": 34
+        }
+      ],
+      "same_geometry_as_step": 34
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178310.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/features/3",
+          "same_as_step": 35
+        }
+      ],
+      "same_geometry_as_step": 35
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/bracket-named.dwprt"
+      },
+      "files": [
+        "{bundle}/bracket-named.dwprt"
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 180110.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/features/3",
+          "same_as_step": 34
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/bracket-named.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178310.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 35
+        },
+        {
+          "pointer": "/summary/features/0/expressions",
+          "same_as_step": 35
+        },
+        {
+          "pointer": "/summary/features/3",
+          "same_as_step": 35
+        }
+      ],
+      "same_geometry_as_step": 35,
+      "checked_step_export": "{bundle}/bracket-named.dwprt"
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "flange_h",
+        "expression": "plate_w / 2"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "flange_h"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": "plate_w / 2"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 70
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "rename_value",
+      "arguments": {
+        "name": "plate_w",
+        "to": "bracket_width"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "bracket_width"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": "bracket_width / 2"
+        },
+        {
+          "pointer": "/summary/features/0/expressions/1",
+          "equals": "bracket_width"
+        },
+        {
+          "pointer": "/summary/features/3/expressions/depth",
+          "equals": "bracket_width / 2"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 41
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "bracket_width",
+        "expression": "6 in"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/expression",
+          "equals": "152.4 mm"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/features/3/depth",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/features/3/expressions/depth",
+          "equals": "bracket_width / 2"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195050.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 48634.7785033677,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 44.712660697,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45.0,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 16.5200387904,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -16.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 136.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 76.2,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "bracket_width",
+        "expression": "flange_h * 2"
+      },
+      "label": "refused value cycle",
+      "refused": "cycle",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195050.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 43
+        }
+      ],
+      "same_geometry_as_step": 43
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "bracket_width",
+        "expression": "30 deg"
+      },
+      "label": "refused angle for a length",
+      "refused": "length",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195050.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 43
+        }
+      ],
+      "same_geometry_as_step": 43
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178310.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 42
+        }
+      ],
+      "same_geometry_as_step": 42
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195050.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 43
+        }
+      ],
+      "same_geometry_as_step": 43
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/bracket-inch.dwprt"
+      },
+      "files": [
+        "{bundle}/bracket-inch.dwprt"
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178310.1767270539,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/bracket-inch.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195050.1767270539,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/features/0/expressions",
+          "same_as_step": 43
+        },
+        {
+          "pointer": "/summary/features/3",
+          "same_as_step": 43
+        }
+      ],
+      "same_geometry_as_step": 43,
+      "checked_step_export": "{bundle}/bracket-inch.dwprt"
     }
   ]
 }

@@ -22,8 +22,8 @@
       ],
       "catallax_revision": "25d682800ca35b1ff0dbf65ea516f5ca0ad3a235",
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
-      "supported_limits": "Prismatic and cylindrical features on top and right planes; centred Sketch1 plate width 120 -> 140 mm, supported widths >= 120 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; partial M1 evidence, not canonical P1; known click gaps in ci/known-over-budget.json",
-      "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; step 25 drawing.dwdrw and drawing.svg; steps 27-32 width edit, undo, redo, save, diverge and reopen; bracket-140.dwprt; commands/0032/{part.step,step-report.json,check-step.stdout,check-step.stderr}; geometry-info.stdout recipe hashes"
+      "supported_limits": "Prismatic and cylindrical features on top and right planes; centred Sketch1 plate width 120 -> 140 mm, supported widths >= 120 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; partial M1 evidence, not canonical P1; known click gaps in ci/known-over-budget.json; plain named values and stable bindings; whole bare literals use mm, multiplicative bare literals are factors; mm, cm, m, in and deg; width >= 120 mm, depth > 37 mm; automatic dotted names, functions and configs deferred; partial M2 evidence",
+      "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; step 25 drawing.dwdrw and drawing.svg; steps 27-32 width edit, undo, redo, save, diverge and reopen; bracket-140.dwprt; commands/0032/{part.step,step-report.json,check-step.stdout,check-step.stderr}; geometry-info.stdout recipe hashes; steps 33-50 named width, derived depth, rename, exact inch literal conversion, cycle and unit refusals, undo/redo/reopen; bracket-named.dwprt, bracket-inch.dwprt; commands/0040 and commands/0050 checked STEP exports"
     },
     {
       "id": "chamfer",

@@ -33,6 +33,7 @@ pub mod file;
 pub mod materials;
 pub mod rebuild;
 pub mod reference;
+pub mod values;
 
 pub use command::{Command, CommandError, Executed};
 pub use document::{BuiltSketch, Document, FaceLabel, FeatureStatus, feature_of_tag};

@@ -55,6 +55,34 @@ pub enum Command {
         /// The new value.
         value: f64,
     },
+    /// Creates or replaces a named expression and propagates its drivers atomically.
+    SetValue {
+        /// The value's identifier.
+        name: String,
+        /// Authored expression text.
+        expression: String,
+    },
+    /// Binds a feature input to an expression.
+    Drive {
+        /// The input to drive.
+        input: crate::values::Input,
+        /// Authored driver text.
+        expression: String,
+    },
+    /// Renames a value and the text of its references.
+    RenameValue {
+        /// Existing identifier.
+        name: String,
+        /// New identifier.
+        to: String,
+    },
+    /// Restores value truth and resolved feature definitions for undo.
+    RestoreValues {
+        /// Authored values and bindings.
+        state: crate::values::Values,
+        /// Resolved definitions to restore.
+        features: Vec<Feature>,
+    },
     /// Renames a feature.
     RenameFeature {
         /// The feature.
@@ -528,8 +556,70 @@ impl Document {
         Ok(())
     }
 
+    fn check_drivers(&self, features: &[Feature]) -> Result<(), CommandError> {
+        let resolved = self.values.validate(features).map_err(CommandError::Invalid)?;
+        if resolved != features {
+            return Err(CommandError::Invalid("edit the driving value instead of its driven input".into()));
+        }
+        Ok(())
+    }
+
+    fn apply_values(&mut self, command: Command) -> Result<Applied, CommandError> {
+        let old = Command::RestoreValues { state: self.values.clone(), features: self.features.clone() };
+        let mut state = self.values.clone();
+        let mut features = self.features.clone();
+        let label = match &command {
+            Command::SetValue { name, expression } => {
+                state.set(name, expression).map_err(CommandError::Invalid)?;
+                format!("set value {name}")
+            }
+            Command::Drive { input, expression } => {
+                state.drive(input.clone(), expression).map_err(CommandError::Invalid)?;
+                "drive input".into()
+            }
+            Command::RenameValue { name, to } => {
+                state.rename(name, to).map_err(CommandError::Invalid)?;
+                format!("rename value {name}")
+            }
+            Command::RestoreValues { state: restored, features: restored_features } => {
+                state = restored.clone();
+                features = restored_features.clone();
+                "restore values".into()
+            }
+            _ => unreachable!(),
+        };
+        if features.len() != self.features.len()
+            || features.iter().zip(&self.features).any(|(a, b)| {
+                a.id != b.id
+                    || a.name != b.name
+                    || a.suppressed != b.suppressed
+                    || a.via_assistant != b.via_assistant
+                    || a.kind.is_lattice() != b.kind.is_lattice()
+            })
+        {
+            return Err(CommandError::Invalid("a value command cannot replace the feature tree".into()));
+        }
+        features = state.validate(&features).map_err(CommandError::Invalid)?;
+        for f in &features {
+            Self::check_kind(&f.kind)?;
+        }
+        Self::check_order(&features)?;
+        Self::check_lattice_last(&features)?;
+        let first = self.features.iter().zip(&features).position(|(a, b)| a.kind != b.kind);
+        self.values = state;
+        self.features = features;
+        if let Some(i) = first {
+            self.touch(i);
+        }
+        Ok(Applied { inverse: old, redo: command, created: None, label })
+    }
+
     fn apply(&mut self, command: Command) -> Result<Applied, CommandError> {
         match command {
+            command @ (Command::SetValue { .. }
+            | Command::Drive { .. }
+            | Command::RenameValue { .. }
+            | Command::RestoreValues { .. }) => self.apply_values(command),
             Command::AddFeature { kind, name, position, via_assistant } => {
                 Self::check_kind(&kind)?;
                 self.check_inputs(&kind)?;
@@ -568,6 +658,7 @@ impl Document {
                     return Err(CommandError::Invalid("a feature cannot change into or out of a lattice".into()));
                 }
                 Self::check_order(&next)?;
+                self.check_drivers(&next)?;
                 let label = format!("edit {}", next[i].name);
                 self.features = next;
                 self.touch(i);
@@ -596,6 +687,9 @@ impl Document {
                 }
                 let old = self.features[i].kind.clone();
                 let kind = FeatureKind::Sketch(sketch);
+                let mut next = self.features.clone();
+                next[i].kind = kind.clone();
+                self.check_drivers(&next)?;
                 let label = format!("set {} {constraint} to {value}", self.features[i].name);
                 self.features[i].kind = kind.clone();
                 self.last_solve = Some(status);
@@ -634,6 +728,9 @@ impl Document {
             }
             Command::DeleteFeature { id } => {
                 let i = self.index(id)?;
+                let mut next = self.features.clone();
+                next.remove(i);
+                self.check_drivers(&next)?;
                 let feature = self.features.remove(i);
                 let label = format!("delete {}", feature.name);
                 let mut inverse = Command::InsertFeature { feature, position: i };

@@ -55,6 +55,7 @@ impl Document {
             id: self.id,
             name: self.name.clone(),
             features: self.features.clone(),
+            values: self.values.clone(),
             datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_id: self.next_id,

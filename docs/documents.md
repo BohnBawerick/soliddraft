@@ -91,7 +91,10 @@ The geometry hash leaves out what does not decide the shape. For a part that is 
 name, each feature's name and `via_assistant` flag, every `label` (the words a
 reference keeps for repair prompts), and the material and appearances (`material`,
 `appearances` and `snapshots`, see [materials.md](materials.md)). Renaming a feature or
-painting a face changes the semantic hash and not the geometry hash.
+painting a face changes the semantic hash and not the geometry hash. The `values`
+table is also excluded: bound inputs are stored as resolved feature parameters, and
+renaming their expressions changes no shape. Readers check that those parameters
+agree with their drivers before accepting the file.
 
 Neither hash depends on Rust `Debug` output.
 

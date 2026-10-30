@@ -265,3 +265,21 @@ The document tests also reopen a part containing a chamfer and check that it reb
 With a finished body, choose Lattice on the Features ribbon. Cell size and density are in millimetres; density is the constant beam radius. The cubic grid uses the part's origin and axes. Accuracy and minimum detail control certified STL export. The viewport and tree label the displayed mesh as an unproved preview.
 
 The lattice stays last. Edit an earlier feature to rebuild it, or return before the lattice to continue CAD work without losing its settings. The `lattice` and `edit_lattice` agent verbs use the same document commands. Old two-setting lattice files open with their earlier body visible and a message naming the missing cell size and density. Configure those inputs to build the field.
+
+## Named values
+
+The `set_value` tool creates or changes a named expression. `drive` binds a sketch
+dimension, numbered from 1, or an extrusion's depth to that expression. For example,
+`plate_w = 140` can drive Sketch1 dimension 1 and `plate_w / 2` can drive a depth.
+`rename_value` preserves references and updates their displayed text.
+
+Values and bindings persist in the part and participate in undo. A value edit resolves
+all its dependents before committing. A cycle, unknown unit or incompatible driver
+unit leaves the accepted document unchanged. Change a driven input through its value.
+
+Bare literals use millimetres; bare factors in multiplication and division are scalars.
+Length literals support mm, cm, m and in, with exact decimal conversion before rounding
+to the stored number. A plain `6 in` is stored as `152.4 mm`. Angle literals use deg.
+Expressions with names or operators keep their text. Names are ASCII identifiers,
+excluding unit symbols. This increment supports 256 values, dependency depth 32 and 64 tokens per expression.
+Automatic dotted names, functions and configuration overrides remain for later slices.

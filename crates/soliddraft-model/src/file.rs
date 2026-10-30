@@ -112,6 +112,8 @@ struct Recipe {
     name: String,
     units: Units,
     features: Vec<Feature>,
+    #[serde(default, skip_serializing_if = "crate::values::Values::is_empty")]
+    values: crate::values::Values,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     datum_names: BTreeMap<DatumPlane, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -168,6 +170,7 @@ impl Document {
             name: self.name.clone(),
             units: Units::Mm,
             features: self.features.clone(),
+            values: self.values.clone(),
             datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_feature: self.next_id,
@@ -194,7 +197,7 @@ impl Document {
     }
 
     /// The hash of what decides the part's shape: the truth without the part's and
-    /// features' names, repair-prompt labels, provenance, material and appearances. Renaming a feature changes
+    /// features' names, value expressions, repair-prompt labels, provenance, material and appearances. Renaming a feature changes
     /// the semantic hash and not this one.
     pub fn geometry_hash(&self) -> ContentHash {
         shape_hash(&self.truth())
@@ -368,6 +371,11 @@ impl Document {
         for (datum, name) in recipe.datum_names {
             doc.rename_datum(datum, &name).map_err(|e| FileError::Invalid(e.to_string()))?;
         }
+        let resolved = recipe.values.validate(&recipe.features).map_err(FileError::Invalid)?;
+        if resolved != recipe.features {
+            return Err(FileError::Invalid("driven inputs disagree with their expressions".into()));
+        }
+        doc.values = recipe.values;
         doc.features = recipe.features;
         doc.rollback = recipe.rollback;
         doc.next_id = recipe.next_feature;
@@ -404,7 +412,7 @@ fn part_manifest(id: DocumentId, backend: &BackendInfo, truth: &Value, settings:
 fn shape_hash(truth: &Value) -> ContentHash {
     let mut truth = soliddraft_document::hash::without_format(truth);
     if let Value::Object(map) = &mut truth {
-        for key in ["name", "datum_names", "material", "appearances", "snapshots"] {
+        for key in ["name", "datum_names", "material", "appearances", "snapshots", "values"] {
             map.remove(key);
         }
         if let Some(Value::Array(features)) = map.get_mut("features") {
