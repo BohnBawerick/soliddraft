@@ -1,0 +1,3528 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "measure-pairs",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      },
+      "label": "T1 sketch block"
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "label": "T1 extrude block"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "diameter": 12
+          }
+        ]
+      },
+      "label": "T1 sketch bore"
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch2",
+        "through_all": false,
+        "depth": 100,
+        "flip": true
+      },
+      "label": "T1 cut bore"
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "10"
+      },
+      "label": "T1 block_h",
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "parameter": "depth",
+        "expression": "block_h"
+      },
+      "label": "T1 drive depth",
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "label": "T2 bind E0-E3, F0, F1",
+      "checks": [
+        {
+          "pointer": "/result/edges/3/name",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/0",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/1",
+          "approx": -15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/2",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/length_mm",
+          "approx": 40,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/faces/0",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/edges/3/faces/1",
+          "equals": "Boss-Extrude1 \u00b7 Side of line 1"
+        },
+        {
+          "pointer": "/result/edges/6/name",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/0",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/1",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/2",
+          "approx": 10,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/length_mm",
+          "approx": 40,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/faces/0",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/edges/6/faces/1",
+          "equals": "Boss-Extrude1 \u00b7 Side of line 3"
+        },
+        {
+          "pointer": "/result/edges/5/name",
+          "equals": "Boss-Extrude1 \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/0",
+          "approx": 20,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/1",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/2",
+          "approx": 10,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/length_mm",
+          "approx": 30,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/faces/0",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/edges/5/faces/1",
+          "equals": "Boss-Extrude1 \u00b7 Side of line 2"
+        },
+        {
+          "pointer": "/result/edges/8/name",
+          "equals": "Boss-Extrude1 \u00b7 Edge 9"
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/0",
+          "approx": 20,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/1",
+          "approx": -15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/2",
+          "approx": 5.0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/length_mm",
+          "approx": 10,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/faces/0",
+          "equals": "Boss-Extrude1 \u00b7 Side of line 1"
+        },
+        {
+          "pointer": "/result/edges/8/faces/1",
+          "equals": "Boss-Extrude1 \u00b7 Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "equals": -1
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/faces/1/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 10,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Cut-Extrude1"
+      },
+      "label": "T2 bind bore rim",
+      "checks": [
+        {
+          "pointer": "/result/edges/0/name",
+          "equals": "Cut-Extrude1 \u00b7 Edge 1"
+        },
+        {
+          "pointer": "/result/edges/0/faces/0",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/edges/0/faces/1",
+          "equals": "Cut-Extrude1 \u00b7 Wall of circle 1"
+        },
+        {
+          "pointer": "/result/edges/0/midpoint/2",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 \u00b7 Edge 4",
+        "quantity": "midpoint"
+      },
+      "label": "T3 E0 midpoint",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/coordinates/0/value",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/result/coordinates/0/lo",
+          "maximum": 0
+        },
+        {
+          "pointer": "/result/coordinates/0/hi",
+          "minimum": 0
+        },
+        {
+          "pointer": "/result/coordinates/0/lo",
+          "minimum": -1e-09
+        },
+        {
+          "pointer": "/result/coordinates/0/hi",
+          "maximum": 1e-09
+        },
+        {
+          "pointer": "/result/coordinates/1/value",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/result/coordinates/1/lo",
+          "maximum": -15
+        },
+        {
+          "pointer": "/result/coordinates/1/hi",
+          "minimum": -15
+        },
+        {
+          "pointer": "/result/coordinates/1/lo",
+          "minimum": -15.000000001
+        },
+        {
+          "pointer": "/result/coordinates/1/hi",
+          "maximum": -14.999999999
+        },
+        {
+          "pointer": "/result/coordinates/2/value",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/result/coordinates/2/lo",
+          "maximum": 0
+        },
+        {
+          "pointer": "/result/coordinates/2/hi",
+          "minimum": 0
+        },
+        {
+          "pointer": "/result/coordinates/2/lo",
+          "minimum": -1e-09
+        },
+        {
+          "pointer": "/result/coordinates/2/hi",
+          "maximum": 1e-09
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Boss-Extrude1 \u00b7 Edge 7",
+        "quantity": "minimum_distance"
+      },
+      "label": "T3 E0/E1 minimum",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/result/hi",
+          "differs_from": {
+            "pointer": "/result/lo"
+          }
+        },
+        {
+          "pointer": "/result/distance_mm",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Boss-Extrude1 \u00b7 Edge 6",
+        "quantity": "minimum_distance"
+      },
+      "label": "T3 E0/E2 minimum",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 10.00000001
+        },
+        {
+          "pointer": "/result/distance_mm",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Boss-Extrude1 \u00b7 Edge 6",
+        "quantity": "point_distance",
+        "a_point": "midpoint",
+        "b_point": "midpoint"
+      },
+      "label": "T3 E0/E2 midpoint distance",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "point_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 26.92582403567252,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 26.92582403567252
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 26.925824035672523
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 26.92582402567252
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 26.92582404567252
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/result/hi",
+          "differs_from": {
+            "pointer": "/result/lo"
+          }
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Boss-Extrude1 \u00b7 Edge 7",
+        "quantity": "direction_angle"
+      },
+      "label": "T4 E0/E1 angle",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "direction_angle"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "deg"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/lo",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/hi",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Boss-Extrude1 \u00b7 Edge 6",
+        "quantity": "direction_angle"
+      },
+      "label": "T4 E0/E2 angle",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "direction_angle"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "deg"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "equals": 90
+        },
+        {
+          "pointer": "/result/lo",
+          "equals": 90
+        },
+        {
+          "pointer": "/result/hi",
+          "equals": 90
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Start cap",
+        "b": "Boss-Extrude1 \u00b7 End cap",
+        "quantity": "minimum_distance"
+      },
+      "label": "T4 F0/F1 minimum",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 10.00000001
+        },
+        {
+          "pointer": "/result/distance_mm",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/gap_mm",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/source_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 7
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 7
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "diagonal_gap",
+        "entity": "Boss-Extrude1 \u00b7 Edge 4",
+        "entity_b": "Boss-Extrude1 \u00b7 Edge 7",
+        "quantity": "minimum_distance",
+        "check": "< 32 mm"
+      },
+      "label": "T5 track diagonal_gap",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/undo",
+          "equals": "track diagonal_gap"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "cap_gap",
+        "entity": "Boss-Extrude1 \u00b7 Start cap",
+        "entity_b": "Boss-Extrude1 \u00b7 End cap",
+        "quantity": "minimum_distance",
+        "check": "< 12 mm"
+      },
+      "label": "T5 track cap_gap",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 10.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/undo",
+          "equals": "track cap_gap"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "label": "T5 undo removes only cap_gap",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 16
+        },
+        {
+          "pointer": "/summary/undo",
+          "equals": "track diagonal_gap"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "label": "T5 redo restores cap_gap",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/undo",
+          "equals": "track cap_gap"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Boss-Extrude1 \u00b7 Edge 4",
+        "b": "Cut-Extrude1 \u00b7 Edge 1",
+        "quantity": "minimum_distance"
+      },
+      "label": "T6 refused E0/rim minimum",
+      "refused": "measure.unsupported-curve",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 19
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "rim_gap",
+        "entity": "Boss-Extrude1 \u00b7 Edge 4",
+        "entity_b": "Cut-Extrude1 \u00b7 Edge 1",
+        "quantity": "minimum_distance"
+      },
+      "label": "T6 refused E0/rim Track",
+      "refused": "measure.unsupported-curve",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 19
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "15"
+      },
+      "label": "T7 block_h 15",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "differs_from": {
+            "step": 19,
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as": {
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 15
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "label": "T8 undo",
+      "same_geometry_as_step": 7,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 10.00000001
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "label": "T8 redo",
+      "same_geometry_as_step": 22,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        }
+      ]
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Block"
+      },
+      "label": "T9 rename",
+      "same_geometry_as_step": 22,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "contains": "Block \u00b7"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/measure-pairs-current.dwprt"
+      },
+      "label": "T9 save current",
+      "files": [
+        "{bundle}/measure-pairs-current.dwprt"
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "11"
+      },
+      "label": "T9 diverge",
+      "checks": [
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 11
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/measure-pairs-current.dwprt"
+      },
+      "label": "T9 reopen current",
+      "same_geometry_as_step": 26,
+      "checks": [
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 26
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "10"
+      },
+      "label": "T10 block_h 10",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 10.00000001
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Block \u00b7 Edge 4",
+        "b": "Block \u00b7 Edge 6",
+        "quantity": "minimum_distance"
+      },
+      "label": "T10 E0/E2 minimum",
+      "same_geometry_as_step": 29,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Block \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 10.00000001
+        },
+        {
+          "pointer": "/result/geometry",
+          "differs_from": {
+            "step": 26,
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 29
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 29
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 29
+        }
+      ]
+    },
+    {
+      "tool": "measure",
+      "arguments": {
+        "a": "Block \u00b7 Edge 4",
+        "b": "Block \u00b7 Edge 6",
+        "quantity": "point_distance",
+        "a_point": "midpoint",
+        "b_point": "midpoint"
+      },
+      "label": "T10 E0/E2 midpoint distance",
+      "same_geometry_as_step": 29,
+      "checks": [
+        {
+          "pointer": "/result/quantity",
+          "equals": "point_distance"
+        },
+        {
+          "pointer": "/result/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/sources/0/point",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/result/sources/1/source",
+          "equals": "Block \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/sources/1/point",
+          "equals": "midpoint"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 26.92582403567252,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/result/lo",
+          "maximum": 26.92582403567252
+        },
+        {
+          "pointer": "/result/hi",
+          "minimum": 26.925824035672523
+        },
+        {
+          "pointer": "/result/lo",
+          "minimum": 26.92582402567252
+        },
+        {
+          "pointer": "/result/hi",
+          "maximum": 26.92582404567252
+        },
+        {
+          "pointer": "/result/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/result/hi",
+          "differs_from": {
+            "pointer": "/result/lo"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 29
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 29
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 29
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "15"
+      },
+      "label": "T11 block_h 15",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Block"
+      },
+      "label": "T11 bind E0 on Block",
+      "same_geometry_as_step": 32,
+      "checks": [
+        {
+          "pointer": "/result/edges/3/name",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/0",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/1",
+          "approx": -15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/midpoint/2",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/length_mm",
+          "approx": 40,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/3/faces/0",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/edges/3/faces/1",
+          "equals": "Block \u00b7 Side of line 1"
+        },
+        {
+          "pointer": "/result/edges/6/name",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/0",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/1",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/midpoint/2",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/length_mm",
+          "approx": 40,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/6/faces/0",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/edges/6/faces/1",
+          "equals": "Block \u00b7 Side of line 3"
+        },
+        {
+          "pointer": "/result/edges/5/name",
+          "equals": "Block \u00b7 Edge 6"
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/0",
+          "approx": 20,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/1",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/midpoint/2",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/length_mm",
+          "approx": 30,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/5/faces/0",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/edges/5/faces/1",
+          "equals": "Block \u00b7 Side of line 2"
+        },
+        {
+          "pointer": "/result/edges/8/name",
+          "equals": "Block \u00b7 Edge 9"
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/0",
+          "approx": 20,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/1",
+          "approx": -15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/midpoint/2",
+          "approx": 7.5,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/length_mm",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/edges/8/faces/0",
+          "equals": "Block \u00b7 Side of line 1"
+        },
+        {
+          "pointer": "/result/edges/8/faces/1",
+          "equals": "Block \u00b7 Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "equals": -1
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/result/faces/1/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 15,
+          "tolerance": 0.02
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "equals": 1
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 32
+        }
+      ]
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "Block \u00b7 Edge 4"
+        ],
+        "radius": 2
+      },
+      "label": "T11 fillet E0",
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "unknown"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/hi"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/certainty"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/reason",
+          "contains": "Edge 4"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "differs_from": {
+            "step": 32,
+            "pointer": "/summary/values/2/tracked/geometry"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/measure-pairs-stale.dwprt"
+      },
+      "label": "T12 save stale",
+      "files": [
+        "{bundle}/measure-pairs-stale.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/measure-pairs-stale.dwprt"
+      },
+      "label": "T12 reopen stale",
+      "same_geometry_as_step": 34,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "unknown"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/measure-pairs-current.dwprt"
+      },
+      "label": "T13 reopen current",
+      "same_geometry_as_step": 26,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 33.54101966249684,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 33.54101966249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 33.54101966249685
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 33.54101965249684
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 33.541019672496844
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "fail"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 15,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 14.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 15.00000001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "block_h",
+        "expression": "10"
+      },
+      "label": "T13 block_h 10",
+      "same_geometry_as_step": 29,
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Block \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Block \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Block \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Block \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 10.00000001
+        }
+      ]
+    }
+  ]
+}
