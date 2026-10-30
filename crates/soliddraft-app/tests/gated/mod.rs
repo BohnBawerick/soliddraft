@@ -20,11 +20,17 @@ pub struct Rules {
     pub refuse: Vec<f64>,
     /// No body can be meshed for display.
     pub refuse_display: bool,
+    /// Bodies with more volume than this cannot be meshed for display.
+    pub refuse_display_above: Option<f64>,
 }
 
 impl Gated {
-    fn display(&self) -> KernelResult<()> {
-        if !self.rules.lock().unwrap().refuse_display {
+    fn display(&self, body: BodyId) -> KernelResult<()> {
+        let (all, above) = {
+            let rules = self.rules.lock().unwrap();
+            (rules.refuse_display, rules.refuse_display_above)
+        };
+        if !all && !above.is_some_and(|limit| self.inner.mass_properties(body).is_ok_and(|m| m.volume > limit)) {
             return Ok(());
         }
         Err(KernelError::QueryFailed {
@@ -91,11 +97,11 @@ impl Kernel for Gated {
         self.inner.reserve_proof_work()
     }
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
-        self.display()?;
+        self.display(body)?;
         self.inner.preview(body, params)
     }
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
-        self.display()?;
+        self.display(body)?;
         self.inner.tessellate(body, params)
     }
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {

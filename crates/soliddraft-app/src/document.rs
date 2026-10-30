@@ -1185,7 +1185,8 @@ pub struct Document {
     /// Why the current body has no display mesh, or why the last change was rolled back
     /// for lacking one. Holds until the next change.
     display_failure: Option<String>,
-    /// The undo depth to return to if the deferred edit being proved cannot be displayed.
+    /// The undo depth of the part on screen while deferred edits after it wait for a
+    /// display. Later edits keep it, because the ones before them were never drawn.
     edit_depth: Option<usize>,
     shown_revision: u64,
     /// Which display level is shown, and the worker that makes the others.
@@ -1579,7 +1580,6 @@ impl Document {
     }
 
     fn adopt_proof(&mut self, result: Result<crate::drag::ProvedBuild, String>) -> Result<(), String> {
-        let depth = self.edit_depth.take();
         let proof = result?;
         self.model.rebuild_reusing(&proof.model)?;
         let selected = self.provisional_selection();
@@ -1605,6 +1605,7 @@ impl Document {
             return Ok(());
         }
         self.retain_proved_revision();
+        let depth = self.edit_depth.take();
         if let Some(display) = proof.display {
             let display = Arc::try_unwrap(display).unwrap_or_else(|display| (*display).clone());
             let wanted = self.quality.retarget(display.body, &display.topology, &self.model.settings().viewport);
@@ -1867,6 +1868,16 @@ impl Document {
         Ok(())
     }
 
+    /// Abandons the steps since `depth`, and those since `drawn` too if the part at
+    /// `depth` cannot be displayed either.
+    fn withdraw(&mut self, depth: usize, drawn: Option<usize>) -> Result<(), String> {
+        self.abandon(depth)?;
+        match drawn {
+            Some(drawn) if drawn < depth && self.display_failure.is_some() => self.abandon(drawn),
+            _ => Ok(()),
+        }
+    }
+
     /// Adds a line to the command log.
     pub fn log_note(&mut self, line: impl Into<String>) {
         self.model.log_note(line);
@@ -1916,6 +1927,7 @@ impl Document {
             let depth = self.model.undo_depth();
             // Rolling back helps only when the part on screen can come back.
             let showing = self.display_body().is_none() || !self.meshes.is_empty();
+            let drawn = self.edit_depth.or((showing && self.shown_revision == self.revision).then_some(depth));
             let commands = self.to_model(command)?;
             let batch = model::Command::Batch { label, commands };
             let done = if deferred { self.model.execute_deferred(batch) } else { self.model.execute(batch) }
@@ -1923,7 +1935,7 @@ impl Document {
             self.touch();
             if deferred {
                 self.after_deferred_change();
-                self.edit_depth = showing.then_some(depth);
+                self.edit_depth = drawn;
             } else {
                 self.after_change();
             }
@@ -1935,7 +1947,7 @@ impl Document {
                 // A refused fillet or chamfer is rolled back, as the command tools do: left
                 // red, it would block every later edge and face reference.
                 if rounding {
-                    self.abandon(depth).map_err(|e| format!("{msg}; {e}"))?;
+                    self.withdraw(depth, drawn).map_err(|e| format!("{msg}; {e}"))?;
                 }
                 return Err(msg);
             }
@@ -1945,7 +1957,7 @@ impl Document {
                 && showing
                 && let Some(message) = self.display_failure.take()
             {
-                self.abandon(depth).map_err(|e| format!("{message}; {e}"))?;
+                self.withdraw(depth, drawn).map_err(|e| format!("{message}; {e}"))?;
                 self.display_failure = Some(message.clone());
                 return Err(message);
             }

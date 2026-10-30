@@ -25,6 +25,15 @@ fn add(depth: f64) -> Command {
     Command::AddExtrude { params: block(depth), via_assistant: false }
 }
 
+fn edit(id: FeatureId, depth: f64) -> Command {
+    Command::EditExtrude { id, params: block(depth) }
+}
+
+fn depth_of(doc: &Document, id: FeatureId) -> f64 {
+    let Some(FeatureKind::Extrude(params)) = doc.feature(id).map(|f| &f.kind) else { panic!("the extrude stays") };
+    params.depth
+}
+
 fn part(kernel: Arc<Gated>) -> (Document, FeatureId) {
     let mut doc = Document::new("Display failure", kernel);
     let id = doc.apply(add(10.0)).unwrap().unwrap();
@@ -97,6 +106,89 @@ fn a_proved_edit_without_a_display_mesh_is_rolled_back() {
     assert_eq!((doc.undo_depth(), volume(&doc), doc.triangle_count()), before, "the part stays on screen");
     let Some(FeatureKind::Extrude(params)) = doc.feature(id).map(|f| &f.kind) else { panic!("the extrude stays") };
     assert_eq!(params.depth, 10.0);
+    let message = doc.display_failure().expect("the status has the reason");
+    assert!(message.contains(REASON), "{message}");
+}
+
+/// The second edit must not move the way back up to the first, which was never drawn.
+#[test]
+fn unproved_edits_without_a_display_mesh_roll_back_to_the_part_on_screen() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    let before = (doc.undo_depth(), doc.display_body(), volume(&doc), doc.triangle_count());
+    assert!(before.3 > 0);
+
+    refuse_display(&kernel, true);
+    doc.apply_interactive(edit(id, 14.0)).unwrap();
+    doc.apply_interactive(edit(id, 18.0)).unwrap();
+    assert_eq!(doc.undo_depth(), before.0 + 2, "each edit has its own undo entry");
+    settle(&mut doc);
+
+    assert_eq!(
+        (doc.undo_depth(), doc.display_body(), volume(&doc), doc.triangle_count()),
+        before,
+        "the part stays on screen"
+    );
+    assert_eq!(depth_of(&doc, id), 10.0);
+    let message = doc.display_failure().expect("the status has the reason");
+    assert!(message.contains(REASON), "{message}");
+}
+
+#[test]
+fn a_new_feature_over_an_unproved_edit_rolls_back_to_the_part_on_screen() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    let before = (doc.undo_depth(), doc.display_body(), doc.triangle_count());
+
+    refuse_display(&kernel, true);
+    doc.apply_interactive(edit(id, 14.0)).unwrap();
+    let refused = doc.apply(add(25.0)).unwrap_err();
+
+    assert!(refused.contains(REASON), "{refused}");
+    assert_eq!((doc.undo_depth(), doc.display_body(), doc.triangle_count()), before, "the part stays on screen");
+    assert_eq!(depth_of(&doc, id), 10.0);
+    assert_eq!(doc.display_failure(), Some(refused.as_str()));
+}
+
+/// Only the new feature cannot be drawn, so the edit under it is not thrown away.
+#[test]
+fn a_new_feature_over_an_edit_the_viewport_can_draw_keeps_the_edit() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    let depth = doc.undo_depth();
+
+    kernel.rules.lock().unwrap().refuse_display_above = Some(40.0 * 30.0 * 20.0);
+    doc.apply_interactive(edit(id, 14.0)).unwrap();
+    let refused = doc.apply(add(25.0)).unwrap_err();
+
+    assert!(refused.contains(REASON), "{refused}");
+    assert_eq!(doc.undo_depth(), depth + 1);
+    assert_eq!(depth_of(&doc, id), 14.0);
+    assert_eq!(volume(&doc), 40.0 * 30.0 * 14.0);
+    assert!(doc.triangle_count() > 0, "the part stays on screen");
+}
+
+/// Undo does not roll back, so the model can pass the mesh on screen. An edit made there
+/// has no drawn model to return to, and it must not clear the mesh by trying.
+#[test]
+fn an_edit_after_an_undo_the_viewport_cannot_draw_keeps_the_part_on_screen() {
+    let kernel = Arc::new(Gated::default());
+    let (mut doc, id) = part(kernel.clone());
+    doc.apply_interactive(edit(id, 14.0)).unwrap();
+    settle(&mut doc);
+    doc.apply_interactive(edit(id, 18.0)).unwrap();
+    settle(&mut doc);
+    let triangles = doc.triangle_count();
+    assert!(triangles > 0);
+
+    refuse_display(&kernel, true);
+    doc.undo_interactive().unwrap();
+    settle(&mut doc);
+    doc.apply_interactive(edit(id, 16.0)).unwrap();
+    settle(&mut doc);
+
+    assert_eq!(depth_of(&doc, id), 16.0, "nothing the user made is lost");
+    assert_eq!(doc.triangle_count(), triangles, "the part stays on screen");
     let message = doc.display_failure().expect("the status has the reason");
     assert!(message.contains(REASON), "{message}");
 }
