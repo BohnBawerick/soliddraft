@@ -6,6 +6,7 @@ import json
 import pathlib
 import re
 import subprocess
+import sys
 import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -24,6 +25,11 @@ OWNERS = {
     'interactive-linux': {'soliddraft-app'},
     'application-loop': {'soliddraft-cli'},
 }
+POLICY = 'ci/check-consumers.json'
+
+
+class PolicyError(Exception):
+    """The consumer map cannot judge a path, so no selection may be published."""
 
 
 def git(root, *args):
@@ -38,6 +44,69 @@ def content(root, path, revision=None):
             return ''
     file = root / path
     return file.read_text(errors='replace') if file.is_file() else ''
+
+
+def unique_keys(pairs):
+    repeated = [key for key, count in Counter(key for key, _ in pairs).items() if count > 1]
+    if repeated:
+        raise PolicyError(f'{POLICY}: duplicate key {repeated[0]}')
+    return dict(pairs)
+
+
+def consumer_units(key, value):
+    if value == 'all':
+        return UNITS | PACKAGES
+    if isinstance(value, list) and all(isinstance(u, str) and u in UNITS | PACKAGES for u in value):
+        return set(value)
+    raise PolicyError(f'{POLICY}: {key}: invalid units {value!r}')
+
+
+def parse_consumers(text):
+    try:
+        policy = json.loads(text, object_pairs_hook=unique_keys)
+    except ValueError as error:
+        raise PolicyError(f'{POLICY}: missing or invalid JSON: {error}') from error
+    if (not isinstance(policy, dict) or set(policy) != {'format', 'files', 'patterns'}
+            or policy['format'] != 'soliddraft-check-consumers/1'
+            or not isinstance(policy['files'], dict) or not isinstance(policy['patterns'], dict)):
+        raise PolicyError(f'{POLICY}: invalid schema')
+    files = {path: consumer_units(path, value) for path, value in policy['files'].items()}
+    patterns = []
+    for pattern, value in policy['patterns'].items():
+        try:
+            patterns.append((re.compile(pattern), consumer_units(pattern, value)))
+        except re.error as error:
+            raise PolicyError(f'{POLICY}: {pattern}: {error}') from error
+    for path in files:
+        mapped_units(path, (files, patterns))
+    return files, patterns
+
+
+def mapped_units(path, consumers):
+    files, patterns = consumers
+    matches = [units for pattern, units in patterns if pattern.fullmatch(path)]
+    if path in files:
+        matches.append(files[path])
+    if len(matches) > 1:
+        raise PolicyError(f'{POLICY}: {path}: more than one entry matches')
+    return matches[0] if matches else None
+
+
+def ci_consumers(path, removed, consumers, base_map):
+    units = mapped_units(path, consumers)
+    if units is None and removed and base_map:
+        units = mapped_units(path, parse_consumers(base_map))
+    if units is None:
+        raise PolicyError(f'{path}: no entry in {POLICY}')
+    return units
+
+
+def check_inventory(root, revision, consumers):
+    # The whole tree counts: a diff must not hide an unmapped file, and neither must a full selection.
+    tracked = git(root, 'ls-tree', '-r', '-z', '--name-only', revision, '--', 'ci/').decode().split('\0')
+    unmapped = [path for path in tracked if path and mapped_units(path, consumers) is None]
+    if unmapped:
+        raise PolicyError(f'no entry in {POLICY} for {", ".join(unmapped)}')
 
 
 def platform_path(path, sources):
@@ -76,29 +145,20 @@ def catallax_lock_move(sources):
         return False
     grouped = []
     for manifest in (base, head):
-        catallax, other = {}, []
+        names, revisions, other = set(), set(), []
         for package in manifest['package']:
-            if CATALLAX_SOURCE.fullmatch(package.get('source', '')):
-                name = package['name']
-                if name in catallax:
+            source = CATALLAX_SOURCE.fullmatch(package.get('source', ''))
+            if source:
+                if package['name'] in names:
                     return False
-                catallax[name] = package
+                names.add(package['name'])
+                revisions.add(source[1])
             else:
                 other.append(json.dumps(package, sort_keys=True))
-        grouped.append((catallax, Counter(other)))
+        grouped.append((revisions, Counter(other)))
     (old, old_other), (new, new_other) = grouped
-    if old.keys() != new.keys() or old_other != new_other:
-        return False
-    for name in old:
-        reduced = []
-        for packages in (old, new):
-            package = packages[name]
-            reduced.append({k: v for k, v in package.items() if k not in {'source', 'dependencies'}})
-            reduced[-1]['dependencies'] = Counter(
-                d for d in package.get('dependencies', []) if d.split(' ', 1)[0] not in packages)
-        if reduced[0] != reduced[1]:
-            return False
-    return any(old[name]['source'] != new[name]['source'] for name in old)
+    # Package source decides ownership: Catallax tables may change freely, nothing else may.
+    return bool(old and new) and old != new and old_other == new_other
 
 
 def catallax_manifest_move(sources):
@@ -230,6 +290,8 @@ def select(changes, event, ref, packages, read_sources):
         for unit in sorted(units):
             reasons.setdefault(unit, []).append(reason)
 
+    base_map, head_map = read_sources(POLICY)
+    mapped = parse_consumers(head_map)
     if changes is None or event == 'workflow_dispatch' or ref.startswith('refs/heads/release/'):
         add(UNITS | PACKAGES, 'full qualification or unavailable diff')
         return reasons
@@ -237,11 +299,9 @@ def select(changes, event, ref, packages, read_sources):
         add(LINUX, 'main Linux selection audit')
     for change in changes:
         for path in change[1:]:
-            if (path in {'ci/run-scenarios.py', 'ci/test_scenarios.py', 'ci/known-over-budget.json',
-                         'ci/fake_mcp_server.py', 'ci/scenario-inventory.json'}
-                    or re.fullmatch(r'ci/scenarios/[^/]+\.json', path)):
-                add({'lint', 'application-loop'}, f'Linux scenario harness: {path}')
-                continue
+            if path.startswith('ci/'):
+                removed = change[0][0] in 'DR' and path == change[1]
+                add(ci_consumers(path, removed, mapped, base_map), f'CI consumers: {path}')
             sources = read_sources(path)
             narrow = narrow_units(path, sources) if change[0] == 'M' else None
             if narrow:
@@ -251,7 +311,7 @@ def select(changes, event, ref, packages, read_sources):
                 add(PLATFORM | {'interactive-linux', 'test-linux'}, f'platform: {path}')
             if path.startswith('packaging/') or path in {'.github/workflows/release.yml', 'docs/RELEASING.md'}:
                 add(PACKAGES, f'packaging: {path}')
-            if path.startswith(('ci/', '.github/')):
+            if path.startswith('.github/'):
                 add(UNITS | PACKAGES, f'check policy: {path}')
             elif pathlib.PurePosixPath(path).name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain', 'rust-toolchain.toml', 'build.rs'}:
                 add(UNITS, f'compiler/dependencies/build: {path}')
@@ -268,7 +328,8 @@ def select(changes, event, ref, packages, read_sources):
                         add({unit}, f'crate consumers of {path}: {", ".join(sorted(owners & affected))}')
             elif path.startswith('recipes/'):
                 add(LINUX, f'compiled recipe fixture: {path}')
-            elif (path.startswith('docs/') and path.endswith('.md')) or path in {'README.md', 'LICENSE', 'NOTICE'}:
+            elif (path.startswith('ci/') or (path.startswith('docs/') and path.endswith('.md'))
+                  or path in {'README.md', 'LICENSE', 'NOTICE'}):
                 pass
             else:
                 add(UNITS | PACKAGES, f'unknown path: {path}')
@@ -297,7 +358,15 @@ def with_base_rules(result, base_script, changes, event, ref, packages, sources)
     if base_script:
         namespace = {'__name__': 'base_selector', '__file__': str(ROOT / 'ci/select-checks.py')}
         exec(compile(base_script, '<base selector>', 'exec'), namespace)
-        for unit, reasons in namespace['select'](changes, event, ref, packages, sources).items():
+        # The accepted selector reads its own map, so a candidate map edit cannot erase a consumer.
+        accepted = sources(POLICY)[0]
+        bound = lambda path: [accepted, accepted] if path == POLICY else sources(path)
+        try:
+            selected = namespace['select'](changes, event, ref, packages, bound)
+        except namespace.get('PolicyError', ()) as error:
+            # A path new to the accepted map arrives with a map edit, which selects everything anyway.
+            selected = {unit: [f'accepted map cannot judge this change: {error}'] for unit in UNITS | PACKAGES}
+        for unit, reasons in selected.items():
             result.setdefault(unit, []).extend(f'base: {reason}' for reason in reasons)
     return result
 
@@ -311,12 +380,19 @@ def main():
     parser.add_argument('--ref', default='')
     parser.add_argument('--output', type=pathlib.Path, required=True)
     args = parser.parse_args()
-    changes = changes_between(args.root, args.base, args.head)
-    packages = graph(args.root, args.base if changes is not None else None)
-    sources = lambda path: [content(args.root, path, args.base), content(args.root, path, args.head)]
-    result = select(changes, args.event, args.ref, packages, sources)
-    base_script = content(args.root, 'ci/select-checks.py', args.base)
-    result = with_base_rules(result, base_script, changes, args.event, args.ref, packages, sources)
+    # The running checkout's selector and map are the candidate policy; --head names the tree they judge.
+    policy = content(args.root, POLICY)
+    sources = lambda path: [content(args.root, path, args.base),
+                            policy if path == POLICY else content(args.root, path, args.head)]
+    try:
+        check_inventory(args.root, args.head, parse_consumers(policy))
+        changes = changes_between(args.root, args.base, args.head)
+        packages = graph(args.root, args.base if changes is not None else None)
+        result = select(changes, args.event, args.ref, packages, sources)
+        base_script = content(args.root, 'ci/select-checks.py', args.base)
+        result = with_base_rules(result, base_script, changes, args.event, args.ref, packages, sources)
+    except PolicyError as error:
+        sys.exit(f'select-checks: {error}')
     args.output.write_text(json.dumps({'selected': sorted(result), 'reasons': result}, indent=2) + '\n')
 
 

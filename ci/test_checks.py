@@ -4,9 +4,14 @@ import importlib.util
 import json
 import pathlib
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+POLICY = 'ci/check-consumers.json'
+FROZEN_BASE = ROOT / 'ci/routing-replays/select-checks.py.9e81eb4'
 
 
 def load(name):
@@ -22,6 +27,11 @@ gate = load('check-gate')
 
 def read(name):
     return json.loads((ROOT / 'ci' / name).read_text())
+
+
+def everything():
+    fixture = read('routing-cases.json')
+    return set(fixture['units'] + fixture['package_units'])
 
 
 def jobs(text):
@@ -67,7 +77,7 @@ class Routing(unittest.TestCase):
         cls.sources = staticmethod(lambda p: [selector.content(ROOT, p, 'HEAD'), selector.content(ROOT, p)])
 
     def test_frozen_fixtures(self):
-        for name, sha in [('routing-cases.json', '6dcefda6a31b4d35e1cc0a69267bc96b78a475022753b6971c0bbad20eac09a1'),
+        for name, sha in [('routing-cases.json', '7c7f4d30af6b7e598c9ca1e4befae99bf1845218e827c8076671e92751609e16'),
                           ('gate-cases.json', 'c66b54349c735d237663849692c9df802caabf8b9f33d6e03940134d89d23c05')]:
             self.assertEqual(hashlib.sha256((ROOT / 'ci' / name).read_bytes()).hexdigest(), sha)
         for name, sha in read('routing-cases.json')['snapshots'].items():
@@ -99,6 +109,100 @@ class Routing(unittest.TestCase):
                     must = {'units': fixture['units'], 'all': fixture['units'] + fixture['package_units']}[must]
                 self.assertLessEqual(set(must), set(selected))
                 self.assertFalse(set(case['must_not']) & set(selected))
+
+    def test_round2_cases_name_every_unit(self):
+        # Must and must_not partition all 15 units, so the routing fixture compares exact sets.
+        fixture = read('routing-cases.json')
+        rows = [c for c in fixture['cases'] if c['id'].startswith('round2-')]
+        rows += read('routing-replays/round2-replays.json')['cases']
+        changed = {'HN03', 'HN04', 'HN05', 'HN06', 'HN07', 'HN08', 'H08', 'H09', 'N03'}
+        rows += [c for c in fixture['cases'] if c['id'].split('-')[0] in changed]
+        self.assertEqual(len(rows), 58)
+        for case in rows:
+            with self.subTest(case['id']):
+                self.assertEqual(set(case['must']) | set(case['must_not']), everything())
+                self.assertFalse(set(case['must']) & set(case['must_not']))
+        replay = next(c for c in fixture['cases'] if c['id'] == 'R72-replay-pr72')
+        self.assertEqual(replay['must'], 'units')
+        self.assertEqual(set(replay['must_not']), set(fixture['package_units']))
+
+    def test_consumer_table(self):
+        for path, units in read('routing-cases.json')['consumers'].items():
+            with self.subTest(path):
+                selected = selector.select([['M', path]], 'pull_request', '', self.packages, self.sources)
+                self.assertEqual(set(selected), everything() if units == 'all' else {'lint', *units})
+
+    def test_map_covers_every_ci_file(self):
+        self.assertEqual(list(read('check-consumers.json')['patterns']), [r'ci/scenarios/[^/]+\.json'])
+        consumers = selector.parse_consumers((ROOT / POLICY).read_text())
+        files = selector.git(ROOT, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', 'ci')
+        paths = [p for p in files.decode().split('\0') if p]
+        self.assertIn('ci/ownership.toml', paths)
+        self.assertEqual([p for p in paths if selector.mapped_units(p, consumers) is None], [])
+
+    def test_refusal_fixture(self):
+        for case in read('routing-cases.json')['refusals']:
+            with self.subTest(case['id']):
+                text = case.get('policy') or ''
+                sources = self.sources
+                if 'policy' in case:
+                    sources = lambda path, text=text: ['', text] if path == POLICY else self.sources(path)
+                with self.assertRaisesRegex(selector.PolicyError, re.escape(case['diagnostic'])):
+                    selector.select(case['changes'], case['event'], case.get('ref', ''), self.packages, sources)
+
+    def test_round2_replays(self):
+        script = FROZEN_BASE.read_text()
+        for case in read('routing-replays/round2-replays.json')['cases']:
+            with self.subTest(case['id']):
+                sources = self.case_sources(case)
+                selected = selector.select(case['changes'], case['event'], '', self.packages, sources)
+                self.assertEqual(set(selected), set(case['must']))
+                union = selector.with_base_rules(selected, script, case['changes'], case['event'], '',
+                                                 self.packages, sources)
+                self.assertEqual(set(union), everything())
+
+    def test_real_base_selector_keeps_its_obligations(self):
+        script = FROZEN_BASE.read_text()
+        ownership = [['M', 'ci/ownership.toml']]
+        candidate = selector.select(ownership, 'pull_request', '', self.packages, self.sources)
+        self.assertEqual(set(candidate), {'lint'})
+        union = selector.with_base_rules(candidate, script, ownership, 'pull_request', '', self.packages, self.sources)
+        self.assertEqual(set(union), everything())
+        self.assertIn('base: check policy: ci/ownership.toml', union['package-linux'])
+        case = next(c for c in read('routing-cases.json')['cases'] if c['id'] == 'round2-L02-catallax-table-added')
+        sources = self.case_sources(case)
+        candidate = selector.select(case['changes'], case['event'], '', self.packages, sources)
+        self.assertEqual(set(candidate), selector.LINUX)
+        union = selector.with_base_rules(candidate, script, case['changes'], case['event'], '', self.packages, sources)
+        self.assertEqual(set(union), selector.UNITS)
+
+    def round2_map(self, *entries):
+        return json.dumps({'format': 'soliddraft-check-consumers/1', 'files': dict(entries), 'patterns': {}})
+
+    def test_accepted_map_keeps_its_own_consumer(self):
+        base, head = (self.round2_map(('ci/linux-helper.py', [unit])) for unit in ('test-windows', 'application-loop'))
+        sources = lambda path: [base, head] if path == POLICY else ['', '']
+        changes = [['M', 'ci/linux-helper.py']]
+        candidate = selector.select(changes, 'pull_request', '', self.packages, sources)
+        self.assertEqual(set(candidate), {'lint', 'application-loop'})
+        union = selector.with_base_rules(candidate, (ROOT / 'ci/select-checks.py').read_text(), changes,
+                                         'pull_request', '', self.packages, sources)
+        self.assertEqual(set(union), {'lint', 'application-loop', 'test-windows'})
+        self.assertEqual(union['test-windows'], ['base: CI consumers: ci/linux-helper.py'])
+
+    def test_accepted_map_that_cannot_judge_selects_everything(self):
+        script = (ROOT / 'ci/select-checks.py').read_text()
+        head = self.round2_map(('ci/new.py', ['lint']))
+        for base, words in ((self.round2_map(), 'ci/new.py'), ('{', 'JSON')):
+            with self.subTest(base):
+                sources = lambda path: [base, head] if path == POLICY else ['', '']
+                changes = [['A', 'ci/new.py']]
+                candidate = selector.select(changes, 'pull_request', '', self.packages, sources)
+                self.assertEqual(set(candidate), {'lint'})
+                union = selector.with_base_rules(candidate, script, changes, 'pull_request', '', self.packages, sources)
+                self.assertEqual(set(union), everything())
+                self.assertIn(words, union['package-linux'][0])
+                self.assertTrue(union['package-linux'][0].startswith('base: accepted map cannot judge'))
 
     def test_base_rules_still_apply(self):
         case = next(c for c in read('routing-cases.json')['cases'] if c['id'] == 'K01-catallax-lock-rev-only')
@@ -139,6 +243,133 @@ class Routing(unittest.TestCase):
             with self.subTest(path):
                 selected = selector.select([['M', path]], 'pull_request', '', self.packages, self.sources)
                 self.assertLessEqual(selector.PLATFORM, set(selected))
+
+
+class Cli(unittest.TestCase):
+    """The real command over a throwaway repository holding a copy of this tree."""
+
+    @classmethod
+    def setUpClass(cls):
+        files = selector.git(ROOT, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').decode()
+        cls.directory = tempfile.TemporaryDirectory(prefix='.scratch-', dir=ROOT)
+        cls.addClassCleanup(cls.directory.cleanup)
+        cls.root = pathlib.Path(cls.directory.name) / 'repo'
+        cls.output = pathlib.Path(cls.directory.name) / 'selection.json'
+        for path in filter(None, files.split('\0')):
+            if (ROOT / path).is_file():
+                (cls.root / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(ROOT / path, cls.root / path)
+        cls.git('init', '-q', '-b', 'main')
+        cls.base = cls.commit({})
+
+    def tearDown(self):
+        self.git('reset', '-q', '--hard', self.base)
+        self.git('clean', '-q', '-fd')
+
+    @classmethod
+    def git(cls, *args):
+        return selector.git(cls.root, '-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid',
+                            '-c', 'commit.gpgsign=false', *args).decode().strip()
+
+    @classmethod
+    def commit(cls, files):
+        for path, text in files.items():
+            file = cls.root / path
+            if text is None:
+                file.unlink()
+            else:
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(text)
+        cls.git('add', '-A')
+        cls.git('commit', '-q', '--allow-empty', '-m', 'change')
+        return cls.git('rev-parse', 'HEAD')
+
+    def select(self, base, event='pull_request', ref=''):
+        self.output.unlink(missing_ok=True)
+        return subprocess.run(['python3', str(ROOT / 'ci/select-checks.py'), '--root', str(self.root), '--base', base,
+                               '--event', event, '--ref', ref, '--output', str(self.output)],
+                              capture_output=True, text=True)
+
+    def selection(self, base, **options):
+        result = self.select(base, **options)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(self.output.read_text())
+
+    def edited(self, path, old, new):
+        return {path: (self.root / path).read_text().replace(old, new)}
+
+    def test_refusals_publish_nothing(self):
+        for case in read('routing-cases.json')['refusals']:
+            with self.subTest(case['id']):
+                files = {change[1]: 'new\n' for change in case['changes'] if change[0] == 'A'}
+                if 'policy' in case:
+                    files[POLICY] = case['policy']
+                self.commit(files)
+                result = self.select(self.base, case['event'], case.get('ref', ''))
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(case['diagnostic'], result.stderr)
+                self.assertFalse(self.output.exists())
+                self.tearDown()
+
+    def test_unmapped_file_outside_the_diff_refuses(self):
+        base = self.commit({'ci/unmapped.py': 'new\n'})
+        for path in ('docs/ci.md', 'ci/select-checks.py'):
+            with self.subTest(path):
+                self.commit({path: (self.root / path).read_text() + '\n'})
+                result = self.select(base)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('ci/unmapped.py', result.stderr)
+                self.assertFalse(self.output.exists())
+
+    def test_selection_after_this_policy_is_accepted(self):
+        policy = (self.root / POLICY).read_text()
+        lock = (self.root / 'Cargo.lock').read_text()
+        pin = re.search(r'catallax\?rev=([0-9a-f]{40})', lock)[1]
+        source = f'source = "git+https://github.com/BohnBawerick/catallax?rev={"a" * 40}#{"a" * 40}"\n'
+        edge = source + 'dependencies = [\n'
+        bumped = lock.replace(pin, 'a' * 40)
+        self.assertIn(edge, bumped)
+        # A name no real lockfile holds, so a later pin bump cannot turn this into a duplicate table.
+        bumped = bumped.replace(edge, edge + ' "catallax-routing-fixture",\n', 1)
+        bumped += f'\n[[package]]\nname = "catallax-routing-fixture"\nversion = "0.1.0"\n{source}'
+        ownership = {'ci/ownership.toml': (self.root / 'ci/ownership.toml').read_text() + '\n'}
+        full = sorted(everything())
+        linux = sorted(selector.LINUX)
+        for name, files, options, expected in (
+                ('ownership', ownership, {}, ['lint']),
+                ('lock', {'Cargo.lock': bumped}, {}, linux),
+                ('map', {POLICY: policy.replace('"ci/cargo-cache.sh": []', '"ci/cargo-cache.sh": ["lint"]')}, {}, full),
+                ('selector', {'ci/select-checks.py': (self.root / 'ci/select-checks.py').read_text() + '\n'}, {}, full),
+                ('main', ownership, {'event': 'push', 'ref': 'refs/heads/main'}, linux),
+                ('release', ownership, {'event': 'push', 'ref': 'refs/heads/release/0.1.0'}, full)):
+            with self.subTest(name):
+                self.commit(files)
+                self.assertEqual(self.selection(self.base, **options)['selected'], expected)
+                self.tearDown()
+
+    def test_base_map_comes_from_the_base_commit(self):
+        policy = (self.root / POLICY).read_text()
+        helper = '"ci/cargo-cache.sh": [],\n    "ci/linux-helper.py": '
+        base = self.commit({'ci/linux-helper.py': 'one\n', POLICY: policy.replace(
+            '"ci/cargo-cache.sh": [],\n    ', helper + '["test-windows"],\n    ')})
+        self.commit({'ci/linux-helper.py': 'two\n', POLICY: policy.replace(
+            '"ci/cargo-cache.sh": [],\n    ', helper + '["application-loop"],\n    ')})
+        selection = self.selection(base)
+        self.assertEqual(set(selection['selected']), everything())
+        self.assertIn('base: CI consumers: ci/linux-helper.py', selection['reasons']['test-windows'])
+
+    def test_new_file_with_its_map_entry_runs_everything_once(self):
+        entry = self.edited(POLICY, '"ci/cargo-cache.sh": []', '"ci/cargo-cache.sh": [],\n    "ci/new.py": ["lint"]')
+        self.commit({'ci/new.py': 'new\n', **entry})
+        selection = self.selection(self.base)
+        self.assertEqual(set(selection['selected']), everything())
+        self.assertTrue(any('accepted map cannot judge' in reason for reason in selection['reasons']['test-windows']))
+
+    def test_first_map_needs_no_base_map(self):
+        current = {path: (self.root / path).read_text() for path in (POLICY, 'ci/select-checks.py')}
+        base = self.commit({POLICY: None, 'ci/select-checks.py': FROZEN_BASE.read_text()})
+        self.commit(current)
+        self.assertEqual(set(self.selection(base)['selected']), everything())
 
 
 class Gate(unittest.TestCase):
