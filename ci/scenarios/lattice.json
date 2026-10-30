@@ -73,7 +73,7 @@
         "cell": "cubic",
         "cell_size": 5,
         "radius": 1,
-        "accuracy": 0.5,
+        "accuracy": 0.1,
         "min_detail": 0.5
       },
       "label": "lattice",
@@ -105,7 +105,7 @@
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",
@@ -168,11 +168,11 @@
             },
             {
               "pointer": "/report/requested_accuracy_mm",
-              "equals": "1/2"
+              "equals": "1/10"
             },
             {
               "pointer": "/report/deviation_bound_mm",
-              "maximum": 0.5
+              "maximum": 0.1
             },
             {
               "pointer": "/report/closed",
@@ -198,8 +198,12 @@
             ],
             "cell": 5,
             "radius": 1,
-            "accuracy": "1/2",
-            "euler": -58
+            "accuracy": "1/10",
+            "euler": -58,
+            "caps": [
+              2000000,
+              1000000
+            ]
           }
         },
         {
@@ -276,7 +280,7 @@
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",
@@ -339,11 +343,11 @@
             },
             {
               "pointer": "/report/requested_accuracy_mm",
-              "equals": "1/2"
+              "equals": "1/10"
             },
             {
               "pointer": "/report/deviation_bound_mm",
-              "maximum": 0.5
+              "maximum": 0.1
             },
             {
               "pointer": "/report/closed",
@@ -369,8 +373,12 @@
             ],
             "cell": 5,
             "radius": 1,
-            "accuracy": "1/2",
-            "euler": -102
+            "accuracy": "1/10",
+            "euler": -102,
+            "caps": [
+              2000000,
+              1000000
+            ]
           }
         }
       ]
@@ -379,7 +387,7 @@
       "tool": "edit_lattice",
       "arguments": {
         "feature": "Lattice1",
-        "radius": 2.25
+        "radius": 1.5
       },
       "label": "density edit",
       "view": "unavailable",
@@ -406,11 +414,11 @@
         },
         {
           "pointer": "/summary/features/2/radius_mm",
-          "equals": 2.25
+          "equals": 1.5
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",
@@ -473,11 +481,11 @@
             },
             {
               "pointer": "/report/requested_accuracy_mm",
-              "equals": "1/2"
+              "equals": "1/10"
             },
             {
               "pointer": "/report/deviation_bound_mm",
-              "maximum": 0.5
+              "maximum": 0.1
             },
             {
               "pointer": "/report/closed",
@@ -502,9 +510,13 @@
               12.5
             ],
             "cell": 5,
-            "radius": 2.25,
-            "accuracy": "1/2",
-            "euler": -102
+            "radius": 1.5,
+            "accuracy": "1/10",
+            "euler": -102,
+            "caps": [
+              2000000,
+              1000000
+            ]
           }
         }
       ]
@@ -540,7 +552,7 @@
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",
@@ -583,11 +595,11 @@
         },
         {
           "pointer": "/summary/features/2/radius_mm",
-          "equals": 2.25
+          "equals": 1.5
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",
@@ -643,11 +655,11 @@
         },
         {
           "pointer": "/summary/features/2/radius_mm",
-          "equals": 2.25
+          "equals": 1.5
         },
         {
           "pointer": "/summary/features/2/accuracy_mm",
-          "equals": 0.5
+          "equals": 0.1
         },
         {
           "pointer": "/summary/features/2/min_detail_mm",

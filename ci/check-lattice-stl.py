@@ -140,6 +140,8 @@ def main():
     parser.add_argument("--radius", type=float, required=True)
     parser.add_argument("--accuracy", required=True, help="exact requested accuracy, such as 1/10")
     parser.add_argument("--euler", type=int, required=True)
+    parser.add_argument("--caps", nargs=2, type=int, metavar=("CELLS", "VERTICES"),
+                        help="the cell and vertex caps the header must record")
     args = parser.parse_args()
     lo, hi, a, r = args.box[:3], args.box[3:], args.cell, args.radius
 
@@ -151,6 +153,9 @@ def main():
     checks["closed and oppositely paired"] = closed
     checks["one component"] = components == 1
     checks["Euler characteristic"] = euler == args.euler
+    if args.caps:
+        checks["header records the caps"] = struct.unpack_from("<QQ", header, 28) == tuple(args.caps)
+        checks["vertices within the vertex cap"] = len(points) <= args.caps[1]
 
     mins = [min(p[i] for p in points) for i in range(3)]
     maxs = [max(p[i] for p in points) for i in range(3)]

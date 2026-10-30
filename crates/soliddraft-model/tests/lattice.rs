@@ -320,3 +320,114 @@ impl Kernel for RefusingKernel {
         })
     }
 }
+
+/// The real kernel builds the lattice; only its certified export refuses, as a part
+/// over the proof caps does. Tessellation is counted so a B-rep stand-in shows up.
+#[derive(Default)]
+struct ExportRefusingKernel {
+    real: CatallaxKernel,
+    field_exports: std::sync::atomic::AtomicUsize,
+    tessellations: std::sync::atomic::AtomicUsize,
+}
+
+impl ExportRefusingKernel {
+    fn count(counter: &std::sync::atomic::AtomicUsize) -> usize {
+        counter.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn bump(counter: &std::sync::atomic::AtomicUsize) {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Kernel for ExportRefusingKernel {
+    fn backend(&self) -> BackendInfo {
+        self.real.backend()
+    }
+    fn create_body_from_profile(&self, tag: &OpTag, profile: &Profile) -> KernelResult<OpResult> {
+        self.real.create_body_from_profile(tag, profile)
+    }
+    fn extrude(&self, tag: &OpTag, profile: BodyId, params: &Extrude) -> KernelResult<OpResult> {
+        self.real.extrude(tag, profile, params)
+    }
+    fn revolve(&self, tag: &OpTag, profile: BodyId, params: &Revolve) -> KernelResult<OpResult> {
+        self.real.revolve(tag, profile, params)
+    }
+    fn boolean(&self, tag: &OpTag, op: BooleanOp, target: BodyId, tool: BodyId) -> KernelResult<OpResult> {
+        self.real.boolean(tag, op, target, tool)
+    }
+    fn fillet(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], radius: f64) -> KernelResult<OpResult> {
+        self.real.fillet(tag, body, edges, radius)
+    }
+    fn chamfer(&self, tag: &OpTag, body: BodyId, edges: &[EdgeId], distance: f64) -> KernelResult<OpResult> {
+        self.real.chamfer(tag, body, edges, distance)
+    }
+    fn shell(&self, tag: &OpTag, body: BodyId, open_faces: &[FaceId], thickness: f64) -> KernelResult<OpResult> {
+        self.real.shell(tag, body, open_faces, thickness)
+    }
+    fn lattice(&self, tag: &OpTag, body: BodyId, params: &Lattice) -> KernelResult<OpResult> {
+        self.real.lattice(tag, body, params)
+    }
+    fn export_field_stl(&self, _: BodyId) -> KernelResult<FieldExport> {
+        Self::bump(&self.field_exports);
+        Err(KernelError::QueryFailed {
+            query: "export_field_stl".into(),
+            code: 0,
+            message: "field.print-budget: designed refusal".into(),
+        })
+    }
+    fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        Self::bump(&self.tessellations);
+        self.real.tessellate(body, params)
+    }
+    fn tessellate_levels(&self, body: BodyId, levels: &[TessellationParams]) -> KernelResult<Vec<Mesh>> {
+        Self::bump(&self.tessellations);
+        self.real.tessellate_levels(body, levels)
+    }
+    fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
+        self.real.tessellate_edges(body, params)
+    }
+    fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.real.preview(body, params)
+    }
+    fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
+        self.real.mass_properties(body)
+    }
+    fn validate(&self, body: BodyId) -> KernelResult<Validation> {
+        self.real.validate(body)
+    }
+    fn topology(&self, body: BodyId) -> KernelResult<Topology> {
+        self.real.topology(body)
+    }
+    fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
+        self.real.history(body)
+    }
+    fn release(&self, body: BodyId) -> KernelResult<()> {
+        self.real.release(body)
+    }
+}
+
+#[test]
+fn a_refused_field_export_returns_the_refusal_and_never_falls_back() {
+    let kernel = Arc::new(ExportRefusingKernel::default());
+    let mut d = Document::new("over the caps", kernel.clone());
+    let s = add(&mut d, rectangle(20.0));
+    add(&mut d, boss(s, 5.0));
+    let l = add(&mut d, FeatureKind::Lattice(LatticeFeature::default()));
+    assert!(status(&d, l).is_ok());
+    let before = d.feature(l).unwrap().kind.clone();
+    let FeatureKind::Lattice(settings) = &before else { panic!("lattice") };
+    assert_eq!(settings.accuracy_mm, 0.1);
+    let undo = d.undo_label().map(str::to_owned);
+    let tessellations = ExportRefusingKernel::count(&kernel.tessellations);
+    let error = d.export(soliddraft_exchange::Format::Stl).unwrap_err();
+    assert!(error.contains("field.print-budget"), "{error}");
+    assert_eq!(ExportRefusingKernel::count(&kernel.field_exports), 1, "one certified attempt, no retry");
+    assert_eq!(
+        ExportRefusingKernel::count(&kernel.tessellations),
+        tessellations,
+        "no B-rep mesh stands in for the field"
+    );
+    assert_eq!(d.feature(l).unwrap().kind, before, "the accuracy is not relaxed");
+    assert!(status(&d, l).is_ok());
+    assert_eq!(d.undo_label(), undo.as_deref());
+}
