@@ -202,7 +202,7 @@
       "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
       "route": "MCP measure, measure_entity and track with two sources -> persistent edge, face and midpoint references -> Catallax pair and midpoint proofs",
       "supported_limits": "One part frame; straight-edge midpoint; finite straight-edge minimum distance; midpoint point distance; parallel planar trimmed-face minimum distance; exact 0 and 90 deg straight-edge angles; curved, mixed, nonparallel and oblique pairs refused by name",
-      "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,viewport.png}; 38-step T1-T13 pair/stale/reopen scenario; measure-pairs-current.dwprt and measure-pairs-stale.dwprt"
+      "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,viewport.png}; 38-step T1-T13 pair/stale/reopen scenario; measure-pairs-current.dwprt and measure-pairs-stale.dwprt; measure_pairs, measure_panel and measure_guides tests"
     },
     {
       "id": "mirror",
