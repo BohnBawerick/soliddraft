@@ -1,6 +1,7 @@
 {
   "format": "soliddraft-scenario/1",
   "name": "collar",
+  "max_work": 20000000,
   "steps": [
     {
       "tool": "sketch",
@@ -109,6 +110,144 @@
           "tolerance": 0.005
         }
       ]
+    },
+    {
+      "tool": "edit_chamfer",
+      "arguments": {
+        "feature": "Chamfer1",
+        "distance": 1
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3998.20025046861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Revolve1 · Side of line 3",
+        "points": [
+          [
+            9,
+            12,
+            0
+          ]
+        ],
+        "diameter": 2
+      },
+      "label": "collar plain hole",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3960.501138625533,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "edit_hole",
+      "arguments": {
+        "feature": "Hole1",
+        "diameter": 2.5
+      },
+      "label": "collar plain hole edit",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3939.295388213802,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Hole1 · Hole 1 wall"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/collar-hole.dwprt"
+      },
+      "files": [
+        "{bundle}/collar-hole.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/collar-hole.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3939.295388213802,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 9,
+      "checked_step_export": "{bundle}/collar-hole.dwprt"
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Hole1 · Hole 1 wall"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        }
+      ]
+    },
+    {
+      "tool": "hole",
+      "arguments": {
+        "face": "Revolve1 · Side of line 3",
+        "points": [
+          [
+            -10.5,
+            12,
+            0
+          ]
+        ],
+        "diameter": 2
+      },
+      "refusal": "intersect.traced-pair-required",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3939.295388213802,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 12
     }
   ]
 }
