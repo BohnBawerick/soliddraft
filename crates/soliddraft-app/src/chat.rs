@@ -86,7 +86,7 @@ pub struct ChatState {
     waker: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
-/// The assistant settings dialog (Assistant tab, Provider): the provider, the models and
+/// The assistant settings dialog (Tools, Assistant, Provider): the provider, the models and
 /// the API keys. The provider and models are saved on Save and reconnect; a key goes to the
 /// OS keychain as soon as it is saved.
 pub struct ProviderDialog {

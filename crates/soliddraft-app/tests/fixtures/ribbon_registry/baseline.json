@@ -38,6 +38,7 @@
     "edit_draft",
     "edit_extrude",
     "edit_fillet",
+    "edit_gyroid",
     "edit_hole",
     "edit_lattice",
     "edit_mirror",
@@ -51,6 +52,7 @@
     "extrude",
     "feature",
     "fillet",
+    "gyroid",
     "hole",
     "lattice",
     "linear_pattern",
@@ -3437,6 +3439,57 @@
       "undo": "step",
       "workspace": "Part"
     },
+    "edit_gyroid": {
+      "agents": "verb",
+      "availability": {
+        "assembly": {
+          "enabled": false,
+          "offered": false
+        },
+        "blank": {
+          "enabled": false,
+          "offered": false
+        },
+        "plate": {
+          "enabled": false,
+          "offered": false
+        },
+        "sketch": {
+          "enabled": false,
+          "offered": false
+        }
+      },
+      "keys": [],
+      "tool": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "accuracy": {
+              "type": "number"
+            },
+            "feature": {
+              "type": "string"
+            },
+            "level": {
+              "type": "number"
+            },
+            "min_detail": {
+              "type": "number"
+            },
+            "period": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "feature"
+          ],
+          "type": "object"
+        },
+        "name": "edit_gyroid"
+      },
+      "undo": "step",
+      "workspace": "Part"
+    },
     "edit_hole": {
       "agents": "verb",
       "availability": {
@@ -4131,6 +4184,62 @@
       "keys": [],
       "tool": null,
       "undo": "none",
+      "workspace": "Part"
+    },
+    "gyroid": {
+      "agents": "verb",
+      "availability": {
+        "assembly": {
+          "enabled": false,
+          "offered": false
+        },
+        "blank": {
+          "enabled": false,
+          "offered": true
+        },
+        "plate": {
+          "enabled": true,
+          "offered": true
+        },
+        "sketch": {
+          "enabled": false,
+          "offered": true
+        }
+      },
+      "keys": [],
+      "tool": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "accuracy": {
+              "type": "number"
+            },
+            "kind": {
+              "const": "network",
+              "type": "string"
+            },
+            "level": {
+              "type": "number"
+            },
+            "min_detail": {
+              "type": "number"
+            },
+            "period": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "period",
+            "level",
+            "accuracy",
+            "min_detail"
+          ],
+          "type": "object"
+        },
+        "name": "gyroid"
+      },
+      "undo": "step",
       "workspace": "Part"
     },
     "hole": {
@@ -5846,6 +5955,69 @@
                         "type": "string"
                       },
                       "radius": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "feature"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "accuracy": {
+                        "type": "number"
+                      },
+                      "kind": {
+                        "const": "network",
+                        "type": "string"
+                      },
+                      "level": {
+                        "type": "number"
+                      },
+                      "min_detail": {
+                        "type": "number"
+                      },
+                      "op": {
+                        "const": "gyroid",
+                        "type": "string"
+                      },
+                      "period": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "kind",
+                      "period",
+                      "level",
+                      "accuracy",
+                      "min_detail"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "accuracy": {
+                        "type": "number"
+                      },
+                      "feature": {
+                        "type": "string"
+                      },
+                      "level": {
+                        "type": "number"
+                      },
+                      "min_detail": {
+                        "type": "number"
+                      },
+                      "op": {
+                        "const": "edit_gyroid",
+                        "type": "string"
+                      },
+                      "period": {
                         "type": "number"
                       }
                     },
@@ -8639,6 +8811,7 @@
     "edit_draft",
     "edit_extrude",
     "edit_fillet",
+    "edit_gyroid",
     "edit_hole",
     "edit_lattice",
     "edit_mirror",
@@ -8647,6 +8820,7 @@
     "edit_shell",
     "extrude",
     "fillet",
+    "gyroid",
     "hole",
     "lattice",
     "linear_pattern",

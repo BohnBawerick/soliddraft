@@ -78,7 +78,7 @@ fn every_ribbon_button_is_a_registry_command() {
         return;
     }
     let mut harness = harness();
-    for tab in RibbonTab::ALL {
+    for tab in RibbonTab::ALL.into_iter().filter(|t| t.planned().is_none()) {
         harness.state_mut().state.ribbon_tab = tab;
         harness.run_steps(2);
         let panels = commands::ribbon(tab);
@@ -95,7 +95,7 @@ fn every_ribbon_button_is_a_registry_command() {
         }
     }
     // A click runs the command and remembers it as recent.
-    harness.state_mut().state.ribbon_tab = RibbonTab::Features;
+    harness.state_mut().state.ribbon_tab = RibbonTab::Solid;
     harness.run_steps(2);
     harness.get_by_label("Extrude").click();
     harness.run_steps(3);
@@ -223,7 +223,7 @@ fn mass_properties_button_calculates_on_request_without_measuring_selection() {
     let id = harness.state().state.doc.features[0].id;
     let body = harness.state().state.doc.display_body().unwrap();
     harness.state_mut().state.doc.selection = Some(Selection::Feature(id));
-    harness.state_mut().state.ribbon_tab = RibbonTab::Evaluate;
+    harness.state_mut().state.ribbon_tab = RibbonTab::Inspect;
     harness.run_steps(4);
     assert!(harness.state().state.doc.kernel().cached_mass_properties(body).is_none());
     harness.render().unwrap().save(dir.join("before-request.png")).unwrap();

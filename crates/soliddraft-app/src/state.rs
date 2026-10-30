@@ -150,24 +150,58 @@ pub enum DragStep {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RibbonTab {
-    Features,
+    Solid,
     Sketch,
-    Evaluate,
+    Assembly,
+    Inspect,
     View,
-    Assistant,
+    Surface,
+    PointCloud,
 }
 
 impl RibbonTab {
-    pub const ALL: [RibbonTab; 5] =
-        [RibbonTab::Features, RibbonTab::Sketch, RibbonTab::Evaluate, RibbonTab::View, RibbonTab::Assistant];
+    pub const ALL: [RibbonTab; 7] = [
+        RibbonTab::Solid,
+        RibbonTab::Sketch,
+        RibbonTab::Assembly,
+        RibbonTab::Inspect,
+        RibbonTab::View,
+        RibbonTab::Surface,
+        RibbonTab::PointCloud,
+    ];
 
     pub fn label(&self) -> &'static str {
         match self {
-            RibbonTab::Features => "Features",
+            RibbonTab::Solid => "Solid",
             RibbonTab::Sketch => "Sketch",
-            RibbonTab::Evaluate => "Evaluate",
+            RibbonTab::Assembly => "Assembly",
+            RibbonTab::Inspect => "Inspect",
             RibbonTab::View => "View",
-            RibbonTab::Assistant => "Assistant",
+            RibbonTab::Surface => "Surface",
+            RibbonTab::PointCloud => "Point cloud",
+        }
+    }
+
+    /// The tab's name in code and tests, which stays when its label changes.
+    pub fn id(&self) -> &'static str {
+        match self {
+            RibbonTab::Solid => "solid",
+            RibbonTab::Sketch => "sketch",
+            RibbonTab::Assembly => "assembly",
+            RibbonTab::Inspect => "inspect",
+            RibbonTab::View => "view",
+            RibbonTab::Surface => "surface",
+            RibbonTab::PointCloud => "point_cloud",
+        }
+    }
+
+    /// Why the tab cannot open yet. A planned tab stays on the strip, disabled, so the
+    /// strip is honest about where the app is going.
+    pub fn planned(&self) -> Option<&'static str> {
+        match self {
+            RibbonTab::Surface => Some("Planned: surface modelling has no commands yet"),
+            RibbonTab::PointCloud => Some("Planned: point clouds cannot be imported yet"),
+            _ => None,
         }
     }
 }
@@ -526,7 +560,7 @@ impl AppState {
             viewport: ViewportState::default(),
             editor: None,
             sketch: None,
-            ribbon_tab: RibbonTab::Features,
+            ribbon_tab: RibbonTab::Solid,
             chat: ChatState::offline("The assistant is not connected.".into()),
             note: None,
             expanded: HashSet::new(),

@@ -38,7 +38,7 @@ Sketch points are world coordinates on the sketch plane, so the model never conv
 
 Apply runs the same commands as the ribbon, as one step on the document's undo stack (`soliddraft_model::Document::group_undo` joins the lines' steps into one `Batch` entry, since a later line reads features an earlier line made), and writes a command-log entry with the proposal, the user's prompt and the model id. Features it makes carry the assistant mark in the tree. If any line fails, the part goes back to how it was and nothing is left on the undo stack. The card's Undo button undoes the proposal while its step is the last one; the Edit menu's Undo works as for any other change, and the card then reads as undone.
 
-The assistant can only propose. Its `apply` tool fails unless the user turned on Auto-apply (Assistant tab, Settings) for the session.
+The assistant can only propose. Its `apply` tool fails unless the user turned on Auto-apply (Tools, Assistant) for the session.
 
 ## Tools
 
@@ -49,7 +49,7 @@ The assistant gets `model_summary`, `feature`, `selection`, `measure`, `mass_pro
 `mass_properties` calculates a named feature's volume, area and centre of mass only on
 request. Normal editing, proposal previews, selection descriptions and `model_summary`
 read only previously requested results. Unmeasured summary and proposal quantities are
-JSON `null`, not zero; the property panel omits those rows until Evaluate › Mass props
+JSON `null`, not zero; the property panel omits those rows until Inspect › Mass props
 is requested. New bodies start unmeasured, while undo can reuse an earlier body's result.
 
 An MCP client gets the same tools, plus each verb as a direct tool, and `rollback`, `undo`, `redo`, `rename`, `rename_plane`, `edit_dimension`, `save` and `open`. Modelling verbs run as one-line proposals, one undo step. Explicit MCP `suppress` and `delete_feature` commands follow the ribbon directly, so a missing downstream reference raises the repair prompt instead of rejecting the edit on a scratch copy. Assistant proposals still reject edits that break previously built features. `rename_plane` changes a datum's display label; `sketch` accepts its current label or its stable `top`, `front` or `right` identity. `edit_dimension` changes a sketch dimension by its number in `feature`. `save` writes the part to a `.dwprt` path without backups or a recent-file entry, and `open` replaces the session's part with a part file, or opens a drawing file with its part.
@@ -85,7 +85,7 @@ OpenRouter is reached through its Anthropic-compatible endpoint, `POST https://o
 - `thinking: {type: "adaptive", display: "omitted"}`, since OpenRouter asks for summarized thinking unless told otherwise and the app shows none.
 - `provider: {order: ["anthropic"]}`, so requests go to Anthropic's own endpoint first, as OpenRouter advises for Claude clients. No server-side `fallbacks` or beta header: OpenRouter's `fallbacks` field means something else.
 
-Which provider: `SOLIDDRAFT_PROVIDER` (`openrouter` or `anthropic`) first, then the Provider setting (Assistant tab, Settings group), then whichever provider has a key, Anthropic if both do. A provider chosen by name does not fall back to the other one; the assistant session says its key is missing. Which model: `SOLIDDRAFT_MODEL`, then the model set for that provider, then its default: `claude-opus-5-5` on Anthropic and `anthropic/claude-opus-5.5` on OpenRouter, the same model as on Anthropic. A model saved in the settings stays as saved. The assistant settings dialog saves both settings to `settings.json` in the config directory (`~/.config/soliddraft` on Linux) and reconnects; the new conversation starts fresh, and the messages, proposals and MCP endpoint stay.
+Which provider: `SOLIDDRAFT_PROVIDER` (`openrouter` or `anthropic`) first, then the Provider setting (Tools, Assistant, Provider), then whichever provider has a key, Anthropic if both do. A provider chosen by name does not fall back to the other one; the assistant session says its key is missing. Which model: `SOLIDDRAFT_MODEL`, then the model set for that provider, then its default: `claude-opus-5-5` on Anthropic and `anthropic/claude-opus-5.5` on OpenRouter, the same model as on Anthropic. A model saved in the settings stays as saved. The assistant settings dialog saves both settings to `settings.json` in the config directory (`~/.config/soliddraft` on Linux) and reconnects; the new conversation starts fresh, and the messages, proposals and MCP endpoint stay.
 
 ## API keys
 
@@ -103,7 +103,7 @@ The other `DRAFTWELL_*` runtime variables remain aliases for the matching
 If a provider has no `soliddraft` keychain entry, the app reads its old `draftwell`
 entry. Saving a key writes only `soliddraft`; deleting it removes both entries.
 
-An app started without environment variables, as a packaged release will be, takes its keys in the app: Provider on the Assistant tab opens the assistant settings, with one key row per provider beside the provider picker. Saving a key stores it in the OS keychain at once; the row then shows only its last four characters, with Replace and Delete. A key from the environment shows the same way and says it overrides the keychain. Save and reconnect starts using the change.
+An app started without environment variables, as a packaged release will be, takes its keys in the app: Tools, Assistant, Provider opens the assistant settings, with one key row per provider beside the provider picker. Saving a key stores it in the OS keychain at once; the row then shows only its last four characters, with Replace and Delete. A key from the environment shows the same way and says it overrides the keychain. Save and reconnect starts using the change.
 
 From the command line:
 

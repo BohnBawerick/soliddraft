@@ -141,7 +141,7 @@ fn revolve_ribbon_opens_and_commits_the_real_editor() {
         assert!(!result.is_error, "{variant} STEP: {}", result.content);
         assert!(std::fs::metadata(&path).unwrap().len() > 0);
     }
-    harness.get_by_label("Make drawing").click();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::D);
     harness.run_steps(4);
     harness.get_by_label("Create drawing (Enter)").click();
     harness.run_steps(4);

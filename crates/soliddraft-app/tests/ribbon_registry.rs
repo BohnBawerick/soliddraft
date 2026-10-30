@@ -142,7 +142,7 @@ fn the_ribbon_moves_commands_and_changes_nothing_else_about_them() {
             ("Sketch", &["sketch"]),
             ("Create", &["extrude", "revolve", "sweep", "loft"]),
             ("Remove", &["cut", "hole", "slot"]),
-            ("Modify", &["fillet", "chamfer", "shell", "draft", "lattice"]),
+            ("Modify", &["fillet", "chamfer", "shell", "draft", "lattice", "gyroid"]),
             ("Pattern", &["linear_pattern", "circular_pattern", "mirror"]),
             ("Reference", &["reference_plane", "reference_axis", "reference_point"]),
         ],

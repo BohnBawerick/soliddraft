@@ -1,6 +1,6 @@
 # Measure and track
 
-Open Evaluate > Measure and pick an edge or face. The panel shows the kernel's proven length in mm or area in mm2 and labels it exact or bounded. A bounded result carries an enclosure. The MCP `measure_entity` tool returns its outward-rounded endpoints, part frame and geometry hash.
+Open Inspect > Measure and pick an edge or face. The panel shows the kernel's proven length in mm or area in mm2 and labels it exact or bounded. A bounded result carries an enclosure. The MCP `measure_entity` tool returns its outward-rounded endpoints, part frame and geometry hash.
 
 Enter a value name, or leave it blank for an automatic name, then press Track this. An optional check takes `<`, `<=`, `>` or `>=` and one limit. Bare limits use the measured unit. Length limits also accept the value model's length units. A check passes or fails only when the whole enclosure proves that answer. Otherwise it is unknown.
 

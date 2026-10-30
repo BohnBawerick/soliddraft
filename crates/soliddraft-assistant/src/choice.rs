@@ -99,8 +99,8 @@ impl fmt::Display for NoProvider {
                 let other = ProviderKind::ALL.into_iter().find(|k| k != kind).unwrap_or(*kind);
                 write!(
                     f,
-                    "The assistant is set to {kind}, which has no API key. Add one under Provider on the Assistant \
-                     tab, or choose {other} there. Or set {}, or run `soliddraft key set {}`, and restart.",
+                    "The assistant is set to {kind}, which has no API key. Add one under Tools, Assistant, \
+                     Provider, or choose {other} there. Or set {}, or run `soliddraft key set {}`, and restart.",
                     kind.key_var(),
                     kind.id(),
                 )

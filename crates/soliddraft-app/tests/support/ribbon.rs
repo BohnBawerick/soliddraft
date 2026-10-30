@@ -193,7 +193,8 @@ pub fn control(app: &App, label: &str, within: Rect) -> Control {
         .filter(|n| within.intersects(n.rect()))
         .map(|n| {
             let node = n.accesskit_node();
-            Control { rect: n.rect(), enabled: !node.is_disabled(), selected: node.is_selected() == Some(true) }
+            let selected = node.toggled() == Some(egui::accesskit::Toggled::True);
+            Control { rect: n.rect(), enabled: !node.is_disabled(), selected }
         })
         .collect();
     assert_eq!(found.len(), 1, "one button {label} in {within:?}: {found:?}");
@@ -236,11 +237,11 @@ pub fn click_ribbon(app: &mut App, label: &str) {
 pub fn tooltip(app: &mut App, rect: Rect) -> String {
     let before: Vec<String> = painted(app).into_iter().map(|p| p.text).collect();
     app.hover_at(rect.center());
-    app.run_steps(60);
+    app.run_steps(36);
     let said: Vec<String> = painted(app).into_iter().map(|p| p.text).filter(|t| !before.contains(t)).collect();
     let rest = window(app).center();
     app.hover_at(rest);
-    app.run_steps(6);
+    app.run_steps(2);
     said.join("\n")
 }
 

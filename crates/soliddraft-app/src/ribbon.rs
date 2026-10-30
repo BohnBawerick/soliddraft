@@ -63,11 +63,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         let w = galley.size().x + 24.0;
         let r = Rect::from_min_size(pos2(x, strip.top() + 4.0), vec2(w, strip.height() - 4.0));
         x += w + 2.0;
-        let resp = ui.interact(r, ui.id().with(("ribbon_tab", tab.label())), Sense::click());
+        let planned = tab.planned();
+        let sense = if planned.is_some() { Sense::hover() } else { Sense::click() };
+        let resp = ui.interact(r, ui.id().with(("ribbon_tab", tab.label())), sense);
         resp.widget_info(|| {
             egui::WidgetInfo::selected(
                 egui::WidgetType::Button,
-                true,
+                planned.is_none(),
                 state.ribbon_tab == tab,
                 format!("{} tab", tab.label()),
             )
@@ -82,16 +84,24 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 StrokeKind::Inside,
             );
             ui.painter().hline(r.x_range().shrink(1.0), r.bottom() - 0.5, Stroke::new(1.5, theme::panel()));
-        } else if resp.hovered() {
+        } else if planned.is_none() && resp.hovered() {
             ui.painter().rect_filled(
                 r,
                 CornerRadius { nw: theme::RADIUS, ne: theme::RADIUS, sw: 0, se: 0 },
                 theme::hover(),
             );
         }
-        let color = if on { theme::ink() } else { theme::muted() };
+        let color = if planned.is_some() {
+            theme::muted().gamma_multiply(0.55)
+        } else if on {
+            theme::ink()
+        } else {
+            theme::muted()
+        };
         ui.painter().galley(r.center() - galley.size() / 2.0, galley, color);
-        if resp.clicked() {
+        if let Some(why) = planned {
+            resp.on_hover_text(why);
+        } else if resp.clicked() {
             state.ribbon_tab = tab;
         }
     }
@@ -107,10 +117,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         x += w + 2.0;
     }
 
-    body(ui, state, commands::Tab::Part(state.ribbon_tab));
+    body(ui, state, state.ribbon_tab.into());
 }
 
-/// The assembly's ribbon: its one tab, in the part ribbon's grammar.
+/// The ribbon while an assembly is the active document: its one tab, in the part
+/// ribbon's grammar.
 fn show_assembly(ui: &mut egui::Ui, state: &mut AppState) {
     let (strip, _) = ui.allocate_exact_size(vec2(ui.available_width(), theme::RIBBON_TABS_HEIGHT), Sense::hover());
     ui.painter().rect_filled(strip, CornerRadius::ZERO, theme::panel());

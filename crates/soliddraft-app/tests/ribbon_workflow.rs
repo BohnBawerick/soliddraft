@@ -104,7 +104,7 @@ fn placeholders_change_nothing(app: &mut App) {
         ribbon::click_at(app, tab.rect.center());
         let rest = ribbon::window(app).center();
         app.hover_at(rest);
-        settle(app);
+        app.run_steps(6);
         assert_eq!(ribbon::fingerprint(app), before, "clicking {name} changes nothing");
         assert_eq!(selected_tabs(app), ["Solid"], "clicking {name} leaves Solid open");
         assert_eq!(ribbon::caption_names(app), captions, "clicking {name} leaves the ribbon as it was");
@@ -117,7 +117,7 @@ fn mesh_volume(doc: &Document) -> f64 {
     let body = doc.display_body().expect("a body to measure");
     let mesh = &doc.meshes[&body];
     let point = |i: u32| mesh.positions[i as usize].as_dvec3();
-    mesh.indices.chunks_exact(3).map(|t| point(t[0]).dot(point(t[1]).cross(point(t[2]))) / 6.0).sum()
+    mesh.indices.as_chunks::<3>().0.iter().map(|t| point(t[0]).dot(point(t[1]).cross(point(t[2]))) / 6.0).sum()
 }
 
 fn plate_is_whole(doc: &Document) {
@@ -153,6 +153,7 @@ fn solid_groups_and_placeholder_tabs_are_visible_and_honest() {
             assert!(app.query_by_label(gone).is_none(), "{gone} is gone");
         }
         assert_eq!(selected_tabs(app), ["Solid"]);
+        case.frame(app, "solid-blank");
         ribbon::groups_in_order(app, &SOLID);
         let captions = ribbon::caption_names(app);
         for old in ["Boss", "Cut", "Finish", "Edit", "Drawing", "Assistant"] {
@@ -216,7 +217,7 @@ fn solid_groups_and_placeholder_tabs_are_visible_and_honest() {
             let said = ribbon::tooltip(app, button.rect);
             assert!(said.contains(says), "{label} says {says}: {said:?}");
             ribbon::click_at(app, button.rect.center());
-            settle(app);
+            app.run_steps(6);
             assert_eq!(ribbon::fingerprint(app), before, "clicking {label} changes nothing");
         }
     });
@@ -239,6 +240,7 @@ fn a_sketch_extrudes_through_the_new_categories_and_undoes() {
         settle(app);
         assert!(app.state().state.sketch.is_some(), "the double click opens the sketch");
         assert_eq!(selected_tabs(app), ["Sketch"]);
+        case.frame(app, "sketch-session");
         ribbon::groups_in_order(app, &SKETCH);
         ribbon::click_ribbon(app, "Rectangle");
         assert_eq!(app.state().state.sketch.as_ref().map(|s| s.tool), Some(Tool::Rectangle));
@@ -317,6 +319,7 @@ fn a_sketch_extrudes_through_the_new_categories_and_undoes() {
         settle(app);
         assert_eq!(app.state().state.doc.selection, Some(Selection::Feature(extrude)));
         ribbon::click_tab(app, "Inspect");
+        case.frame(app, "inspect");
         let body = app.state().state.doc.display_body().unwrap();
         assert!(app.state().state.doc.kernel().cached_mass_properties(body).is_none(), "nothing has measured it yet");
         ribbon::click_ribbon(app, "Mass props");
@@ -346,6 +349,7 @@ fn assembly_is_discoverable_without_applying_part_commands_to_it() {
         assert_eq!(ribbon::fingerprint(app), start, "the entry changes nothing");
         assert_eq!(selected_tabs(app), ["Assembly"]);
         assert!(app.state().state.assembly.session.is_none(), "no assembly appears by itself");
+        case.frame(app, "assembly-on-part");
         assert!(ribbon::caption_names(app).iter().any(|c| c == "Component"));
         let insert = ribbon::ribbon_button(app, "Insert component");
         assert!(!insert.enabled, "Insert component needs an assembly");
@@ -375,7 +379,11 @@ fn assembly_is_discoverable_without_applying_part_commands_to_it() {
         ribbon::click_tab(app, "Solid");
         settle(app);
         assert_eq!(selected_tabs(app), ["Solid"]);
-        assert_eq!(ribbon::fingerprint(app).without_history(), start.clone().without_history(), "the part is untouched");
+        assert_eq!(
+            ribbon::fingerprint(app).without_history(),
+            start.clone().without_history(),
+            "the part is untouched"
+        );
         for (label, _) in NEEDS_A_BODY {
             assert!(!ribbon::ribbon_button(app, label).enabled, "{label} is off without a body");
         }

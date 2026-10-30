@@ -45,7 +45,7 @@ impl SolidDraftApp {
             let _ = self.state.doc.rebuild();
         }
         self.state.editor = Some(FeatureEditor::new(target, params, saved));
-        self.state.ribbon_tab = crate::state::RibbonTab::Features;
+        self.state.ribbon_tab = crate::state::RibbonTab::Solid;
     }
 
     pub(super) fn open_sketch(&mut self, id: crate::document::FeatureId) {
@@ -203,7 +203,7 @@ impl SolidDraftApp {
             AppAction::ExitSketch(into) => {
                 let Some(session) = self.state.sketch.take() else { return };
                 self.state.viewport.camera.orthographic = session.was_orthographic;
-                self.state.ribbon_tab = crate::state::RibbonTab::Features;
+                self.state.ribbon_tab = crate::state::RibbonTab::Solid;
                 let id = session.feature;
                 let empty = self.state.doc.feature(id).and_then(|f| f.sketch()).is_some_and(|s| s.sketch.is_empty());
                 if empty && into.is_none() && self.state.doc.consumer_of(id).is_none() {
@@ -911,7 +911,7 @@ impl SolidDraftApp {
             None => {
                 // The sketch is gone (undone past its creation).
                 self.state.sketch = None;
-                self.state.ribbon_tab = crate::state::RibbonTab::Features;
+                self.state.ribbon_tab = crate::state::RibbonTab::Solid;
             }
         }
     }
