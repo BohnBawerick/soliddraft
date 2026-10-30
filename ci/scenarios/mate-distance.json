@@ -1,0 +1,4234 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "mate-distance",
+  "folders": [
+    "work"
+  ],
+  "max_work": 20000000,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      },
+      "label": "profile for A"
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "files": [
+        "{bundle}/work/a.dwprt"
+      ],
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/revision",
+          "contains": "blake3:"
+        }
+      ]
+    },
+    {
+      "tool": "make_assembly",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/document",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_save",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "files": [
+        "{bundle}/work/rig.dwasm"
+      ],
+      "inspect": {
+        "rig": [
+          "doc",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/rig/references/0/path",
+          "equals": "a.dwprt"
+        },
+        {
+          "pointer": "/inspect/rig/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "new_part",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 20,
+            "height": 10
+          }
+        ]
+      },
+      "label": "profile for B"
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 6,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 6,
+          "tolerance": 1e-09
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/b.dwprt"
+      },
+      "files": [
+        "{bundle}/work/b.dwprt"
+      ],
+      "inspect": {
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/b/id",
+          "differs_from": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "show_assembly",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "tool": "insert_component",
+      "arguments": {
+        "paths": [
+          "{bundle}/work/b.dwprt"
+        ],
+        "placement": {
+          "translation": [
+            10,
+            10,
+            30
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/1/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/1/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/1/pinned",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "underconstrained"
+        },
+        {
+          "pointer": "/summary/assembly/mates",
+          "equals": []
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            30
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "assembly_measure_planes",
+      "arguments": {
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "end_cap"
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "start_cap"
+        }
+      },
+      "label": "read-only plane proof",
+      "checks": [
+        {
+          "pointer": "/result/measurement/value",
+          "equals": 20
+        },
+        {
+          "pointer": "/result/measurement/lo",
+          "equals": 20
+        },
+        {
+          "pointer": "/result/measurement/hi",
+          "equals": 20
+        },
+        {
+          "pointer": "/result/measurement/rational",
+          "equals": "20"
+        },
+        {
+          "pointer": "/result/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/result/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/result/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/result/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/result/measurement/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/result/measurement/a/geometry",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/result/measurement/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/result/measurement/b/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 11
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_origin",
+      "arguments": {
+        "name": "O",
+        "component": 2,
+        "align_axes": true
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/floating",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/kind",
+          "equals": "origin"
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/align_axes",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Origin mate"
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_distance",
+      "arguments": {
+        "name": "Z",
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "end_cap"
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "start_cap"
+        },
+        "distance": "5 mm",
+        "alignment": "opposed",
+        "require_fully_constrained": true
+      },
+      "label": "strict proposal leaves freedom",
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "under_constrained",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "under_constrained"
+        },
+        {
+          "pointer": "/result/remaining_dof",
+          "equals": 3
+        },
+        {
+          "pointer": "/result/free",
+          "equals": [
+            {
+              "component": 4,
+              "motion": "translate_x"
+            },
+            {
+              "component": 4,
+              "motion": "translate_y"
+            },
+            {
+              "component": 4,
+              "motion": "spin_z"
+            }
+          ]
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "translation along X"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "spin about Z"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 13
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_distance",
+      "arguments": {
+        "name": "X",
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "side",
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "side",
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "distance": "0 mm",
+        "alignment": "aligned",
+        "require_fully_constrained": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 3
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "underconstrained"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            30
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_distance",
+      "arguments": {
+        "name": "Y",
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "side",
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "side",
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        },
+        "distance": "0 mm",
+        "alignment": "aligned",
+        "require_fully_constrained": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/assembly/solver/free",
+          "equals": [
+            {
+              "component": 4,
+              "motion": "translate_z"
+            }
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            30
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_distance",
+      "arguments": {
+        "name": "Z",
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "end_cap"
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "start_cap"
+        },
+        "distance": "5 mm",
+        "alignment": "opposed",
+        "require_fully_constrained": true
+      },
+      "label": "literal mate",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            15
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 21,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "5"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Distance mate"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo/depth",
+          "minimum": 1
+        }
+      ]
+    },
+    {
+      "tool": "assembly_mate_distance",
+      "arguments": {
+        "name": "Conflict",
+        "a": {
+          "component": 2,
+          "feature": "Boss-Extrude1",
+          "generator": "end_cap"
+        },
+        "b": {
+          "component": 4,
+          "feature": "Boss-Extrude1",
+          "generator": "start_cap"
+        },
+        "distance": "6 mm",
+        "alignment": "opposed",
+        "require_fully_constrained": false
+      },
+      "label": "conflicting mate",
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "over_constrained",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "over_constrained"
+        },
+        {
+          "pointer": "/result/mates",
+          "equals": [
+            "Conflict",
+            "Z"
+          ]
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "Z (5 mm)"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "Conflict (6 mm)"
+        },
+        {
+          "pointer": "/summary/assembly/mates",
+          "length": 4
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_set_value",
+      "arguments": {
+        "name": "gap",
+        "expression": "5 mm"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/values/0/name",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/summary/assembly/values/0/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/values/0/expression",
+          "equals": "5 mm"
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "differs_from": {
+            "step": 17,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            15
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 21,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "5"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_drive_mate",
+      "arguments": {
+        "mate": "Z",
+        "parameter": "distance",
+        "expression": "gap"
+      },
+      "label": "bind the driver",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/mates/3/distance/driven",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/distance/expression",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/distance/reads/0",
+          "same_as": {
+            "pointer": "/summary/assembly/values/0/id"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/proof_rebuilds",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            15
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 21,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "5"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "assembly_set_value",
+      "arguments": {
+        "name": "gap",
+        "expression": "1.2 cm"
+      },
+      "label": "driver changed",
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/values/0/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/values/0/expression",
+          "equals": "1.2 cm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/distance/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/proof_rebuilds",
+          "same_as_step": 19
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 28,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/values/0/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 20,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 20,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            15
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 21,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "5"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 21,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 21,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 28,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "assembly_set_value",
+      "arguments": {
+        "name": "gap",
+        "expression": "12 deg"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "unit_mismatch",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "unit_mismatch"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 23
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_set_value",
+      "arguments": {
+        "name": "gap",
+        "expression": "gap + 1 mm"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "value_cycle",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "value_cycle"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 23
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_edit_mate",
+      "arguments": {
+        "mate": "Z",
+        "distance": "9 mm"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "driven_input",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "driven_input"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "edit gap"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 23
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/a/geometry_hash",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/inspect/b/geometry_hash",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_save",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "inspect": {
+        "rig": [
+          "doc",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ],
+        "tree": [
+          "asm",
+          "tree",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/rig/references/0/pinned",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/rig/references/1/pinned",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/tree/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Plate"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/1/name",
+          "equals": "Plate"
+        },
+        {
+          "pointer": "/summary/features/1/name",
+          "equals": "Plate"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/a/face/feature",
+          "same_as": {
+            "pointer": "/summary/features/1/id"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Plate",
+        "depth": 14,
+        "flip": false
+      },
+      "label": "part edit, assembly out of date",
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/warning",
+          "contains": "Update"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/revision",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/dirty",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/dirty"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/undo"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/definitions",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/definitions"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/id",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "differs_from": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 27,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "show_assembly",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/active",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        }
+      ]
+    },
+    {
+      "tool": "assembly_update",
+      "arguments": {},
+      "label": "explicit update",
+      "checks": [
+        {
+          "pointer": "/result/updated",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/assembly/undo",
+          "equals": "Update"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 26,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 32,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/1/pinned",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/shown",
+          "same_as": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "current"
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/warning",
+          "contains": "Update"
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 33,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 33,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 26,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 32,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "assembly_save",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "inspect": {
+        "rig": [
+          "doc",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ],
+        "tree": [
+          "asm",
+          "tree",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ],
+        "info": [
+          "asm",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/rig/references/0/pinned",
+          "same_as": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/rig/references/1/pinned",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/tree/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/inspect/tree/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/inspect/info/mates/1/a/face/feature",
+          "same_as": {
+            "pointer": "/summary/features/1/id"
+          }
+        },
+        {
+          "pointer": "/inspect/info/mates/3/a/face/feature",
+          "same_as": {
+            "pointer": "/summary/features/1/id"
+          }
+        },
+        {
+          "pointer": "/inspect/info/mates/3/distance/text",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/inspect/info/mates/3/distance/tree/Ref",
+          "same_as": {
+            "pointer": "/summary/assembly/values/0/id"
+          }
+        },
+        {
+          "pointer": "/inspect/info/values/0/name",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "label": "reopen assembly",
+      "inspect": {
+        "rig": [
+          "doc",
+          "info",
+          "{bundle}/work/rig.dwasm",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 36,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "step": 36,
+            "pointer": "/summary/assembly/accepted_state/truth"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo",
+          "equals": {
+            "label": null,
+            "depth": 0
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/redo",
+          "equals": {
+            "label": null,
+            "depth": 0
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/distance/expression",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/summary/assembly/values/0/expression",
+          "equals": "1.2 cm"
+        },
+        {
+          "pointer": "/inspect/rig/revision",
+          "same_as": {
+            "step": 36,
+            "pointer": "/inspect/rig/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/rig/references",
+          "same_as": {
+            "step": 36,
+            "pointer": "/inspect/rig/references"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 26,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 32,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "assembly_set_value",
+      "arguments": {
+        "name": "gap",
+        "expression": "8 mm"
+      },
+      "label": "reopened graph driven again",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            22
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 28,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "8"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "step": 36,
+            "pointer": "/summary/assembly/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 26,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 32,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/id",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/summary/features/1/id",
+          "same_as": {
+            "step": 29,
+            "pointer": "/summary/features/1/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "delete_feature",
+      "arguments": {
+        "feature": "Plate"
+      },
+      "label": "temporary empty body"
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      },
+      "label": "profile again, its sketch went with Plate"
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 14,
+        "flip": false
+      },
+      "label": "same box, new feature",
+      "checks": [
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/features/1/id",
+          "differs_from": {
+            "step": 29,
+            "pointer": "/summary/features/1/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Plate"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/1/name",
+          "equals": "Plate"
+        },
+        {
+          "pointer": "/summary/features/1/id",
+          "differs_from": {
+            "step": 29,
+            "pointer": "/summary/features/1/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/work/a.dwprt"
+      },
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/inspect/a/id",
+          "same_as": {
+            "step": 3,
+            "pointer": "/inspect/a/id"
+          }
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "differs_from": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/features",
+          "length": 2
+        },
+        {
+          "pointer": "/summary/features/1/id",
+          "differs_from": {
+            "step": 29,
+            "pointer": "/summary/features/1/id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "show_assembly",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/translation",
+          "equals": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/min/2",
+          "approx": 26,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/bounds/max/2",
+          "approx": 32,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/name",
+          "equals": "O"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/name",
+          "equals": "X"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/name",
+          "equals": "Y"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/name",
+          "equals": "Z"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/quantity",
+          "equals": "signed_support_plane_distance"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/frame",
+          "equals": "root"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/certainty",
+          "equals": "exact"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/lo",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/hi",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/rational",
+          "equals": "12"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/0/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/components/1/pinned"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/a/path",
+          "equals": "2"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/measurement/b/path",
+          "equals": "4"
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "solved"
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/now",
+          "same_as": {
+            "step": 45,
+            "pointer": "/inspect/a/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "assembly_update",
+      "arguments": {},
+      "label": "dangling reference refused",
+      "inspect": {
+        "a": [
+          "doc",
+          "info",
+          "{bundle}/work/a.dwprt",
+          "--json"
+        ],
+        "b": [
+          "doc",
+          "info",
+          "{bundle}/work/b.dwprt",
+          "--json"
+        ]
+      },
+      "refused": "dangling_reference",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "dangling_reference"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "a.dwprt"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "occurrence 2"
+        },
+        {
+          "pointer": "/result/message",
+          "contains": "feature F"
+        },
+        {
+          "pointer": "/result/mates",
+          "equals": [
+            "X",
+            "Y",
+            "Z"
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as_step": 46
+        },
+        {
+          "pointer": "/inspect/a/revision",
+          "same_as": {
+            "step": 45,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/inspect/b/revision",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/work/rig.dwasm"
+      },
+      "label": "reopen after refusal",
+      "checks": [
+        {
+          "pointer": "/summary/assembly/components/0/pinned",
+          "same_as": {
+            "step": 31,
+            "pointer": "/inspect/a/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/1/pinned",
+          "same_as": {
+            "step": 9,
+            "pointer": "/inspect/b/revision"
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/bounds/max/2",
+          "approx": 14,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/components/1/translation",
+          "equals": [
+            10,
+            10,
+            26
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/components/1/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/values/0/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/distance/expression",
+          "equals": "gap"
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo",
+          "equals": {
+            "label": null,
+            "depth": 0
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/redo",
+          "equals": {
+            "label": null,
+            "depth": 0
+          }
+        },
+        {
+          "pointer": "/summary/assembly/components/0/status",
+          "equals": "newer_available"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/display",
+          "equals": "display"
+        },
+        {
+          "pointer": "/summary/assembly/components/0/now",
+          "same_as": {
+            "step": 45,
+            "pointer": "/inspect/a/revision"
+          }
+        }
+      ]
+    }
+  ]
+}

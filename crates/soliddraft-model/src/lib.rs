@@ -36,6 +36,7 @@ pub mod materials;
 pub mod rebuild;
 pub mod reference;
 pub mod tracked;
+mod value_expr;
 pub mod values;
 pub mod view;
 
@@ -56,6 +57,7 @@ pub use reference::{
     Candidate, EdgeFingerprint, EdgeRef, FaceFingerprint, FaceRef, Generator, NamedFace, NamingError, ReferenceSlot,
     RepairNeeded, RepairReason,
 };
+pub use value_expr::{Expression, ValueTable};
 
 /// The sketch types features are built from.
 pub use soliddraft_sketch as sketch;

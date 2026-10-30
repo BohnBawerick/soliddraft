@@ -5107,6 +5107,9 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "glam",
+ "num-bigint",
+ "num-rational",
+ "num-traits 0.2.19",
  "serde",
  "serde_json",
  "soliddraft-document",

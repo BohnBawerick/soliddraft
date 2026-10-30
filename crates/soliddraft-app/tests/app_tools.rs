@@ -387,6 +387,43 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("open", json!({ "path": assembly_file }));
     assert_eq!(s.call("model_summary", json!({}))["assembly"]["active"], true);
 
+    // Mates between two parts, each change one assembly undo step.
+    s.call("assembly_show_part", json!({}));
+    s.call("new_part", json!({}));
+    s.call(
+        "sketch",
+        json!({ "plane": "top", "shapes": [{
+        "shape": "rectangle", "center": [0,0,0], "width": 20, "height": 10
+    }] }),
+    );
+    s.call("extrude", json!({ "sketch": "Sketch1", "depth": 6, "flip": false }));
+    let second = s.path("second.dwprt");
+    s.call("save", json!({ "path": second }));
+    s.call("show_assembly", json!({}));
+    let placement = json!({ "translation": [10, 10, 30], "rotation": [0, 0, 0, 1] });
+    let inserted = s.call("insert_component", json!({ "paths": [second], "placement": placement }));
+    let parts: Vec<u64> = inserted["assembly"]["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["path"].as_str().unwrap().parse().unwrap())
+        .collect();
+    let top = json!({ "component": parts[0], "feature": "Linked block", "generator": "end_cap" });
+    let bottom = json!({ "component": parts[1], "feature": "Boss-Extrude1", "generator": "start_cap" });
+    let gap = s.call("assembly_measure_planes", json!({ "a": top, "b": bottom }));
+    assert_eq!(gap["measurement"]["rational"], "20");
+    s.call("assembly_mate_origin", json!({ "name": "O", "component": parts[0], "align_axes": true }));
+    let z = json!({ "name": "Z", "a": top, "b": bottom, "distance": "5 mm", "alignment": "opposed" });
+    let mated = s.call("assembly_mate_distance", z);
+    assert_eq!(mated["assembly"]["components"][1]["translation"], json!([10.0, 10.0, 15.0]));
+    s.call("assembly_set_value", json!({ "name": "gap", "expression": "1.2 cm" }));
+    s.call("assembly_rename_value", json!({ "name": "gap", "to": "clearance" }));
+    let drive = json!({ "mate": "Z", "parameter": "distance", "expression": "clearance" });
+    let driven = s.call("assembly_drive_mate", drive);
+    assert_eq!(driven["assembly"]["components"][1]["translation"], json!([10.0, 10.0, 22.0]));
+    s.call("assembly_edit_mate", json!({ "mate": "O", "align_axes": false }));
+    s.call("assembly_delete_mate", json!({ "mate": "Z" }));
+
     s.call("assembly_show_part", json!({}));
     s.call("new_part", json!({}));
     std::fs::write(s.dir.join("source.step"), include_bytes!("../../../ci/fixtures/import/block-seam-4um.step"))

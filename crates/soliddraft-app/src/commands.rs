@@ -470,7 +470,7 @@ impl CommandSpec {
         }
     }
 
-    fn on(mut self, tab: impl Into<Tab>, panel: &'static str, size: Size) -> Self {
+    pub(crate) fn on(mut self, tab: impl Into<Tab>, panel: &'static str, size: Size) -> Self {
         self.ribbon.push(Place { tab: tab.into(), panel, size });
         self
     }
@@ -493,7 +493,7 @@ impl CommandSpec {
     }
 
     /// An assembly command: enabled while an assembly is open and active.
-    fn assembly(mut self) -> Self {
+    pub(crate) fn assembly(mut self) -> Self {
         self.workspace = Workspace::Assembly;
         self.enabled = |s| s.assembly.is_active();
         self.hint = |s| (!s.assembly.is_active()).then(|| "Needs an assembly: File, New assembly".into());
@@ -512,7 +512,7 @@ impl CommandSpec {
         self
     }
 
-    fn run(mut self, action: fn(&AppState) -> AppAction) -> Self {
+    pub(crate) fn run(mut self, action: fn(&AppState) -> AppAction) -> Self {
         self.action = Some(action);
         self
     }
@@ -550,7 +550,7 @@ impl CommandSpec {
     }
 
     /// A command that runs only in the app, and why.
-    fn app_only(mut self, why: &'static str) -> Self {
+    pub(crate) fn app_only(mut self, why: &'static str) -> Self {
         self.agents = Agents::App(why);
         self
     }
@@ -1735,6 +1735,7 @@ fn registry() -> Vec<CommandSpec> {
     .chain(drawing_registry())
     .chain(crate::measure::registry::commands())
     .chain(crate::grid::registry::commands())
+    .chain(crate::mates::registry::commands())
     .collect()
 }
 

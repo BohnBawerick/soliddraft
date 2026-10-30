@@ -28,6 +28,7 @@ pub mod journal;
 #[cfg(target_arch = "wasm32")]
 pub mod journal_browser;
 pub mod locations;
+pub mod mates;
 pub mod measure;
 pub mod navigation;
 pub mod palette;

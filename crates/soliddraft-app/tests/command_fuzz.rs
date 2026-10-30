@@ -576,6 +576,97 @@ proptest! {
     }
 }
 
+/// A floating block and a second one placed on it, with `O` and `Z`, saved.
+fn mated_state() -> AppState {
+    let dir = std::env::temp_dir().join(format!("soliddraft-fuzz-mates-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut state = AppState::new(soliddraft_app::new_document());
+    let caller = Caller::Mcp { client: "fuzz".into() };
+    let mut run = |state: &mut AppState, tool: &str, input: Value| {
+        let out = call_checked(&mut AppTools { state }, tool, input, &caller);
+        assert!(!out.is_error, "{tool}: {}", out.content);
+    };
+    let part = |state: &mut AppState, run: &mut dyn FnMut(&mut AppState, &str, Value), name: &str| {
+        let shape = json!({ "shape": "rectangle", "center": [0, 0, 0], "width": 40, "height": 30 });
+        run(state, "sketch", json!({ "plane": "top", "shapes": [shape] }));
+        run(state, "extrude", json!({ "sketch": "Sketch1", "depth": 10, "flip": false }));
+        run(state, "save", json!({ "path": dir.join(name) }));
+    };
+    part(&mut state, &mut run, "a.dwprt");
+    run(&mut state, "make_assembly", json!({}));
+    run(&mut state, "assembly_save", json!({ "path": dir.join("rig.dwasm") }));
+    run(&mut state, "new_part", json!({}));
+    part(&mut state, &mut run, "b.dwprt");
+    run(&mut state, "show_assembly", json!({}));
+    run(&mut state, "insert_component", json!({ "paths": [dir.join("b.dwprt")] }));
+    run(&mut state, "assembly_mate_origin", json!({ "name": "O", "component": 2, "align_axes": true }));
+    let cap = |c: u64, g: &str| json!({ "component": c, "feature": "Boss-Extrude1", "generator": g });
+    let z = json!({ "name": "Z", "a": cap(2, "end_cap"), "b": cap(4, "start_cap"), "distance": "5 mm", "alignment": "opposed" });
+    run(&mut state, "assembly_mate_distance", z);
+    state
+}
+
+const MATE_TOOLS: [&str; 9] = [
+    "insert_component",
+    "assembly_measure_planes",
+    "assembly_mate_origin",
+    "assembly_mate_distance",
+    "assembly_set_value",
+    "assembly_rename_value",
+    "assembly_drive_mate",
+    "assembly_edit_mate",
+    "assembly_delete_mate",
+];
+
+/// The mate tools' calls, from their schemas, with the names an assembly really has.
+fn mate_calls() -> BoxedStrategy<Vec<Call>> {
+    let mut pools = pools(&board_bracket());
+    pools.any = ["O", "Z", "gap", "5 mm", "12 deg", "gap + 1 mm", "Boss-Extrude1", "side", "end_cap", "opposed"]
+        .map(str::to_owned)
+        .to_vec();
+    pools.features = vec!["Boss-Extrude1".to_owned()];
+    let specs: Vec<_> =
+        tool_specs(Surface::Mcp).into_iter().filter(|s| MATE_TOOLS.contains(&s.name.as_str())).collect();
+    let mut by_name: HashMap<String, BoxedStrategy<Value>> = HashMap::new();
+    for spec in &specs {
+        by_name.insert(spec.name.clone(), for_schema(&spec.input_schema, &spec.input_schema, &pools, ""));
+    }
+    let tools: Vec<String> = specs.iter().map(|s| s.name.clone()).collect();
+    let known = prop::sample::select(tools).prop_flat_map(move |tool| {
+        let arguments = by_name[&tool].clone();
+        arguments.prop_map(move |arguments| Call { tool: tool.clone(), arguments })
+    });
+    prop::collection::vec(known, 1..6).boxed()
+}
+
+fn run_on_mates(calls: Vec<Call>) {
+    let mut state = mated_state();
+    let caller = Caller::Mcp { client: "fuzz".into() };
+    for call in &calls {
+        let before = AppTools { state: &mut state }.summary()["assembly"]["accepted_state"].clone();
+        let out = call_checked(&mut AppTools { state: &mut state }, &call.tool, call.arguments.clone(), &caller);
+        if out.is_error {
+            let after = AppTools { state: &mut state }.summary()["assembly"]["accepted_state"].clone();
+            assert_eq!(before, after, "a refused call changed the assembly: {call:?}\n{}", out.content);
+        }
+    }
+    let s = state.assembly.session.as_mut().expect("the assembly stays open");
+    let (solver, accepted) = (s.doc.solver(), s.doc.assembly().clone());
+    assert_ne!(solver.state, soliddraft_assembly::SolverState::Error, "{calls:?}");
+    let bytes = accepted.to_bytes(s.doc.id(), None, &[]).expect("the assembly saves");
+    soliddraft_assembly::AssemblyPackage::from_bytes(bytes).expect("the saved assembly reopens");
+}
+
+proptest! {
+    #![proptest_config(config())]
+
+    #[test]
+    fn mate_tools_never_panic_and_refusals_change_nothing(calls in mate_calls()) {
+        let what = format!("{calls:?}");
+        within_limit(what, move || run_on_mates(calls));
+    }
+}
+
 /// A call with no arguments is refused, with a message, by every tool that needs some.
 #[test]
 fn every_tool_refuses_an_empty_call_with_a_message() {

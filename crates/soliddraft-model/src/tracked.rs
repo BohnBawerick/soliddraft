@@ -222,7 +222,7 @@ impl Document {
         source: &Source,
         check: Option<&str>,
     ) -> Result<String, String> {
-        crate::values::check_name(name)?;
+        crate::value_expr::check_name(name)?;
         if state.summary().as_array().is_some_and(|rows| rows.iter().any(|r| r["name"] == name))
             || state.tracked.iter().any(|r| r.name == name)
         {

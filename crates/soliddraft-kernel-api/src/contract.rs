@@ -6,9 +6,9 @@
 use crate::drawing::mesh_hlr::{self, visible_length_by_source};
 use crate::drawing::{Curve3, CurveSource, SectionSpec, SectionView, StandardView, ViewCurves, ViewSpec, deviation};
 use crate::{
-    BodyId, BooleanOp, Certainty, CurveKind, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, Loop, Measurement,
-    OpKind, OpTag, PairEndpoint, PairQuantity, Plane, Point2, Profile, Revolve, Segment, SurfaceKind,
-    TessellationParams, Topology, Vec3, VertexId,
+    Axis, BodyId, BooleanOp, Certainty, CurveKind, EdgeId, ExactAxisPlane, ExactRational, Extrude, FaceId, FaceRole,
+    Kernel, KernelError, Loop, Measurement, OpKind, OpTag, PairEndpoint, PairQuantity, Plane, Point2, Profile, Revolve,
+    Segment, SurfaceKind, TessellationParams, Topology, Vec3, VertexId,
 };
 
 fn tag(s: &str) -> OpTag {
@@ -1386,4 +1386,78 @@ pub fn query_domains_and_work_are_explicit(k: &dyn Kernel) {
     valid();
     k.release(wedge).unwrap();
     k.release(body).unwrap();
+}
+
+/// The support plane of the face of `body` whose outward normal is `normal`.
+fn support(k: &dyn Kernel, body: BodyId, normal: Vec3) -> ExactAxisPlane {
+    let topology = k.topology(body).unwrap();
+    let face = topology.faces.iter().find(|f| f.normal == Some(normal)).unwrap();
+    k.face_support_plane(body, face.id).unwrap()
+}
+
+fn plate(k: &dyn Kernel, name: &str, width: f64, height: f64, depth: f64) -> BodyId {
+    let profile = Profile::rectangle(Plane::XY, Point2::new(0.0, 0.0), width, height);
+    let base = k.create_body_from_profile(&tag(&format!("{name}_profile")), &profile).unwrap();
+    k.extrude(&tag(name), base.body, &Extrude { distance: depth, direction: None }).unwrap().body
+}
+
+/// Reads the six signed plane equations of a block, exactly, through each face's own sense.
+pub fn support_planes_are_native_and_exact(k: &dyn Kernel) {
+    let whole = |n: i64| ExactRational { numerator: n.to_string(), denominator: "1".into() };
+    let equation = |p: ExactAxisPlane| (p.axis, p.positive, p.offset);
+    let check = |body, planes: &[(Vec3, Axis, bool, i64)]| {
+        for &(normal, axis, positive, offset) in planes {
+            assert_eq!(equation(support(k, body, normal)), (axis, positive, whole(offset)), "{normal:?}");
+        }
+    };
+    let a = plate(k, "a", 40.0, 30.0, 10.0);
+    let sides = [
+        (Vec3::X, Axis::X, true, 20),
+        (-Vec3::X, Axis::X, false, 20),
+        (Vec3::Y, Axis::Y, true, 15),
+        (-Vec3::Y, Axis::Y, false, 15),
+        (-Vec3::Z, Axis::Z, false, 0),
+    ];
+    check(a, &sides);
+    check(a, &[(Vec3::Z, Axis::Z, true, 10)]);
+    // A taller revision moves only its top.
+    let taller = plate(k, "taller", 40.0, 30.0, 14.0);
+    check(taller, &sides);
+    check(taller, &[(Vec3::Z, Axis::Z, true, 14)]);
+    let b = plate(k, "b", 20.0, 10.0, 6.0);
+    check(b, &[(Vec3::X, Axis::X, true, 10), (Vec3::Y, Axis::Y, true, 5), (Vec3::Z, Axis::Z, true, 6)]);
+    check(b, &[(-Vec3::Z, Axis::Z, false, 0)]);
+    // A decimal depth stays the rational it is.
+    let inches = plate(k, "inches", 40.0, 30.0, 76.2);
+    let top = support(k, inches, Vec3::Z);
+    assert_eq!(top.offset, ExactRational { numerator: "381".into(), denominator: "5".into() }, "{top:?}");
+    assert_eq!(top.normal(), [0, 0, 1]);
+}
+
+/// Faces this query does not cover, and handles that name nothing, are refused by kind.
+pub fn support_plane_refusals(k: &dyn Kernel) {
+    let wall = cylinder(k, Vec3::ZERO, 10.0, 20.0);
+    let topology = k.topology(wall).unwrap();
+    let side = topology.faces.iter().find(|f| f.surface == SurfaceKind::Cylinder).unwrap();
+    assert!(matches!(k.face_support_plane(wall, side.id), Err(KernelError::Unsupported(_))));
+    let cap = topology.faces.iter().find(|f| f.surface == SurfaceKind::Plane).unwrap();
+    k.face_support_plane(wall, cap.id).unwrap();
+
+    let corners = [Point2::new(0.0, 0.0), Point2::new(30.0, 0.0), Point2::new(0.0, 40.0)];
+    let sides = (0..3).map(|i| Segment::Line { from: corners[i], to: corners[(i + 1) % 3] }).collect();
+    let wedge = Profile { plane: Plane::XY, outer: Loop(sides), holes: Vec::new() };
+    let base = k.create_body_from_profile(&tag("wedge_profile"), &wedge).unwrap();
+    let wedge = k.extrude(&tag("wedge"), base.body, &Extrude { distance: 5.0, direction: None }).unwrap().body;
+    let topology = k.topology(wedge).unwrap();
+    let slope = topology.faces.iter().find(|f| f.normal.is_some_and(|n| n.x > 0.1 && n.y > 0.1)).unwrap();
+    assert!(matches!(k.face_support_plane(wedge, slope.id), Err(KernelError::Unsupported(_))));
+
+    let foreign = FaceId::from_raw(u64::MAX);
+    assert!(matches!(k.face_support_plane(wall, foreign), Err(KernelError::UnknownFace { .. })));
+    k.release(wedge).unwrap();
+    assert!(k.face_support_plane(wedge, slope.id).is_err());
+    // The refusals took nothing from the body they did not ask about.
+    let history = k.history(wall).unwrap();
+    k.face_support_plane(wall, cap.id).unwrap();
+    assert_eq!(k.history(wall).unwrap(), history);
 }

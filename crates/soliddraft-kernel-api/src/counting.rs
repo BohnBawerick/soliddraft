@@ -8,9 +8,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    BackendInfo, BodyId, BooleanOp, Draft, EdgeId, EdgePolyline, Extrude, ExtrudeLimit, FaceId, HistoryRecord, Hole,
-    Kernel, KernelResult, MassProperties, Measurement, Mesh, Mirror, OpResult, OpTag, PairEndpoint, PairQuantity,
-    PatternLayout, Plane, PointProof, Profile, Revolve, TessellationParams, Topology, Validation, Vec3, drawing,
+    BackendInfo, BodyId, BooleanOp, Draft, EdgeId, EdgePolyline, ExactAxisPlane, Extrude, ExtrudeLimit, FaceId,
+    HistoryRecord, Hole, Kernel, KernelResult, MassProperties, Measurement, Mesh, Mirror, OpResult, OpTag,
+    PairEndpoint, PairQuantity, PatternLayout, Plane, PointProof, Profile, Revolve, TessellationParams, Topology,
+    Validation, Vec3, drawing,
 };
 
 /// One piece of work a kernel was asked for.
@@ -243,6 +244,10 @@ impl Kernel for Counting {
         quantity: PairQuantity,
     ) -> KernelResult<Measurement> {
         self.inner.measure_pair(body, a, b, quantity)
+    }
+
+    fn face_support_plane(&self, body: BodyId, face: FaceId) -> KernelResult<ExactAxisPlane> {
+        self.inner.face_support_plane(body, face)
     }
 
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {

@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::assembly::AssemblyAction;
-use soliddraft_assistant::tools::schema::string;
+use serde_json::json;
+use soliddraft_assistant::tools::schema::{array, non_empty_array, number, object, optional, string};
 
 const ASSEMBLY: &str = "It works on the assembly open in the window; soliddraft asm makes, places and saves assembly \
                         files without it";
@@ -10,6 +11,19 @@ const ASSEMBLY: &str = "It works on the assembly open in the window; soliddraft 
 /// Why an assembly command is off in the browser build, whose loader has no threads.
 fn desktop_only(_: &AppState) -> Option<String> {
     cfg!(target_arch = "wasm32").then(|| "Assemblies open in the desktop app".to_owned())
+}
+
+fn insert_params() -> Vec<(&'static str, Value)> {
+    let placement = object(&[
+        ("translation", optional(array(number("mm"), "[x, y, z] in millimetres"))),
+        ("rotation", optional(array(number("A quaternion component"), "A unit quaternion [x, y, z, w]"))),
+    ]);
+    let mut placement = placement;
+    placement["description"] = json!("Where to place it; beside what is there when left out");
+    vec![
+        ("paths", non_empty_array(string("A part or assembly file"), "The file to place, one at a time")),
+        ("placement", optional(placement)),
+    ]
 }
 
 fn path_params() -> Vec<(&'static str, Value)> {
@@ -45,7 +59,8 @@ pub(super) fn registry() -> Vec<CommandSpec> {
         .on(Tab::Assembly, "Component", Large)
         .key(Scope::Assembly, ctrl, Key::I)
         .run(|_| AppAction::Assembly(AssemblyAction::Insert(None)))
-        .app_only(ASSEMBLY),
+        .agents(Agents::Mcp, "Pinned at the file's revision now, floating, with no mates.", insert_params)
+        .undo(Undo::Step),
         cmd(
             "assembly_save",
             "Save assembly",
@@ -72,11 +87,15 @@ pub(super) fn registry() -> Vec<CommandSpec> {
             .assembly()
             .run(|_| AppAction::Assembly(AssemblyAction::ShowPart))
             .agents(Agents::Mcp, "Makes the part active.", Vec::new),
-        cmd("assembly_update", "Update", Icon::Tree, "Accept the current revisions of every source together")
+        cmd("assembly_update", "Update", Icon::Tree, "Accept the current revisions of every source together and solve the mates on them")
             .assembly()
             .on(Tab::Assembly, "Component", Large)
             .run(|_| AppAction::Assembly(AssemblyAction::Update))
-            .agents(Agents::Mcp, "Keeps all accepted revisions if any source is missing or cannot be shown.", Vec::new)
+            .agents(
+                Agents::Mcp,
+                "Keeps all accepted revisions if any source is missing or cannot be shown, or the mates do not solve on the new revisions.",
+                Vec::new,
+            )
             .undo(Undo::Step),
     ]
 }
