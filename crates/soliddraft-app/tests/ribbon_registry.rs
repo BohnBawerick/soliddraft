@@ -11,6 +11,9 @@
 #[path = "support/ribbon.rs"]
 mod ribbon;
 
+#[path = "support/configuration_registry.rs"]
+mod configuration_registry;
+
 use ribbon::App;
 use serde_json::{Map, Value, json};
 use soliddraft_app::commands::{self, Agents, Context, History, Tab};
@@ -197,7 +200,8 @@ fn the_ribbon_moves_commands_and_changes_nothing_else_about_them() {
     let rows = frozen["commands"].as_object().expect("the frozen commands");
     for (id, row) in rows {
         let current = now["commands"].get(id).unwrap_or_else(|| panic!("{id} is gone"));
-        assert_eq!(current, row, "{id} changed");
+        let current = configuration_registry::before_configurations(id, current, plain);
+        assert_eq!(&current, row, "{id} changed");
     }
     for list in ["agent_tools", "verbs"] {
         for name in frozen[list].as_array().expect("a frozen list") {
