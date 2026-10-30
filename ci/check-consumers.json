@@ -1,0 +1,41 @@
+{
+  "format": "soliddraft-check-consumers/1",
+  "files": {
+    "ci/browser-journal.js": ["web"],
+    "ci/cargo-cache.sh": [],
+    "ci/check-consumers.json": "all",
+    "ci/check-gate.py": "all",
+    "ci/check-lattice-stl.py": ["application-loop"],
+    "ci/check-ownership.py": ["lint"],
+    "ci/check-registry.json": "all",
+    "ci/check-step.py": ["step-opencascade", "application-loop"],
+    "ci/check-unchanged-tests.py": [],
+    "ci/compare-scenario-bundles.py": [],
+    "ci/fake_mcp_server.py": ["lint", "application-loop"],
+    "ci/gate-cases.json": ["lint"],
+    "ci/known-over-budget.json": ["lint", "application-loop"],
+    "ci/ownership.toml": ["lint"],
+    "ci/public-items.py": [],
+    "ci/refactor_baseline.py": [],
+    "ci/routing-cases.json": ["lint"],
+    "ci/routing-replays/Cargo.lock.cea2704": ["lint"],
+    "ci/routing-replays/hosted.yml.cea2704": ["lint"],
+    "ci/routing-replays/packages.yml.cea2704": ["lint"],
+    "ci/routing-replays/round2-replays.json": ["lint"],
+    "ci/routing-replays/scenario-inventory.json.cea2704": ["lint"],
+    "ci/routing-replays/select-checks.py.9e81eb4": ["lint"],
+    "ci/routing-replays/soliddraft-kernel-catallax.Cargo.toml.cea2704": ["lint"],
+    "ci/run-scenarios.py": ["lint", "application-loop"],
+    "ci/scenario-inventory.json": ["lint"],
+    "ci/scenarios/p3-rounded-boss.md": [],
+    "ci/select-checks.py": "all",
+    "ci/test_checks.py": ["lint"],
+    "ci/test_ownership.py": ["lint"],
+    "ci/test_scenario_bundles.py": ["lint"],
+    "ci/test_scenarios.py": ["lint", "application-loop"],
+    "ci/test_workflows.py": ["lint"]
+  },
+  "patterns": {
+    "ci/scenarios/[^/]+\\.json": ["lint", "application-loop"]
+  }
+}
