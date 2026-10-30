@@ -506,6 +506,8 @@ pub struct AppState {
     pub revisions: Arc<dyn soliddraft_document::RevisionStore>,
     /// The commands run lately and the pinned ones, for the command search.
     pub commands: crate::commands::History,
+    /// The navigation preset, the wheel, the view keys and the camera settings.
+    pub navigation: crate::navigation::NavigationSettings,
     /// Autosave and the copies found after a crash. `None` until the app starts it, and
     /// in tests and automated runs that do not.
     pub recovery: Option<crate::recovery::Recovery>,
@@ -547,6 +549,7 @@ impl AppState {
             command_line: crate::command_line::CommandLine::load(),
             revisions: Arc::new(soliddraft_document::CacheOnlyStore::new()),
             commands: crate::settings::command_history(),
+            navigation: crate::settings::navigation(crate::settings::install_kind()),
             recovery: None,
             actions: Vec::new(),
         }
@@ -558,6 +561,21 @@ impl AppState {
         if let Ok(bytes) = model.to_bytes() {
             self.revisions.record(model.id(), &model.semantic_hash(), &bytes);
         }
+    }
+
+    /// Saves new navigation settings and uses them. They are the user's, not the
+    /// document's: the part, its undo steps and its selection are untouched. When the
+    /// save is refused nothing changes and the note says why.
+    pub fn set_navigation(
+        &mut self,
+        settings: crate::navigation::NavigationSettings,
+    ) -> Result<(), crate::navigation::SaveError> {
+        if let Err(e) = crate::settings::save_navigation(&settings) {
+            self.note(format!("Navigation settings not saved: {e}"), NoteKind::Error);
+            return Err(e);
+        }
+        self.navigation = settings;
+        Ok(())
     }
 
     pub fn push(&mut self, action: AppAction) {
