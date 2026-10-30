@@ -166,6 +166,8 @@ fn dimension_field(ui: &mut egui::Ui, state: &mut AppState, id: FeatureId, kind:
     {
         let (message, failed) = drag.label();
         ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
+    } else if let Some(message) = state.doc.display_failure() {
+        ui.label(egui::RichText::new(message).size(11.0).color(theme::error()));
     } else if let Some((message, failed)) = state.doc.proof_message() {
         ui.label(egui::RichText::new(message).size(11.0).color(if failed { theme::error() } else { theme::muted() }));
     }

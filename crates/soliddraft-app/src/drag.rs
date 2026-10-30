@@ -429,7 +429,10 @@ impl DragPreview {
             Ok(false) => Finish::Pending { value },
             Ok(true) => match doc.feature(feature).map(|feature| &feature.status) {
                 Some(FeatureStatus::Error(message)) => Finish::Failed { value, message: message.clone() },
-                _ => Finish::Applied { value },
+                _ => match doc.display_failure() {
+                    Some(message) => Finish::Failed { value, message: message.to_owned() },
+                    None => Finish::Applied { value },
+                },
             },
         }
     }

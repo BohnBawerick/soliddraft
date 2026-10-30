@@ -20,8 +20,12 @@ use soliddraft_app::document::{
     SketchPlane,
 };
 use soliddraft_app::state::{EditorParams, NoteKind};
-use soliddraft_kernel_api::{EdgeId, FaceId, OpTag};
+use soliddraft_kernel_api::{EdgeId, FaceId, OpTag, StepOptions};
 use soliddraft_sketch::P2;
+
+#[allow(dead_code)]
+#[path = "support/ribbon.rs"]
+mod ribbon;
 
 type App = Harness<'static, SolidDraftApp>;
 
@@ -513,6 +517,59 @@ fn fillet_face_refusal_on_the_slot_names_the_kernel_reason_and_leaves_the_part_u
     let state = &app.state().state;
     let editor = state.editor.as_ref().expect("Fillet opens on an edge pick");
     assert_eq!(editor.edges().len(), 1, "the picked edge joins the panel: {:?}", editor.error);
+}
+
+/// Catallax builds this fillet but cannot mesh it at the viewport's default angle, so the
+/// app rolls it back. Once Catallax can, this expects the fillet instead.
+#[test]
+fn fillet_edge_on_the_slot_rolls_back_for_want_of_a_display_mesh() {
+    const REASON: &str = "mesh.precision-or-budget";
+    let _gpu = gpu();
+    let mut app = harness(slot_document());
+    let before = shape(&app.state().state.doc);
+    let midpoint = straight_top_edge(&app.state().state.doc);
+    click_world(&mut app, midpoint);
+
+    // F is the Fillet shortcut with an edge selected.
+    app.key_press(Key::F);
+    app.run_steps(4);
+    {
+        let state = &app.state().state;
+        let editor = state.editor.as_ref().expect("F opens Fillet on an edge pick");
+        assert_eq!(editor.edges().len(), 1);
+        let panel_says = editor.error.as_deref().expect("the panel shows why it cannot be shown");
+        assert!(panel_says.contains(REASON), "{panel_says}");
+
+        // The exact part is sound. Only its display mesh is missing.
+        let kernel = state.doc.kernel();
+        let body = state.doc.display_body().expect("a body");
+        let edges = panel_edges(&state.doc, editor.edges());
+        let rounded = kernel.fillet(&OpTag::new("contract"), body, &edges, rounding_size(editor)).expect("a fillet");
+        assert!(kernel.validate(rounded.body).expect("a validity answer").valid, "the rounded slot is valid");
+        let step = kernel.export_step(rounded.body, &StepOptions::default()).expect("a STEP export").report;
+        assert!(step.within_tolerance, "{step:?}");
+        kernel.release(rounded.body).unwrap();
+    }
+
+    ok(&mut app);
+    {
+        let state = &app.state().state;
+        let note = state.note.as_ref().expect("committing leaves a note");
+        assert_eq!(note.kind, NoteKind::Error, "{}", note.text);
+        assert!(note.text.contains(REASON), "the note names the kernel's reason: {}", note.text);
+        assert_eq!(state.doc.display_failure(), Some(note.text.as_str()));
+        assert!(!state.doc.features.iter().any(|f| matches!(f.kind, FeatureKind::Fillet(_))), "the fillet is gone");
+        assert!(state.doc.triangle_count() > 0, "the part stays on screen");
+    }
+    let after = shape(&app.state().state.doc);
+    assert!(same_shape(before, after), "the rollback restores the shape: {before:?} -> {after:?}");
+    assert_no_blocking_failure(&app.state().state.doc, "the rolled back fillet");
+
+    let status = ribbon::status_lines(&mut app);
+    assert!(!status.iter().any(|line| line.contains("Rebuild OK")), "{status:?}");
+    assert!(status.iter().any(|line| line.contains(REASON)), "{status:?}");
+
+    assert_picks_still_work(&mut app, glam::Vec3::new(0.0, 0.0, 10.0), 4, "Fillet");
 }
 
 #[test]

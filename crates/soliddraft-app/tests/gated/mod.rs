@@ -18,6 +18,21 @@ pub struct Rules {
     pub holding: Option<f64>,
     /// Extrusions this deep fail.
     pub refuse: Vec<f64>,
+    /// No body can be meshed for display.
+    pub refuse_display: bool,
+}
+
+impl Gated {
+    fn display(&self) -> KernelResult<()> {
+        if !self.rules.lock().unwrap().refuse_display {
+            return Ok(());
+        }
+        Err(KernelError::QueryFailed {
+            query: "tessellate".into(),
+            code: 0,
+            message: "mesh.precision-or-budget: the scenario refuses to mesh".into(),
+        })
+    }
 }
 impl Kernel for Gated {
     fn backend(&self) -> BackendInfo {
@@ -76,9 +91,11 @@ impl Kernel for Gated {
         self.inner.reserve_proof_work()
     }
     fn preview(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.display()?;
         self.inner.preview(body, params)
     }
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
+        self.display()?;
         self.inner.tessellate(body, params)
     }
     fn tessellate_edges(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Vec<EdgePolyline>> {
