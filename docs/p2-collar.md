@@ -69,3 +69,27 @@ work had not landed, so failure snap-back/red-state acceptance remains
 pending L03. Integrated mesh-fix acceptance remains pending the separately
 owned dependency update. No qualification tier is claimed by this
 public-only slice.
+
+## Plain hole beside the bevels
+
+Steps 7-14 of `ci/scenarios/collar.json` restore the 1 mm chamfer and drill
+a plain through hole of diameter 2 mm at `(9, 12, 0)` on the top annulus,
+`Revolve1 · Side of line 3`. The hole's radial extent, 8 to 10 mm, lies
+strictly inside both bevel rings, which start at radius 11 mm, and clear
+of the 6 mm bore. The diameter then edits to 2.5 mm. The wall keeps the
+name `Hole1 · Hole 1 wall` on a cylinder before and after save and reopen,
+and the reopened part passes the checked STEP export, including the direct
+no-healing OCP 8 check. A second hole at `(-10.5, 12, 0)` crosses the lower
+and upper bevel cones; it returns `intersect.traced-pair-required` and
+leaves the accepted document and geometry unchanged.
+
+Before Catallax `75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4` the first hole
+also refused with that code, because the bevel ring's bounding box contains
+the hole and the cone's unbounded support meets the cylinder beyond the
+finite band. That revision excludes a tube strictly inside a cone band's
+smaller ring. Exact contact, crossing and skew holes keep the refusal.
+
+The scenario runs at the 20M application allowance. Its volumes come from
+the V8 merge C test design, independently of the kernel: `3782*pi/3` mm³
+for diameter 2 and `15047*pi/12` mm³ for diameter 2.5, each within
+0.005 mm³.
