@@ -198,6 +198,10 @@ impl Document {
         if self.is_dirty() {
             return Err("the current part has not been rebuilt; wait for its rebuild before exporting".into());
         }
+        let field = self.active_lattice().is_some();
+        if field && format != soliddraft_exchange::Format::Stl {
+            return Err("field parts export as meshes; use labelled STL".into());
+        }
         if let Some(f) = self.features.iter().find(|f| {
             matches!(
                 self.status(f.id),
@@ -207,6 +211,14 @@ impl Document {
             return Err(format!("{} did not build; repair or suppress it before exporting", f.name));
         }
         let body = self.body().ok_or("the part has no body to export")?;
+        if field {
+            let output = self.kernel.export_field_stl(body).map_err(|e| e.to_string())?;
+            return Ok(soliddraft_exchange::Export {
+                bytes: output.bytes,
+                report: soliddraft_exchange::Report::FieldMesh(output.report),
+            });
+        }
+
         soliddraft_exchange::export(self.kernel.as_ref(), body, &self.name, format, &self.settings.export)
             .map_err(|e| e.to_string())
     }

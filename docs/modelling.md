@@ -259,3 +259,9 @@ their dependent builds; names and refusals are resolved by the new rebuild.
 `crates/soliddraft-model/tests/exit_test.rs` builds the sample L-bracket through the command layer, saves and reopens it, edits its base thickness and checks undo, redo and reference repair. Its saved inside fillet builds through Catallax's elementary fillet strips. Supported downstream features keep building.
 
 The document tests also reopen a part containing a chamfer and check that it rebuilds to the same body. Ribbon tests check that waiting commands stay visible, stay disabled and name their stages, and that the switched-on commands are enabled. These run in the workspace CI suite. The application scenarios in `ci/scenarios` build and edit each switched-on feature through MCP.
+
+## Terminal cubic lattice
+
+With a finished body, choose Lattice on the Features ribbon. Cell size and density are in millimetres; density is the constant beam radius. The cubic grid uses the part's origin and axes. Accuracy and minimum detail control certified STL export. The viewport and tree label the displayed mesh as an unproved preview.
+
+The lattice stays last. Edit an earlier feature to rebuild it, or return before the lattice to continue CAD work without losing its settings. The `lattice` and `edit_lattice` agent verbs use the same document commands. Old two-setting lattice files open with their earlier body visible and a message naming the missing cell size and density. Configure those inputs to build the field.

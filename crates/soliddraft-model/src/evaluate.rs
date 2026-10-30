@@ -765,9 +765,25 @@ impl Document {
 
     fn build_lattice(&self, f: &Feature, l: &LatticeFeature, current: Option<BodyId>) -> Built {
         let Some(body) = current else { return Built::failed(current, "there is no body to lattice") };
-        let params = Lattice { accuracy_mm: l.accuracy_mm, min_detail_mm: l.min_detail_mm };
+        let (Some(cell), Some(cell_size_mm), Some(radius_mm)) = (l.cell, l.cell_size_mm, l.radius_mm) else {
+            return Built::failed(current, "lattice is missing cell size and density; configure the cubic cell");
+        };
+        let params = Lattice {
+            cell,
+            cell_size_mm,
+            radius_mm,
+            frame: l.frame,
+            accuracy_mm: l.accuracy_mm,
+            min_detail_mm: l.min_detail_mm,
+        };
         let result = self.kernel.lattice(&OpTag::new(format!("{}.lattice", f.id)), body, &params);
-        self.finish(result, current, |_| Vec::new())
+        self.finish(result, current, |r| {
+            vec![NamedFace {
+                origin: Origin { tag: r.record.tag.clone(), role: FaceRole::Other },
+                generator: Generator::Other,
+                ordinal: 0,
+            }]
+        })
     }
 
     fn build_import(&self, f: &Feature, i: &ImportStepFeature, current: Option<BodyId>) -> Built {

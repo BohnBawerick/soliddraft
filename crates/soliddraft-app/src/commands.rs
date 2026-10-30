@@ -1135,6 +1135,16 @@ fn registry() -> Vec<CommandSpec> {
             .hint(|s| (!has_body(s)).then(|| "Chamfer needs a body".into()))
             .agents(Agents::Verb, "", tools::chamfer_params)
 .undo(Undo::Step),
+        cmd("lattice", "Lattice", Icon::LinearPattern, "Make a terminal cubic lattice")
+            .on(Features, "Finish", Small)
+            .run(|_| AppAction::StartLattice)
+            .when(has_body)
+            .lit(|s| editing(s, |p| matches!(p, EditorParams::Lattice(_))))
+            .agents(Agents::Verb, "Density is the constant beam radius. The preview is unproved; export certifies the mesh.", tools::lattice_params)
+            .undo(Undo::Step),
+        cmd("edit_lattice", "Edit lattice", Icon::LinearPattern, "Change lattice density and output settings")
+            .agents(Agents::Verb, "Only supplied settings change.", tools::edit_lattice_params)
+            .undo(Undo::Step),
         cmd("shell", "Shell", Icon::Shell, "Hollow the part, leaving walls of one thickness")
             .on(Features, "Finish", Small)
             .run(|_| AppAction::StartShell)

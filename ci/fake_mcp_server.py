@@ -9,8 +9,10 @@ no-solid (the display reports no solid), lost-display (the display succeeds but 
 stale-no-solid (a no-solid reply for the previous revision), failed-no-solid (a failed reply claiming no solid)."""
 
 import json
+import hashlib
 import os
 import pathlib
+import struct
 import sys
 import time
 
@@ -18,6 +20,19 @@ mode = os.environ.get("FAKE_MODE", "ok")
 revision_pin = os.environ.get("FAKE_PIN", "")
 if mode == "other-revision":
     revision_pin = "0" * 40
+if len(sys.argv) > 1 and sys.argv[1] == "export":
+    path = pathlib.Path(sys.argv[sys.argv.index("--out") + 1])
+    if mode.startswith("export-refused"):
+        if mode == "export-refused-written":
+            path.write_bytes(b"bad partial file")
+        print("field parts export as meshes" if mode != "export-refused-wrong" else "other error", file=sys.stderr)
+        sys.exit(1)
+    data = bytearray(84)
+    struct.pack_into("<d", data, 68, 0.1)
+    path.write_bytes(data)
+    print(json.dumps({"report": {"kind": "field_mesh", "deviation_bound_mm": 0.1,
+                               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}}))
+    sys.exit(0)
 bundle = pathlib.Path(sys.argv[sys.argv.index("--bundle") + 1])
 bundle.mkdir(parents=True)
 sequence = 0
@@ -61,6 +76,10 @@ for line in sys.stdin:
         (directory / "viewport.png").write_bytes(b"png")
         reply(request, {"isError": False})
     elif name == "scenario_view":
+        if mode in {"field-view", "wrong-view-error"}:
+            reply(request, {"isError": True, "content": [{"type": "text", "text":
+                  "drawings of field parts are coming soon" if mode == "field-view" else "unrelated view error"}]})
+            continue
         write(directory, "view.json", {"backend": {"name": "catallax"}, "live_document": True, "method": "mesh",
               "request": sequence, "revision": revision})
         write(directory, "view.kernel.json", {"calls": []})

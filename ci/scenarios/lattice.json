@@ -1,0 +1,703 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "lattice",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": -2.5,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              -2.5
+            ],
+            "width": 25,
+            "height": 15
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "label": "body",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 3750,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -2.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 7.5,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "lattice",
+      "arguments": {
+        "cell": "cubic",
+        "cell_size": 5,
+        "radius": 1,
+        "accuracy": 0.5,
+        "min_detail": 0.5
+      },
+      "label": "lattice",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -2.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 7.5,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/2"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.5
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "box": [
+              -12.5,
+              -7.5,
+              -2.5,
+              12.5,
+              7.5,
+              7.5
+            ],
+            "cell": 5,
+            "radius": 1,
+            "accuracy": "1/2",
+            "euler": -58
+          }
+        },
+        {
+          "format": "step",
+          "refused": "field parts export as meshes"
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": 0,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 4,
+            "height": 4
+          }
+        ]
+      },
+      "label": "CAD after the lattice",
+      "view": "unavailable",
+      "refused": "is the lattice stage and must stay last",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 15,
+        "flip": false
+      },
+      "label": "upstream edit",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -2.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 12.5,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/2"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.5
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "box": [
+              -12.5,
+              -7.5,
+              -2.5,
+              12.5,
+              7.5,
+              12.5
+            ],
+            "cell": 5,
+            "radius": 1,
+            "accuracy": "1/2",
+            "euler": -102
+          }
+        }
+      ]
+    },
+    {
+      "tool": "edit_lattice",
+      "arguments": {
+        "feature": "Lattice1",
+        "radius": 2.25
+      },
+      "label": "density edit",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 2.25
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -2.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 12.5,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/2"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.5
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            }
+          ],
+          "oracle": {
+            "box": [
+              -12.5,
+              -7.5,
+              -2.5,
+              12.5,
+              7.5,
+              12.5
+            ],
+            "cell": 5,
+            "radius": 2.25,
+            "accuracy": "1/2",
+            "euler": -102
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 2.25
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/lattice.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/lattice.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/lattice.dwprt"
+      },
+      "label": "reopen",
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/features/2/name",
+          "equals": "Lattice1"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/cell",
+          "equals": "cubic"
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 5
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 2.25
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.5
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -2.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 12.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 7.5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 12.5,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "density edit"
+        }
+      ]
+    }
+  ]
+}

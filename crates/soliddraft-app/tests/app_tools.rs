@@ -288,6 +288,22 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(!edited.is_null(), "edit_revolve must succeed");
     s.call("undo", json!({}));
     s.call("redo", json!({}));
+    // The terminal lattice and its edit each add one undo step.
+    s.call("new_part", json!({}));
+    s.call(
+        "sketch",
+        json!({"plane":"top", "offset":-2.5, "shapes":[
+            {"shape":"rectangle", "center":[0,0,-2.5], "width":25, "height":15}
+        ]}),
+    );
+    s.call("extrude", json!({"sketch":"Sketch1", "depth":10, "flip":false}));
+    let lattice =
+        s.call("lattice", json!({"cell":"cubic", "cell_size":5, "radius":1, "accuracy":0.5, "min_detail":0.5}));
+    assert!(!lattice.is_null(), "lattice must succeed");
+    let edited = s.call("edit_lattice", json!({"feature":"Lattice1", "radius":2.25}));
+    assert!(!edited.is_null(), "edit_lattice must succeed");
+    s.call("undo", json!({}));
+    s.call("undo", json!({}));
     s.call("open", json!({ "path": part }));
     assert!(s.state.doc.features.iter().any(|f| f.name == "Hole"), "the saved part opens with its features");
 
