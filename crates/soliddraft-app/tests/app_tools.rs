@@ -297,10 +297,8 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
         ]}),
     );
     s.call("extrude", json!({"sketch":"Sketch1", "depth":10, "flip":false}));
-    let lattice = s.call(
-        "lattice",
-        json!({"cell":"cubic", "cell_size":5, "radius":1, "accuracy":0.5, "min_detail":0.5}),
-    );
+    let lattice =
+        s.call("lattice", json!({"cell":"cubic", "cell_size":5, "radius":1, "accuracy":0.5, "min_detail":0.5}));
     assert!(!lattice.is_null(), "lattice must succeed");
     let edited = s.call("edit_lattice", json!({"feature":"Lattice1", "radius":2.25}));
     assert!(!edited.is_null(), "edit_lattice must succeed");
