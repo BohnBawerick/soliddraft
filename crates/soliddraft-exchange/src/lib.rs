@@ -32,16 +32,21 @@ pub enum Format {
     ThreeMf,
     /// Wavefront OBJ, triangles with face groups and vertex normals.
     Obj,
+    /// STEP AP242 mass stand-in of a terminal field: the field's source envelope as a
+    /// massless surface and unit-density proxy solids. It is never the field's boundary
+    /// and is only written when asked for by name.
+    StandIn,
 }
 
 impl Format {
-    /// Every format, in menu order.
+    /// Every format a file extension picks, in menu order. A mass stand-in is asked for
+    /// by name, never by extension.
     pub const ALL: [Format; 4] = [Format::Step, Format::Stl, Format::ThreeMf, Format::Obj];
 
     /// The file extension written, without the dot.
     pub fn extension(self) -> &'static str {
         match self {
-            Format::Step => "step",
+            Format::Step | Format::StandIn => "step",
             Format::Stl => "stl",
             Format::ThreeMf => "3mf",
             Format::Obj => "obj",
@@ -55,7 +60,13 @@ impl Format {
             Format::Stl => "STL",
             Format::ThreeMf => "3MF",
             Format::Obj => "OBJ",
+            Format::StandIn => "STEP mass stand-in",
         }
+    }
+
+    /// Whether `path` has an extension this format is written under, ignoring case.
+    pub fn suits(self, path: &Path) -> bool {
+        Format::of_path(path).is_some_and(|f| f.extension() == self.extension())
     }
 
     /// The format a path's extension names, ignoring case. `.stp` is STEP too.
@@ -99,6 +110,8 @@ pub enum Report {
     Mesh(MeshReport),
     /// A certified field approximation with a labelled file.
     FieldMesh(soliddraft_kernel_api::FieldReport),
+    /// A field's explicit mass stand-in, not its boundary.
+    StandIn(Box<soliddraft_kernel_api::StandInReport>),
 }
 
 impl Report {
@@ -118,6 +131,10 @@ impl Report {
             Report::FieldMesh(r) => {
                 format!("{} triangles; approximate field mesh, proven within {} mm", r.triangles, r.deviation_bound_mm)
             }
+            Report::StandIn(r) => format!(
+                "{} unit-density proxy solids and the massless source envelope; {}, within the field's proven moments",
+                r.mass_bodies, r.label
+            ),
             Report::Mesh(r) => {
                 let mut s = format!("{} triangles; within {} mm of the exact part", r.triangles, r.chord_height);
                 if !r.closed {
@@ -170,6 +187,9 @@ pub fn export(
             let step = kernel.export_step(body, &options)?;
             Ok(Export { bytes: step.text.into_bytes(), report: Report::Step(step.report) })
         }
+        Format::StandIn => {
+            Err(ExportError::Invalid("a mass stand-in comes from a part's active lattice or gyroid".into()))
+        }
         Format::Stl | Format::ThreeMf | Format::Obj => {
             tolerance.check().map_err(ExportError::Invalid)?;
             let mesh = kernel.tessellate(body, &tolerance.params())?;
@@ -180,7 +200,7 @@ pub fn export(
                 Format::Stl => stl::write(&welded, name),
                 Format::ThreeMf if closed => three_mf::write(&welded, name)?,
                 Format::ThreeMf => return Err(ExportError::NotClosed),
-                Format::Step => unreachable!(),
+                Format::Step | Format::StandIn => unreachable!(),
             };
             let report = MeshReport {
                 triangles: welded.triangles.len(),

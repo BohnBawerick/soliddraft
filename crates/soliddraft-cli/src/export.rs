@@ -13,7 +13,7 @@ use soliddraft_model::Document;
 use soliddraft_tessellation::ExportTolerance;
 
 pub(crate) const USAGE: &str = "\
-usage: soliddraft export <part.dwprt | recipe.json> --out <file>... [--json]
+usage: soliddraft export <part.dwprt | recipe.json> --out <file>... [--stand-in <file.step>] [--json]
 
 Exports a part file, rebuilt on the Catallax kernel, or a recipe's result. The
 extension of each --out file picks its format:
@@ -29,8 +29,14 @@ uses the default, 0.01 mm. Each report gives what was written and how far it may
 lie from the exact part. A part with a feature that did not build is refused.
 STEP output over its requested tolerance is refused before any file is written.
 
-  --out   a file to write; repeat it for several formats
-  --json  print one JSON export report per file
+A part whose last feature is a lattice or gyroid exports its certified, labelled
+STL. Its mass stand-in is written only when asked for with --stand-in: the
+field's source envelope as a massless surface and unit-density proxy solids
+whose proven moments lie inside the field's, never the field's boundary.
+
+  --out       a file to write; repeat it for several formats
+  --stand-in  a .step file for a field part's mass stand-in
+  --json      print one JSON export report per file
 ";
 
 /// What `export` was asked for.
@@ -52,6 +58,13 @@ fn parse(args: &[String]) -> Result<Args, String> {
                 let format = Format::of_path(&path)
                     .ok_or_else(|| format!("{}: give a .step, .stp, .stl, .3mf or .obj file", path.display()))?;
                 outputs.push((path, format));
+            }
+            "--stand-in" => {
+                let path = PathBuf::from(it.next().ok_or("--stand-in needs a file")?);
+                if !Format::StandIn.suits(&path) {
+                    return Err(format!("{}: a mass stand-in is a .step or .stp file", path.display()));
+                }
+                outputs.push((path, Format::StandIn));
             }
             flag if flag.starts_with('-') => return Err(format!("unknown option {flag}")),
             path if input.is_none() => input = Some(PathBuf::from(path)),
@@ -157,6 +170,9 @@ mod tests {
         assert!(parse(&args("bracket.json")).unwrap_err().contains("--out"));
         assert!(parse(&args("--out a.step")).unwrap_err().contains("no part"));
         assert!(parse(&args("a.json b.json --out a.step")).unwrap_err().contains("one part"));
+        let a = parse(&args("part.dwprt --stand-in mass.stp --out part.stl")).unwrap();
+        assert_eq!(a.outputs.iter().map(|(_, f)| *f).collect::<Vec<_>>(), [Format::StandIn, Format::Stl]);
+        assert!(parse(&args("part.dwprt --stand-in mass.stl")).unwrap_err().contains(".step or .stp"));
     }
 
     #[test]

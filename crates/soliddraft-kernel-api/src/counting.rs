@@ -135,6 +135,18 @@ impl Kernel for Counting {
         self.inner.export_field_stl(body)
     }
 
+    fn field_mass(&self, body: BodyId, accuracy: &crate::FieldMassAccuracy) -> KernelResult<crate::FieldMass> {
+        self.inner.field_mass(body, accuracy)
+    }
+
+    fn export_field_stand_in(
+        &self,
+        body: BodyId,
+        accuracy: &crate::FieldMassAccuracy,
+    ) -> KernelResult<crate::StandInExport> {
+        self.inner.export_field_stand_in(body, accuracy)
+    }
+
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.note(Work::Mesh(body));
         self.inner.tessellate(body, params)

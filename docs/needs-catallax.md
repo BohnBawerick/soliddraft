@@ -1,6 +1,6 @@
 # Catallax backend gaps
 
-The backend pins Catallax main revision `659259eedbd0f156ab601784f29f42e87e419c76`. B-rep construction uses `catallax-app`; terminal lattices and network gyroids use `catallax-field::lattice_stage`. No Catallax code is copied into SolidDraft.
+The backend pins Catallax main revision `659259eedbd0f156ab601784f29f42e87e419c76`. B-rep construction uses `catallax-app`; terminal lattices and network gyroids, constant or graded linearly along a part axis, use `catallax-field::lattice_stage`. Their explicit moments use `catallax_field::mass::properties` on the stage's compiled field, and their mass stand-in uses `catallax_features::stand_in::equivalent_blocks`, `catallax_step::write_stand_in_step` and `catallax_field::mass::surrogate_properties`, checked with the field enclosures' own `contains` and `encloses`, as Catallax's `catallax-stand-in/1` request does. Moments and stand-ins run on the caller's work allowance, or on 19,999,999 units when there is none; a certified export keeps its unbounded run outside an allowance and reports the work it used. No Catallax code is copied into SolidDraft.
 
 Each solid retains its `IncrementalApplicationBody` and owned `EvaluationCheckpoint`.
 For a new solid, the adapter merges operand and read-only context recipes, selects the

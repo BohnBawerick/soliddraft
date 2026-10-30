@@ -29,7 +29,7 @@ PHASES = ("construction", "edit", "display", "measurement", "refusal")
 DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "preview", "preview_edges", "view_curves",
            "section_view"}
 MEASUREMENT = {"mass_properties", "measured_topology", "face_area", "face_centroid", "face_bounding_box",
-               "bounding_box", "edge_length", "edge_midpoint", "inertia"}
+               "bounding_box", "edge_length", "edge_midpoint", "inertia", "field_mass"}
 TREND_NOISE_MS = 25
 # The one hang guard for every MCP request and CLI command: generous, never a speed limit.
 HANG_TIMEOUT_S = 600
@@ -82,7 +82,7 @@ def milliseconds(value):
 
 
 def command_phase(tool):
-    if tool == "measure":
+    if tool in ("measure", "field_mass"):
         return "measurement"
     if tool.startswith("edit_") or tool in {
         "undo", "redo", "rollback", "suppress", "delete_feature", "rename", "drive", "set_value",
@@ -173,6 +173,14 @@ def verdict(result):
     if result["within_budget"] is None:
         return "output"
     return "strict-pass" if result["within_budget"] else "over-budget"
+
+
+def action_work_check(ceiling, latency):
+    """One application action's whole deterministic work: its click and background calls."""
+    if isinstance(ceiling, bool) or not isinstance(ceiling, int) or ceiling < 0:
+        raise ValueError("max_action_work must be a nonnegative integer")
+    used = sum(latency["work"].values()) + sum(latency["background"]["work"].values())
+    return {"check": "action work ceiling", "used": used, "ceiling": ceiling, "pass": used <= ceiling}
 
 
 def edit_work_check(step, latency):
@@ -488,6 +496,13 @@ def cli(binary, arguments, directory, label, timeout):
 def oracle_command(oracle, path):
     """The independent checker for one exported STL. Only a named kind or the cubic lattice runs."""
     kind = oracle.get("kind")
+    if kind in ("graded-lattice", "graded-gyroid"):
+        checker = pathlib.Path(__file__).with_name("check-graded-stl.py")
+        field = (["--kind", "lattice", "--cell", str(oracle["cell"])] if kind == "graded-lattice"
+                 else ["--kind", "gyroid", "--period", str(oracle["period"])])
+        return [str(checker), str(path), *field, "--box", *map(str, oracle["box"]),
+                "--tight", *map(str, oracle["tight"]), f"--grade={','.join(map(str, oracle['grade']))}",
+                "--accuracy", oracle["accuracy"], "--caps", *map(str, oracle["caps"])]
     if kind == "gyroid":
         checker = pathlib.Path(__file__).with_name("check-gyroid-stl.py")
         return [str(checker), str(path), "--box", *map(str, oracle["box"]), "--period", str(oracle["period"]),
@@ -504,11 +519,46 @@ def oracle_command(oracle, path):
     return command
 
 
+def moments_command(oracle, report, step=None):
+    """The independent moment check of a field mass answer or a mass stand-in export."""
+    checker = pathlib.Path(__file__).with_name("check-field-moments.py")
+    command = [str(checker), str(report), "--reference", oracle["reference"],
+               "--permutation", str(oracle.get("permutation", 0)), "--max-work", str(oracle["max_work"])]
+    return command + (["--step", str(step)] if step is not None else [])
+
+
+def replay_stand_in(args, directory, path, spec):
+    """The same stand-in asked of the pinned kernel's public request: the field's native
+    recipe from this step's evidence, the design's widths and the application allowance.
+    The application's file must be the request's answer byte for byte."""
+    question = {"format": "catallax-question/1", "source": "recipe", "max_work": spec["replay"]["max_work"],
+                "problem": {"format": "catallax-stand-in/1",
+                            "recipe": json.loads((directory / "recipe.json").read_text()),
+                            "accuracy": {"volume": {"relative": "0", "absolute": "1/100"},
+                                         "centroid": {"relative": "0", "absolute": "1/1000"},
+                                         "inertia": {"relative": "0", "absolute": "1/10"}},
+                            "max_cells": 2000000}}
+    write(directory / "stand-in-question.json", question)
+    result = cli(args.catallax_verify, ["replay", directory / "stand-in-question.json", "--out",
+                 directory / "stand-in-replay"], directory, "stand-in-replay", args.timeout)
+    result["check"] = "public stand-in request answers the same bytes"
+    if result["pass"]:
+        response = json.loads((directory / "stand-in-replay.stdout").read_text())
+        answer = directory / "stand-in-replay" / "answer.step"
+        result["status"] = response["manifest"]["status"]
+        result["work"] = response["work"]
+        result["pass"] = (result["status"] == "answered" and answer.is_file()
+                          and answer.read_bytes() == path.read_bytes())
+    return result
+
+
 def export_check(args, directory, spec, previous):
     extension = spec["format"]
-    path = directory / f"part.{extension}"
-    label = f"export-{extension}"
-    exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json", "--out", path],
+    stand_in = spec.get("stand_in", False)
+    path = directory / ("stand-in.step" if stand_in else f"part.{extension}")
+    label = "export-stand-in" if stand_in else f"export-{extension}"
+    exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
+                                     "--stand-in" if stand_in else "--out", path],
                    directory, label, args.timeout)
     if "refused" in spec:
         exported["pass"] = (exported["exit"] != 0 and not path.exists() and
@@ -521,6 +571,22 @@ def export_check(args, directory, spec, previous):
         exported["report"] = value["report"]
         exported["checks"] = [check(value, rule) for rule in spec.get("checks", [])]
         exported["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if "max_work" in spec:
+            exported["checks"].append({"check": "export work within the application allowance",
+                                       "work": value["report"].get("work"), "ceiling": spec["max_work"],
+                                       "pass": 0 < value["report"].get("work", 0) <= spec["max_work"]})
+        if stand_in:
+            exported["checks"].append({"check": "stand-in report describes the written bytes",
+                                       "pass": value["report"].get("sha256") == exported["sha256"]})
+            if "oracle" in spec:
+                command = moments_command(spec["oracle"], directory / f"{label}.stdout", path)
+                exported["checks"].append(cli(sys.executable, command, directory, f"{label}-oracle", args.timeout))
+            if "replay" in spec:
+                exported["checks"].append(replay_stand_in(args, directory, path, spec))
+            if spec.get("raw_valid"):
+                exported["checks"].append(raw_step_check(path, directory, f"{label}-raw-step", args.timeout))
+            exported["pass"] = all(c["pass"] for c in exported["checks"])
+            return exported
         if "same_export_as" in spec:
             expected = previous.get((spec["same_export_as"], extension))
             exported["checks"].append({"check": "same exported bytes", "expected": expected,
@@ -594,6 +660,12 @@ def checked_step_export(binary, part, directory, evidence, timeout):
         directory / "part.step", directory / "step-report.json"], directory, "check-step", timeout))
     if not checks[-1]["pass"]:
         return checks
+    checks.append(raw_step_check(directory / "part.step", directory, "raw-step", timeout))
+    return checks
+
+
+def raw_step_check(step, directory, label, timeout):
+    """The kernel gate's direct no-healing validity check of every solid in a STEP file."""
     root = pathlib.Path(__file__).resolve().parent.parent
     # Use the kernel gate's direct translator, with its own OCP 8 binding.
     program = """import importlib.metadata, json, pathlib, subprocess, sys
@@ -607,10 +679,8 @@ passed = valid(step)
 print(json.dumps({"catallax_revision": actual, "raw_valid": passed}))
 sys.exit(0 if passed else 1)
 """
-    checks.append(cli(str(root / ".ci-ocp8/bin/python"),
-        ["-c", program, root / ".ci-catallax", pinned_revision(), directory / "part.step"],
-        directory, "raw-step", timeout))
-    return checks
+    return cli(str(root / ".ci-ocp8/bin/python"), ["-c", program, root / ".ci-catallax", pinned_revision(), step],
+               directory, label, timeout)
 
 
 def scenario_folders(bundle, folders):
@@ -859,6 +929,13 @@ def run(args):
             checks.append(latency)
             if "max_edit_work" in step:
                 checks.append(edit_work_check(step, latency))
+            if "max_action_work" in scenario:
+                checks.append(action_work_check(scenario["max_action_work"], latency))
+            if "moments" in step and command.get("result") is not None:
+                # The field_mass answer, checked against the design's references.
+                write(directory / "field-mass.json", command["result"])
+                checks.append(cli(sys.executable, moments_command(step["moments"], directory / "field-mass.json"),
+                                  directory, "field-mass-oracle", args.timeout))
             write(directory / "timing.json", latency)
             print(json.dumps({"step": number, "tool": step["tool"], "timing": latency}), flush=True)
             if latency["status"] == "output":

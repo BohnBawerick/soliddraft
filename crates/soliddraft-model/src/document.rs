@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use soliddraft_document::DocumentId;
-use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Kernel, KernelResult, Plane, Topology};
+use soliddraft_kernel_api::{
+    BodyId, EdgeId, FaceId, FieldMass, FieldMassAccuracy, Kernel, KernelResult, Plane, Topology,
+};
 use soliddraft_sketch::profile::Region;
 use soliddraft_sketch::{EntityKind, Sketch, SolveStatus};
 use soliddraft_tessellation::{Report, Settings};
@@ -199,8 +201,12 @@ impl Document {
 
     /// Exports the part's body as `format`, meshes at the part's export tolerance. A part
     /// with a feature that did not build is refused, so no file shows a body the part does
-    /// not have; suppressed and rolled-back features are fine.
+    /// not have; suppressed and rolled-back features are fine. A field part writes only
+    /// its labelled STL, or its mass stand-in when that is the format asked for.
     pub fn export(&self, format: soliddraft_exchange::Format) -> Result<soliddraft_exchange::Export, String> {
+        if format == soliddraft_exchange::Format::StandIn {
+            return self.export_stand_in(&FieldMassAccuracy::default());
+        }
         if self.is_dirty() {
             return Err("the current part has not been rebuilt; wait for its rebuild before exporting".into());
         }
@@ -208,15 +214,7 @@ impl Document {
         if field && format != soliddraft_exchange::Format::Stl {
             return Err("field parts export as meshes; use labelled STL".into());
         }
-        if let Some(f) = self.features.iter().find(|f| {
-            matches!(
-                self.status(f.id),
-                Some(FeatureStatus::RepairNeeded(_) | FeatureStatus::Blocked(_) | FeatureStatus::Failed(_))
-            )
-        }) {
-            return Err(format!("{} did not build; repair or suppress it before exporting", f.name));
-        }
-        let body = self.body().ok_or("the part has no body to export")?;
+        let body = self.built_body()?;
         if field {
             let output = self.kernel.export_field_stl(body).map_err(|e| e.to_string())?;
             return Ok(soliddraft_exchange::Export {
@@ -227,6 +225,49 @@ impl Document {
 
         soliddraft_exchange::export(self.kernel.as_ref(), body, &self.name, format, &self.settings.export)
             .map_err(|e| e.to_string())
+    }
+
+    /// The active field's explicit mass stand-in: a STEP file holding the field's source
+    /// envelope as a massless surface and unit-density proxy solids proven to match the
+    /// field's moments to `accuracy`. It is never the field's boundary, and nothing else
+    /// stands in for a refused one.
+    pub fn export_stand_in(&self, accuracy: &FieldMassAccuracy) -> Result<soliddraft_exchange::Export, String> {
+        let body = self.field_body("a mass stand-in")?;
+        let output = self.kernel.export_field_stand_in(body, accuracy).map_err(|e| e.to_string())?;
+        Ok(soliddraft_exchange::Export {
+            bytes: output.bytes,
+            report: soliddraft_exchange::Report::StandIn(Box::new(output.report)),
+        })
+    }
+
+    /// Proven unit-density moments of the active field's own definition, on request only.
+    pub fn field_mass(&self, accuracy: &FieldMassAccuracy) -> Result<FieldMass, String> {
+        let body = self.field_body("field mass")?;
+        self.kernel.field_mass(body, accuracy).map_err(|e| e.to_string())
+    }
+
+    /// The active field's body, refused as an export is.
+    fn field_body(&self, what: &str) -> Result<BodyId, String> {
+        if self.is_dirty() {
+            return Err("the current part has not been rebuilt; wait for its rebuild before exporting".into());
+        }
+        if self.active_field().is_none() {
+            return Err(format!("{what} needs an active lattice or gyroid; a CAD part exports its exact body"));
+        }
+        self.built_body()
+    }
+
+    /// The body of a part whose every feature built.
+    fn built_body(&self) -> Result<BodyId, String> {
+        if let Some(f) = self.features.iter().find(|f| {
+            matches!(
+                self.status(f.id),
+                Some(FeatureStatus::RepairNeeded(_) | FeatureStatus::Blocked(_) | FeatureStatus::Failed(_))
+            )
+        }) {
+            return Err(format!("{} did not build; repair or suppress it before exporting", f.name));
+        }
+        Ok(self.body().ok_or("the part has no body to export")?)
     }
 
     /// The kernel the document builds on.

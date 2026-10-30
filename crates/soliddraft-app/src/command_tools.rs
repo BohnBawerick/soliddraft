@@ -237,6 +237,9 @@ pub enum Line {
         #[serde(default)]
         min_detail: Option<f64>,
     },
+    /// Grades a terminal field linearly along one part axis: a lattice's beam radius or a
+    /// gyroid's level is `start` at part coordinate `from` and `end` at `to`.
+    GradeField { feature: String, axis: soliddraft_kernel_api::GradeAxis, from: f64, to: f64, start: f64, end: f64 },
     /// Hollows the part, leaving named faces open.
     Shell {
         /// Faces left open; empty requests a closed shell.
@@ -586,6 +589,18 @@ pub fn gyroid_params() -> Vec<(&'static str, Value)> {
         ("level", number("Constant dimensionless level of the gyroid function, which may be zero or negative")),
         ("accuracy", number("Certified export accuracy in millimetres")),
         ("min_detail", number("Minimum preserved detail in millimetres")),
+    ]
+}
+
+/// The `grade_field` verb's parameters.
+pub fn grade_field_params() -> Vec<(&'static str, Value)> {
+    vec![
+        ("feature", string("The lattice or gyroid's tree name, such as Lattice1")),
+        ("axis", json!({"type": "string", "enum": ["x", "y", "z"], "description": "The part axis it changes along"})),
+        ("from", number("Part coordinate on the axis where the value is start, in millimetres")),
+        ("to", number("Part coordinate on the axis where the value is end, in millimetres; not from")),
+        ("start", number("The value at from and before it: beam radius in millimetres, or the dimensionless level")),
+        ("end", number("The value at to and beyond it: beam radius in millimetres, or the dimensionless level")),
     ]
 }
 
@@ -1115,6 +1130,12 @@ fn value_command(doc: &Document, name: &str, input: &Value) -> Result<Command, S
 impl Line {
     /// Runs the line on `doc` through the command layer.
     fn run(&self, doc: &mut Document, run: &mut Run) -> Result<(), String> {
+        // An active field is last: a CAD add is refused before any of its inputs are read.
+        if self.adds_cad()
+            && let Some(refusal) = doc.model().cad_after_field()
+        {
+            return Err(refusal.to_string());
+        }
         match self {
             Line::AddConfiguration { .. } | Line::SetConfigurationValue { .. } | Line::ActivateConfiguration { .. } => {
                 run.apply(doc, crate::grid::tools::command(self)?)?;
@@ -1262,7 +1283,7 @@ impl Line {
                 let lattice = soliddraft_model::LatticeFeature {
                     cell: Some(*cell),
                     cell_size_mm: Some(positive("cell size", *cell_size)?),
-                    radius_mm: Some(positive("density", *radius)?),
+                    radius_mm: Some(positive("density", *radius)?.into()),
                     accuracy_mm: *accuracy,
                     min_detail_mm: *min_detail,
                     ..Default::default()
@@ -1279,7 +1300,7 @@ impl Line {
                     lattice.cell_size_mm = Some(positive("cell size", *v)?);
                 }
                 if let Some(v) = radius {
-                    lattice.radius_mm = Some(positive("density", *v)?);
+                    lattice.radius_mm = Some(positive("density", *v)?.into());
                 }
                 if let Some(v) = accuracy {
                     lattice.accuracy_mm = *v;
@@ -1293,7 +1314,7 @@ impl Line {
                 let gyroid = soliddraft_model::GyroidFeature {
                     kind: *kind,
                     period_mm: positive("period", *period)?,
-                    level: *level,
+                    level: (*level).into(),
                     accuracy_mm: *accuracy,
                     min_detail_mm: *min_detail,
                     ..Default::default()
@@ -1309,7 +1330,7 @@ impl Line {
                     gyroid.period_mm = positive("period", *v)?;
                 }
                 if let Some(v) = level {
-                    gyroid.level = *v;
+                    gyroid.level = (*v).into();
                 }
                 if let Some(v) = accuracy {
                     gyroid.accuracy_mm = *v;
@@ -1318,6 +1339,26 @@ impl Line {
                     gyroid.min_detail_mm = *v;
                 }
                 run.apply(doc, Command::EditFeature { id, kind: FeatureKind::Gyroid(gyroid) })?;
+            }
+            Line::GradeField { feature, axis, from, to, start, end } => {
+                let id = feature_by_name(doc, feature)?;
+                let grade = soliddraft_kernel_api::Grade::Linear(soliddraft_kernel_api::LinearGrade {
+                    axis: *axis,
+                    from: *from,
+                    to: *to,
+                    start: *start,
+                    end: *end,
+                });
+                let kind = match doc.feature(id).map(|f| f.kind.clone()) {
+                    Some(FeatureKind::Lattice(lattice)) => {
+                        FeatureKind::Lattice(soliddraft_model::LatticeFeature { radius_mm: Some(grade), ..lattice })
+                    }
+                    Some(FeatureKind::Gyroid(gyroid)) => {
+                        FeatureKind::Gyroid(soliddraft_model::GyroidFeature { level: grade, ..gyroid })
+                    }
+                    _ => return Err(format!("{feature} is not a lattice or a gyroid")),
+                };
+                run.apply(doc, Command::EditFeature { id, kind })?;
             }
             Line::Shell { open_faces, thickness } => {
                 let shell = soliddraft_model::ShellFeature {
@@ -1449,6 +1490,27 @@ impl Line {
         Ok(())
     }
 
+    /// Whether the line adds a CAD feature, which an active terminal field refuses. A
+    /// second field meets the document's one-field rule instead.
+    fn adds_cad(&self) -> bool {
+        matches!(
+            self,
+            Line::Sketch { .. }
+                | Line::SketchGeometry { .. }
+                | Line::Extrude { .. }
+                | Line::Revolve { .. }
+                | Line::Cut { .. }
+                | Line::Fillet { .. }
+                | Line::Chamfer { .. }
+                | Line::Hole { .. }
+                | Line::LinearPattern { .. }
+                | Line::CircularPattern { .. }
+                | Line::Mirror { .. }
+                | Line::Draft { .. }
+                | Line::Shell { .. }
+        )
+    }
+
     /// The line's `op`: the id of its verb in the command registry.
     pub fn op(&self) -> &'static str {
         match self {
@@ -1479,6 +1541,7 @@ impl Line {
             Line::EditLattice { .. } => "edit_lattice",
             Line::Gyroid { .. } => "gyroid",
             Line::EditGyroid { .. } => "edit_gyroid",
+            Line::GradeField { .. } => "grade_field",
             Line::Shell { .. } => "shell",
             Line::EditShell { .. } => "edit_shell",
             Line::EditHole { .. } => "edit_hole",
@@ -1587,6 +1650,9 @@ impl Line {
                 ("Gyroid".into(), format!("Network, period {} mm, level {}", fmt_mm(*period), fmt_mm(*level)))
             }
             Line::EditGyroid { feature, .. } => (format!("Edit {feature}"), "Change gyroid settings".into()),
+            Line::GradeField { feature, axis, from, to, start, end } => {
+                (format!("Grade {feature}"), format!("{start} to {end} along {} from {from} to {to} mm", axis.name()))
+            }
             Line::Shell { open_faces, thickness } => (
                 "Shell".into(),
                 format!(
@@ -2117,6 +2183,16 @@ fn corner(doc: &Document, edge_mid: Vec3, a: FaceId, b: FaceId) -> &'static str 
 
 fn face_json(doc: &Document, face: FaceId) -> Value {
     let Some(nf) = doc.named_face(face) else { return Value::Null };
+    if doc.model().active_field().is_some_and(|f| doc.model().status(f.id).is_some_and(|s| s.is_ok())) {
+        // A field's one display region is a placeholder with no measured area or centroid.
+        return json!({
+            "name": name_of_face(doc, face),
+            "surface": "field display region",
+            "area_mm2": null,
+            "centroid": null,
+            "measured": "field_mass proves the field's moments; the display region has none",
+        });
+    }
     let mut v = json!({
         "name": name_of_face(doc, face),
         "surface": format!("{:?}", nf.surface).to_lowercase(),
@@ -2517,6 +2593,11 @@ impl ToolHost for CommandTools<'_> {
             "model_summary" => Ok(self.summary()),
             "feature" => self.feature(input["name"].as_str().unwrap_or_default()),
             "mass_properties" => self.mass_properties(input["name"].as_str().unwrap_or_default()),
+            "field_mass" => self
+                .doc
+                .model()
+                .field_mass(&soliddraft_kernel_api::FieldMassAccuracy::default())
+                .map(|mass| json!({ "field_mass": mass, "density": "unit", "units": { "volume": "mm3", "centroid": "mm", "inertia": "mm5" } })),
             "selection" => Ok(json!({
                 "selection": self.doc.selection.map(|s| selection_json(self.doc, s)).unwrap_or(Value::Null)
             })),
@@ -2570,7 +2651,7 @@ impl ToolHost for CommandTools<'_> {
                 *self.doc = doc;
                 Ok(json!({ "opened": path }))
             })(),
-            "delete_feature" | "suppress" if mcp => {
+            "delete_feature" | "suppress" | "grade_field" if mcp => {
                 let mut line = input.clone();
                 line["op"] = json!(name);
                 serde_json::from_value::<Line>(line)

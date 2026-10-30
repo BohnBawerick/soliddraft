@@ -5225,6 +5225,7 @@ name = "soliddraft-kernel-catallax"
 version = "0.1.0"
 dependencies = [
  "catallax-app",
+ "catallax-features",
  "catallax-field",
  "catallax-measure",
  "catallax-mesh",

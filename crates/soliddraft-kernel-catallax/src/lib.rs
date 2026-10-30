@@ -196,6 +196,9 @@ impl State {
     }
 
     fn solid(&self, body: BodyId) -> KernelResult<Arc<Solid>> {
+        if self.fields.contains_key(&body) {
+            return Err(terminal_field(body));
+        }
         self.get(body)?.solid.clone().ok_or_else(|| gap("profile sheet queries", "1"))
     }
 
@@ -277,6 +280,9 @@ impl CatallaxKernel {
         context: &[BodyId],
         mut step: Value,
     ) -> KernelResult<OpResult> {
+        if let Some(field) = inputs.iter().chain(context).find(|body| state.fields.contains_key(body)) {
+            return Err(terminal_field(*field));
+        }
         let mut steps = BTreeMap::new();
         let mut history = BTreeMap::new();
         let mut parents = Vec::new();
@@ -382,6 +388,13 @@ impl CatallaxKernel {
     fn solid(&self, body: BodyId) -> KernelResult<Arc<Solid>> {
         self.state()?.solid(body)
     }
+}
+
+/// A terminal field is last: no CAD step or B-rep query reads it.
+fn terminal_field(body: BodyId) -> KernelError {
+    KernelError::InvalidInput(format!(
+        "lattice.cad-after-lattice: {body} is a terminal field; return before it to edit (Catallax stage 1)"
+    ))
 }
 
 fn gap(what: &str, stage: &str) -> KernelError {
@@ -788,6 +801,16 @@ impl Kernel for CatallaxKernel {
         self.observe("export_field_stl", || self.field(body)?.ok_or(KernelError::UnknownBody(body))?.export())
     }
 
+    fn field_mass(&self, body: BodyId, accuracy: &FieldMassAccuracy) -> KernelResult<FieldMass> {
+        self.observe("field_mass", || self.field(body)?.ok_or(KernelError::UnknownBody(body))?.mass(accuracy))
+    }
+
+    fn export_field_stand_in(&self, body: BodyId, accuracy: &FieldMassAccuracy) -> KernelResult<StandInExport> {
+        self.observe("export_field_stand_in", || {
+            self.field(body)?.ok_or(KernelError::UnknownBody(body))?.stand_in(accuracy)
+        })
+    }
+
     fn tessellate(&self, body: BodyId, params: &TessellationParams) -> KernelResult<Mesh> {
         self.observe("tessellate", || {
             if self.field(body)?.is_some() {
@@ -879,6 +902,9 @@ impl Kernel for CatallaxKernel {
 
     fn mass_properties(&self, body: BodyId) -> KernelResult<MassProperties> {
         self.observe("mass_properties", || {
+            if self.field(body)?.is_some() {
+                return Err(KernelError::Unsupported("a field's moments need an explicit field mass request".into()));
+            }
             let solid = self.solid(body)?;
             solid
                 .mass
