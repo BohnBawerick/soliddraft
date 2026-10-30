@@ -85,7 +85,7 @@ cargo run --release -p soliddraft-app -- --demo
 
 A part or drawing file on the command line opens it. `--demo` loads a sample part, `--bench` measures frame times on a dense body and exits, `--screenshot out.png` saves the window and exits, `--help` lists the rest. Press `?` in the app for the keyboard shortcuts.
 
-Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Hole, Fillet, Chamfer, Draft, the patterns and Mirror work on the body from the ribbon.
+Modelling starts with a sketch: pick a plane in the tree or click a planar face, draw, add dimensions with `D`, then Extrude or Cut from the property panel. Hole, Fillet, Chamfer, Draft, the patterns and Mirror work on the body from the ribbon. Fillet and Chamfer take picked edges, or a picked face for every edge on its boundary; one the kernel refuses is not added, and the note gives the kernel's reason.
 
 ## Running in a browser
 

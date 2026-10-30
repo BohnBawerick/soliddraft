@@ -1870,6 +1870,8 @@ impl Document {
         });
         journal.finish((|| {
             let label = command.label();
+            let rounding = matches!(command, Command::AddFillet { .. } | Command::AddChamfer { .. });
+            let depth = self.model.undo_depth();
             let commands = self.to_model(command)?;
             let batch = model::Command::Batch { label, commands };
             let done = if deferred { self.model.execute_deferred(batch) } else { self.model.execute(batch) }
@@ -1885,6 +1887,11 @@ impl Document {
                 && let Some(id) = created
                 && let Some(FeatureStatus::Error(msg)) = self.feature(id).map(|f| f.status.clone())
             {
+                // A refused fillet or chamfer is rolled back, as the command tools do: left
+                // red, it would block every later edge and face reference.
+                if rounding {
+                    self.abandon(depth).map_err(|e| format!("{msg}; {e}"))?;
+                }
                 return Err(msg);
             }
             Ok(created)
@@ -2575,6 +2582,16 @@ impl Document {
             return None;
         }
         self.model.edge_ref(edge).ok()
+    }
+
+    /// Persistent references to every edge on a face's boundary, so a picked face can
+    /// stand for its edges in a fillet or chamfer. None unless every edge has a name.
+    pub fn face_edge_refs(&self, face: FaceId) -> Option<Vec<EdgeRef>> {
+        if !self.current_exact_display() {
+            return None;
+        }
+        let topology = self.kernel().topology(self.display_body()?).ok()?;
+        topology.face(face)?.edges.iter().map(|&e| self.model.edge_ref(e).ok()).collect()
     }
 
     /// A persistent reference to a planar face of the part, for sketching on it. A piece
