@@ -26,3 +26,15 @@ pub(crate) fn command(line: &Line) -> Result<Command, String> {
         _ => return Err("not a configuration command".into()),
     })
 }
+
+/// Keep tracked readouts while showing the selected row's named expressions and numbers.
+pub(crate) fn values(mut all: Value, active: Value) -> Value {
+    if let (Some(rows), Some(active)) = (all.as_array_mut(), active.as_array()) {
+        for row in rows {
+            if let Some(selected) = active.iter().find(|value| value["name"] == row["name"]) {
+                *row = selected.clone();
+            }
+        }
+    }
+    all
+}

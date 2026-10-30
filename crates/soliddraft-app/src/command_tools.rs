@@ -2310,7 +2310,7 @@ impl CommandTools<'_> {
         json!({
             "part": doc.name,
             "units": "mm",
-            "values": crate::measure::values(doc),
+            "values": crate::grid::tools::values(crate::measure::values(doc), doc.model().values().summary()),
             "configurations": doc.model().configuration_summary(),
             "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),

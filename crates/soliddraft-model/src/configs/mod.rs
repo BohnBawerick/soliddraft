@@ -61,7 +61,7 @@ impl Configurations {
             Document::check_kind(&feature.kind).map_err(|e| e.to_string())?;
         }
         Document::check_order(&self.base).map_err(|e| e.to_string())?;
-        Document::check_lattice_last(&self.base).map_err(|e| e.to_string())?;
+        Document::check_field_last(&self.base).map_err(|e| e.to_string())?;
         defaults.validate(&self.base)?;
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
