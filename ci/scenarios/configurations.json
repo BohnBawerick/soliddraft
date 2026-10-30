@@ -1,0 +1,821 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "configurations",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              60,
+              45,
+              0
+            ],
+            "width": 140,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              45,
+              0
+            ],
+            "width": 10,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 70,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              10
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch3",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 41950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.3324427964,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45.0,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 15.5663905901,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 130.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 70,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "plate_w",
+        "expression": "140"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "flange_d",
+        "expression": "plate_w / 2"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 70
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "expression": "plate_w"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/0/expressions/1",
+          "equals": "plate_w"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "parameter": "depth",
+        "expression": "flange_d"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/features/3/expressions/depth",
+          "equals": "flange_d"
+        },
+        {
+          "pointer": "/summary/features/3/depth",
+          "equals": 70
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/summary/configurations/rows",
+          "length": 2
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 10
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Narrow",
+        "name": "plate_w",
+        "expression": "120"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/rows/1/overrides/plate_w",
+          "equals": "120"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 10
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Wide"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/rows",
+          "length": 3
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 10
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Wide",
+        "name": "plate_w",
+        "expression": "6 in"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/rows/2/overrides/plate_w",
+          "equals": "152.4 mm"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 10
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Narrow",
+        "name": "plate_w",
+        "expression": "flange_d * 2"
+      },
+      "label": "refused row cycle",
+      "refused": "cycle",
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/configurations",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 14
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Wide",
+        "name": "plate_w",
+        "expression": "30 deg"
+      },
+      "label": "refused row unit",
+      "refused": "length",
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/configurations",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 14
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "label": "first switch",
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 120
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 60
+        },
+        {
+          "pointer": "/summary/features/3/depth",
+          "equals": 60
+        },
+        {
+          "pointer": "/summary/features/0/expressions/1",
+          "equals": "plate_w"
+        },
+        {
+          "pointer": "/summary/features/3/expressions/depth",
+          "equals": "flange_d"
+        },
+        {
+          "pointer": "/summary/configurations/rows",
+          "same_as_step": 14
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 35950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.6285924228,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45.0,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 13.8892385092,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 120.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 60,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 70
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 120
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 60
+        }
+      ],
+      "same_geometry_as_step": 17
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Wide"
+      },
+      "label": "second switch",
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/features/3/depth",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/values/0/expression",
+          "equals": "152.4 mm"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195609.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 45670.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.189887553,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45.0,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 16.6047712058,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -16.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 136.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 76.2,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "label": "switch back",
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 17
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/narrow.dwprt"
+      },
+      "files": [
+        "{bundle}/narrow.dwprt"
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Wide"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide"
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 20
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/narrow.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/summary/configurations",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 35950.79644737231,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 17,
+      "checked_step_export": "{bundle}/narrow.dwprt"
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Wide"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        }
+      ],
+      "same_geometry_as_step": 20
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/wide.dwprt"
+      },
+      "files": [
+        "{bundle}/wide.dwprt"
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Default"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Default"
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/wide.dwprt"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide"
+        },
+        {
+          "pointer": "/summary/configurations",
+          "same_as_step": 26
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 26
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 26
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195609.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 45670.79644737231,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 20,
+      "checked_step_export": "{bundle}/wide.dwprt"
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Default"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 70
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Zero"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/configurations/rows",
+          "length": 4
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 14
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Zero",
+        "name": "plate_w",
+        "expression": "0"
+      },
+      "checks": [
+        {
+          "pointer": "/revision",
+          "same_as_step": 30
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 30
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 30
+        },
+        {
+          "pointer": "/summary/configurations",
+          "same_as_step": 30
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 30
+        }
+      ],
+      "same_geometry_as_step": 14,
+      "refused": "depth must be positive",
+      "label": "refused zero depth, approved S13 fallback"
+    }
+  ]
+}

@@ -24,6 +24,7 @@
 //! Units are millimetres and degrees.
 
 mod command;
+pub mod configs;
 pub mod display;
 mod document;
 mod evaluate;

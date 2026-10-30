@@ -807,6 +807,17 @@ pub enum Command {
         source: model::tracked::Source,
         check: Option<String>,
     },
+    AddConfiguration {
+        name: String,
+    },
+    SetConfigurationValue {
+        configuration: String,
+        name: String,
+        expression: String,
+    },
+    ActivateConfiguration {
+        name: String,
+    },
     SetValue {
         name: String,
         expression: String,
@@ -897,6 +908,9 @@ impl Command {
             Command::AddSketch { .. } => "Add sketch".into(),
             Command::EditSketch { .. } => "Edit sketch".into(),
             Command::Track { .. } => "Track this".into(),
+            Command::AddConfiguration { .. }
+            | Command::SetConfigurationValue { .. }
+            | Command::ActivateConfiguration { .. } => "Configuration".into(),
             Command::SetValue { .. } => "Set value".into(),
             Command::Drive { .. } => "Drive input".into(),
             Command::RenameValue { .. } => "Rename value".into(),
@@ -1989,6 +2003,11 @@ impl Document {
             |id: FeatureId, kind: &FeatureKind| model::Command::EditFeature { id: model_id(id), kind: kind.to_model() };
         Ok(match command {
             Command::Track { name, source, check } => vec![model::Command::Track { name, source, check }],
+            Command::AddConfiguration { name } => vec![model::Command::AddConfiguration { name }],
+            Command::SetConfigurationValue { configuration, name, expression } => {
+                vec![model::Command::SetConfigurationValue { configuration, name, expression }]
+            }
+            Command::ActivateConfiguration { name } => vec![model::Command::ActivateConfiguration { name }],
             Command::SetValue { name, expression } => vec![model::Command::SetValue { name, expression }],
             Command::Drive { input, expression } => vec![model::Command::Drive { input, expression }],
             Command::RenameValue { name, to } => vec![model::Command::RenameValue { name, to }],

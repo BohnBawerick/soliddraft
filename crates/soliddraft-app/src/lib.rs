@@ -19,6 +19,7 @@ pub mod document;
 pub mod drag;
 pub mod drawing;
 pub mod file;
+mod grid;
 pub mod icons;
 pub mod journal;
 #[cfg(target_arch = "wasm32")]

@@ -127,6 +127,22 @@ impl Values {
         Ok(())
     }
 
+    pub(crate) fn expression(&self, name: &str) -> Option<&str> {
+        self.entries.iter().find(|v| v.name == name).map(|v| v.expression.text.as_str())
+    }
+
+    pub(crate) fn overlay(&self, overrides: &BTreeMap<String, String>) -> Result<Self, String> {
+        let mut next = self.clone();
+        for (name, text) in overrides {
+            let expression = self.parse(text)?;
+            let entry =
+                next.entries.iter_mut().find(|v| v.name == *name).ok_or_else(|| format!("unknown value {name}"))?;
+            entry.expression = expression;
+        }
+        next.resolve()?;
+        Ok(next)
+    }
+
     pub(crate) fn drive(&mut self, input: Input, text: &str) -> Result<(), String> {
         let expression = self.parse(text)?;
         if let Some(binding) = self.bindings.iter_mut().find(|b| b.input == input) {
@@ -346,7 +362,7 @@ impl Values {
 impl Document {
     /// The document's named values and bindings.
     pub fn values(&self) -> &Values {
-        &self.values
+        self.configurations.lookup(&self.values)
     }
 }
 
@@ -481,7 +497,7 @@ fn tokenize(text: &str) -> Result<Vec<&str>, String> {
     Ok(out)
 }
 
-fn rename_tokens(text: &str, from: &str, to: &str) -> String {
+pub(crate) fn rename_tokens(text: &str, from: &str, to: &str) -> String {
     let mut out = String::new();
     let mut at = 0;
     for token in tokenize(text).expect("accepted expression") {

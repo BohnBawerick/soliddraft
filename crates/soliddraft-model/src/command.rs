@@ -92,6 +92,34 @@ pub enum Command {
         /// Resolved definitions to restore.
         features: Vec<Feature>,
     },
+    /// Adds an inactive row of named-value overrides.
+    AddConfiguration {
+        /// New row name, distinct from Default.
+        name: String,
+    },
+    /// Sets one named-value override in a non-default row.
+    SetConfigurationValue {
+        /// Target non-default row.
+        configuration: String,
+        /// Existing named value.
+        name: String,
+        /// Authored override expression.
+        expression: String,
+    },
+    /// Selects a configuration and resolves its geometry from the saved base.
+    ActivateConfiguration {
+        /// Row to select, including Default.
+        name: String,
+    },
+    /// Restores configuration truth and resolved definitions for undo.
+    RestoreConfigurations {
+        /// Table and fixed base.
+        state: Box<crate::configs::Configurations>,
+        /// File-default values.
+        values: crate::values::Values,
+        /// Resolved selected variant.
+        features: Vec<Feature>,
+    },
     /// Renames a feature.
     RenameFeature {
         /// The feature.
@@ -262,11 +290,11 @@ pub(crate) struct UndoEntry {
 }
 
 /// What applying a command did.
-struct Applied {
-    inverse: Command,
-    redo: Command,
-    created: Option<FeatureId>,
-    label: String,
+pub(crate) struct Applied {
+    pub(crate) inverse: Command,
+    pub(crate) redo: Command,
+    pub(crate) created: Option<FeatureId>,
+    pub(crate) label: String,
 }
 
 impl Document {
@@ -462,7 +490,7 @@ impl Document {
     }
 
     /// Checks that every feature reads only features above it, in this order.
-    fn check_order(features: &[Feature]) -> Result<(), CommandError> {
+    pub(crate) fn check_order(features: &[Feature]) -> Result<(), CommandError> {
         for (i, f) in features.iter().enumerate() {
             for dep in f.kind.dependencies() {
                 match features.iter().position(|g| g.id == dep) {
@@ -494,7 +522,7 @@ impl Document {
         Ok(())
     }
 
-    fn check_kind(kind: &FeatureKind) -> Result<(), CommandError> {
+    pub(crate) fn check_kind(kind: &FeatureKind) -> Result<(), CommandError> {
         match kind {
             FeatureKind::Fillet(b) | FeatureKind::Chamfer(b) if !(b.size.is_finite() && b.size > 0.0) => {
                 Err(CommandError::Invalid(format!("size must be positive, got {}", b.size)))
@@ -590,7 +618,7 @@ impl Document {
     }
 
     fn check_drivers(&self, features: &[Feature]) -> Result<(), CommandError> {
-        let resolved = self.values.validate(features).map_err(CommandError::Invalid)?;
+        let resolved = self.values().validate(features).map_err(CommandError::Invalid)?;
         if resolved != features {
             return Err(CommandError::Invalid("edit the driving value instead of its driven input".into()));
         }
@@ -656,7 +684,24 @@ impl Document {
     }
 
     fn apply(&mut self, command: Command) -> Result<Applied, CommandError> {
+        if crate::configs::handles(&command, !self.configurations.is_empty()) {
+            return self.apply_configuration(command);
+        }
+        let capture = !self.configurations.is_empty() && !matches!(command, Command::Batch { .. });
+        let before = if capture { self.features.clone() } else { Vec::new() };
+        let applied = self.apply_inner(command)?;
+        if capture {
+            self.configurations.capture_edits(&before, &self.features);
+        }
+        Ok(applied)
+    }
+
+    fn apply_inner(&mut self, command: Command) -> Result<Applied, CommandError> {
         match command {
+            command @ (Command::AddConfiguration { .. }
+            | Command::SetConfigurationValue { .. }
+            | Command::ActivateConfiguration { .. }
+            | Command::RestoreConfigurations { .. }) => self.apply_configuration(command),
             command @ (Command::Track { .. }
             | Command::SetValue { .. }
             | Command::Drive { .. }

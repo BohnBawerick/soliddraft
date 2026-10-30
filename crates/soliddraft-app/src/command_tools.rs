@@ -68,6 +68,12 @@ pub enum Shape {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Line {
+    /// Adds an inactive configuration row.
+    AddConfiguration { name: String },
+    /// Changes one row override.
+    SetConfigurationValue { configuration: String, name: String, expression: String },
+    /// Selects a row and resolves its feature inputs.
+    ActivateConfiguration { name: String },
     /// Creates or changes a named value.
     SetValue {
         /// The value identifier.
@@ -1110,6 +1116,9 @@ impl Line {
     /// Runs the line on `doc` through the command layer.
     fn run(&self, doc: &mut Document, run: &mut Run) -> Result<(), String> {
         match self {
+            Line::AddConfiguration { .. } | Line::SetConfigurationValue { .. } | Line::ActivateConfiguration { .. } => {
+                run.apply(doc, crate::grid::tools::command(self)?)?;
+            }
             Line::SetValue { .. } | Line::RenameValue { .. } | Line::Drive { .. } => {
                 let input = serde_json::to_value(self).map_err(|e| e.to_string())?;
                 let command = value_command(doc, self.op(), &input)?;
@@ -1443,6 +1452,9 @@ impl Line {
     /// The line's `op`: the id of its verb in the command registry.
     pub fn op(&self) -> &'static str {
         match self {
+            Line::AddConfiguration { .. } => "add_configuration",
+            Line::SetConfigurationValue { .. } => "set_configuration_value",
+            Line::ActivateConfiguration { .. } => "activate_configuration",
             Line::SetValue { .. } => "set_value",
             Line::RenameValue { .. } => "rename_value",
             Line::Drive { .. } => "drive",
@@ -1614,6 +1626,11 @@ impl Line {
             Line::Chamfer { edges, distance } => {
                 ("Chamfer".into(), format!("{} mm on {}", fmt_mm(*distance), edges.join(", ")))
             }
+            Line::AddConfiguration { name } => ("Add configuration".into(), name.clone()),
+            Line::SetConfigurationValue { configuration, name, expression } => {
+                (format!("Set {configuration} {name}"), expression.clone())
+            }
+            Line::ActivateConfiguration { name } => ("Activate configuration".into(), name.clone()),
             Line::SetValue { name, expression } => (format!("Set {name}"), expression.clone()),
             Line::RenameValue { name, to } => (format!("Rename {name}"), to.clone()),
             Line::Drive { sketch, feature, expression, .. } => {
@@ -2294,6 +2311,7 @@ impl CommandTools<'_> {
             "part": doc.name,
             "units": "mm",
             "values": crate::measure::values(doc),
+            "configurations": doc.model().configuration_summary(),
             "edit_state": proof,
             "planes": PlaneKind::ALL.map(|p| doc.model().datum_name(p.to_model())),
             "features": doc.features.iter().map(|f| {

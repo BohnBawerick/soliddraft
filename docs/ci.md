@@ -95,3 +95,7 @@ The `countersink` acceptance scenario extends its original seven steps with a bo
 The `assembly` acceptance scenario checks separate part and assembly undo, a floating
 component at the origin, in-session freshness, transactional Update, failure retention
 and reopen from accepted display copies through MCP at the current Catallax pin.
+
+## Configuration acceptance
+
+`ci/scenarios/configurations.json` checks three width variants against hand-derived volume, area, centroid and bounds, then checks exact geometry identity across undo, redo, switches and reopens. Two checked STEP exports must match the selected variant. The scenario uses the normal timing budgets. Its S13 fallback checks that zero driven depth is refused; activation of an unbuildable row awaits a designer replacement case. Model cases M1-M9 cover old files, display meshes, inheritance, write targets, rename, row validation, undo and damaged truth. Command fuzzing includes configuration edits and switches.

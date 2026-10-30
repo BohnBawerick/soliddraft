@@ -1673,6 +1673,7 @@ fn registry() -> Vec<CommandSpec> {
     .chain(assembly_registry::registry())
     .chain(drawing_registry())
     .chain(crate::measure::registry::commands())
+    .chain(crate::grid::registry::commands())
     .collect()
 }
 
