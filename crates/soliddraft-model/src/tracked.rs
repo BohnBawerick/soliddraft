@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Measurement, PairEndpoint, PairQuantity};
+use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Measurement, PairEndpoint, PairQuantity, PointProof};
 
 use crate::{Document, EdgeRef, FaceRef};
 
@@ -66,13 +66,14 @@ impl Endpoint {
         matches!(self, Self::EdgeMidpoint { .. }).then_some("midpoint")
     }
 
-    fn resolve(&self, doc: &Document, body: BodyId) -> Result<PairEndpoint, String> {
+    /// A missing or ambiguous end is named by its saved label; no nearby entity stands in.
+    pub fn resolve(&self, doc: &Document, body: BodyId) -> Result<PairEndpoint, String> {
         match self {
             Self::Edge { reference } => doc.resolve_edge(reference, body).map(PairEndpoint::Edge),
             Self::Face { reference } => doc.resolve_face(reference, body).map(PairEndpoint::Face),
             Self::EdgeMidpoint { reference } => doc.resolve_edge(reference, body).map(PairEndpoint::EdgeMidpoint),
         }
-        .map_err(|e| format!("{}: {}", self.label(), e.message))
+        .map_err(|e| format!("measure.unresolved-reference: {}: {}", self.label(), e.message))
     }
 }
 
@@ -251,6 +252,17 @@ impl Document {
             Entity::Pair(quantity, a, b) => self.kernel.measure_pair(body, a, b, quantity),
         }
         .map_err(|e| format!("{} could not be measured: {e}", source.label()))
+    }
+
+    /// The proven midpoint of one straight edge on the current part. A coordinate bundle
+    /// is a readout, not a tracked scalar.
+    pub fn measure_midpoint(&self, reference: &EdgeRef) -> Result<PointProof, String> {
+        if self.is_dirty() {
+            return Err("proof pending".into());
+        }
+        let body = self.body().ok_or("the part has no body")?;
+        let edge = self.resolve_edge(reference, body).map_err(|e| format!("{}: {}", reference.label, e.message))?;
+        self.kernel.edge_midpoint(body, edge).map_err(|e| format!("{} could not be measured: {e}", reference.label))
     }
 
     pub(crate) fn refresh_tracked(&mut self) {

@@ -26,7 +26,7 @@ use soliddraft_assistant::tools::schema::{
     any_of, array, boolean, constant, integer, non_empty_array, number, object, optional, string,
 };
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
-use soliddraft_kernel_api::{FaceId, KernelResult, Plane, SurfaceKind};
+use soliddraft_kernel_api::{FaceId, Plane, SurfaceKind};
 use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip};
 use soliddraft_model::{DatumPlane, PatternSpec, PlaneRef};
 
@@ -754,7 +754,7 @@ pub fn feature_params() -> Vec<(&'static str, Value)> {
 
 /// The `measure` tool's parameters.
 pub fn measure_params() -> Vec<(&'static str, Value)> {
-    vec![("a", string("First entity name")), ("b", string("Second entity name"))]
+    crate::measure::tools::pair_params()
 }
 
 /// The `propose` tool's parameters.
@@ -2014,7 +2014,7 @@ macro_rules! names_help {
     };
 }
 
-const NAMES_HELP: &str = names_help!();
+pub(crate) const NAMES_HELP: &str = names_help!();
 
 /// The tools for a surface, in the registry's order.
 pub fn tool_specs(surface: Surface) -> Vec<ToolSpec> {
@@ -2052,33 +2052,6 @@ pub fn find_entity(doc: &Document, name: &str) -> Option<Selection> {
     let n: u32 = label.to_ascii_lowercase().strip_prefix("vertex")?.trim().parse().ok()?;
     let key = VertexKey { feature: f.id, index: n.checked_sub(1)? };
     doc.vertex_position(key).map(|_| Selection::Vertex(key))
-}
-
-/// The point an entity is measured from. Measuring is an explicit request, so features,
-/// faces and edges use the kernel's proven centre of mass, centroids and midpoints. When
-/// the kernel refuses the proof, so does the measurement: the display's estimates are
-/// never passed off as measured.
-fn reference_point(doc: &Document, sel: Selection) -> KernelResult<Option<Vec3>> {
-    let f32s = |v: soliddraft_kernel_api::Vec3| Vec3::new(v.x as f32, v.y as f32, v.z as f32);
-    let measured = || doc.display_body().map(|body| doc.kernel().measured_topology(body)).transpose();
-    Ok(match sel {
-        Selection::Body => match doc.display_body() {
-            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
-            None => None,
-        },
-        Selection::Feature(id) => match doc.feature(id).and_then(|f| f.body) {
-            Some(body) => Some(f32s(doc.kernel().mass_properties(body)?.centroid)),
-            None => None,
-        },
-        Selection::Face(face) => {
-            measured()?.and_then(|t| t.faces.iter().find(|f| f.id == face).map(|f| f32s(f.centroid)))
-        }
-        Selection::Edge(edge) => {
-            measured()?.and_then(|t| t.edges.iter().find(|e| e.id == edge).map(|e| f32s(e.midpoint)))
-        }
-        Selection::Vertex(key) => doc.vertex_position(key),
-        Selection::Reference(_) => None,
-    })
 }
 
 /// Whether an edge is an outside (convex) edge or an inside corner (concave), from the
@@ -2380,32 +2353,6 @@ impl CommandTools<'_> {
         }))
     }
 
-    fn measure(&self, a: &str, b: &str) -> Result<Value, String> {
-        let doc = &*self.doc;
-        let find = |name: &str| find_entity(doc, name).ok_or_else(|| format!("no entity named `{name}`. {NAMES_HELP}"));
-        let (sa, sb) = (find(a)?, find(b)?);
-        let point = |name: &str, s| match reference_point(doc, s) {
-            Ok(Some(p)) => Ok(p),
-            Ok(None) => Err(format!("`{name}` has no reference point")),
-            Err(e) => Err(format!("`{name}` could not be measured: {e}")),
-        };
-        let (pa, pb) = (point(a, sa)?, point(b, sb)?);
-        let d = pb - pa;
-        let mut v = json!({
-            "a": { "name": a, "point": vec3(pa) },
-            "b": { "name": b, "point": vec3(pb) },
-            "distance_mm": round(d.length() as f64),
-            "dx_mm": round(d.x as f64), "dy_mm": round(d.y as f64), "dz_mm": round(d.z as f64),
-        });
-        if let (Selection::Face(fa), Selection::Face(fb)) = (sa, sb)
-            && let (Some(qa), Some(qb)) = (doc.face_plane(fa), doc.face_plane(fb))
-            && qa.normal.dot(qb.normal).abs() > 0.9999
-        {
-            v["gap_mm"] = round((qb.origin - qa.origin).dot(qa.normal).abs()).into();
-        }
-        Ok(v)
-    }
-
     fn propose(&mut self, input: &Value, caller: &Caller) -> Result<Value, String> {
         let lines: Vec<Line> =
             serde_json::from_value(input["commands"].clone()).map_err(|e| format!("bad commands: {e}"))?;
@@ -2520,8 +2467,7 @@ impl ToolHost for CommandTools<'_> {
             "selection" => Ok(json!({
                 "selection": self.doc.selection.map(|s| selection_json(self.doc, s)).unwrap_or(Value::Null)
             })),
-            "measure_entity" | "track" => crate::measure::tools::call(self.doc, name, &input),
-            "measure" => self.measure(input["a"].as_str().unwrap_or_default(), input["b"].as_str().unwrap_or_default()),
+            "measure_entity" | "track" | "measure" => crate::measure::tools::call(self.doc, name, &input),
             "propose" => self.propose(&input, caller),
             "apply" => self.apply(input["proposal_id"].as_str().unwrap_or_default(), caller),
             "rollback" if mcp => (|| {
@@ -2952,6 +2898,15 @@ mod tests {
         fn measured_topology(&self, _body: BodyId) -> KernelResult<Topology> {
             Err(Self::refusal("measured_topology"))
         }
+        fn measure_pair(
+            &self,
+            _body: BodyId,
+            _a: soliddraft_kernel_api::PairEndpoint,
+            _b: soliddraft_kernel_api::PairEndpoint,
+            _quantity: soliddraft_kernel_api::PairQuantity,
+        ) -> KernelResult<soliddraft_kernel_api::Measurement> {
+            Err(Self::refusal("measure_pair"))
+        }
         fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
             self.0.history(body)
         }
@@ -2985,7 +2940,6 @@ mod tests {
         for (a, b) in [
             ("Boss-Extrude1 · Start cap", "Boss-Extrude1 · End cap"),
             ("Boss-Extrude1 · Edge 1", "Boss-Extrude1 · End cap"),
-            ("Boss-Extrude1", "Boss-Extrude1 · End cap"),
         ] {
             let m = call_checked(&mut tools, "measure", json!({ "a": a, "b": b }), &mcp);
             assert!(m.is_error, "{a} to {b} answered without a proof: {}", m.content);
@@ -2995,6 +2949,10 @@ mod tests {
                 m.content
             );
         }
+        // A feature has no proven pair quantity; it is refused before any proof.
+        let m =
+            call_checked(&mut tools, "measure", json!({ "a": "Boss-Extrude1", "b": "Boss-Extrude1 · End cap" }), &mcp);
+        assert!(m.is_error && m.content.contains("select an edge or a face"), "{}", m.content);
 
         // The descriptions still show the display's estimates, and say so.
         let feature = call_checked(&mut tools, "feature", json!({ "name": "Boss-Extrude1" }), &mcp);

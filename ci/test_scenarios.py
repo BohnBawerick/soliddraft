@@ -131,6 +131,19 @@ class Checks(unittest.TestCase):
         self.assertFalse(scenarios.references_kept(known, [ref], [], False)["pass"])
         self.assertFalse(scenarios.references_kept(known, [], [], False)["pass"])
 
+    def test_an_opened_file_keeps_only_the_references_it_holds(self):
+        ref = {"feature_id": "F1", "feature": "Sketch1", "slot": "sketch plane", "origin": "Top plane",
+            "resolved": True, "kernel_origins": [], "matches_origin": True}
+        fillet = dict(ref, feature_id="F5", feature="Fillet1", slot="edge 1", origin="F2 Edge 4")
+        known = {}
+        self.assertTrue(scenarios.references_kept(known, [ref, fillet], [], False)["pass"])
+        # A refused open retains the document and its references.
+        self.assertFalse(scenarios.references_kept(known, [ref], [], False, reopened=False)["pass"])
+        self.assertTrue(scenarios.references_kept(known, [ref], [], False, reopened=True)["pass"])
+        self.assertEqual(list(known), [("F1", "sketch plane")])
+        # A reference the opened file holds must still name its origin.
+        self.assertFalse(scenarios.references_kept(known, [dict(ref, origin="Front plane")], [], False, reopened=True)["pass"])
+
     def test_bundle_paths(self):
         self.assertEqual(scenarios.substitute({"path": "{bundle}/a.dwprt", "n": [1, "{bundle}"]}, "/run"),
             {"path": "/run/a.dwprt", "n": [1, "/run"]})
