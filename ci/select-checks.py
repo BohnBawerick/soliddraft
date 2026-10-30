@@ -26,6 +26,12 @@ OWNERS = {
     'application-loop': {'soliddraft-cli'},
 }
 POLICY = 'ci/check-consumers.json'
+# Reviewed viewport UI and math with no device, adapter, surface or OS API. The rest of viewport/ is platform.
+SHARED_VIEWPORT = {f'crates/soliddraft-app/src/viewport/{name}.rs'
+                   for name in ('camera', 'dimensions', 'environment', 'mod', 'pick')}
+# Native window, GPU setup and dialogs that depend on the platform without a desktop cfg.
+NATIVE_SETUP = {'crates/soliddraft-app/src/main.rs', 'crates/soliddraft-app/src/app/workspace.rs',
+                'crates/soliddraft-app/src/platform.rs', 'crates/soliddraft-cli/src/screenshot.rs'}
 
 
 class PolicyError(Exception):
@@ -109,15 +115,30 @@ def check_inventory(root, revision, consumers):
         raise PolicyError(f'no entry in {POLICY} for {", ".join(unmapped)}')
 
 
+def desktop_cfg(text):
+    # Include multiline and nested cfg expressions; wasm-only code does not add desktop legs.
+    return bool(re.search(r'\bcfg(?:_attr)?!?\s*\([^;{}]*?\b(target_os|target_family|target_vendor|target_env|windows|unix)\b',
+                          text, re.S))
+
+
+def native_api(text):
+    # Comments may overselect. The egui_wgpu callback hand-off alone is not device setup.
+    return desktop_cfg(text) or bool(re.search(
+        r'\b(?:wgpu|winit|rfd|raw_window_handle)\s*::|\bstd\s*::\s*os\s*::|\.wgsl\b'
+        r'|\b(?:NativeOptions|WgpuConfiguration|SurfaceConfig)\b|\brun_native\s*\(', text))
+
+
 def platform_path(path, sources):
     if pathlib.PurePosixPath(path).name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain', 'rust-toolchain.toml'}:
         return True
-    if path.startswith(('packaging/', '.github/', 'crates/soliddraft-app/src/viewport/')):
+    if path.startswith(('packaging/', '.github/')) or path in NATIVE_SETUP:
         return True
-    # Include multiline and nested cfg expressions; wasm-only code does not add desktop legs.
-    return path.endswith('.rs') and any(
-        re.search(r'\bcfg!?\s*\([^;{}]*?\b(target_os|target_family|target_vendor|target_env|windows|unix)\b', s, re.S)
-        for s in sources)
+    if path in SHARED_VIEWPORT:
+        return any(native_api(s) for s in sources)
+    # Backend files, shaders and any viewport path not reviewed as shared.
+    if path.startswith('crates/soliddraft-app/src/viewport/'):
+        return True
+    return path.endswith('.rs') and any(desktop_cfg(s) for s in sources)
 
 
 def graph(root, base=None):
