@@ -427,6 +427,28 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/coordinates/0/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/coordinates/1/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/coordinates/2/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
+        },
+        {
+          "pointer": "/result/geometry",
+          "contains": ""
         }
       ]
     },
@@ -533,6 +555,12 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -629,6 +657,16 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -732,6 +770,12 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -818,6 +862,12 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -904,6 +954,12 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -1005,6 +1061,16 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 7
+        },
+        {
+          "pointer": "/result/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
         }
       ]
     },
@@ -1290,6 +1356,10 @@
         {
           "pointer": "/rebuild/operations",
           "equals": 0
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -1300,16 +1370,106 @@
       "same_geometry_as_step": 7,
       "checks": [
         {
-          "pointer": "/summary/values",
-          "same_as_step": 16
-        },
-        {
           "pointer": "/summary/undo",
           "equals": "track diagonal_gap"
         },
         {
           "pointer": "/rebuild/operations",
           "equals": 0
+        },
+        {
+          "pointer": "/summary/values",
+          "length": 2
+        },
+        {
+          "pointer": "/summary/values/0",
+          "same_as_step": 16
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
         }
       ]
     },
@@ -1320,16 +1480,179 @@
       "same_geometry_as_step": 7,
       "checks": [
         {
-          "pointer": "/summary/values",
-          "same_as_step": 17
-        },
-        {
           "pointer": "/summary/undo",
           "equals": "track cap_gap"
         },
         {
           "pointer": "/rebuild/operations",
           "equals": 0
+        },
+        {
+          "pointer": "/summary/values",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/values/0",
+          "same_as_step": 17
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "diagonal_gap"
+        },
+        {
+          "pointer": "/summary/values/1/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/check/text",
+          "equals": "< 32 mm"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 Edge 7"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 31.622776601683793,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "maximum": 31.622776601683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "minimum": 31.622776601683796
+        },
+        {
+          "pointer": "/summary/values/1/tracked/lo",
+          "minimum": 31.62277659168379
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "maximum": 31.622776611683793
+        },
+        {
+          "pointer": "/summary/values/1/tracked/certainty",
+          "equals": "bounded"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/hi",
+          "differs_from": {
+            "pointer": "/summary/values/1/tracked/lo"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "cap_gap"
+        },
+        {
+          "pointer": "/summary/values/2/expression",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "minimum_distance"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/frame",
+          "equals": "part"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/state",
+          "equals": "pass"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/check/text",
+          "equals": "< 12 mm"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/source",
+          "equals": "Boss-Extrude1 \u00b7 Start cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/0/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/source",
+          "equals": "Boss-Extrude1 \u00b7 End cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/sources/1/point",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 10,
+          "tolerance": 1e-08
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "maximum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "minimum": 10
+        },
+        {
+          "pointer": "/summary/values/2/tracked/lo",
+          "minimum": 9.99999999
+        },
+        {
+          "pointer": "/summary/values/2/tracked/hi",
+          "maximum": 10.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -1355,6 +1678,14 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 19
+        },
+        {
+          "pointer": "/output",
+          "contains": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/output",
+          "contains": "Cut-Extrude1 \u00b7 Edge 1"
         }
       ]
     },
@@ -1385,6 +1716,14 @@
         {
           "pointer": "/summary/features",
           "same_as_step": 19
+        },
+        {
+          "pointer": "/output",
+          "contains": "Boss-Extrude1 \u00b7 Edge 4"
+        },
+        {
+          "pointer": "/output",
+          "contains": "Cut-Extrude1 \u00b7 Edge 1"
         }
       ]
     },
@@ -1560,6 +1899,10 @@
         {
           "pointer": "/summary/body/bounding_box/max/2",
           "approx": 15
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -1569,10 +1912,6 @@
       "label": "T8 undo",
       "same_geometry_as_step": 7,
       "checks": [
-        {
-          "pointer": "/summary/values",
-          "same_as_step": 19
-        },
         {
           "pointer": "/summary/values/1/name",
           "equals": "diagonal_gap"
@@ -1720,6 +2059,18 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 10.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/values/0",
+          "same_as_step": 19
         }
       ]
     },
@@ -1729,10 +2080,6 @@
       "label": "T8 redo",
       "same_geometry_as_step": 22,
       "checks": [
-        {
-          "pointer": "/summary/values",
-          "same_as_step": 22
-        },
         {
           "pointer": "/summary/values/1/name",
           "equals": "diagonal_gap"
@@ -1880,6 +2227,18 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/values/0",
+          "same_as_step": 22
         }
       ]
     },
@@ -2047,6 +2406,10 @@
         {
           "pointer": "/rebuild/operations",
           "equals": 0
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -2082,10 +2445,6 @@
       "label": "T9 reopen current",
       "same_geometry_as_step": 26,
       "checks": [
-        {
-          "pointer": "/summary/values",
-          "same_as_step": 26
-        },
         {
           "pointer": "/summary/values/1/name",
           "equals": "diagonal_gap"
@@ -2233,6 +2592,18 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values",
+          "length": 3
+        },
+        {
+          "pointer": "/summary/values/0",
+          "same_as_step": 26
         }
       ]
     },
@@ -2391,6 +2762,23 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 10.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values/1/tracked/geometry",
+          "same_as": {
+            "step": 9,
+            "pointer": "/result/geometry"
+          }
+        },
+        {
+          "pointer": "/summary/values/2/tracked/geometry",
+          "same_as": {
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
         }
       ]
     },
@@ -2475,6 +2863,22 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 29
+        },
+        {
+          "pointer": "/result/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "pointer": "/summary/values/1/tracked/geometry"
+          }
         }
       ]
     },
@@ -2564,6 +2968,19 @@
         {
           "pointer": "/summary/values",
           "same_as_step": 29
+        },
+        {
+          "pointer": "/result/source_revision",
+          "same_as": {
+            "pointer": "/revision"
+          }
+        },
+        {
+          "pointer": "/result/geometry",
+          "same_as": {
+            "step": 30,
+            "pointer": "/result/geometry"
+          }
         }
       ]
     },
@@ -2722,6 +3139,10 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -3063,6 +3484,21 @@
             "step": 32,
             "pointer": "/summary/values/2/tracked/geometry"
           }
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values/1/tracked/reason",
+          "contains": "measure.unresolved-reference"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/sources"
+          }
         }
       ]
     },
@@ -3204,6 +3640,17 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
+        },
+        {
+          "pointer": "/summary/values/1/tracked/sources",
+          "same_as": {
+            "step": 32,
+            "pointer": "/summary/values/1/tracked/sources"
+          }
         }
       ]
     },
@@ -3362,6 +3809,10 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 15.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     },
@@ -3521,6 +3972,10 @@
         {
           "pointer": "/summary/values/2/tracked/hi",
           "maximum": 10.00000001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/certainty",
+          "contains": ""
         }
       ]
     }
