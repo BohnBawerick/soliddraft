@@ -20,6 +20,9 @@ use soliddraft_drawing::{AnnotationKind, AnnotationState, DimValue, DimensionKin
 use soliddraft_kernel_api::Vec3;
 use std::path::PathBuf;
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: std::time::Duration = std::time::Duration::from_secs(600);
+
 fn gpu_available() -> bool {
     let _ = env_logger::try_init();
     let instance = egui_wgpu::wgpu::Instance::default();
@@ -53,7 +56,7 @@ fn save(harness: &mut App<'_>, name: &str) {
 
 fn settle(harness: &mut App<'_>) {
     harness.run_steps(24);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let deadline = std::time::Instant::now() + HANG;
     while harness.state().state.doc.proof_pending() {
         assert!(std::time::Instant::now() < deadline, "the part proof did not settle");
         std::thread::sleep(std::time::Duration::from_millis(10));

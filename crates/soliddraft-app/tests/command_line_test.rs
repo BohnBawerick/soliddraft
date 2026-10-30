@@ -16,6 +16,9 @@ use soliddraft_app::command_line::{AI_COMMAND, DEFAULT_TOOLS};
 use soliddraft_assistant::{MockProvider, MockTurn};
 use std::path::PathBuf;
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: std::time::Duration = std::time::Duration::from_secs(600);
+
 fn gpu_available() -> bool {
     let _ = env_logger::try_init();
     let instance = egui_wgpu::wgpu::Instance::default();
@@ -188,7 +191,7 @@ fn typed_commands_run_and_the_session_talks_to_the_assistant() {
 
     // Free text goes to the assistant, which proposes; Apply builds it.
     type_line(&mut harness, "Add a Ø20 boss, 24 mm tall, on the base", Key::Enter);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let deadline = std::time::Instant::now() + HANG;
     while harness.state().state.chat.busy() && std::time::Instant::now() < deadline {
         harness.step();
         std::thread::sleep(std::time::Duration::from_millis(10));

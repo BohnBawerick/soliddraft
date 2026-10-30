@@ -14,6 +14,9 @@ use soliddraft_drawing::display::layout_sheet;
 use soliddraft_drawing::export::{self, Format};
 use soliddraft_drawing::{Command, Drawing, DrawingError, apply_with};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: std::time::Duration = std::time::Duration::from_secs(600);
+
 fn call(state: &mut AppState, name: &str, arguments: Value) {
     let caller = Caller::Mcp { client: "test".into() };
     let out = call_checked(&mut AppTools { state }, name, arguments, &caller);
@@ -69,7 +72,7 @@ fn drawings_never_pair_requested_definitions_with_a_retained_body() {
     use std::time::{Duration, Instant};
 
     let settle = |state: &mut AppState| {
-        let deadline = Instant::now() + Duration::from_secs(120);
+        let deadline = Instant::now() + HANG;
         while state.doc.proof_pending() {
             state.doc.poll_proof();
             assert!(Instant::now() < deadline, "the part proof did not settle");

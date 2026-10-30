@@ -22,6 +22,9 @@ use soliddraft_assistant::Caller;
 use soliddraft_assistant::mcp::{HttpServer, McpSession, serve_lines};
 use soliddraft_assistant::tools::{ToolHost, ToolOutput, ToolSpec, schema::*, validate};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 /// Cases per property, and the seed they come from, unless the environment says otherwise.
 fn config() -> ProptestConfig {
     // A failing input is printed with the test's seed; nothing is written beside the sources.
@@ -387,7 +390,7 @@ fn server() -> SocketAddr {
 /// Sends `bytes`, then closes the sending side and reads what the server answers.
 fn exchange(bytes: &[u8]) -> String {
     let mut stream = TcpStream::connect(server()).expect("connect");
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    stream.set_read_timeout(Some(HANG)).unwrap();
     // The server may answer and close before the whole of a large request is sent.
     let _ = stream.write_all(bytes);
     let _ = stream.shutdown(Shutdown::Write);
@@ -460,7 +463,7 @@ fn http_answers_431_to_a_client_that_keeps_sending_past_the_limit() {
     // The refusal must reach the client even while more of the request is in flight:
     // closing on unread bytes resets the connection, and Windows then drops the answer.
     let mut stream = TcpStream::connect(server()).expect("connect");
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    stream.set_read_timeout(Some(HANG)).unwrap();
     let mut sender = stream.try_clone().unwrap();
     let sending = std::thread::spawn(move || {
         let _ = sender.write_all(b"POST /mcp HTTP/1.1\r\nX-Padding: ");

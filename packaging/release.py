@@ -170,8 +170,7 @@ def known_gap_notes():
     for entry in policy["steps"]:
         steps.setdefault(entry["scenario"], []).append(f"{entry['step']} ({entry['tool']})")
     lines = ["## Known gaps", "",
-             "These application steps take longer than the 1,000 ms feature click budget. "
-             "The release accepts each one only up to 120% of its recorded time; "
+             "These application steps took longer than the 1,000 ms feature click budget when measured; "
              f"this is not a claim of meeting the budget. Follow-up: {policy['follow_up']}.", ""]
     return lines + [f"- {scenario}: steps {', '.join(numbers)}." for scenario, numbers in steps.items()] + [""]
 

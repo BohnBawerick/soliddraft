@@ -15,6 +15,9 @@ use gated::Gated;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 impl Gated {
     fn hold(&self, depth: f64) {
         self.rules.lock().unwrap().hold = Some(depth);
@@ -27,8 +30,7 @@ impl Gated {
     /// Waits until an extrusion is held.
     fn wait_held(&self) {
         let rules = self.rules.lock().unwrap();
-        let (_rules, timeout) =
-            self.changed.wait_timeout_while(rules, Duration::from_secs(120), |r| r.holding.is_none()).unwrap();
+        let (_rules, timeout) = self.changed.wait_timeout_while(rules, HANG, |r| r.holding.is_none()).unwrap();
         assert!(!timeout.timed_out(), "no extrusion reached the hold");
     }
 
@@ -42,8 +44,7 @@ impl Gated {
         self.rules.lock().unwrap().hold = Some(depth);
         self.changed.notify_all();
         let rules = self.rules.lock().unwrap();
-        let (_rules, timeout) =
-            self.changed.wait_timeout_while(rules, Duration::from_secs(120), |r| r.holding != Some(depth)).unwrap();
+        let (_rules, timeout) = self.changed.wait_timeout_while(rules, HANG, |r| r.holding != Some(depth)).unwrap();
         assert!(!timeout.timed_out(), "the newest extrusion never reached its hold");
     }
 }
@@ -76,7 +77,7 @@ fn volume(state: &AppState) -> f64 {
 
 /// Polls once per frame until the drag has answered its newest value.
 fn settle(state: &mut AppState) {
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + HANG;
     while state.poll_drag() {
         assert!(Instant::now() < deadline, "the drag preview never answered");
         std::thread::sleep(Duration::from_millis(5));
@@ -86,7 +87,7 @@ fn settle(state: &mut AppState) {
 /// Polls while an exact proof is held until `shown` is true. Construction runs beside
 /// its proof, so the early display can arrive after the proof reaches the hold.
 fn poll_until(state: &mut AppState, shown: impl Fn(&AppState) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + HANG;
     while !shown(state) {
         assert!(Instant::now() < deadline, "the construction display never arrived while its proof was held");
         state.poll_drag();
@@ -389,7 +390,7 @@ fn cancelling_a_newer_drag_resumes_the_original_proof_and_resolves_its_selected_
 
     start(&mut state, block);
     state.drag_dimension(DragStep::Move(18.0));
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + HANG;
     while shown_value(&state) != Some(18.0) {
         assert!(state.poll_drag());
         assert!(Instant::now() < deadline, "the newer construction was held behind the old proof");

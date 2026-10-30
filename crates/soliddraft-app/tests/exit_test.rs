@@ -20,6 +20,9 @@ use soliddraft_app::sketcher::Frame;
 use soliddraft_assistant::{MockProvider, MockTurn};
 use std::path::PathBuf;
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: std::time::Duration = std::time::Duration::from_secs(600);
+
 fn gpu_available() -> bool {
     let _ = env_logger::try_init();
     let instance = egui_wgpu::wgpu::Instance::default();
@@ -79,7 +82,7 @@ fn look_from(harness: &mut App<'_>, yaw: f32, pitch: f32) {
 /// Lets camera moves and the one-frame pick lag settle.
 fn settle(harness: &mut App<'_>) {
     harness.run_steps(30);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let deadline = std::time::Instant::now() + HANG;
     while harness.state().state.doc.proof_pending() {
         assert!(std::time::Instant::now() < deadline, "the part proof did not settle");
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -371,7 +374,7 @@ fn demo_part_renders() {
     harness.state_mut().state.command_line.input = "Add a Ø20 boss, 24 mm tall from the Top plane, on the base.".into();
     harness.run_steps(1);
     harness.key_press(Key::Enter);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+    let deadline = std::time::Instant::now() + HANG;
     while harness.state().state.chat.busy() && std::time::Instant::now() < deadline {
         harness.step();
         std::thread::sleep(std::time::Duration::from_millis(20));

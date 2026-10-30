@@ -392,7 +392,7 @@ jobs:
           spec.loader.exec_module(scenarios)
           root = pathlib.Path(sys.argv[1])
           root.mkdir(parents=True)
-          client = scenarios.Client(str(pathlib.Path("target/release/soliddraft").resolve()), root / "commands", 100_000_000, 300)
+          client = scenarios.Client(str(pathlib.Path("target/release/soliddraft").resolve()), root / "commands", 100_000_000, scenarios.HANG_TIMEOUT_S)
           try:
               client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                   "clientInfo": {"name": "live-display-check", "version": "1"}})
@@ -461,40 +461,13 @@ jobs:
         if: always()
         run: |
           python3 - "$RUNNER_TEMP/application-loop" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
-          import json, pathlib, sys
-          rows = ["## Application click budgets", "",
-                  "Release build on ${{ runner.environment }}/${{ runner.os }}/${{ runner.arch }}; raw click-to-display timing, not a matched-core baseline.", "",
-                  "| Scenario | Step | Tool | Wait ms | Budget ms | Result |",
-                  "|---|---:|---|---:|---:|---|"]
-          trends, views = [], []
-          for path in sorted(pathlib.Path(sys.argv[1]).glob("*/result.json")):
-              report = json.loads(path.read_text())
-              for step in report["steps"]:
-                  timing = step.get("timing")
-                  if timing:
-                      budget = "none" if timing["budget_ms"] is None else timing["budget_ms"]
-                      rows.append(f"| {report['name']} | {step['number']} | {step['tool']} | "
-                          f"{timing['elapsed_ms']:.3f} | {budget} | {timing['status']} |")
-                  view = step.get("drawing_view")
-                  if view:
-                      views.append(f"| {report['name']} | {step['number']} | {view['elapsed_ms']:.3f} | "
-                          f"{view['budget_ms']} | {'pass' if view['pass'] else 'OVER BUDGET'} |")
-              for trend in report.get("trends", []):
-                  trends.append(f"| {report['name']} | {trend['tool']} | {trend.get('samples', 0)} | "
-                      f"{trend.get('growth_ms', 'unavailable')} | {trend['noise_ms']} | "
-                      f"{'pass' if trend['pass'] else 'fail'} |")
-              if report.get("error"):
-                  rows.extend(["", f"{report['name']}: {report['error']}"])
-          if views:
-              rows.extend(["", "## Drawing-view budgets", "",
-                  "| Scenario | Step | Hidden-line SVG ms | Budget ms | Result |",
-                  "|---|---:|---:|---:|---|", *views])
-          if trends:
-              rows.extend(["", "## Feature-count latency trends", "",
-                  "| Scenario | Tool | Samples | Fitted growth ms | Noise ms | Result |",
-                  "|---|---|---:|---:|---:|---|", *trends])
+          import importlib.util, json, pathlib, sys
+          spec = importlib.util.spec_from_file_location("scenarios", "ci/run-scenarios.py")
+          scenarios = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(scenarios)
+          reports = [json.loads(path.read_text()) for path in sorted(pathlib.Path(sys.argv[1]).glob("*/result.json"))]
           with open(sys.argv[2], "a") as summary:
-              summary.write("\n".join(rows) + "\n")
+              summary.write(scenarios.summary(reports, "${{ runner.environment }}/${{ runner.os }}/${{ runner.arch }}"))
           PYTHON
       - uses: actions/upload-artifact@v4
         if: always()

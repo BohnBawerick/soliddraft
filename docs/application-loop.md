@@ -88,8 +88,8 @@ intersections, offsets or rotations use rational arithmetic.
 and cuts of the same 2 × 4 mm hole at (10, 10), each 12 mm deep. Each cut is undone
 and redone before the next sketch. The surface stays at ten faces after the first
 cut, so the run separates recipe length from live geometry size. Volume and cached
-history work are checked throughout. The four sketch/cut/undo/redo series must not
-develop a feature-count latency trend.
+history work are checked throughout. The four sketch/cut/undo/redo series are checked
+for a feature-count latency trend.
 
 `drawing.json` is the drawing scenario: the drawing follows the edited part through the
 same tools the ribbon runs. It builds the bracket up to its slot, saves the part, makes a
@@ -209,7 +209,7 @@ catallax-verify replay /tmp/bracket-run/commands/0002/question-0000.json \
 
 Directories must be new. Neither MCP capture nor the runner overwrites an older
 run. Commands have a timeout. An unexpected behavioral failure stops the run;
-latency-only failures do not, so later steps retain their measurements.
+latency is a warning, not a failure, so later steps retain their measurements.
 To collect the same evidence from another agent, start
 `soliddraft mcp --bundle /tmp/new-agent-run`. A command's files appear after its
 reply: the bundle writes them on `scenario_evidence`, before the next request other
@@ -349,10 +349,12 @@ timeout or closed pipe records `incomplete` on the step with the request that di
 answer and fails the run; it is never counted as a pass.
 
 Timing verdicts are diagnostics under the 30 October advisory policy. The
-recorded labels distinguish a `strict-pass` within its timing reference, a
-legacy `known-gap`, and a timing overrun. An output has no click budget and
-records `output`. Timing labels do not fail a PR. Correctness, complete evidence
+recorded labels distinguish a `strict-pass` within its timing reference from an
+`over-budget` timing overrun, listed or not. An output has no click budget and
+records `output`. Timing labels do not fail a PR: each overrun is a warning and a
+line in the result's `warnings` and `over_budget`. Correctness, complete evidence
 and work limits remain hard acceptance checks, including when `--strict` is used.
+`--strict`, the release-path verdict, also exits nonzero when `over_budget` is not empty.
 
 ### Pinned evidence
 
@@ -371,7 +373,8 @@ qualified evidence of its own before it could excuse a measurement.
 
 Every step with a solid requests `scenario_display` first and records the click
 before asking `scenario_view` for the hidden-line SVG. SVG time is recorded
-separately against a 1,000 ms reference, with its own per-step CI summary table.
+separately against a 1,000 ms reference; an overrun is a row in the CI summary's
+over-budget table.
 A timing overrun is advisory; drawing correctness errors remain hard failures.
 Later steps still run so the cost distribution is retained.
 
@@ -383,9 +386,9 @@ preview mesh with no boolean, so it costs about what a view costs; the certified
 an export draws subtracts a half-space through a Catallax boolean, inside the export's
 recorded wait. The drawing exports (`drawing_export_svg`,
 `drawing_export_pdf`, `drawing_export_dxf`) are the `output` class: their wait is the
-caller's wait for the certified file and is recorded in the step's timing and the CI
-summary, not gated, as the CLI export and drawing checks are; an output cannot be listed
-as a known gap. Each export reports how many views it drew again from the certified
+caller's wait for the certified file and is recorded in the step's timing with no
+budget, as the CLI export and drawing checks are; an output listed as a known gap is a
+warning to remove the listing. Each export reports how many views it drew again from the certified
 mesh, and a view that is a preview of another revision refuses to export.
 
 The timing reference was calibrated from the

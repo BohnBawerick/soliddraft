@@ -61,7 +61,7 @@ Before release, also download the AppImage and browser zip from the successful r
 ## Release checklist
 
 1. Confirm the first-release gate above and record the landed/parked scope and frozen base commits. Create the versioned release branches without holding development on `main`.
-2. Confirm the candidate release commit is green in Hosted CI, including application scenarios, click budgets and survival checks. Packaging success does not replace these checks. The tag workflow requires a successful Hosted CI push run on `release/<version>` at the tagged commit.
+2. Confirm the candidate release commit is green in Hosted CI, including application scenarios and survival checks. Hosted CI reports click budgets as warnings; the strict release verdict below confirms them. Packaging success does not replace these checks. The tag workflow requires a successful Hosted CI push run on `release/<version>` at the tagged commit.
 3. Test the supported desktop part and drawing flows. Open older supported `.dwprt` and `.dwdrw` documents, save and reopen them, and check document identities and references.
    Separately, run the `.dwasm` assembly-format and schema checks. Desktop assemblies are created, saved and reopened from inside the application. Installers do not register an assembly file association, so double-clicking a `.dwasm` file does not open it. Keep the format and extension unchanged.
 4. Commit the final kernel pin, workspace version and generated lockfile on the release branch. Run the full release dry run at that exact commit. Inspect all seven packages, the SBOM, SHA256SUMS, generated notes and both smoke screenshots. After installation, double-click a `.dwprt` part and a `.dwdrw` drawing and confirm that each opens in the application.

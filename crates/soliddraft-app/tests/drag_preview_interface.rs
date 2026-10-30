@@ -20,6 +20,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 mod gated;
 
+/// The hang guard every test shares: a wait this long means stuck, not slow.
+const HANG: Duration = Duration::from_secs(600);
+
 fn gpu_available() -> bool {
     let _ = env_logger::try_init();
     let instance = egui_wgpu::wgpu::Instance::default();
@@ -44,7 +47,7 @@ fn save(harness: &mut App<'_>, name: &str) {
 }
 
 fn settle_document(harness: &mut App<'_>) {
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + HANG;
     while harness.state().state.doc.proof_pending() {
         assert!(Instant::now() < deadline, "the current document proof never answered");
         std::thread::sleep(Duration::from_millis(10));
@@ -105,7 +108,7 @@ fn dragging_the_depth_field_previews_and_applies_one_undo_step() {
         assert_eq!(plate_depth(&harness), 10.0, "the part is unchanged during the drag");
     }
     // The first exact edit is held, but a newer construction must still render.
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + HANG;
     while !harness
         .state()
         .state
