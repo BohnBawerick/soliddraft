@@ -5,7 +5,7 @@
 //! the input body, never by numeric handles, so the operation means the same thing on
 //! every rebuild of the stored chain.
 
-use catallax_numbers::Rational;
+use catallax_numbers::{Integer, Rational};
 use catallax_recipe::{
     Axis, EdgeRef, ElementId, FaceRef, HoleDepth, HoleHead, HolePlacement, HoleTip, Number, Origin, OriginPattern,
     Plane, Point3, Vector3,
@@ -121,17 +121,124 @@ impl Solid {
     }
 }
 
-pub(super) fn hole(target: catallax_recipe::StepId, params: &Hole) -> KernelResult<catallax_recipe::Operation> {
+type Exact = [Rational; 3];
+
+fn dot(a: &Exact, b: &Exact) -> Rational {
+    &(&(&a[0] * &b[0]) + &(&a[1] * &b[1])) + &(&a[2] * &b[2])
+}
+
+fn times(a: &Exact, k: &Rational) -> Exact {
+    [&a[0] * k, &a[1] * k, &a[2] * k]
+}
+
+fn plus(a: &Exact, b: &Exact) -> Exact {
+    [&a[0] + &b[0], &a[1] + &b[1], &a[2] + &b[2]]
+}
+
+fn cross(a: &Exact, b: &Exact) -> Exact {
+    [&(&a[1] * &b[2]) - &(&a[2] * &b[1]), &(&a[2] * &b[0]) - &(&a[0] * &b[2]), &(&a[0] * &b[1]) - &(&a[1] * &b[0])]
+}
+
+/// The whole square root of `n`, when it has one.
+fn whole_root(n: &Integer) -> Option<Integer> {
+    if n.is_zero() {
+        return Some(Integer::zero());
+    }
+    let two = Integer::from_i64(2);
+    let mut root = Integer::one().mul_pow2(n.bit_length().div_ceil(2));
+    loop {
+        let (quotient, _) = n.div_rem_floor(&root)?;
+        let (next, _) = (&root + &quotient).div_rem_floor(&two)?;
+        if next >= root {
+            return (&root * &root == *n).then_some(root);
+        }
+        root = next;
+    }
+}
+
+/// `v` scaled to unit length, when that length is rational.
+fn unit(v: &Exact) -> Option<Exact> {
+    let square = dot(v, v);
+    let length = Rational::from_integer(whole_root(square.numerator())?)
+        / Rational::from_integer(whole_root(square.denominator())?);
+    (!length.is_zero()).then(|| times(v, &(Rational::one() / length)))
+}
+
+/// A planar face's sketch frame in exact numbers, as `FacePoint` defines it. A face whose
+/// unit normal or X axis is irrational has none.
+struct FaceFrame {
+    origin: Exact,
+    x: Exact,
+    y: Exact,
+    normal: Exact,
+}
+
+impl FaceFrame {
+    fn of(solid: &Solid, body: BodyId, face: FaceId) -> KernelResult<Option<Self>> {
+        let id = solid.cat_face(face, body)?;
+        let model = &solid.app.checkpoint.built().model;
+        let native = model.face(id);
+        let catallax_shapes::Surface::Plane(plane) = model.geom().surface(native.surface) else { return Ok(None) };
+        let exact = |x, y, z| -> Option<Exact> {
+            let r = |v: &catallax_numbers::Real| v.as_rational();
+            Some([r(x)?, r(y)?, r(z)?])
+        };
+        let normal = exact(&plane.normal.x, &plane.normal.y, &plane.normal.z);
+        let origin = exact(&plane.origin.x, &plane.origin.y, &plane.origin.z);
+        let (Some(normal), Some(origin)) = (normal, origin) else { return Ok(None) };
+        Ok(Self::on(&normal, &origin, native.sense == catallax_topology::Sense::Same))
+    }
+
+    fn on(normal: &Exact, point: &Exact, same_sense: bool) -> Option<Self> {
+        let sign = Rational::from_i64(if same_sense { 1 } else { -1 });
+        let normal = times(&unit(normal)?, &sign);
+        let zero = Rational::zero();
+        // The test `plane_on_face` makes, on the value it reads.
+        let x = if normal[2].to_f64_nearest().abs() < 1.0 - 1e-9 {
+            unit(&[&zero - &normal[1], normal[0].clone(), zero])?
+        } else {
+            let along = times(&normal, &(&zero - &normal[0]));
+            unit(&plus(&[Rational::one(), zero.clone(), zero], &along))?
+        };
+        let y = cross(&normal, &x);
+        let origin = times(&normal, &dot(point, &normal));
+        Some(Self { origin, x, y, normal })
+    }
+
+    fn point(&self, u: &Rational, v: &Rational) -> Exact {
+        plus(&plus(&self.origin, &times(&self.x, u)), &times(&self.y, v))
+    }
+}
+
+/// A hole's centre and direction. One authored on a face is built from the local point and
+/// the face's exact frame, so literal inputs stay exact and the centre lies on the plane.
+fn hole_axis(solid: &Solid, body: BodyId, p: &crate::HolePlacement) -> KernelResult<(Point3, Vector3)> {
+    let frame = match p.on_face {
+        Some(on) => FaceFrame::of(solid, body, on.face)?.map(|frame| (on, frame)),
+        None => None,
+    };
+    let Some((on, frame)) = frame else {
+        return Ok((point(p.point, "hole point")?, vector(p.direction, "hole direction")?));
+    };
+    let numbers = |v: Exact| v.map(Number::new);
+    let centre = frame.point(number(on.u, "hole position")?.value(), number(on.v, "hole position")?.value());
+    let into = times(&frame.normal, &Rational::from_i64(-1));
+    Ok((Point3(numbers(centre)), Vector3(numbers(into))))
+}
+
+pub(super) fn hole(
+    target: catallax_recipe::StepId,
+    solid: &Solid,
+    body: BodyId,
+    params: &Hole,
+) -> KernelResult<catallax_recipe::Operation> {
     let at = params
         .placements
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            Ok(HolePlacement {
-                id: ElementId::new(format!("h{i}")).expect("placement id"),
-                point: point(p.point, "hole point")?,
-                direction: vector(p.direction, "hole direction")?,
-            })
+            let (point, direction) = hole_axis(solid, body, p)?;
+            Ok(HolePlacement { id: ElementId::new(format!("h{i}")).expect("placement id"), point, direction })
         })
         .collect::<KernelResult<Vec<_>>>()?;
     if at.is_empty() {
@@ -187,4 +294,48 @@ pub(super) fn pattern_layout(layout: &PatternLayout) -> KernelResult<catallax_re
 
 pub(super) fn plane(origin: Vec3, normal: Vec3, what: &str) -> KernelResult<Plane> {
     Ok(Plane { point: point(origin, what)?, normal: vector(normal, what)? })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exact(v: [&str; 3]) -> Exact {
+        v.map(|text| Rational::parse(text).unwrap())
+    }
+
+    #[test]
+    fn whole_roots_are_exact_or_absent() {
+        for n in [0, 1, 4, 25, 625, 1_000_000] {
+            let root = whole_root(&Integer::from_i64(n)).unwrap();
+            assert_eq!(&root * &root, Integer::from_i64(n));
+        }
+        for n in [2, 3, 24, 26, 999_999] {
+            assert!(whole_root(&Integer::from_i64(n)).is_none(), "{n}");
+        }
+    }
+
+    #[test]
+    fn a_tilted_frame_is_exact_and_an_irrational_one_is_absent() {
+        // Any multiple of a 3-4-5 normal has rational axes. The point fixes the plane at 6.
+        let frame = FaceFrame::on(&exact(["-4", "3", "0"]), &exact(["3", "14", "-13"]), true).unwrap();
+        assert_eq!(frame.normal, exact(["-4/5", "3/5", "0"]));
+        assert_eq!(frame.x, exact(["-3/5", "-4/5", "0"]));
+        assert_eq!(frame.y, exact(["0", "0", "1"]));
+        assert_eq!(frame.origin, exact(["-24/5", "18/5", "0"]));
+        assert_eq!(frame.point(&Rational::from_i64(-13), &Rational::from_i64(4)), exact(["3", "14", "4"]));
+        let turned = FaceFrame::on(&exact(["-4", "3", "0"]), &exact(["3", "14", "-13"]), false).unwrap();
+        assert_eq!(turned.normal, exact(["4/5", "-3/5", "0"]));
+        let top = FaceFrame::on(&exact(["0", "0", "2"]), &exact(["5", "5", "10"]), true).unwrap();
+        assert_eq!(
+            (top.x, top.y, top.origin),
+            (exact(["1", "0", "0"]), exact(["0", "1", "0"]), exact(["0", "0", "10"]))
+        );
+        assert!(FaceFrame::on(&exact(["1", "1", "0"]), &exact(["0", "0", "0"]), true).is_none());
+        assert!(
+            FaceFrame::on(&exact(["3", "4", "12"]), &exact(["0", "0", "0"]), true).is_some(),
+            "|n| is 13 and |Z x n| is 5"
+        );
+        assert!(FaceFrame::on(&exact(["1", "2", "2"]), &exact(["0", "0", "0"]), true).is_none(), "|Z x n| is sqrt 5");
+    }
 }

@@ -6,7 +6,8 @@ previous revision), pending, silent (no display reply), stale-measure (measureme
 revision), slow-measure (measurement takes 4.3 s), slow-click (the command takes 1.3 s), slow-evidence
 (writing the command's evidence takes 1.3 s), other-revision (the backend reports another Catallax sha),
 no-solid (the display reports no solid), lost-display (the display succeeds but writes no evidence),
-stale-no-solid (a no-solid reply for the previous revision), failed-no-solid (a failed reply claiming no solid)."""
+stale-no-solid (a no-solid reply for the previous revision), failed-no-solid (a failed reply claiming no solid).
+FAKE_LOG names a file that records each process's commands and its exit."""
 
 import json
 import hashlib
@@ -37,6 +38,12 @@ bundle = pathlib.Path(sys.argv[sys.argv.index("--bundle") + 1])
 bundle.mkdir(parents=True)
 sequence = 0
 revision = 1
+
+
+def record(event):
+    if "FAKE_LOG" in os.environ:
+        with open(os.environ["FAKE_LOG"], "a") as log:
+            log.write(f"{os.getpid()} {event}\n")
 
 
 def write(directory, name, value):
@@ -109,5 +116,7 @@ for line in sys.stdin:
         revision += 1
         directory = bundle / f"{sequence:04}"
         directory.mkdir()
+        record(name)
         # Like the real bundle, the command's evidence waits for scenario_evidence.
         reply(request, {"isError": False})
+record("exit")

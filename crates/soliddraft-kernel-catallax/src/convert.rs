@@ -246,8 +246,27 @@ pub(super) fn midpoint(value: &catallax_measure::Enclosure) -> f64 {
     ((&value.lo + &value.hi) / catallax_numbers::Rational::from_i64(2)).to_f64_nearest()
 }
 
-fn vector(v: &catallax_shapes::Vector3) -> Vec3 {
-    Vec3::new(v.x.to_f64(), v.y.to_f64(), v.z.to_f64())
+/// A value to a double's precision. `Real::to_f64` is the midpoint of a cached enclosure,
+/// kept for display, and for an irrational such as a draft's slope it is wrong in its
+/// first digits.
+fn nearest(value: &catallax_numbers::Real) -> Result<f64, catallax_numbers::Refusal> {
+    use catallax_numbers::{Decider, Rational};
+    match value.rational_ref() {
+        Some(exact) => Ok(exact.to_f64_nearest()),
+        None => {
+            let width = Rational::from_i64(1) / Rational::from_i64(1 << 60);
+            Ok(Decider::default().enclose(value, &width)?.mid().to_f64_nearest())
+        }
+    }
+}
+
+/// A plane's origin and normal, to a double's precision.
+fn plane_vectors(plane: &catallax_shapes::Plane) -> Result<(Vec3, Vec3), catallax_numbers::Refusal> {
+    let (o, n) = (&plane.origin, &plane.normal);
+    Ok((
+        Vec3::new(nearest(&o.x)?, nearest(&o.y)?, nearest(&o.z)?),
+        Vec3::new(nearest(&n.x)?, nearest(&n.y)?, nearest(&n.z)?),
+    ))
 }
 
 fn surface_kind(surface: &Surface) -> SurfaceKind {
@@ -370,19 +389,17 @@ pub(super) fn topology(
             }
         }
         let surface = model.geom().surface(face.surface);
-        let normal = if let Surface::Plane(p) = surface {
-            vector(&p.normal).normalized().map(|n| if face.sense == Sense::Same { n } else { -n })
-        } else {
-            None
+        let plane = match surface {
+            Surface::Plane(p) => Some(plane_vectors(p).map_err(|e| query("face_plane", e))?),
+            _ => None,
         };
+        let normal =
+            plane.and_then(|(_, normal)| normal.normalized()).map(|n| if face.sense == Sense::Same { n } else { -n });
         // A sketch on a planar face takes its plane's offset from the centroid, so an
         // estimate is moved onto the face's exact plane: an offset of a hair would make
         // the sketch miss faces it should meet.
-        let centroid = match (normal, surface) {
-            (Some(n), Surface::Plane(p)) if !proven => {
-                let origin = Vec3::new(p.origin.x.to_f64(), p.origin.y.to_f64(), p.origin.z.to_f64());
-                centroid + n * (origin.dot(n) - centroid.dot(n))
-            }
+        let centroid = match (normal, plane) {
+            (Some(n), Some((origin, _))) if !proven => centroid + n * (origin.dot(n) - centroid.dot(n)),
             _ => centroid,
         };
         faces.push(FaceInfo {

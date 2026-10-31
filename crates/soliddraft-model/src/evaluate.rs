@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use soliddraft_kernel_api::{
-    BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FaceRole, Gyroid, Hole, HolePlacement,
-    ImportOptions, ImportStepRequest, ImportStepResult, KernelError, KernelResult, Lattice, Mirror, OpResult, OpTag,
-    Origin, PatternLayout, Plane, SurfaceKind, Vec3,
+    BodyId, BooleanOp, CurveKind, Draft, EdgeId, Extrude, ExtrudeLimit, FacePoint, FaceRole, Gyroid, Hole,
+    HolePlacement, ImportOptions, ImportStepRequest, ImportStepResult, KernelError, KernelResult, Lattice, Mirror,
+    OpResult, OpTag, Origin, PatternLayout, Plane, SurfaceKind, Vec3,
 };
 
 use crate::feature::{
@@ -642,12 +642,14 @@ impl Document {
             Ok(p) => p,
             Err(r) => return Built::pass(FeatureStatus::RepairNeeded(vec![*r]), current),
         };
+        let face = self.resolve_face(&h.face, body).ok();
         let placements = h
             .points
             .iter()
             .map(|p| HolePlacement {
                 point: plane.origin + plane.x_dir * p.u + plane.y_dir() * p.v,
                 direction: -plane.normal,
+                on_face: face.map(|face| FacePoint { face, u: p.u, v: p.v }),
             })
             .collect();
         let params = Hole { placements, diameter: h.diameter, depth: h.depth, tip: h.tip, head: h.head };
@@ -950,7 +952,8 @@ fn number(mut faces: Vec<(Origin, Generator, usize)>) -> Vec<NamedFace> {
 }
 
 /// The sketch plane on a planar face: origin at the world origin projected onto the
-/// face, X horizontal for a face that is not horizontal, else the world X axis.
+/// face, X horizontal for a face that is not horizontal, else the world X axis. The
+/// Catallax adapter builds this frame again in exact numbers for hole centres.
 pub fn plane_on_face(normal: Vec3, point: Vec3) -> Plane {
     let n = normal;
     let x_dir = if n.z.abs() < 1.0 - 1e-9 {

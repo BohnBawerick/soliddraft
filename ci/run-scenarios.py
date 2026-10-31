@@ -611,16 +611,12 @@ def export_check(args, directory, spec, previous):
         exported["checks"] = [check(value, rule) for rule in spec.get("checks", [])]
         exported["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
         if "max_work" in spec:
-            exported["checks"].append({"check": "export work within the application allowance",
-                                       "work": value["report"].get("work"), "ceiling": spec["max_work"],
-                                       "pass": 0 < value["report"].get("work", 0) <= spec["max_work"]})
-            request = value.get("request_work") or {}
-            exported["checks"].append({"check": "fresh open, rebuild and export within one allowance",
-                                       "request_work": request, "ceiling": spec["max_work"],
-                                       "pass": request.get("limit") == spec["max_work"]
-                                               and request.get("exhausted") is False
-                                               and value["report"].get("work", 0) <= request.get("used", 0)
-                                               <= spec["max_work"]})
+            # A B-rep report states no work of its own; its request's allowance is the evidence.
+            if value["report"].get("kind") not in ("step", "mesh"):
+                exported["checks"].append({"check": "export work within the application allowance",
+                                           "work": value["report"].get("work"), "ceiling": spec["max_work"],
+                                           "pass": 0 < value["report"].get("work", 0) <= spec["max_work"]})
+            exported["checks"].append(request_work_check(value, spec["max_work"]))
         if stand_in:
             exported["checks"].append({"check": "stand-in report describes the written bytes",
                                        "pass": value["report"].get("sha256") == exported["sha256"]})
@@ -685,13 +681,25 @@ def same_geometry(binary, directory, previous_directory, timeout):
     return result
 
 
-def checked_step_export(binary, part, directory, evidence, timeout):
-    exported = cli(binary, ["export", part, "--json", "--out", directory / "part.step"],
+def request_work_check(value, ceiling):
+    """A fresh export ran its whole request, opening and rebuilding included, on one allowance."""
+    request = value.get("request_work") or {}
+    return {"check": "fresh open, rebuild and export within one allowance", "request_work": request,
+            "ceiling": ceiling, "pass": request.get("limit") == ceiling and request.get("exhausted") is False
+                                        and value["report"].get("work", 0) <= request.get("used", 0) <= ceiling}
+
+
+def checked_step_export(binary, part, directory, evidence, timeout, max_work=None, oracle=None):
+    ceiling = [] if max_work is None else ["--max-work", max_work]
+    exported = cli(binary, ["export", part, "--json", "--out", directory / "part.step", *ceiling],
                    directory, "checked-step-export", timeout)
     checks = [exported]
     if not exported["pass"]:
         return checks
-    report = json.loads((directory / "checked-step-export.stdout").read_text())["report"]
+    value = json.loads((directory / "checked-step-export.stdout").read_text())
+    report = value["report"]
+    if max_work is not None:
+        checks.append(request_work_check(value, max_work))
     checks.append({"check": "one within-tolerance STEP solid", "report": report,
                    "pass": report.get("kind") == "step" and report.get("within_tolerance") is True
                            and report.get("solids") == 1})
@@ -707,6 +715,9 @@ def checked_step_export(binary, part, directory, evidence, timeout):
     if not checks[-1]["pass"]:
         return checks
     checks.append(raw_step_check(directory / "part.step", directory, "raw-step", timeout))
+    if oracle is not None and checks[-1]["pass"]:
+        write(directory / "step-oracle.json", oracle)
+        checks.append(step_oracle_check(directory / "part.step", directory, timeout))
     return checks
 
 
@@ -727,6 +738,14 @@ sys.exit(0 if passed else 1)
 """
     return cli(str(root / ".ci-ocp8/bin/python"), ["-c", program, root / ".ci-catallax", pinned_revision(), step],
                directory, label, timeout)
+
+
+def step_oracle_check(step, directory, timeout):
+    """A design's independent solid, volume and material expectations, on the direct and ordinary imports."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    return cli(str(root / ".ci-ocp8/bin/python"), [pathlib.Path(__file__).with_name("check-step-oracle.py"),
+               root / ".ci-catallax", pinned_revision(), step, directory / "step-oracle.json"],
+               directory, "step-oracle", timeout)
 
 
 def scenario_folders(bundle, folders):
@@ -1103,7 +1122,8 @@ def run(args):
             # Exports run after the click is timed, as a user's separate request would.
             if "checked_step_export" in step:
                 checks.extend(checked_step_export(args.soliddraft,
-                    substitute(step["checked_step_export"], args.out), directory, evidence, args.timeout))
+                    substitute(step["checked_step_export"], args.out), directory, evidence, args.timeout,
+                    step.get("checked_step_max_work"), step.get("step_oracle")))
             for index, arguments in enumerate(step.get("helpers", [])):
                 checks.append(helper(arguments, args.out, directory, f"helper-{index}", args.timeout))
             specifications = [{"format": f} for f in step.get("export", [])] + step.get("exports", [])

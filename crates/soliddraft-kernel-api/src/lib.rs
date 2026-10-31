@@ -107,6 +107,25 @@ pub struct HolePlacement {
     pub point: Vec3,
     /// The drilling direction, into the material.
     pub direction: Vec3,
+    /// The same placement as authored on a planar face. A backend with exact numbers
+    /// builds from it, because `point` has passed through the face's binary64 frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_face: Option<FacePoint>,
+}
+
+/// A point in the sketch frame of a planar face of the body being drilled.
+///
+/// That frame has its origin at the world origin projected onto the face. Its X axis is the
+/// world Z axis crossed with the face's outward normal, or the world X axis projected onto
+/// a horizontal face, and its Y axis is the normal crossed with X.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FacePoint {
+    /// The face.
+    pub face: FaceId,
+    /// Along the frame's X axis, mm.
+    pub u: f64,
+    /// Along the frame's Y axis, mm.
+    pub v: f64,
 }
 
 /// How deep a hole's main wall goes.

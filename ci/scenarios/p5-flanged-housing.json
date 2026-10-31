@@ -437,6 +437,563 @@
           "equals": 41
         }
       ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 0.999
+      },
+      "label": "P5 separated fillet edit",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12511.609716045488,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 0.999
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 1
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 15
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2.5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12511.609716045488,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 0.999
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 1
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 15
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/p5-clearance.dwprt"
+      },
+      "files": [
+        "{bundle}/p5-clearance.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/p5-clearance.dwprt"
+      },
+      "fresh_process": true,
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12511.609716045488,
+          "tolerance": 0.005
+        }
+      ],
+      "same_geometry_as_step": 25,
+      "checked_step_export": "{bundle}/p5-clearance.dwprt",
+      "checked_step_max_work": 20000000,
+      "step_oracle": {
+        "surfaces": {
+          "plane": 3,
+          "cylinder": 7,
+          "cone": 4,
+          "torus": 1
+        },
+        "volume": 12511.609716045488,
+        "floor": 1e-06,
+        "inside": [
+          [
+            10,
+            15,
+            0
+          ],
+          [
+            0,
+            2,
+            20
+          ],
+          [
+            7.5,
+            5.1,
+            10
+          ],
+          [
+            12.9995,
+            4.9999,
+            0
+          ]
+        ],
+        "outside": [
+          [
+            0,
+            15,
+            0
+          ],
+          [
+            17,
+            2,
+            0
+          ],
+          [
+            7.5,
+            5.2,
+            10
+          ],
+          [
+            12.9995,
+            5.0001,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 0.999
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 1
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 15
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 3.5
+      },
+      "refusal": "shapes.rolling-envelope",
+      "same_geometry_as_step": 30,
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12511.609716045488,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/features/3/radius",
+          "equals": 0.999
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 15
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 0.999
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 1
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 1
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 15
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "edit_fillet",
+      "arguments": {
+        "feature": "Fillet1",
+        "radius": 2.5
+      },
+      "label": "P5 return to fitted",
+      "same_geometry_as_step": 8,
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 12591.90560450861,
+          "tolerance": 0.005
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Fillet1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/radius",
+          "equals": 2.5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 8
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "torus": 4,
+              "spline": 4
+            },
+            "name": {
+              "Fillet1 · Blend of edge 1 1": 8
+            }
+          }
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 22
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 41
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Revolve1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 3,
+              "cylinder": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Hole1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "cylinder": 4,
+              "cone": 4
+            }
+          }
+        }
+      ]
     }
   ]
 }
