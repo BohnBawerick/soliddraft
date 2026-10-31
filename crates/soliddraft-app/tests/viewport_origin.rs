@@ -1,5 +1,6 @@
 //! Origin axes on demand: hidden at rest in every part, shown while a reference is
-//! selected, through the real tree and the real renderer.
+//! selected or while the user keeps them on, through the real tree, the real Preferences
+//! window and the real renderer.
 //!
 //! The design is `sdc-d-ux-viewport`, merge A.
 
@@ -194,14 +195,68 @@ fn plane_and_axis_tree_selection_controls_the_triad() {
 }
 
 #[test]
-fn a_saved_always_on_choice_shows_the_axes_with_nothing_selected() {
-    let mut case = Case::gpu("saved_always_on");
-    case.seed_settings(r#"{"view":{"always_show_origin_axes":true}}"#);
+fn always_on_is_persisted_and_selection_still_overrides_off() {
+    let mut case = Case::gpu("always_on_persisted");
     let mut app = launch(empty());
+    let before = model(&app);
+    let view = camera(&app);
     assert_eq!(reference(&app), None);
-    assert!(app.state().state.viewport.references.always_show_origin_axes);
     pointer_to_chrome(&mut app);
+    let image = case.frame(&mut app, "rest");
+    assert_axes_hidden(&image, &app, "at rest");
+
+    // On through the window: with nothing selected the axes show.
+    open_grid_and_planes(&mut app);
+    assert!(!checked(&app, ALWAYS_SHOW_AXES), "unchecked on a new install");
+    click_label(&mut app, ALWAYS_SHOW_AXES);
+    assert!(checked(&app, ALWAYS_SHOW_AXES));
+    close_preferences(&mut app);
+    assert_eq!(reference(&app), None);
     let image = case.frame(&mut app, "always-on");
     case.note(format!("always on: rays {:?}", rays(&image, &app)));
     assert_axes_shown(&image, &app, "with the axes kept on");
+    assert_eq!((model(&app), camera(&app)), (before, view), "the choice touches neither the model nor the view");
+    drop(app);
+
+    // A restart keeps it.
+    let mut app = launch(empty());
+    open_grid_and_planes(&mut app);
+    assert!(checked(&app, ALWAYS_SHOW_AXES), "still checked after a restart");
+    close_preferences(&mut app);
+    let image = case.frame(&mut app, "always-on-restarted");
+    assert_axes_shown(&image, &app, "after a restart");
+
+    // Off again: with nothing selected they hide.
+    set_preference(&mut app, ALWAYS_SHOW_AXES, false);
+    let image = case.frame(&mut app, "off");
+    assert_axes_hidden(&image, &app, "with the choice off");
+
+    // A selection shows them with the choice off.
+    click_label(&mut app, "Origin, planes and axes");
+    click_label(&mut app, "Origin");
+    assert_eq!(reference(&app), Some(Reference::Origin));
+    pointer_to_chrome(&mut app);
+    let image = case.frame(&mut app, "off-origin-selected");
+    assert_axes_shown(&image, &app, "with the origin selected and the choice off");
+
+    // While it stays selected the choice changes nothing, on or off.
+    for on in [true, false] {
+        set_preference(&mut app, ALWAYS_SHOW_AXES, on);
+        assert_eq!(reference(&app), Some(Reference::Origin), "the window keeps the selection");
+        let image = case.frame(&mut app, &format!("origin-selected-choice-{on}"));
+        assert_axes_shown(&image, &app, "with the origin still selected");
+    }
+    click_empty(&mut app);
+    assert_eq!(reference(&app), None);
+    pointer_to_chrome(&mut app);
+    let image = case.frame(&mut app, "cleared");
+    assert_axes_hidden(&image, &app, "once the selection clears");
+    drop(app);
+
+    let mut app = launch(empty());
+    open_grid_and_planes(&mut app);
+    assert!(!checked(&app, ALWAYS_SHOW_AXES), "still unchecked after a restart");
+    close_preferences(&mut app);
+    let image = case.frame(&mut app, "off-restarted");
+    assert_axes_hidden(&image, &app, "after the last restart");
 }

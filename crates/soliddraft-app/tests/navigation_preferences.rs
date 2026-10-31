@@ -45,12 +45,12 @@ type Window = Harness<'static, Preferences>;
 /// The window on the saved settings; changes are saved as the app saves them, and
 /// counted.
 fn window() -> Window {
-    let prefs = Preferences::new(&settings::navigation(InstallKind::Existing));
+    let prefs = Preferences::new(&settings::navigation(InstallKind::Existing), settings::view().references);
     Harness::builder().with_size(vec2(1100.0, 760.0)).build_ui_state(
         |ui, p: &mut Preferences| {
             p.ui(ui);
             for change in p.take_changes() {
-                let Change::Navigation(s) = change;
+                let Change::Navigation(s) = change else { continue };
                 SAVES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 if let Err(e) = settings::save_navigation(&s) {
                     p.revert(&settings::navigation(InstallKind::Existing), e.to_string());
@@ -110,16 +110,10 @@ fn preferences_window_opens_with_search_and_categories() {
 fn reserved_categories_are_not_finished_pages() {
     let (_guard, _dir) = config_dir("reserved");
     let ids: Vec<&str> = preferences::available_pages().iter().map(|p| p.id).collect();
-    assert_eq!(ids, ["navigation.mouse", "navigation.orbit_zoom", "navigation.view_keys"]);
+    assert_eq!(ids, ["navigation.mouse", "navigation.orbit_zoom", "navigation.view_keys", "viewport.grid_and_planes"]);
     let reserved: Vec<&str> = preferences::reserved_categories().iter().map(|c| c.label).collect();
-    for label in [
-        "Viewport",
-        "Selection and editing",
-        "Interface",
-        "Appearance and graphics",
-        "General and documents",
-        "Assistant",
-    ] {
+    for label in ["Selection and editing", "Interface", "Appearance and graphics", "General and documents", "Assistant"]
+    {
         assert!(reserved.contains(&label), "{label} is reserved: {reserved:?}");
     }
     assert!(preferences::reserved_categories().iter().all(|c| c.status == preferences::Status::Reserved));
@@ -135,7 +129,7 @@ fn reserved_categories_are_not_finished_pages() {
         assert_eq!(w.state().page, preferences::MOUSE, "selecting {label} opens nothing");
     }
     assert_eq!(saves(), saves_before, "and writes nothing");
-    for absent in ["Grid", "Selection profile", "Ribbon", "Units", "Provider"] {
+    for absent in ["Selection profile", "Ribbon", "Units", "Provider"] {
         assert!(!has(&w, absent), "no {absent} control from a reserved page");
     }
 }
