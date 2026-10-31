@@ -14,8 +14,8 @@
   "pair": {
     "parent_app": "d4d294b4863a0900ca126727d3aeae509e032d40",
     "candidate_app": "the head of branch fm/sdc-ux-fillet-tool; each run records the commit it tested in run.log",
-    "catallax_pin": "25883191687914a3c03b954b620e0c425cc7f224",
-    "history": "Designed against app 3403d2134d5f1d8e76e6f2d143eedd48648fdd5f at Catallax e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc; the pair moved to the slot-display pin when https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/100 merged, then to Catallax 1599a8db3a8cc45be8f87e8ab085be72fb938ef6 with https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/98, then to Catallax 25883191687914a3c03b954b620e0c425cc7f224 with the V8 catch-up. No expected geometry was regenerated."
+    "catallax_pin": "e139919ae1d6b3718e49ff4519f956cc429c36ac",
+    "history": "Designed against app 3403d2134d5f1d8e76e6f2d143eedd48648fdd5f at Catallax e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc; the pair moved to the slot-display pin when https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/100 merged, then to Catallax 1599a8db3a8cc45be8f87e8ab085be72fb938ef6 with https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/98, then to Catallax 25883191687914a3c03b954b620e0c425cc7f224 with the V8 catch-up, then to Catallax e139919ae1d6b3718e49ff4519f956cc429c36ac with V8 K, L, M, N and O. No expected geometry was regenerated."
   },
   "harness": {
     "window_points": [1440, 900],

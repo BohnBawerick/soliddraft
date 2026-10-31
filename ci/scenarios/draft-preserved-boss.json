@@ -1,0 +1,2894 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "draft-preserved-boss",
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              0
+            ],
+            "width": 40,
+            "height": 30
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 20,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 24000,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5200,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 6
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 · End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              6,
+              2,
+              20
+            ],
+            "diameter": 8
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 5,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 24251.327412287184,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5325.663706143592,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.062180698322,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.020726899441,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 10.129543121503,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        }
+      ]
+    },
+    {
+      "tool": "draft",
+      "arguments": {
+        "faces": [
+          "Boss-Extrude1 · Side of line 2",
+          "Boss-Extrude1 · Side of line 4"
+        ],
+        "neutral": "top",
+        "angle": 3,
+        "reverse": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23622.43406089069,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5222.494962775014,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.063836117389,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021278705796,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 10.044249524819,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2573617.064122793,
+          "tolerance": 0.025736170641227928
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3785857.522882187,
+          "tolerance": 0.03785857522882187
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4721906.302958257,
+          "tolerance": 0.047219063029582564
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.841415059,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18782.829210132,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6260.943070044,
+          "tolerance": 0.001
+        }
+      ],
+      "drawing": true,
+      "label": "draft build",
+      "exports": [
+        {
+          "format": "step",
+          "max_work": 20000000
+        },
+        {
+          "format": "stl",
+          "max_work": 20000000
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1086.85,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.05,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.48,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 600.82,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.05,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.48,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 600.82,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 3
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "shoulder",
+        "entity": "Boss-Extrude1 · End cap"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1086.845182402914,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "boss_wall",
+        "entity": "Boss-Extrude2 · Wall of circle 1"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "boss_cap",
+        "entity": "Boss-Extrude2 · End cap"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "track",
+      "arguments": {
+        "name": "drafted_side",
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "edit_draft",
+      "arguments": {
+        "feature": "Draft1",
+        "angle": 5
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23201.463449976094,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5155.270184143761,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.064994368867,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021664789622,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 9.984571926326,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2528052.451210093,
+          "tolerance": 0.025280524512100933
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3618759.944130454,
+          "tolerance": 0.03618759944130454
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4537227.357348239,
+          "tolerance": 0.04537227357348239
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.259214365,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18872.820908537,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6290.940302846,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/source",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1044.7481213114543,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/source",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/source",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/reason",
+          "contains": "the face now faces [0.996, 0.0, 0.087] instead of [0.999, 0.0, 0.052]"
+        }
+      ],
+      "drawing": true,
+      "label": "draft edit",
+      "exports": [
+        {
+          "format": "step",
+          "max_work": 20000000
+        },
+        {
+          "format": "stl",
+          "max_work": 20000000
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1044.75,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 602.2919025260085,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23622.43406089069,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5222.494962775014,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.063836117389,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021278705796,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 10.044249524819,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2573617.064122793,
+          "tolerance": 0.025736170641227928
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3785857.522882187,
+          "tolerance": 0.03785857522882187
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4721906.302958257,
+          "tolerance": 0.047219063029582564
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.841415059,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18782.829210132,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6260.943070044,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/source",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1086.845182402914,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/source",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/source",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "current"
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1086.85,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.05,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.48,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 600.82,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.05,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.48,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 600.82,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 3
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23201.463449976094,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5155.270184143761,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.064994368867,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021664789622,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 9.984571926326,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2528052.451210093,
+          "tolerance": 0.025280524512100933
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3618759.944130454,
+          "tolerance": 0.03618759944130454
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4537227.357348239,
+          "tolerance": 0.04537227357348239
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.259214365,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18872.820908537,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6290.940302846,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/source",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1044.7481213114543,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/source",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/source",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "approx": 600.8234075987526,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/reason",
+          "contains": "the face now faces [0.996, 0.0, 0.087] instead of [0.999, 0.0, 0.052]"
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1044.75,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 602.2919025260085,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/draft-preserved-boss.dwprt"
+      },
+      "files": [
+        "{bundle}/draft-preserved-boss.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/draft-preserved-boss.dwprt"
+      },
+      "fresh_process": true,
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23201.463449976094,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5155.270184143761,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.064994368867,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021664789622,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 9.984571926326,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2528052.451210093,
+          "tolerance": 0.025280524512100933
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3618759.944130454,
+          "tolerance": 0.03618759944130454
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4537227.357348239,
+          "tolerance": 0.04537227357348239
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.259214365,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18872.820908537,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6290.940302846,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/source",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1044.7481213114543,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/source",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/source",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/reason",
+          "contains": "the face now faces [0.996, 0.0, 0.087] instead of [0.999, 0.0, 0.052]"
+        }
+      ],
+      "same_geometry_as_step": 28
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1044.75,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 602.2919025260085,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "edit_draft",
+      "arguments": {
+        "feature": "Draft1",
+        "angle": 90
+      },
+      "refused": "draft angle must be between -90 and 90 and not 0, got 90",
+      "same_geometry_as_step": 34,
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 23201.463449976094,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 5155.270184143761,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 0.064994368867,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 0.021664789622,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 9.984571926326,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 15,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 25,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/faces",
+          "equals": 8
+        },
+        {
+          "pointer": "/summary/body/edges",
+          "equals": 14
+        },
+        {
+          "pointer": "/measurement/inertia/0/0",
+          "approx": 2528052.451210093,
+          "tolerance": 0.025280524512100933
+        },
+        {
+          "pointer": "/measurement/inertia/1/1",
+          "approx": 3618759.944130454,
+          "tolerance": 0.03618759944130454
+        },
+        {
+          "pointer": "/measurement/inertia/2/2",
+          "approx": 4537227.357348239,
+          "tolerance": 0.04537227357348239
+        },
+        {
+          "pointer": "/measurement/inertia/0/1",
+          "approx": -2983.259214365,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/0/2",
+          "approx": -18872.820908537,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/measurement/inertia/1/2",
+          "approx": -6290.940302846,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/name",
+          "equals": "shoulder"
+        },
+        {
+          "pointer": "/summary/values/0/tracked/source",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "approx": 1044.7481213114543,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/1/name",
+          "equals": "boss_wall"
+        },
+        {
+          "pointer": "/summary/values/1/tracked/source",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "approx": 125.66370614359172,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/1/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/2/name",
+          "equals": "boss_cap"
+        },
+        {
+          "pointer": "/summary/values/2/tracked/source",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "approx": 50.26548245743669,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/2/tracked/state",
+          "equals": "current"
+        },
+        {
+          "pointer": "/summary/values/3/name",
+          "equals": "drafted_side"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/source",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/summary/values/3/value",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/values/3/tracked/state",
+          "equals": "stale"
+        },
+        {
+          "pointer": "/summary/values/3/tracked/reason",
+          "contains": "the face now faces [0.996, 0.0, 0.087] instead of [0.999, 0.0, 0.052]"
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 34
+        },
+        {
+          "pointer": "/summary/features",
+          "same_as_step": 34
+        },
+        {
+          "pointer": "/summary/values",
+          "same_as_step": 34
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 34
+        }
+      ],
+      "checked_step_export": "{bundle}/draft-preserved-boss.dwprt",
+      "checked_step_max_work": 20000000,
+      "step_oracle": {
+        "surfaces": {
+          "plane": 7,
+          "cylinder": 1
+        },
+        "volume": 23201.463449976094,
+        "floor": 1e-06,
+        "inside": [
+          [
+            0,
+            0,
+            10
+          ],
+          [
+            6,
+            2,
+            22
+          ],
+          [
+            6,
+            2,
+            20
+          ]
+        ],
+        "outside": [
+          [
+            11,
+            2,
+            22
+          ],
+          [
+            21,
+            0,
+            10
+          ],
+          [
+            19,
+            0,
+            19
+          ]
+        ]
+      }
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "length": 6
+        },
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 6
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude1 · Start cap"
+        },
+        {
+          "pointer": "/result/faces/0/normal/2",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 1200.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 20.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 1044.75,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/name",
+          "equals": "Boss-Extrude1 · Side of line 2"
+        },
+        {
+          "pointer": "/result/faces/3/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/3/normal/0",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/0",
+          "approx": 19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/3/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/name",
+          "equals": "Boss-Extrude1 · Side of line 4"
+        },
+        {
+          "pointer": "/result/faces/5/surface",
+          "equals": "plane"
+        },
+        {
+          "pointer": "/result/faces/5/normal/0",
+          "approx": -1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/1",
+          "approx": 0.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/normal/2",
+          "approx": 0.09,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/0",
+          "approx": -19.13,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/centroid/2",
+          "approx": 10.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/5/area_mm2",
+          "approx": 602.29,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Boss-Extrude2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/faces",
+          "tally": {
+            "surface": {
+              "plane": 1,
+              "cylinder": 1
+            },
+            "name": {
+              "Boss-Extrude2 · End cap": 1,
+              "Boss-Extrude2 · Wall of circle 1": 1
+            }
+          }
+        },
+        {
+          "pointer": "/result/faces/1/name",
+          "equals": "Boss-Extrude2 · End cap"
+        },
+        {
+          "pointer": "/result/faces/1/normal/2",
+          "approx": 1.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/centroid/2",
+          "approx": 25.0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/result/faces/1/area_mm2",
+          "approx": 50.27,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/features/2/plane",
+          "equals": "Boss-Extrude1 · End cap"
+        },
+        {
+          "pointer": "/result/faces/0/name",
+          "equals": "Boss-Extrude2 · Wall of circle 1"
+        },
+        {
+          "pointer": "/result/faces/0/surface",
+          "equals": "cylinder"
+        },
+        {
+          "pointer": "/result/faces/0/centroid/0",
+          "approx": 6.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/1",
+          "approx": 2.0,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/centroid/2",
+          "approx": 22.5,
+          "tolerance": 0.015
+        },
+        {
+          "pointer": "/result/faces/0/area_mm2",
+          "approx": 125.66,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "feature",
+      "arguments": {
+        "name": "Draft1"
+      },
+      "checks": [
+        {
+          "pointer": "/result/angle",
+          "equals": 5
+        },
+        {
+          "pointer": "/result/faces",
+          "length": 0
+        },
+        {
+          "pointer": "/summary/features/4/name",
+          "equals": "Draft1"
+        },
+        {
+          "pointer": "/summary/features/4/faces",
+          "equals": [
+            "Boss-Extrude1 · Side of line 2",
+            "Boss-Extrude1 · Side of line 4"
+          ]
+        },
+        {
+          "pointer": "/summary/features/4/neutral",
+          "equals": "Top plane"
+        }
+      ]
+    },
+    {
+      "tool": "measure_entity",
+      "arguments": {
+        "entity": "Boss-Extrude1 · Side of line 2"
+      },
+      "checks": [
+        {
+          "pointer": "/result/kind",
+          "equals": "face"
+        },
+        {
+          "pointer": "/result/quantity",
+          "equals": "face_area"
+        },
+        {
+          "pointer": "/result/value",
+          "approx": 602.2919025260085,
+          "tolerance": 0.001
+        }
+      ]
+    }
+  ],
+  "max_work": 20000000
+}

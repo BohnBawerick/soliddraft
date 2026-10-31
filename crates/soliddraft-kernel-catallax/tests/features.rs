@@ -249,6 +249,90 @@ fn a_drafted_face_reports_its_own_plane() {
     }
 }
 
+/// The through holes (centre x and y, radius, top z) and the boss of the five drafted scenarios
+/// keep their supports and rings, which the application's feature summaries do not report.
+#[test]
+fn a_planar_draft_keeps_holes_and_a_boss_on_their_supports() {
+    let parts: [(&[(f64, f64, f64, f64)], bool); 5] = [
+        (&[(0.0, 0.0, 5.0, 20.0)], false),
+        (&[(-8.0, 0.0, 3.0, 20.0), (8.0, 0.0, 4.0, 20.0)], false),
+        (&[], true),
+        (&[(-8.0, 0.0, 3.0, 20.0)], true),
+        (&[(7.0, 2.0, 2.0, 25.0)], true),
+    ];
+    for (holes, boss) in parts {
+        let k = CatallaxKernel::new();
+        let mut body = block(&k, "block", 40.0, 30.0, 0.0, 20.0);
+        if boss {
+            let plane = Plane::XY.with_origin(Vec3::new(0.0, 0.0, 20.0));
+            let circle = Profile::circle(plane, Point2::new(6.0, 2.0), 4.0);
+            let sheet = k.create_body_from_profile(&OpTag::new("boss"), &circle).unwrap().body;
+            let extrude = Extrude { distance: 5.0, direction: None };
+            let tool = k.extrude(&OpTag::new("boss"), sheet, &extrude).unwrap().body;
+            body = k.boolean(&OpTag::new("join"), BooleanOp::Union, body, tool).unwrap().body;
+        }
+        for &(x, y, radius, top) in holes {
+            let params = Hole {
+                placements: vec![down(Vec3::new(x, y, top))],
+                diameter: 2.0 * radius,
+                depth: HoleDepth::Through,
+                tip: HoleTip::Flat,
+                head: None,
+            };
+            body = k.hole(&OpTag::new(format!("hole{x}")), body, &params).unwrap().body;
+        }
+        let source = k.topology(body).unwrap();
+        let side = |x: f64| source.faces.iter().find(|f| f.normal.is_some_and(|n| n.distance(Vec3::X * x) < 1e-12));
+        let sides = [side(1.0).unwrap().id, side(-1.0).unwrap().id];
+        for angle_deg in [3.0f64, 5.0] {
+            let params = Draft { pull: Vec3::Z, neutral_origin: Vec3::ZERO, neutral_normal: Vec3::Z, angle_deg };
+            let tag = OpTag::new(format!("draft-{angle_deg}"));
+            let drafted = k.draft(&tag, body, &sides, &params).unwrap().body;
+            assert!(k.validate(drafted).unwrap().valid);
+            let topology = k.topology(drafted).unwrap();
+            let rings = |face: &FaceInfo| {
+                let circle = |e: &&EdgeInfo| e.curve == CurveKind::Circle && face.edges.contains(&e.id);
+                topology.edges.iter().filter(circle).count()
+            };
+            let (sin, cos) = angle_deg.to_radians().sin_cos();
+            for sign in [1.0, -1.0] {
+                let normal = Vec3::new(sign * cos, 0.0, sin);
+                let wall = topology.faces.iter().find(|f| f.normal.is_some_and(|n| n.distance(normal) < 1e-12));
+                let wall = wall.unwrap();
+                assert!((wall.centroid.x.abs() - (20.0 - wall.centroid.z * sin / cos)).abs() < 1e-9, "{wall:?}");
+            }
+            let cap = |z: f64, up: f64| {
+                let normal = Vec3::Z * up;
+                let found = topology
+                    .faces
+                    .iter()
+                    .find(|f| f.normal.is_some_and(|n| n.distance(normal) < 1e-12) && (f.centroid.z - z).abs() < 1e-9);
+                found.unwrap()
+            };
+            assert_eq!(rings(cap(0.0, -1.0)), holes.len());
+            let opening = |z: f64| holes.iter().filter(|hole| hole.3 == z).count();
+            assert_eq!(rings(cap(20.0, 1.0)), opening(20.0) + usize::from(boss));
+            let cylinder = |x: f64, y: f64, radius: f64, low: f64, high: f64| {
+                let (min, max) = (Vec3::new(x - radius, y - radius, low), Vec3::new(x + radius, y + radius, high));
+                // A face's box is grown by the 0.01 mm display chord bound on each axis.
+                let found = topology.faces.iter().find(|f| {
+                    f.surface == SurfaceKind::Cylinder
+                        && f.bbox.min.distance(min) < 0.02
+                        && f.bbox.max.distance(max) < 0.02
+                });
+                assert_eq!(rings(found.unwrap_or_else(|| panic!("no wall at {x}, {y}: {:?}", topology.faces))), 2);
+            };
+            for &(x, y, radius, top) in holes {
+                cylinder(x, y, radius, 0.0, top);
+            }
+            if boss {
+                assert_eq!(rings(cap(25.0, 1.0)), 1 + opening(25.0));
+                cylinder(6.0, 2.0, 4.0, 20.0, 25.0);
+            }
+        }
+    }
+}
+
 #[test]
 fn unchanged_drafted_entities_keep_their_ids_after_their_roots_are_refined() {
     let k = CatallaxKernel::new();

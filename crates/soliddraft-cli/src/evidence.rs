@@ -186,6 +186,7 @@ impl<'a> Evidence<'a> {
             "volume_mm3":mass.map(|m| m.volume),
             "area_mm2":mass.map(|m| m.area),
             "centre_of_mass":mass.map(|m| [m.centroid.x,m.centroid.y,m.centroid.z]),
+            "inertia":mass.and_then(|m| m.inertia),
         });
         write_json(dir.join("measurement.json"), &result)?;
         Ok(result)
