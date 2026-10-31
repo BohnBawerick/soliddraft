@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use soliddraft_document::resolve::Resolution;
+use soliddraft_document::resolve::{Location, Resolution};
 use soliddraft_document::{ContentHash, DocKind, DocRef, DocumentId};
 
 use crate::document::AssemblyDocument;
@@ -90,10 +90,17 @@ fn file_name(path: &Path) -> String {
 }
 
 impl AssemblyDocument {
-    /// The revision `r`'s file has now, or a refusal naming it when it cannot be found.
-    fn resolved_revision(&self, r: &DocRef) -> Result<Option<ContentHash>, FormRefusal> {
+    /// The revision `r`'s file has now and where it was found, or a refusal naming it
+    /// when it cannot be found.
+    fn resolved(&self, r: &DocRef) -> Result<(Option<ContentHash>, Option<PathBuf>), FormRefusal> {
         match self.resolver().resolve(r) {
-            Resolution::Found(t) => Ok(t.revision().cloned()),
+            Resolution::Found(t) => {
+                let file = match &t.location {
+                    Location::File(p) => Some(p.clone()),
+                    Location::Open(d) => d.path.clone(),
+                };
+                Ok((t.revision().cloned(), file))
+            }
             Resolution::Missing(_) => Err(FormRefusal::new(
                 FormCode::MissingReference,
                 format!("{} cannot be found; the copy the assembly shows cannot stand in for it", r.path),
@@ -133,9 +140,11 @@ impl AssemblyDocument {
         }
         source_ids.sort();
         let mut sources = Vec::new();
+        let mut found = Vec::new();
         for s in &source_ids {
             let r = truth.source(*s).expect("checked").document.clone();
-            let now = self.resolved_revision(&r)?;
+            let (now, file) = self.resolved(&r)?;
+            found.push(file.unwrap_or_else(|| r.stored_path(&root_path)));
             sources.push((r, now));
         }
         check_carried(self, &truth, &chosen, &request.paths)?;
@@ -146,10 +155,11 @@ impl AssemblyDocument {
         let child_id = DocumentId::new();
         let mut child =
             Assembly::new(destination.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
-        for s in &source_ids {
+        // Each reference keeps its id, configuration and pin, and points where the root
+        // found the document, which may not be where its stored path says.
+        for (s, target) in source_ids.iter().zip(&found) {
             let mut source = truth.source(*s).expect("checked").clone();
-            let target = source.document.stored_path(&root_path);
-            source.document.set_path(&destination, &target);
+            source.document.set_path(&destination, target);
             child.sources.push(source);
         }
         for c in &selected {
@@ -332,7 +342,7 @@ impl AssemblyDocument {
             });
         }
         for (r, then) in &plan.sources {
-            let current = self.resolved_revision(r)?;
+            let (current, _) = self.resolved(r)?;
             if current != *then {
                 let show = |h: &Option<ContentHash>| h.as_ref().map(ToString::to_string).unwrap_or_default();
                 return Err(FormRefusal {

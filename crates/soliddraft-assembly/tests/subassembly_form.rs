@@ -369,3 +369,39 @@ fn an_existing_destination_is_kept() {
     assert_eq!(fx.doc.assembly(), &before);
     assert_eq!(fx.doc.undo_label(), Some("Drive mate"), "nothing was recorded");
 }
+
+/// A part the root finds by id after its file was renamed keeps working once formed: the
+/// new file references the part where it is, not where the root's stale path said, and
+/// opens on its own with the part found.
+#[test]
+fn a_renamed_part_is_referenced_where_it_is_found() {
+    let dir = std::env::temp_dir().join(format!("soliddraft-subassembly-{}-renamed", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (part, renamed) = (dir.join("parts/p.dwprt"), dir.join("parts/renamed.dwprt"));
+    let (root, pack) = (dir.join("root.dwasm"), dir.join("modules/pack.dwasm"));
+    new_block(&part, 20.0, 10.0, 6.0);
+    let mut doc = AssemblyDocument::new_with("Root", options());
+    doc.save(Some(&root)).unwrap();
+    let p = doc.insert(reference(&root, &part), Placement::IDENTITY).unwrap();
+    doc.finish_loading();
+    doc.save(None).unwrap();
+    std::fs::rename(&part, &renamed).unwrap();
+
+    let mut doc = AssemblyDocument::open(&root, options()).unwrap();
+    doc.finish_loading();
+    let row = doc.table().find(&path(&[p.0])).unwrap();
+    let freshness = &doc.store().get(doc.table().definition(row)).freshness;
+    assert_eq!(*freshness, soliddraft_assembly::Freshness::Current, "the root finds the part by id");
+    let request = FormRequest { paths: vec![path(&[p.0])], path: pack.clone(), origin: path(&[p.0]) };
+    doc.form_subassembly(&request).unwrap();
+
+    let child = AssemblyPackage::open(&pack).unwrap();
+    assert_eq!(child.assembly().sources[0].document.path, "../parts/renamed.dwprt");
+    assert_eq!(child.assembly().sources[0].document.id, Some(identify_file(&renamed).unwrap().id));
+    let mut alone = AssemblyDocument::open(&pack, options()).unwrap();
+    alone.finish_loading();
+    let row = alone.table().find(&path(&[p.0])).unwrap();
+    let freshness = &alone.store().get(alone.table().definition(row)).freshness;
+    assert_eq!(*freshness, soliddraft_assembly::Freshness::Current, "the new file finds the part on its own");
+    let _ = std::fs::remove_dir_all(&dir);
+}

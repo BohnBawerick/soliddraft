@@ -30,7 +30,7 @@ id counter.
 
 | Reference | After |
 |---|---|
-| A chosen part | Its id and source move into the new file. The source keeps its id, document, configuration and pin; its path is rewritten relative to the new file. Parts that shared a source still share one |
+| A chosen part | Its id and source move into the new file. The source keeps its id, document, configuration and pin; its path points, relative to the new file, where the root finds the document now, even when that is not where the root's stored path says. Parts that shared a source still share one |
 | A mate between two chosen parts | Moves into the new file under the same id, with the same endpoints |
 | A mate between a chosen part and another | Stays in the root under the same id; the chosen end's path gains the new component in front, such as `4` to `16/4` |
 | Any other mate, every value and binding | Unchanged in the root |
