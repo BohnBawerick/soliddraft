@@ -331,6 +331,13 @@ impl AssemblyDocument {
     /// accepted one in one undo step labelled "Form subassembly". The root's own file is
     /// not written until it is saved.
     pub fn commit_form(&mut self, plan: FormPlan) -> Result<Formed, FormRefusal> {
+        self.commit_form_with(plan, Fault::None)
+    }
+
+    /// [`AssemblyDocument::commit_form`] with a publication failure made on purpose: test
+    /// setup for the paths a full disk or a crash would take, never a command.
+    #[doc(hidden)]
+    pub fn commit_form_with(&mut self, plan: FormPlan, fault: Fault) -> Result<Formed, FormRefusal> {
         self.finish_loading();
         let now = self.revision();
         if now != plan.root_revision {
@@ -356,7 +363,22 @@ impl AssemblyDocument {
                 });
             }
         }
+        let failed = |at: &str| {
+            FormRefusal::new(FormCode::Io, format!("cannot write {}: {at}", plan.destination.display()))
+                .caused_by(file_name(&plan.destination))
+        };
+        if fault == Fault::Staging {
+            return Err(failed("the write failed while staging"));
+        }
         publish(&plan.destination, &plan.child_bytes)?;
+        match fault {
+            Fault::AfterPublication => {
+                withdraw(&plan.destination, &plan.child_bytes);
+                return Err(failed("the root could not take the new file"));
+            }
+            Fault::Exit => std::process::exit(FAULT_EXIT),
+            Fault::None | Fault::Staging => {}
+        }
         let before = self.structural_image(&plan.components, &plan.changed_sources);
         self.adopt("Form subassembly", plan.candidate, before);
         let open = self.options.open.clone();
@@ -368,6 +390,32 @@ impl AssemblyDocument {
     pub fn form_subassembly(&mut self, request: &FormRequest) -> Result<Formed, FormRefusal> {
         let plan = self.prepare_form(request)?;
         self.commit_form(plan)
+    }
+}
+
+/// A publication failure made on purpose, for tests.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fault {
+    /// None: the ordinary commit.
+    None,
+    /// The new file's write fails before anything is published.
+    Staging,
+    /// The new file is published, then the root's change fails.
+    AfterPublication,
+    /// The process ends right after the new file is published, before the root changes.
+    Exit,
+}
+
+/// The status a [`Fault::Exit`] ends the process with.
+#[doc(hidden)]
+pub const FAULT_EXIT: i32 = 86;
+
+/// Takes back a file this formation published, only while it is still exactly what was
+/// written: another document is never removed.
+fn withdraw(path: &Path, bytes: &[u8]) {
+    if std::fs::read(path).is_ok_and(|now| now == bytes) {
+        let _ = std::fs::remove_file(path);
     }
 }
 

@@ -539,7 +539,7 @@ fn insert(state: &mut AppState, files: &[PathBuf]) {
     for file in files {
         match place(s, &*revisions, file, None) {
             Ok(path) => placed.push(path),
-            Err(e) => problems.push(format!("{}: {e}", file.display())),
+            Err(e) => problems.push(format!("{}: {}", file.display(), readable(&e))),
         }
     }
     if let Some(last) = placed.last() {
@@ -590,8 +590,27 @@ fn place(
             .unwrap_or(0.0);
         DVec3::new(there.max.x + INSERT_GAP - own_min, 0.0, 0.0)
     };
-    let id = s.doc.insert(r, placement.unwrap_or(Placement::translation(at))).map_err(|e| e.to_string())?;
+    let id = s.doc.insert(r, placement.unwrap_or(Placement::translation(at))).map_err(insert_refusal)?;
     Ok(OccurrencePath::root().child(soliddraft_assembly::Step::component(id)))
+}
+
+/// A refused insert as a tool reports it: a cycle is typed JSON naming the occurrence it
+/// runs through; anything else is its message.
+fn insert_refusal(e: soliddraft_assembly::EditError) -> String {
+    match &e {
+        soliddraft_assembly::EditError::Cycle(at) => {
+            serde_json::json!({ "refused": "cycle", "message": e.to_string(), "cause": at }).to_string()
+        }
+        _ => e.to_string(),
+    }
+}
+
+/// What a refusal says to people: its message when it is typed JSON.
+fn readable(refusal: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(refusal)
+        .ok()
+        .and_then(|v| v["message"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| refusal.to_owned())
 }
 
 fn save(state: &mut AppState, path: Option<PathBuf>) {

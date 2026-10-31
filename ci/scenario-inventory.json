@@ -453,7 +453,7 @@
     {
       "id": "subassembly-form",
       "file": "ci/scenarios/subassembly-form.json",
-      "acceptance": false,
+      "acceptance": true,
       "owners": [
         "soliddraft-app",
         "soliddraft-assembly",
@@ -462,7 +462,7 @@
       ],
       "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
       "route": "MCP assembly, mate and Form subassembly commands -> formation plan -> assembly transaction -> proven plane query -> Catallax adapter -> pinned kernel",
-      "supported_limits": "Increment 1 of 4 of V6 batch 1: root part occurrences in their default state formed into a new separate file with internal and crossing distance mates, default configuration, no patterns; partial M4/M6 evidence. The typed refusal step lands with increment 2.",
+      "supported_limits": "Increments 1-2 of 4 of V6 batch 1: root part occurrences in their default state formed into a new separate file with internal and crossing distance mates, one-step undo and redo, and a typed cycle refusal; default configuration, no patterns; partial M4/M6 evidence.",
       "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,inspect-*.stdout}; work/parts/base.dwprt, work/parts/pin.dwprt, work/root.dwasm and work/modules/pack.dwasm"
     }
   ]

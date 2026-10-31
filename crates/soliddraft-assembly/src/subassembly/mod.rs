@@ -25,7 +25,7 @@ use soliddraft_document::{ContentHash, DocumentId};
 use crate::mates::{MateId, SolverStatus};
 use crate::path::{ComponentId, OccurrencePath, SourceId};
 
-pub use form::{FormPlan, Formed};
+pub use form::{FAULT_EXIT, Fault, FormPlan, Formed};
 
 /// What to form: the root's part occurrences, in order, the file to make, and the
 /// occurrence whose placement becomes the new file's frame.

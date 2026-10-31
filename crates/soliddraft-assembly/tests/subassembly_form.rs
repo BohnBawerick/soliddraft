@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use glam::{DQuat, DVec3};
+use soliddraft_assembly::subassembly::{FAULT_EXIT, Fault};
 use soliddraft_assembly::{
     Alignment, AssemblyDocument, AssemblyPackage, ComponentId, EndpointSelector, FaceSelector, FormCode, FormRequest,
     GeneratorChoice, KernelSource, Mate, OccurrencePath, OpenOptions, Placement, SolverState, Step,
@@ -115,7 +116,11 @@ impl Drop for Fixture {
 
 /// The flat accepted state T0, saved: the design's steps 1 to 23.
 fn flat(name: &str) -> Fixture {
-    let dir = std::env::temp_dir().join(format!("soliddraft-subassembly-{}-{name}", std::process::id()));
+    flat_in(std::env::temp_dir().join(format!("soliddraft-subassembly-{}-{name}", std::process::id())))
+}
+
+/// The same, in `dir`.
+fn flat_in(dir: PathBuf) -> Fixture {
     let _ = std::fs::remove_dir_all(&dir);
     let work = dir.join("work");
     let (base, pin) = (work.join("parts/base.dwprt"), work.join("parts/pin.dwprt"));
@@ -404,4 +409,238 @@ fn a_renamed_part_is_referenced_where_it_is_found() {
     let freshness = &alone.store().get(alone.table().definition(row)).freshness;
     assert_eq!(*freshness, soliddraft_assembly::Freshness::Current, "the new file finds the part on its own");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Sets a saved block's height, keeping its id and its extrusion.
+fn set_height(path: &Path, h: f64) {
+    let mut doc = Document::open(path, kernel()).unwrap();
+    let id = doc.features()[1].id;
+    let FeatureKind::Extrude(mut extrude) = doc.feature(id).unwrap().kind.clone() else { panic!("an extrusion") };
+    extrude.end = EndCondition::Blind { depth: h };
+    doc.execute(Command::EditFeature { id, kind: FeatureKind::Extrude(extrude) }).unwrap();
+    doc.save(path).unwrap();
+}
+
+/// Everything a refused formation must leave as it was: the accepted truth and its
+/// hashes, every occurrence's paths and poses, the definitions shown, the solver's
+/// verdict, the save point and both histories.
+fn snapshot(doc: &mut AssemblyDocument) -> serde_json::Value {
+    let table = doc.table();
+    let rows: Vec<_> = (0..table.len() as u32)
+        .map(soliddraft_assembly::OccurrenceIndex)
+        .map(|r| {
+            let key = &doc.store().get(table.definition(r)).key;
+            serde_json::json!([table.path(r), table.local(r), table.world(r), key.document, key.revision, key.quality])
+        })
+        .collect();
+    let definitions: Vec<_> = doc
+        .store()
+        .iter()
+        .map(|(_, d)| serde_json::json!([d.key.document, d.key.revision, d.state.as_str()]))
+        .collect();
+    serde_json::json!({
+        "truth": doc.assembly(), "revision": doc.revision(), "geometry": doc.assembly().geometry_hash(),
+        "next_id": doc.assembly().next_id, "rows": rows, "definitions": definitions, "solver": doc.solver(),
+        "dirty": doc.is_dirty(), "undo": [doc.undo_label(), doc.undo_depth()], "redo": [doc.redo_label(), doc.redo_depth()],
+    })
+}
+
+/// The files a formation must not touch, by hash, and what the destination's folder holds.
+fn disk(fx: &Fixture) -> (String, String, String, Vec<String>) {
+    let folder = fx.pack.parent().unwrap();
+    let mut names: Vec<String> = std::fs::read_dir(folder)
+        .map(|d| d.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    names.sort();
+    (sha(&fx.root), sha(&fx.base), sha(&fx.pin), names)
+}
+
+/// N2: a stale preview, a changed source, a taken name, a failed write and a missing
+/// part each refuse whole, before or after the new file would be published; then Form
+/// succeeds on the same references and poses.
+#[test]
+fn formation_preview_and_publication_fail_without_mutation() {
+    let mut fx = flat("n2");
+    let request = fx.request();
+    let refused = |fx: &mut Fixture, plan, code: FormCode, fault| {
+        let (before, files) = (snapshot(&mut fx.doc), disk(fx));
+        let refusal = fx.doc.commit_form_with(plan, fault).unwrap_err();
+        assert_eq!(refusal.code, code, "{refusal}");
+        assert_eq!(snapshot(&mut fx.doc), before, "{refusal}");
+        assert_eq!(disk(fx), files, "{refusal}");
+        refusal
+    };
+
+    // a. Prepared at gap 8, committed after an undo back to T0: the redo is kept.
+    fx.doc.set_value("gap", "8 mm").unwrap();
+    let at_eight = fx.doc.revision();
+    let plan = fx.doc.prepare_form(&request).unwrap();
+    assert!(fx.doc.undo());
+    let t0 = fx.doc.revision();
+    let r = refused(&mut fx, plan, FormCode::StaleRevision, Fault::None);
+    assert_eq!((r.expected, r.actual), (Some(at_eight.to_string()), Some(t0.to_string())));
+    assert!(!fx.pack.exists());
+    assert!(fx.doc.redo(), "the redo entry is still usable");
+    assert_eq!(fx.doc.revision(), at_eight);
+    assert!(fx.doc.undo());
+
+    // b. The pin is saved at P1 between preparing and committing, with T0 still accepted.
+    let pin_p0 = std::fs::read(&fx.pin).unwrap();
+    let plan = fx.doc.prepare_form(&request).unwrap();
+    set_height(&fx.pin, 8.0);
+    let r = refused(&mut fx, plan, FormCode::StaleRevision, Fault::None);
+    assert_eq!(r.cause.as_deref(), Some("parts/pin.dwprt"));
+    assert_eq!(r.actual, Some(identify_file(&fx.pin).unwrap().revision.to_string()));
+    std::fs::write(&fx.pin, &pin_p0).unwrap();
+
+    // c. The name is taken by another valid assembly, before preparing and between
+    // preparing and committing: its bytes and id stay.
+    std::fs::create_dir_all(fx.pack.parent().unwrap()).unwrap();
+    AssemblyDocument::new("Other").save(Some(&fx.pack)).unwrap();
+    let other = (std::fs::read(&fx.pack).unwrap(), identify_file(&fx.pack).unwrap().id);
+    let (before, files) = (snapshot(&mut fx.doc), disk(&fx));
+    let r = fx.doc.prepare_form(&request).err().expect("the name is taken");
+    assert_eq!((r.code, r.cause.as_deref()), (FormCode::DestinationExists, Some("pack.dwasm")));
+    assert_eq!((snapshot(&mut fx.doc), disk(&fx)), (before, files));
+    std::fs::remove_file(&fx.pack).unwrap();
+    let plan = fx.doc.prepare_form(&request).unwrap();
+    AssemblyDocument::new("Other").save(Some(&fx.pack)).unwrap();
+    std::fs::write(&fx.pack, &other.0).unwrap();
+    let r = refused(&mut fx, plan, FormCode::DestinationExists, Fault::None);
+    assert_eq!(r.cause.as_deref(), Some("pack.dwasm"));
+    assert_eq!((std::fs::read(&fx.pack).unwrap(), identify_file(&fx.pack).unwrap().id), other);
+    std::fs::remove_file(&fx.pack).unwrap();
+
+    // d. The write fails while staging, and after publication before the root changes:
+    // the new file this formation wrote goes again, and nothing else.
+    for fault in [Fault::Staging, Fault::AfterPublication] {
+        let plan = fx.doc.prepare_form(&request).unwrap();
+        let r = refused(&mut fx, plan, FormCode::Io, fault);
+        assert_eq!(r.cause.as_deref(), Some("pack.dwasm"), "{fault:?}");
+        assert!(!fx.pack.exists(), "{fault:?}");
+    }
+
+    // e. The pin is moved out of the root's folder, and a cold session has no other copy
+    // of it: the copy the root shows does not make it current.
+    let parked = fx.dir.join("parked/pin.dwprt");
+    std::fs::create_dir_all(parked.parent().unwrap()).unwrap();
+    std::fs::rename(&fx.pin, &parked).unwrap();
+    let cold = OpenOptions {
+        display: Some(Arc::new(KernelSource::new(kernel()))),
+        check_freshness: true,
+        ..OpenOptions::default()
+    };
+    let mut alone = AssemblyDocument::open(&fx.root, cold).unwrap();
+    alone.finish_loading();
+    let before = snapshot(&mut alone);
+    let r = alone.prepare_form(&request).err().expect("the pin is missing");
+    assert_eq!((r.code, r.cause.as_deref()), (FormCode::MissingReference, Some("parts/pin.dwprt")));
+    assert_eq!(snapshot(&mut alone), before);
+    assert_eq!(std::fs::read(&parked).unwrap(), pin_p0);
+    assert!(!fx.pack.exists());
+    std::fs::rename(&parked, &fx.pin).unwrap();
+
+    // Then the same request forms, on the original references and poses.
+    let formed = fx.doc.form_subassembly(&request).unwrap();
+    let nested = |c: ComponentId| path(&[formed.migration.component.0, c.0]);
+    p0(&fx.doc, &path(&[fx.a.0]), &nested(fx.b), &nested(fx.c), &nested(fx.f));
+    assert_eq!(fx.doc.undo_label(), Some("Form subassembly"));
+}
+
+/// Form, Undo, an independent edit of the retained new file, then Redo: the root comes
+/// back on the new file's first revision, says it has moved on, and leaves the edited
+/// file alone. Only an explicit Update accepts it.
+#[test]
+fn redo_keeps_the_formed_revision_and_the_edited_file() {
+    let mut fx = flat("redo");
+    let formed = fx.doc.form_subassembly(&fx.request()).unwrap();
+    let t1 = fx.doc.revision();
+    let s0 = formed.migration.child_revision.clone();
+    assert!(fx.doc.undo());
+    assert!(!fx.doc.is_dirty(), "T0 is the save point");
+    assert_eq!(identify_file(&fx.pack).unwrap().revision, s0, "undo deletes no file");
+
+    let mut child = AssemblyDocument::open(&fx.pack, options()).unwrap();
+    child.finish_loading();
+    child.rename(fx.f, Some("Free pin".into())).unwrap();
+    child.save(None).unwrap();
+    let edited = std::fs::read(&fx.pack).unwrap();
+
+    assert!(fx.doc.redo());
+    assert_eq!(fx.doc.revision(), t1);
+    let pinned = &fx.doc.assembly().source(formed.migration.source).unwrap().document.pinned;
+    assert_eq!(*pinned, s0, "redo restores the formed pin");
+    assert_eq!(std::fs::read(&fx.pack).unwrap(), edited, "redo writes no file");
+    fx.doc.finish_loading();
+    fx.doc.refresh_references(Vec::new());
+    let row = fx.doc.table().find(&path(&[formed.migration.component.0])).unwrap();
+    let freshness = &fx.doc.store().get(fx.doc.table().definition(row)).freshness;
+    assert!(matches!(freshness, soliddraft_assembly::Freshness::NewerAvailable { .. }), "{freshness:?}");
+    let nested = |c: ComponentId| path(&[formed.migration.component.0, c.0]);
+    p0(&fx.doc, &path(&[fx.a.0]), &nested(fx.b), &nested(fx.c), &nested(fx.f));
+}
+
+const CRASH: &str = "SOLIDDRAFT_FORM_CRASH_DIR";
+
+/// The crash branch's child process: forms the fixture in the folder it is given and ends
+/// right after the new file is published. Does nothing in an ordinary test run.
+#[test]
+fn form_crash_child() {
+    let Some(dir) = std::env::var_os(CRASH) else { return };
+    let mut fx = flat_in(PathBuf::from(dir));
+    let plan = fx.doc.prepare_form(&fx.request()).unwrap();
+    let _ = fx.doc.commit_form_with(plan, Fault::Exit);
+    unreachable!("the commit ends the process");
+}
+
+/// A crash after the new file is complete and before the root changes leaves the root as
+/// last saved, flat, and an unreferenced complete new file; forming again needs a new name.
+#[test]
+fn a_crash_after_publication_leaves_both_files_whole() {
+    let dir = std::env::temp_dir().join(format!("soliddraft-subassembly-{}-crash", std::process::id()));
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["form_crash_child", "--exact", "--nocapture", "--test-threads", "1"])
+        .env(CRASH, &dir)
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(FAULT_EXIT), "the child ended at the fault");
+    let work = dir.join("work");
+    let (root, pack) = (work.join("root.dwasm"), work.join("modules/pack.dwasm"));
+    let mut t0 = AssemblyDocument::open(&root, options()).unwrap();
+    t0.finish_loading();
+    assert_eq!(t0.assembly().components.len(), 4, "the root on disk is still flat");
+    assert!(t0.assembly().sources.iter().all(|s| s.document.kind == DocKind::Part));
+    let mut s0 = AssemblyDocument::open(&pack, options()).unwrap();
+    s0.finish_loading();
+    assert_eq!(s0.solver().remaining_dof, 12, "the new file is complete");
+    let names: Vec<_> = std::fs::read_dir(work.join("modules")).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(names, ["pack.dwasm"], "no temporary file is left");
+
+    let again = |to: &Path| FormRequest {
+        paths: vec![path(&[4]), path(&[5]), path(&[6])],
+        path: to.to_path_buf(),
+        origin: path(&[4]),
+    };
+    let taken = t0.form_subassembly(&again(&pack)).unwrap_err();
+    assert_eq!(taken.code, FormCode::DestinationExists);
+    let formed = t0.form_subassembly(&again(&work.join("modules/pack2.dwasm"))).unwrap();
+    assert_ne!(formed.migration.child, s0.id());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Step 30: the new file cannot place the root that places it. The refusal names the cycle
+/// and leaves the new file's accepted state, history and every file as they were.
+#[test]
+fn placing_the_parent_in_the_child_is_a_cycle() {
+    let mut fx = flat("cycle");
+    fx.doc.form_subassembly(&fx.request()).unwrap();
+    fx.doc.save(None).unwrap();
+    let mut child = AssemblyDocument::open(&fx.pack, options()).unwrap();
+    child.finish_loading();
+    let before = snapshot(&mut child);
+    let files = (sha(&fx.root), sha(&fx.pack), sha(&fx.base), sha(&fx.pin));
+    let refused = child.insert(reference(&fx.pack, &fx.root), Placement::IDENTITY).unwrap_err();
+    assert!(matches!(refused, soliddraft_assembly::EditError::Cycle(_)), "{refused}");
+    assert_eq!(snapshot(&mut child), before, "no source, id or row was added");
+    assert_eq!((sha(&fx.root), sha(&fx.pack), sha(&fx.base), sha(&fx.pin)), files);
 }

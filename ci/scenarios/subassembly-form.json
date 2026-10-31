@@ -3241,6 +3241,834 @@
       ]
     },
     {
+      "tool": "undo",
+      "arguments": {},
+      "files": [
+        "{bundle}/work/modules/pack.dwasm"
+      ],
+      "inspect": {
+        "root": [
+          "doc",
+          "info",
+          "{bundle}/work/root.dwasm",
+          "--json"
+        ],
+        "pack": [
+          "doc",
+          "info",
+          "{bundle}/work/modules/pack.dwasm",
+          "--json"
+        ],
+        "base": [
+          "doc",
+          "info",
+          "{bundle}/work/parts/base.dwprt",
+          "--json"
+        ],
+        "pin": [
+          "doc",
+          "info",
+          "{bundle}/work/parts/pin.dwprt",
+          "--json"
+        ]
+      },
+      "label": "S25 undo Form: exact T0, clean, S0 kept on disk",
+      "checks": [
+        {
+          "pointer": "/result/done",
+          "equals": "Form subassembly"
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/revision",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/truth",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/next_id",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/next_id",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates",
+          "same_as": {
+            "pointer": "/summary/assembly/mates",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/values",
+          "same_as": {
+            "pointer": "/summary/assembly/values",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/redo",
+          "equals": {
+            "label": "Form subassembly",
+            "depth": 1
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/undo",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16",
+          "absent": true
+        },
+        {
+          "pointer": "/inspect/pack/revision",
+          "same_as": {
+            "pointer": "/inspect/pack/revision",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/inspect/root/revision",
+          "same_as": {
+            "pointer": "/inspect/root/revision",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/inspect/base/revision",
+          "same_as": {
+            "pointer": "/inspect/base/revision",
+            "step": 3
+          }
+        },
+        {
+          "pointer": "/inspect/pin/revision",
+          "same_as": {
+            "pointer": "/inspect/pin/revision",
+            "step": 9
+          }
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/1",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/world/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/world/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/world/translation/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/min/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/bounds/max/2",
+          "approx": 28,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/local/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/local/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/local/translation/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/4/local/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/world/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/world/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/world/translation/2",
+          "approx": 31,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/min/2",
+          "approx": 31,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/bounds/max/2",
+          "approx": 37,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/local/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/local/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/local/translation/2",
+          "approx": 31,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/5/local/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/world/translation/0",
+          "approx": 60,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/world/translation/1",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/world/translation/2",
+          "approx": 7,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/world/rotation",
+          "equals": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/min/0",
+          "approx": 50,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/min/1",
+          "approx": -25,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/min/2",
+          "approx": 7,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/max/0",
+          "approx": 70,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/max/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/bounds/max/2",
+          "approx": 13,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/local/translation/0",
+          "approx": 60,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/local/translation/1",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/local/translation/2",
+          "approx": 7,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/6/local/rotation",
+          "equals": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "underconstrained"
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "files": [
+        "{bundle}/work/modules/pack.dwasm"
+      ],
+      "inspect": {
+        "root": [
+          "doc",
+          "info",
+          "{bundle}/work/root.dwasm",
+          "--json"
+        ],
+        "pack": [
+          "doc",
+          "info",
+          "{bundle}/work/modules/pack.dwasm",
+          "--json"
+        ]
+      },
+      "label": "S26 redo Form: same T1, S UUID and pin, S0 not rewritten",
+      "checks": [
+        {
+          "pointer": "/result/done",
+          "equals": "Form subassembly"
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/revision",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/truth",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/next_id",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/next_id",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/undo",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state/undo",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/redo",
+          "equals": {
+            "label": null,
+            "depth": 0
+          }
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth/sources/1/document/id",
+          "same_as": {
+            "pointer": "/result/formed/migration/child",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state/truth/sources/1/document/pinned",
+          "same_as": {
+            "pointer": "/result/formed/migration/child_revision",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/inspect/pack/revision",
+          "same_as": {
+            "pointer": "/inspect/pack/revision",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/inspect/root/revision",
+          "same_as": {
+            "pointer": "/inspect/root/revision",
+            "step": 23
+          }
+        },
+        {
+          "pointer": "/summary/assembly/mates/0/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/1/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/mates/3/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/1",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/translation/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/0",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/min/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/2/bounds/max/2",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/world/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/world/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/world/translation/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/min/2",
+          "approx": 22,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/bounds/max/2",
+          "approx": 28,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/local/translation/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/local/translation/1",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/local/translation/2",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~14/local/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/world/translation/0",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/world/translation/1",
+          "approx": 10,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/world/translation/2",
+          "approx": 31,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/world/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/min/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/min/1",
+          "approx": 5,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/min/2",
+          "approx": 31,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/max/0",
+          "approx": 20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/max/1",
+          "approx": 15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/bounds/max/2",
+          "approx": 37,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/local/translation/0",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/local/translation/1",
+          "approx": 0,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/local/translation/2",
+          "approx": 9,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~15/local/rotation",
+          "equals": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/world/translation/0",
+          "approx": 60,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/world/translation/1",
+          "approx": -20,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/world/translation/2",
+          "approx": 7,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/world/rotation",
+          "equals": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/min/0",
+          "approx": 50,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/min/1",
+          "approx": -25,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/min/2",
+          "approx": 7,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/max/0",
+          "approx": 70,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/max/1",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/bounds/max/2",
+          "approx": 13,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/local/translation/0",
+          "approx": 50,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/local/translation/1",
+          "approx": -30,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/local/translation/2",
+          "approx": -15,
+          "tolerance": 1e-09
+        },
+        {
+          "pointer": "/summary/assembly/occurrences/16~16/local/rotation",
+          "equals": [
+            0,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "pointer": "/summary/assembly/solver/remaining_dof",
+          "equals": 6
+        },
+        {
+          "pointer": "/summary/assembly/solver/state",
+          "equals": "underconstrained"
+        }
+      ]
+    },
+    {
       "tool": "assembly_save",
       "arguments": {
         "path": "{bundle}/work/root.dwasm"
@@ -3730,14 +4558,14 @@
           "pointer": "/summary/assembly/revision",
           "same_as": {
             "pointer": "/summary/assembly/revision",
-            "step": 25
+            "step": 27
           }
         },
         {
           "pointer": "/summary/assembly/accepted_state/truth",
           "same_as": {
             "pointer": "/summary/assembly/accepted_state/truth",
-            "step": 25
+            "step": 27
           }
         },
         {
@@ -4428,6 +5256,94 @@
         {
           "pointer": "/summary/assembly/solver/state",
           "equals": "underconstrained"
+        }
+      ]
+    },
+    {
+      "tool": "insert_component",
+      "arguments": {
+        "paths": [
+          "{bundle}/work/root.dwasm"
+        ]
+      },
+      "refused": "cycle",
+      "inspect": {
+        "root": [
+          "doc",
+          "info",
+          "{bundle}/work/root.dwasm",
+          "--json"
+        ],
+        "pack": [
+          "doc",
+          "info",
+          "{bundle}/work/modules/pack.dwasm",
+          "--json"
+        ],
+        "base": [
+          "doc",
+          "info",
+          "{bundle}/work/parts/base.dwprt",
+          "--json"
+        ],
+        "pin": [
+          "doc",
+          "info",
+          "{bundle}/work/parts/pin.dwprt",
+          "--json"
+        ]
+      },
+      "label": "S30 refuse placing the root in S: cycle S -> T -> S, nothing changes",
+      "checks": [
+        {
+          "pointer": "/result/refused",
+          "equals": "cycle"
+        },
+        {
+          "pointer": "/summary/assembly/accepted_state",
+          "same_as": {
+            "pointer": "/summary/assembly/accepted_state",
+            "step": 29
+          }
+        },
+        {
+          "pointer": "/summary/assembly/revision",
+          "same_as": {
+            "pointer": "/summary/assembly/revision",
+            "step": 29
+          }
+        },
+        {
+          "pointer": "/summary/assembly/dirty",
+          "equals": false
+        },
+        {
+          "pointer": "/inspect/root/revision",
+          "same_as": {
+            "pointer": "/inspect/root/revision",
+            "step": 27
+          }
+        },
+        {
+          "pointer": "/inspect/pack/revision",
+          "same_as": {
+            "pointer": "/inspect/pack/revision",
+            "step": 24
+          }
+        },
+        {
+          "pointer": "/inspect/base/revision",
+          "same_as": {
+            "pointer": "/inspect/base/revision",
+            "step": 3
+          }
+        },
+        {
+          "pointer": "/inspect/pin/revision",
+          "same_as": {
+            "pointer": "/inspect/pin/revision",
+            "step": 9
+          }
         }
       ]
     }

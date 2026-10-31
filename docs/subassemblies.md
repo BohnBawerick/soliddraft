@@ -66,6 +66,13 @@ accepted one, in one undo step labelled `Form subassembly`. The root's own file 
 when it is saved.
 
 A refusal at any point leaves the accepted root, its history and every file as they were.
+Undo restores the root exactly, flat, and leaves the new file where it is: undo deletes no
+file. Redo brings back the same new file's id and pin and writes nothing; if the file was
+edited meanwhile the root says it has moved on, and only Update accepts it.
+
+Inserting a component reads the new structure before accepting it, so a sub-assembly
+cannot place an assembly that places it: that is refused as `cycle`, naming the occurrence
+the cycle runs through, and nothing changes.
 
 | Code | Why |
 |---|---|
