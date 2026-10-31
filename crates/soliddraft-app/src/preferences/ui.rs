@@ -1,7 +1,9 @@
-//! The Preferences window's widgets: the search field, the category list and the three
-//! Navigation pages.
+//! The Preferences window's widgets: the search field, the category list, the three
+//! Navigation pages and Viewport > Grid and planes.
 
-use super::{Hit, MOUSE, Message, ORBIT_ZOOM, Preferences, Status, VIEW_KEYS, categories, page, search};
+use super::{
+    GRID_AND_PLANES, Hit, MOUSE, Message, ORBIT_ZOOM, Preferences, Status, VIEW_KEYS, categories, page, search,
+};
 use crate::navigation::view_keys::{self, RowState};
 use crate::navigation::{Action, Binding, Capability, EventKind, Outcome, Pivot, ZoomAnchor, gather, presets};
 use crate::theme;
@@ -38,6 +40,13 @@ pub(super) const VIEW_KEY_CONTROLS: [(&str, &str); 5] = [
     ("reset_view_keys", "Reset view keys"),
 ];
 
+/// The Grid and planes page's controls, for search.
+pub(super) const GRID_AND_PLANES_CONTROLS: [(&str, &str); 3] = [
+    ("show_grid", "Show grid"),
+    ("show_origin_planes", "Show origin planes"),
+    ("always_show_origin_axes", "Always show origin axes"),
+];
+
 pub(super) fn show(p: &mut Preferences, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.label("Search");
@@ -58,6 +67,7 @@ pub(super) fn show(p: &mut Preferences, ui: &mut egui::Ui) {
                         MOUSE => mouse_page(p, ui),
                         ORBIT_ZOOM => orbit_zoom_page(p, ui),
                         VIEW_KEYS => view_keys_page(p, ui),
+                        GRID_AND_PLANES => grid_and_planes_page(p, ui),
                         _ => {}
                     }
                 } else {
@@ -375,6 +385,21 @@ fn orbit_zoom_page(p: &mut Preferences, ui: &mut egui::Ui) {
             p.reset_preset();
         }
     });
+}
+
+fn grid_and_planes_page(p: &mut Preferences, ui: &mut egui::Ui) {
+    heading(ui, GRID_AND_PLANES);
+    let mut d = p.display;
+    control(lit(p, "show_grid"), ui, |ui| ui.checkbox(&mut d.show_grid, "Show grid"));
+    control(lit(p, "show_origin_planes"), ui, |ui| ui.checkbox(&mut d.show_origin_planes, "Show origin planes"));
+    control(lit(p, "always_show_origin_axes"), ui, |ui| {
+        ui.checkbox(&mut d.always_show_origin_axes, "Always show origin axes")
+    });
+    ui.label(
+        egui::RichText::new("The origin axes also show while the origin, a plane or an axis is selected.")
+            .color(theme::muted()),
+    );
+    p.edit_display(|display| *display = d);
 }
 
 fn view_keys_page(p: &mut Preferences, ui: &mut egui::Ui) {

@@ -266,7 +266,7 @@ impl SolidDraftApp {
                 ui.separator();
                 menu_command(ui, st, "file_locations", "File locations…");
                 if ui.button("Preferences…").clicked() {
-                    *preferences = Some(crate::preferences::Preferences::new(&st.navigation));
+                    *preferences = Some(crate::preferences::Preferences::new(&st.navigation, st.viewport.references));
                     ui.close();
                 }
             });

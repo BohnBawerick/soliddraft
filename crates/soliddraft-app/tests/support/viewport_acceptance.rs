@@ -334,19 +334,76 @@ pub fn drag_held(app: &mut App, button: egui::PointerButton, modifiers: Modifier
     settle(app);
 }
 
-/// Changes the display choices at the seam the Preferences window will call. That window
-/// arrives with the navigation lane's merge D. Until then this holds a display state
-/// steady for frame comparison, and no case asserts a preference through it.
-pub fn set_display(app: &mut App, change: impl FnOnce(&mut ReferenceDisplay)) {
-    let mut references = app.state().state.viewport.references;
-    change(&mut references);
-    app.state_mut().state.set_reference_display(references).expect("the display choices save");
+pub const SHOW_GRID: &str = "Show grid";
+pub const SHOW_PLANES: &str = "Show origin planes";
+pub const ALWAYS_SHOW_AXES: &str = "Always show origin axes";
+
+/// Clicks a control and gives the window time to take it. Quicker than `click_label`,
+/// because the frame comparisons do this many times over.
+fn press_label(app: &mut App, label: &str) {
+    app.get_by_label(label).hover();
+    app.run_steps(2);
+    app.get_by_label(label).click();
     app.run_steps(3);
+}
+
+/// Opens Tools > Preferences and goes to Viewport > Grid and planes. In a sketch the ribbon
+/// has a Tools group too, and the menu bar comes first.
+pub fn open_grid_and_planes(app: &mut App) {
+    app.get_all_by_label("Tools").next().expect("the Tools menu").hover();
+    app.run_steps(2);
+    app.get_all_by_label("Tools").next().expect("the Tools menu").click();
+    app.run_steps(3);
+    press_label(app, "Preferences…");
+    assert!(app.state().preferences.is_some(), "the menu opened Preferences");
+    press_label(app, "Grid and planes");
+}
+
+/// Closes the window the way a user does, and takes the pointer off the view.
+pub fn close_preferences(app: &mut App) {
+    press_label(app, "Close window");
+    assert!(app.state().preferences.is_none(), "the window closed");
+    pointer_to_chrome(app);
+}
+
+/// Whether a checkbox of the open window is checked.
+pub fn checked(app: &App, label: &str) -> bool {
+    row_selected(app, label)
+}
+
+/// Sets one choice through the window, leaving it closed.
+pub fn set_preference(app: &mut App, label: &str, on: bool) {
+    open_grid_and_planes(app);
+    if checked(app, label) != on {
+        press_label(app, label);
+    }
+    assert_eq!(checked(app, label), on, "{label} took the click");
+    close_preferences(app);
+}
+
+/// Changes the display choices through the window.
+pub fn set_display(app: &mut App, change: impl FnOnce(&mut ReferenceDisplay)) {
+    let before = app.state().state.viewport.references;
+    let mut after = before;
+    change(&mut after);
+    open_grid_and_planes(app);
+    for (label, was, now) in [
+        (SHOW_GRID, before.show_grid, after.show_grid),
+        (SHOW_PLANES, before.show_origin_planes, after.show_origin_planes),
+        (ALWAYS_SHOW_AXES, before.always_show_origin_axes, after.always_show_origin_axes),
+    ] {
+        if was != now {
+            press_label(app, label);
+        }
+    }
+    close_preferences(app);
+    assert_eq!(app.state().state.viewport.references, after, "the window applied the choices");
 }
 
 /// The same view with the grid on and off, the grid left on.
 pub fn grid_frames(case: &mut Case, app: &mut App, name: &str) -> (image::RgbaImage, image::RgbaImage) {
     pointer_to_chrome(app);
+    app.run_steps(2);
     let on = case.frame(app, &format!("{name}-grid-on"));
     set_display(app, |d| d.show_grid = false);
     let off = case.frame(app, &format!("{name}-grid-off"));
