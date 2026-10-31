@@ -28,8 +28,8 @@
     "sketch": { "plane": "top", "centre_mm": [80.0, 0.0], "width_mm": 20.0, "height_mm": 10.0, "explicitly_shown": true },
     "legacy": "tests/data/near-coincident-flange.dwprt",
     "config": {
-      "note": "Builder fixture config: the ground grid off, so a hidden face or edge is read against the plain backdrop. The grid's own acceptance belongs to the grid lane.",
-      "view": { "show_grid": false }
+      "note": "Builder fixture config: the ground grid and the origin planes off, so a hidden face or edge is read against the plain backdrop, an axis by its colour, and an empty click finds nothing. Their own acceptance belongs to the grid lane. The cases about planes turn Show origin planes on through Preferences, which is its default.",
+      "view": { "show_grid": false, "show_origin_planes": false }
     }
   },
   "expected": {
@@ -55,6 +55,7 @@
     "note": "Builder-chosen image thresholds for the designer's paired on/off method; no theme palette is asserted.",
     "backdrop_channel_tolerance": 8,
     "changed_channel_difference": 12,
+    "plane_fill_channel_difference": 4,
     "covered_sample_fraction": 0.8,
     "axis_pixels_shown_at_least": 10,
     "axis_pixels_hidden_at_most": 2,
