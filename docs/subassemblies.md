@@ -60,12 +60,20 @@ sub-assembly's own mates tie to it, and leaves the sub-assembly's free parts alo
 Both candidate truths are made, flattened and solved before anything is written: the root
 with the new file placed in it, and the new file on its own. Neither may move anything.
 Committing then checks that the root and every chosen source are still at the revisions the
-plan was prepared on, writes the new file with `soliddraft_document::save_new`, which never
+plan was prepared on, and each source still where it was found (the new file's bytes name
+that place; a source moved meanwhile, even at the same revision, makes the plan stale), writes the new file with `soliddraft_document::save_new`, which never
 replaces a file (even one made a moment before), and only then makes the formed root the
 accepted one, in one undo step labelled `Form subassembly`. The root's own file is written
 when it is saved.
 
 A refusal at any point leaves the accepted root, its history and every file as they were.
+Undo restores the root exactly, flat, and leaves the new file where it is: undo deletes no
+file. Redo brings back the same new file's id and pin and writes nothing; if the file was
+edited meanwhile the root says it has moved on, and only Update accepts it.
+
+Inserting a component reads the new structure before accepting it, so a sub-assembly
+cannot place an assembly that places it: that is refused as `cycle`, naming the occurrence
+the cycle runs through, and nothing changes.
 
 | Code | Why |
 |---|---|

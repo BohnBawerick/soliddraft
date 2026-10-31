@@ -22,8 +22,9 @@ use crate::subassembly::{FormCode, FormRefusal, FormRequest, FormStatus, Migrati
 pub struct FormPlan {
     /// The root's revision it was prepared on.
     root_revision: ContentHash,
-    /// Each selected source's reference, and the revision its file had then.
-    sources: Vec<(DocRef, Option<ContentHash>)>,
+    /// Each selected source's reference, the revision its file had then, and where it
+    /// was: the new file's bytes reference that place.
+    sources: Vec<(DocRef, Option<ContentHash>, PathBuf)>,
     destination: PathBuf,
     child_bytes: Vec<u8>,
     candidate: AssemblyDocument,
@@ -144,8 +145,9 @@ impl AssemblyDocument {
         for s in &source_ids {
             let r = truth.source(*s).expect("checked").document.clone();
             let (now, file) = self.resolved(&r)?;
-            found.push(file.unwrap_or_else(|| r.stored_path(&root_path)));
-            sources.push((r, now));
+            let at = located(file.unwrap_or_else(|| r.stored_path(&root_path)));
+            found.push(at.clone());
+            sources.push((r, now, at));
         }
         check_carried(self, &truth, &chosen, &request.paths)?;
 
@@ -331,6 +333,13 @@ impl AssemblyDocument {
     /// accepted one in one undo step labelled "Form subassembly". The root's own file is
     /// not written until it is saved.
     pub fn commit_form(&mut self, plan: FormPlan) -> Result<Formed, FormRefusal> {
+        self.commit_form_with(plan, Fault::None)
+    }
+
+    /// [`AssemblyDocument::commit_form`] with a publication failure made on purpose: test
+    /// setup for the paths a full disk or a crash would take, never a command.
+    #[doc(hidden)]
+    pub fn commit_form_with(&mut self, plan: FormPlan, fault: Fault) -> Result<Formed, FormRefusal> {
         self.finish_loading();
         let now = self.revision();
         if now != plan.root_revision {
@@ -341,8 +350,22 @@ impl AssemblyDocument {
                     .caused_by(self.id().to_string())
             });
         }
-        for (r, then) in &plan.sources {
-            let (current, _) = self.resolved(r)?;
+        // The new file's bytes name each source where it was: one found elsewhere now, even
+        // at the same revision, would leave the new file pointing at nothing.
+        for (r, then, was) in &plan.sources {
+            let (current, file) = self.resolved(r)?;
+            let at = located(file.unwrap_or_else(|| r.stored_path(self.path().unwrap_or(Path::new("")))));
+            if at != *was {
+                return Err(FormRefusal {
+                    expected: Some(was.display().to_string()),
+                    actual: Some(at.display().to_string()),
+                    ..FormRefusal::new(
+                        FormCode::StaleRevision,
+                        format!("{} moved after the formation was prepared; prepare it again", r.path),
+                    )
+                    .caused_by(r.path.clone())
+                });
+            }
             if current != *then {
                 let show = |h: &Option<ContentHash>| h.as_ref().map(ToString::to_string).unwrap_or_default();
                 return Err(FormRefusal {
@@ -356,7 +379,19 @@ impl AssemblyDocument {
                 });
             }
         }
-        publish(&plan.destination, &plan.child_bytes)?;
+        let failed = |at: &str| {
+            FormRefusal::new(FormCode::Io, format!("cannot write {}: {at}", plan.destination.display()))
+                .caused_by(file_name(&plan.destination))
+        };
+        publish(&plan.destination, &plan.child_bytes, fault == Fault::Staging)?;
+        match fault {
+            Fault::AfterPublication => {
+                withdraw(&plan.destination, &plan.child_bytes);
+                return Err(failed("the root could not take the new file"));
+            }
+            Fault::Exit => std::process::exit(FAULT_EXIT),
+            Fault::None | Fault::Staging => {}
+        }
         let before = self.structural_image(&plan.components, &plan.changed_sources);
         self.adopt("Form subassembly", plan.candidate, before);
         let open = self.options.open.clone();
@@ -371,9 +406,42 @@ impl AssemblyDocument {
     }
 }
 
-/// Writes the new file, never over another.
-fn publish(path: &Path, bytes: &[u8]) -> Result<(), FormRefusal> {
-    soliddraft_document::save_new(path, bytes).map_err(|e| {
+/// A publication failure made on purpose, for tests.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fault {
+    /// None: the ordinary commit.
+    None,
+    /// The new file's write stops halfway, before anything is published.
+    Staging,
+    /// The new file is published, then the root's change fails.
+    AfterPublication,
+    /// The process ends right after the new file is published, before the root changes.
+    Exit,
+}
+
+/// The status a [`Fault::Exit`] ends the process with.
+#[doc(hidden)]
+pub const FAULT_EXIT: i32 = 86;
+
+/// Takes back a file this formation published, only while it is still exactly what was
+/// written: another document is never removed.
+fn withdraw(path: &Path, bytes: &[u8]) {
+    if std::fs::read(path).is_ok_and(|now| now == bytes) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// A file's place, absolute, to compare one resolution with another.
+fn located(path: PathBuf) -> PathBuf {
+    std::path::absolute(&path).unwrap_or(path)
+}
+
+/// Writes the new file, never over another; `interrupted` stops the write halfway.
+fn publish(path: &Path, bytes: &[u8], interrupted: bool) -> Result<(), FormRefusal> {
+    let write =
+        if interrupted { soliddraft_document::save::save_new_interrupted } else { soliddraft_document::save_new };
+    write(path, bytes).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
             FormRefusal::new(FormCode::DestinationExists, format!("{} already exists", path.display()))
                 .caused_by(file_name(path))

@@ -112,8 +112,9 @@ and reopen from accepted display copies through MCP at the current Catallax pin.
 The `subassembly-form` scenario runs the V6 batch 1 design's manifest: a base and three
 placements of one pin, mated and driven, formed into `modules/pack.dwasm` with every pose,
 reference, mate id and freedom checked against hand-derived values, then saved and both
-files reopened. Its later increments add history, refusals, the two-file Update and
-the reopened driver; until its typed refusal step lands it is not an acceptance scenario.
+files reopened, with Form's undo and redo and the typed `cycle` refusal of placing the root
+in its own sub-assembly. Its later increments add the two-file Update and the reopened
+driver.
 `crates/soliddraft-assembly/tests/subassembly_form.rs` and
 `crates/soliddraft-app/tests/subassembly_form.rs` compare file bytes and package contents
 the runner cannot.

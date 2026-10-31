@@ -43,6 +43,24 @@ pub fn save_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// appears whole or not at all, and an existing file, even one made while this runs, is
 /// left alone: that is an [`std::io::ErrorKind::AlreadyExists`] error.
 pub fn save_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    publish_new(path, bytes, |file, bytes| file.write_all(bytes))
+}
+
+/// [`save_new`] whose write stops halfway with an error, as a full disk would: test
+/// setup for what such a failure leaves behind, which is nothing.
+#[doc(hidden)]
+pub fn save_new_interrupted(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    publish_new(path, bytes, |file, bytes| {
+        file.write_all(&bytes[..bytes.len() / 2])?;
+        Err(std::io::Error::other("the write stopped halfway"))
+    })
+}
+
+fn publish_new(
+    path: &Path,
+    bytes: &[u8],
+    write: impl FnOnce(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty());
     if let Some(dir) = dir {
         std::fs::create_dir_all(dir)?;
@@ -50,7 +68,7 @@ pub fn save_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = temporary_name(path);
     let written = (|| {
         let mut file = std::fs::File::create(&tmp)?;
-        file.write_all(bytes)?;
+        write(&mut file, bytes)?;
         file.sync_all()?;
         drop(file);
         // A hard link never replaces its target, unlike a rename.
@@ -102,6 +120,10 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"one", "the file already there is kept");
         let names: Vec<_> = std::fs::read_dir(dir.join("sub")).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(names, ["new.dwasm"], "no temporary file is left");
+        let other = dir.join("sub/other.dwasm");
+        assert!(save_new_interrupted(&other, b"half of this").is_err());
+        let names: Vec<_> = std::fs::read_dir(dir.join("sub")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, ["new.dwasm"], "a write stopped halfway leaves nothing");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

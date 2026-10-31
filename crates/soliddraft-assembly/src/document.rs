@@ -80,6 +80,9 @@ pub enum EditError {
     /// The edit is not consistent.
     #[error("{0}")]
     Invalid(String),
+    /// The edit would make the assembly contain itself, through the occurrence at this path.
+    #[error("the assembly would contain itself through {0}")]
+    Cycle(OccurrencePath),
 }
 
 /// One row's editable state, for undo.
@@ -892,7 +895,9 @@ impl AssemblyDocument {
 
     /// Places `document` (a part or an assembly, pinned at the revision it carries) in
     /// the root at `placement`. Returns the new component. Its display mesh loads like
-    /// any other: call [`AssemblyDocument::poll`].
+    /// any other: call [`AssemblyDocument::poll`]. The new structure is read before the
+    /// edit is accepted: an assembly that would contain this one, at any depth, is refused
+    /// and nothing changes.
     pub fn insert(&mut self, document: DocRef, placement: Placement) -> Result<ComponentId, EditError> {
         if !matches!(document.kind, DocKind::Part | DocKind::Assembly) || !document.is_bound() {
             return Err(EditError::Invalid("only a part or an assembly with an id can be inserted".into()));
@@ -900,12 +905,27 @@ impl AssemblyDocument {
         if document.id == Some(self.id) {
             return Err(EditError::Invalid("an assembly cannot contain itself".into()));
         }
+        self.finish_loading();
         let mut before = self.image(&[], &[]);
+        let known = self.assembly.sources.len();
         let source = self.assembly.add_source(document.clone());
         before.sources.push((source, None));
         let id = self.assembly.add_component(source, placement);
         before.components.push((id, None));
-        self.reflatten();
+        let mut lookup = Lookup::with_packages(self.packages.clone(), self.path.as_deref(), &self.options);
+        if let Err(e) = self.restructure(&mut lookup) {
+            // Reading the structure changes nothing until it succeeds: only the truth goes back.
+            self.assembly.components.retain(|c| c.id != id);
+            if self.assembly.sources.len() > known {
+                self.assembly.sources.retain(|s| s.id != source);
+            }
+            self.assembly.next_id = before.next_id;
+            return Err(match e {
+                LoadError::Flatten(crate::occurrence::FlattenError::Cycle(at)) => EditError::Cycle(at),
+                e => EditError::Invalid(e.to_string()),
+            });
+        }
+        self.start_loading(lookup);
         self.solver_status = None;
         let after = self.reimage(&before);
         self.undo.push(Record {
