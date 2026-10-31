@@ -272,6 +272,19 @@ pub enum CommandError {
     Empty(&'static str),
 }
 
+impl CommandError {
+    /// The kernel refusal a document refusal stands for, where it has one: the terminal
+    /// field policy is Catallax's `lattice.cad-after-lattice`.
+    pub fn kernel_code(&self) -> Option<&'static str> {
+        match self {
+            CommandError::AfterLattice(_) | CommandError::AfterGyroid(_) | CommandError::LatticeNotLast => {
+                Some("lattice.cad-after-lattice")
+            }
+            _ => None,
+        }
+    }
+}
+
 /// What an executed command did.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Executed {
@@ -355,6 +368,16 @@ impl Document {
     /// The enabled terminal field above the rollback bar, including a failed build.
     pub fn active_field(&self) -> Option<&Feature> {
         self.features.iter().take(self.active_count()).find(|f| f.kind.is_terminal_field() && !f.suppressed)
+    }
+
+    /// The refusal a CAD add meets while a terminal field is active, before any of its
+    /// geometric inputs are read: the field stays last until the user returns before it.
+    pub fn cad_after_field(&self) -> Option<CommandError> {
+        let field = self.active_field()?;
+        Some(match field.kind {
+            FeatureKind::Gyroid(_) => CommandError::AfterGyroid(field.id),
+            _ => CommandError::AfterLattice(field.id),
+        })
     }
 
     /// Puts the rollback bar above the terminal field so the user is back at the last
@@ -556,9 +579,12 @@ impl Document {
             }
             FeatureKind::Lattice(l)
                 if l.cell_size_mm.is_some_and(|v| !v.is_finite() || v <= 0.0)
-                    || l.radius_mm.is_some_and(|v| !v.is_finite() || v <= 0.0) =>
+                    || l.radius_mm.is_some_and(|g| !finite(&g) || g.endpoints().iter().any(|v| *v <= 0.0)) =>
             {
                 Err(CommandError::Invalid("lattice cell size and density must be finite and positive".into()))
+            }
+            FeatureKind::Lattice(l) if l.radius_mm.is_some_and(|g| !anchors_differ(&g)) => {
+                Err(CommandError::Invalid("a graded density needs two different anchors on its axis".into()))
             }
             FeatureKind::Lattice(l)
                 if !(l.accuracy_mm.is_finite()
@@ -568,8 +594,11 @@ impl Document {
             {
                 Err(CommandError::Invalid("lattice accuracy and minimum detail must be positive".into()))
             }
-            FeatureKind::Gyroid(g) if !(g.period_mm.is_finite() && g.period_mm > 0.0) || !g.level.is_finite() => {
+            FeatureKind::Gyroid(g) if !(g.period_mm.is_finite() && g.period_mm > 0.0) || !finite(&g.level) => {
                 Err(CommandError::Invalid("gyroid period must be positive and its level finite".into()))
+            }
+            FeatureKind::Gyroid(g) if !anchors_differ(&g.level) => {
+                Err(CommandError::Invalid("a graded level needs two different anchors on its axis".into()))
             }
             FeatureKind::Gyroid(g)
                 if !(g.accuracy_mm.is_finite()
@@ -1016,6 +1045,19 @@ impl Document {
 }
 
 /// Refuses a material or appearance with values out of range.
+/// Every number a field grade is built from is finite.
+fn finite(grade: &soliddraft_kernel_api::Grade) -> bool {
+    grade.values().iter().all(|v| v.is_finite())
+}
+
+/// A linear grade's anchors are two different places on its axis.
+fn anchors_differ(grade: &soliddraft_kernel_api::Grade) -> bool {
+    match grade {
+        soliddraft_kernel_api::Grade::Linear(l) => l.from != l.to,
+        soliddraft_kernel_api::Grade::Constant(_) => true,
+    }
+}
+
 fn check_entry(problems: Vec<soliddraft_materials::Problem>) -> Result<(), CommandError> {
     match problems.first() {
         Some(p) => Err(CommandError::Invalid(p.to_string())),

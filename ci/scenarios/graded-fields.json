@@ -1,0 +1,3083 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "graded-fields",
+  "max_work": 19999999,
+  "max_action_work": 19999999,
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": 20,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              20
+            ],
+            "width": 6,
+            "height": 6
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      },
+      "label": "D region",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 360,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 30,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "lattice",
+      "arguments": {
+        "cell": "cubic",
+        "cell_size": 100,
+        "radius": 1,
+        "accuracy": 0.1,
+        "min_detail": 0.1
+      },
+      "view": "unavailable",
+      "label": "D constant lattice",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/radius_mm",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "tool": "grade_field",
+      "arguments": {
+        "feature": "Lattice1",
+        "axis": "z",
+        "from": 20,
+        "to": 30,
+        "start": 1,
+        "end": 2
+      },
+      "view": "unavailable",
+      "label": "D0",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 30,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-lattice",
+            "box": [
+              -3,
+              -3,
+              20,
+              3,
+              3,
+              30
+            ],
+            "tight": [
+              -2,
+              -2,
+              20,
+              2,
+              2,
+              30
+            ],
+            "grade": [
+              "z",
+              "20",
+              "30",
+              "1",
+              "2"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "cell": 100
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "D0",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        },
+        {
+          "format": "step",
+          "refused": "field parts export as meshes"
+        },
+        {
+          "format": "obj",
+          "refused": "field parts export as meshes"
+        },
+        {
+          "format": "3mf",
+          "refused": "field parts export as meshes"
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "D0 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "D0",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "edit_lattice",
+      "arguments": {
+        "feature": "Lattice1",
+        "accuracy": 0.5
+      },
+      "view": "unavailable",
+      "label": "D0 at 1/2",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/2"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.5
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-lattice",
+            "box": [
+              -3,
+              -3,
+              20,
+              3,
+              3,
+              30
+            ],
+            "tight": [
+              -2,
+              -2,
+              20,
+              2,
+              2,
+              30
+            ],
+            "grade": [
+              "z",
+              "20",
+              "30",
+              "1",
+              "2"
+            ],
+            "accuracy": "1/2",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "cell": 100
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D0"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/d.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/d.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/d.dwprt"
+      },
+      "view": "unavailable",
+      "label": "D0 reopened",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D0"
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 12,
+        "flip": false
+      },
+      "view": "unavailable",
+      "label": "D1",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 20,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 3,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 32,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-lattice",
+            "box": [
+              -3,
+              -3,
+              20,
+              3,
+              3,
+              32
+            ],
+            "tight": [
+              -2,
+              -2,
+              20,
+              2,
+              2,
+              32
+            ],
+            "grade": [
+              "z",
+              "20",
+              "30",
+              "1",
+              "2"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "cell": 100
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "D1",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "D1 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "D1",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/d1.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/d1.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/d1.dwprt"
+      },
+      "view": "unavailable",
+      "label": "D1 reopened",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D1"
+        }
+      ]
+    },
+    {
+      "tool": "edit_extrude",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "depth": 10,
+        "flip": false
+      },
+      "view": "unavailable",
+      "label": "D0 restored",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D0"
+        }
+      ]
+    },
+    {
+      "tool": "grade_field",
+      "arguments": {
+        "feature": "Lattice1",
+        "axis": "z",
+        "from": 20,
+        "to": 30,
+        "start": 2,
+        "end": 1
+      },
+      "view": "unavailable",
+      "label": "D2",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-lattice",
+            "box": [
+              -3,
+              -3,
+              20,
+              3,
+              3,
+              30
+            ],
+            "tight": [
+              -2,
+              -2,
+              20,
+              2,
+              2,
+              30
+            ],
+            "grade": [
+              "z",
+              "20",
+              "30",
+              "2",
+              "1"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "cell": 100
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "D2",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "D2 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "D2",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D0"
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D2"
+        }
+      ]
+    },
+    {
+      "tool": "rename",
+      "arguments": {
+        "feature": "Boss-Extrude1",
+        "name": "Region"
+      },
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/1/name",
+          "equals": "Region"
+        },
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D2"
+        }
+      ]
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": 25,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              25
+            ],
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      "view": "unavailable",
+      "label": "CAD after the lattice",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "refused": "is the lattice stage and must stay last"
+    },
+    {
+      "tool": "fillet",
+      "arguments": {
+        "edges": [
+          "NoSuchEdge"
+        ],
+        "radius": 0.1
+      },
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "refused": "is the lattice stage and must stay last"
+    },
+    {
+      "tool": "rollback",
+      "arguments": {
+        "before": "Lattice1"
+      },
+      "label": "D returned before the field",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "rolled back"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        }
+      ],
+      "exports": [
+        {
+          "format": "step",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "step"
+            },
+            {
+              "pointer": "/report/within_tolerance",
+              "equals": true
+            }
+          ]
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "refused": "needs an active lattice or gyroid"
+        }
+      ]
+    },
+    {
+      "tool": "rollback",
+      "arguments": {
+        "before": null
+      },
+      "view": "unavailable",
+      "label": "D2 rebuilt",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "lattice"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/from",
+          "equals": 20
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/to",
+          "equals": 30
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/start",
+          "equals": 2.0
+        },
+        {
+          "pointer": "/summary/features/2/radius_mm/linear/end",
+          "equals": 1.0
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/cell_size_mm",
+          "equals": 100
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "D2"
+        }
+      ]
+    },
+    {
+      "tool": "new_part",
+      "arguments": {}
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "offset": -1,
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              0,
+              0,
+              -1
+            ],
+            "width": 2,
+            "height": 2
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 2,
+        "flip": false
+      },
+      "label": "G region",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 8,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 1,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "gyroid",
+      "arguments": {
+        "kind": "network",
+        "period": 10,
+        "level": 0,
+        "accuracy": 0.1,
+        "min_detail": 0.1
+      },
+      "view": "unavailable",
+      "label": "G constant gyroid",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/level",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "grade_field",
+      "arguments": {
+        "feature": "Gyroid1",
+        "axis": "z",
+        "from": -1,
+        "to": 1,
+        "start": -0.1,
+        "end": 0.1
+      },
+      "view": "unavailable",
+      "label": "G0",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 1,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-gyroid",
+            "box": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "tight": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "grade": [
+              "z",
+              "-1",
+              "1",
+              "-1/10",
+              "1/10"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "period": 10
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "G0",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        },
+        {
+          "format": "step",
+          "refused": "field parts export as meshes"
+        },
+        {
+          "format": "obj",
+          "refused": "field parts export as meshes"
+        },
+        {
+          "format": "3mf",
+          "refused": "field parts export as meshes"
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "G0 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "G0",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "edit_gyroid",
+      "arguments": {
+        "feature": "Gyroid1",
+        "accuracy": 0.5
+      },
+      "view": "unavailable",
+      "label": "G0 at 1/2",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.5
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/2"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.5
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-gyroid",
+            "box": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "tight": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "grade": [
+              "z",
+              "-1",
+              "1",
+              "-1/10",
+              "1/10"
+            ],
+            "accuracy": "1/2",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "period": 10
+          }
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G0"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/g.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/g.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/g.dwprt"
+      },
+      "view": "unavailable",
+      "label": "G0 reopened",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G0"
+        }
+      ]
+    },
+    {
+      "tool": "edit_dimension",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "value": 2.4
+      },
+      "view": "unavailable",
+      "label": "G1",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -1.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 1.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 1,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-gyroid",
+            "box": [
+              -1.2,
+              -1,
+              -1,
+              1.2,
+              1,
+              1
+            ],
+            "tight": [
+              -1.2,
+              -1,
+              -1,
+              1.2,
+              1,
+              1
+            ],
+            "grade": [
+              "z",
+              "-1",
+              "1",
+              "-1/10",
+              "1/10"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "period": 10
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "G1",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "G1 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "G1",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/g1.dwprt"
+      },
+      "view": "unavailable",
+      "files": [
+        "{bundle}/g1.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/g1.dwprt"
+      },
+      "view": "unavailable",
+      "label": "G1 reopened",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G1"
+        }
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/g.dwprt"
+      },
+      "view": "unavailable",
+      "label": "G0 restored",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": -1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 1,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 1,
+          "tolerance": 0.001
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G0"
+        }
+      ]
+    },
+    {
+      "tool": "grade_field",
+      "arguments": {
+        "feature": "Gyroid1",
+        "axis": "z",
+        "from": -1,
+        "to": 1,
+        "start": 0.1,
+        "end": -0.1
+      },
+      "view": "unavailable",
+      "label": "G2",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "field_mesh"
+            },
+            {
+              "pointer": "/report/label",
+              "equals": "catallax-print-stl/1"
+            },
+            {
+              "pointer": "/report/route",
+              "equals": "field"
+            },
+            {
+              "pointer": "/report/approximate",
+              "equals": true
+            },
+            {
+              "pointer": "/report/requested_accuracy_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/minimum_detail_mm",
+              "equals": "1/10"
+            },
+            {
+              "pointer": "/report/deviation_bound_mm",
+              "maximum": 0.1
+            },
+            {
+              "pointer": "/report/closed",
+              "equals": true
+            },
+            {
+              "pointer": "/report/non_self_intersecting",
+              "equals": true
+            },
+            {
+              "pointer": "/report/connected",
+              "equals": true
+            },
+            {
+              "pointer": "/report/components",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/max_cells",
+              "equals": 2000000
+            },
+            {
+              "pointer": "/report/max_vertices",
+              "equals": 1000000
+            }
+          ],
+          "oracle": {
+            "kind": "graded-gyroid",
+            "box": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "tight": [
+              -1,
+              -1,
+              -1,
+              1,
+              1,
+              1
+            ],
+            "grade": [
+              "z",
+              "-1",
+              "1",
+              "1/10",
+              "-1/10"
+            ],
+            "accuracy": "1/10",
+            "caps": [
+              2000000,
+              1000000
+            ],
+            "period": 10
+          }
+        },
+        {
+          "format": "step",
+          "stand_in": true,
+          "max_work": 19999999,
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "stand_in"
+            },
+            {
+              "pointer": "/report/surface_envelopes",
+              "equals": 1
+            },
+            {
+              "pointer": "/report/density_metadata",
+              "equals": false
+            }
+          ],
+          "oracle": {
+            "reference": "G2",
+            "max_work": 19999999
+          },
+          "replay": {
+            "max_work": 19999999
+          },
+          "raw_valid": true
+        }
+      ]
+    },
+    {
+      "tool": "field_mass",
+      "arguments": {},
+      "view": "unavailable",
+      "label": "G2 field mass",
+      "checks": [
+        {
+          "pointer": "/result/field_mass/scope",
+          "equals": "original-field-definition"
+        },
+        {
+          "pointer": "/result/density",
+          "equals": "unit"
+        }
+      ],
+      "moments": {
+        "reference": "G2",
+        "max_work": 19999999,
+        "permutation": 0
+      }
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G0"
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G2"
+        }
+      ]
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "NoSuchSketch",
+        "depth": 1,
+        "flip": false
+      },
+      "view": "unavailable",
+      "label": "CAD after the gyroid",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "refused": "is the gyroid stage and must stay last"
+    },
+    {
+      "tool": "lattice",
+      "arguments": {
+        "cell": "cubic",
+        "cell_size": 100,
+        "radius": 1,
+        "accuracy": 0.1,
+        "min_detail": 0.1
+      },
+      "view": "unavailable",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "refused": "a terminal field must be the only one and the last feature"
+    },
+    {
+      "tool": "rollback",
+      "arguments": {
+        "before": "Gyroid1"
+      },
+      "label": "G returned before the field",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "rolled back"
+        }
+      ],
+      "exports": [
+        {
+          "format": "step",
+          "checks": [
+            {
+              "pointer": "/report/kind",
+              "equals": "step"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "rollback",
+      "arguments": {
+        "before": null
+      },
+      "view": "unavailable",
+      "label": "G2 rebuilt",
+      "checks": [
+        {
+          "pointer": "/summary/features/2/type",
+          "equals": "gyroid"
+        },
+        {
+          "pointer": "/summary/features/2/status",
+          "equals": "ok"
+        },
+        {
+          "pointer": "/summary/features/2/display",
+          "equals": "unproved preview"
+        },
+        {
+          "pointer": "/summary/features/2/accuracy_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/min_detail_mm",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/axis",
+          "equals": "z"
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/from",
+          "equals": -1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/to",
+          "equals": 1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/start",
+          "equals": 0.1
+        },
+        {
+          "pointer": "/summary/features/2/level/linear/end",
+          "equals": -0.1
+        },
+        {
+          "pointer": "/summary/body/volume_mm3",
+          "equals": null
+        },
+        {
+          "pointer": "/summary/features/2/period_mm",
+          "equals": 10
+        }
+      ],
+      "exports": [
+        {
+          "format": "stl",
+          "same_export_as": "G2"
+        }
+      ]
+    }
+  ]
+}

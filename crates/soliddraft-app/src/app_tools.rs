@@ -263,6 +263,7 @@ impl AppTools<'_> {
             "export_stl" => self.export_part(ExportFormat::Stl, input),
             "export_3mf" => self.export_part(ExportFormat::ThreeMf, input),
             "export_obj" => self.export_part(ExportFormat::Obj, input),
+            "export_stand_in" => self.export_part(ExportFormat::StandIn, input),
             "roll_to_end" => self.roll_to_end(),
             "make_drawing" => self.make_drawing(input),
             "show_drawing" => self.session().map(|_| ()).map(|()| {
@@ -382,7 +383,7 @@ impl AppTools<'_> {
     /// Writes the part's body as `format`, as File › Export does.
     fn export_part(&mut self, format: ExportFormat, input: &Value) -> Result<Value, String> {
         let path = PathBuf::from(input["path"].as_str().unwrap_or_default());
-        if ExportFormat::of_path(&path) != Some(format) {
+        if !format.suits(&path) {
             return Err(format!("the path must end in .{} for {}", format.extension(), format.name()));
         }
         let doc = &self.state.doc;

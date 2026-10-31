@@ -855,6 +855,18 @@ fn has_body(s: &AppState) -> bool {
     s.doc.display_body().is_some()
 }
 
+/// Why no CAD feature may be added now: an active lattice or gyroid is the last feature.
+/// The same typed policy refuses the add in the document; the kernel's is
+/// `lattice.cad-after-lattice`.
+fn after_field(s: &AppState) -> Option<String> {
+    s.doc.model().cad_after_field().map(|e| e.to_string())
+}
+
+/// No terminal field stands in the way of adding a CAD feature.
+fn field_open(s: &AppState) -> bool {
+    after_field(s).is_none()
+}
+
 fn can_export(s: &AppState) -> bool {
     s.drag_preview.is_none()
         && !s.doc.proof_pending()
@@ -962,8 +974,9 @@ fn registry() -> Vec<CommandSpec> {
             .on(Sketch, "Sketch", Large)
             .key(Scope::Model, none, Key::S)
             .run(|s| if s.in_sketch() { AppAction::ExitSketch(None) } else { AppAction::StartSketch })
+            .when(|s| s.in_sketch() || field_open(s))
             .lit(AppState::in_sketch)
-            .hint(|s| s.in_sketch().then(|| format!("Exit the sketch ({})", key_of("confirm"))))
+            .hint(|s| if s.in_sketch() { Some(format!("Exit the sketch ({})", key_of("confirm"))) } else { after_field(s) })
             .agents(
                 Agents::Verb,
                 "The sketch holds closed shapes (rectangles, circles, straight slots). Shapes may not overlap. \
@@ -1060,17 +1073,21 @@ fn registry() -> Vec<CommandSpec> {
                     if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Extrude)) } else { AppAction::StartExtrude }
                 },
             )
+            .when(field_open)
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Extrude(_))))
+            .hint(after_field)
             .agents(Agents::Verb, "Every profile of the sketch extrudes along its normal.", tools::extrude_params)
 .undo(Undo::Step),
         cmd("revolve", "Revolve", Icon::Cad("revolve"), "Add material: revolve a sketch about an axis")
             .on(Solid, "Create", Large)
             .on(Sketch, "Use sketch", Large)
             .run(|s| if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Revolve)) } else { AppAction::StartRevolve })
-            .when(|s| s.in_sketch() || s.selected_sketch().is_some())
+            .when(|s| field_open(s) && (s.in_sketch() || s.selected_sketch().is_some()))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Revolve(_))))
             .hint(|s| {
-                (!s.in_sketch() && s.selected_sketch().is_none()).then(|| "Select a sketch to revolve".into())
+                after_field(s).or_else(|| {
+                    (!s.in_sketch() && s.selected_sketch().is_none()).then(|| "Select a sketch to revolve".into())
+                })
             })
             .agents(Agents::Verb, "Revolve a closed meridian sketch about a model-space axis.", tools::revolve_params)
             .undo(Undo::Step),
@@ -1085,10 +1102,12 @@ fn registry() -> Vec<CommandSpec> {
             .on(Sketch, "Use sketch", Large)
             .key(Scope::Model, none, Key::X)
             .run(|s| if s.in_sketch() { AppAction::ExitSketch(Some(ExitInto::Cut)) } else { AppAction::StartCut })
-            .when(|s| s.in_sketch() || (has_body(s) && s.selected_sketch().is_some()))
+            .when(|s| field_open(s) && (s.in_sketch() || (has_body(s) && s.selected_sketch().is_some())))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Cut(_))))
             .hint(|s| {
-                if s.in_sketch() || (has_body(s) && s.selected_sketch().is_some()) {
+                if let Some(why) = after_field(s) {
+                    Some(why)
+                } else if s.in_sketch() || (has_body(s) && s.selected_sketch().is_some()) {
                     None
                 } else if has_body(s) {
                     Some("Select a sketch to cut with, or sketch on a face first".into())
@@ -1106,9 +1125,9 @@ fn registry() -> Vec<CommandSpec> {
         cmd("hole", "Hole", Icon::Cad("hole"), "Drill holes into a planar face, with a counterbore or countersink")
             .on(Solid, "Remove", Large)
             .run(|_| AppAction::StartHole)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Hole(_))))
-            .hint(|s| (!has_body(s)).then(|| "Hole needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Hole needs a body".into())))
             .agents(
                 Agents::Verb,
                 "Each point is a hole centre on the face. Holes drill against the face's outward normal. Standard \
@@ -1122,26 +1141,26 @@ fn registry() -> Vec<CommandSpec> {
             .on(Solid, "Modify", Large)
             .key(Scope::Edge, none, Key::F)
             .run(|_| AppAction::StartFillet)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Fillet(_))))
-            .hint(|s| (!has_body(s)).then(|| "Fillet needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Fillet needs a body".into())))
             .agents(Agents::Verb, "", tools::fillet_params)
 .undo(Undo::Step),
         cmd("chamfer", "Chamfer", Icon::Cad("chamfer"), "Bevel edges with a flat chamfer of one distance")
             .on(Solid, "Modify", Large)
             .key(Scope::Model, none, Key::C)
             .run(|_| AppAction::StartChamfer)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Chamfer(_))))
-            .hint(|s| (!has_body(s)).then(|| "Chamfer needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Chamfer needs a body".into())))
             .agents(Agents::Verb, "", tools::chamfer_params)
 .undo(Undo::Step),
         cmd("lattice", "Lattice", Icon::Cad("lattice"), "Make a terminal cubic lattice")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartLattice)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Lattice(_))))
-            .hint(|s| (!has_body(s)).then(|| "Lattice needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Lattice needs a body".into())))
             .agents(Agents::Verb, "Density is the constant beam radius. The preview is unproved; export certifies the mesh.", tools::lattice_params)
             .undo(Undo::Step),
         cmd("edit_lattice", "Edit lattice", Icon::Cad("lattice"), "Change lattice density and output settings")
@@ -1150,28 +1169,47 @@ fn registry() -> Vec<CommandSpec> {
         cmd("gyroid", "Gyroid", Icon::Cad("lattice"), "Make a terminal network gyroid")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartGyroid)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Gyroid(_))))
-            .hint(|s| (!has_body(s)).then(|| "Gyroid needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Gyroid needs a body".into())))
             .agents(Agents::Verb, "The level is dimensionless, not a thickness, and may be zero or negative. The preview is unproved; export certifies the mesh.", tools::gyroid_params)
             .undo(Undo::Step),
         cmd("edit_gyroid", "Edit gyroid", Icon::Cad("lattice"), "Change gyroid period, level and output settings")
             .agents(Agents::Verb, "Only supplied settings change.", tools::edit_gyroid_params)
             .undo(Undo::Step),
+        cmd("grade_field", "Grade field", Icon::Cad("lattice"), "Grade a lattice's density or a gyroid's level along a part axis")
+            .agents(
+                Agents::Mcp,
+                "A lattice's beam radius in millimetres, which controls density, or a gyroid's dimensionless network \
+                 level, not a thickness, is start at part coordinate from on the axis and end at to, linear between \
+                 and held beyond them. The anchors stay put when the part's size changes. edit_lattice radius or \
+                 edit_gyroid level makes it one value again. Grades the kernel cannot certify fail with its typed \
+                 coverage code.",
+                tools::grade_field_params,
+            )
+            .undo(Undo::Step),
+        cmd("field_mass", "Field mass", Icon::Cad("mass"), "Prove the active lattice or gyroid's volume, centre of gravity and inertia")
+            .agents(
+                Agents::Tool,
+                "Unit-density moments of the field's own definition, as exact rational enclosures: volume within \
+                 0.01 mm³, each centroid coordinate within 0.001 mm and each centroidal inertia component within \
+                 0.1 mm⁵. Never computed from the preview or a mesh, and only when asked for.",
+                Vec::new,
+            ),
         cmd("shell", "Shell", Icon::Cad("shell"), "Hollow the part, leaving walls of one thickness")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartShell)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Shell(_))))
-            .hint(|s| (!has_body(s)).then(|| "Shell needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Shell needs a body".into())))
             .agents(Agents::Verb, "Selected faces are left open. An empty list makes a closed shell.", tools::shell_params)
             .undo(Undo::Step),
         cmd("draft", "Draft", Icon::Cad("draft"), "Taper faces by an angle about a neutral plane")
             .on(Solid, "Modify", Small)
             .run(|_| AppAction::StartDraft)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Draft(_))))
-            .hint(|s| (!has_body(s)).then(|| "Draft needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Draft needs a body".into())))
             .agents(
                 Agents::Verb,
                 "The pull direction is the neutral plane's normal, or its reverse. Catallax drafts planar faces and \
@@ -1183,25 +1221,25 @@ fn registry() -> Vec<CommandSpec> {
         cmd("linear_pattern", "Linear", Icon::Cad("linear"), "Copy the part's body along a direction")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartPattern { circular: false })
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Pattern(f) if matches!(f.layout, soliddraft_model::PatternSpec::Linear { .. }))))
-            .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Pattern needs a body".into())))
             .agents(Agents::Verb, "The copies unite with the body.", tools::linear_pattern_params)
             .undo(Undo::Step),
         cmd("circular_pattern", "Circular", Icon::Cad("circular"), "Copy the part's body around an axis")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartPattern { circular: true })
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Pattern(f) if matches!(f.layout, soliddraft_model::PatternSpec::Circular { .. }))))
-            .hint(|s| (!has_body(s)).then(|| "Pattern needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Pattern needs a body".into())))
             .agents(Agents::Verb, "The copies unite with the body.", tools::circular_pattern_params)
             .undo(Undo::Step),
         cmd("mirror", "Mirror", Icon::Cad("mirror"), "Mirror the part's body in a plane")
             .on(Solid, "Pattern", Large)
             .run(|_| AppAction::StartMirror)
-            .when(has_body)
+            .when(|s| has_body(s) && field_open(s))
             .lit(|s| editing(s, |p| matches!(p, EditorParams::Mirror(_))))
-            .hint(|s| (!has_body(s)).then(|| "Mirror needs a body".into()))
+            .hint(|s| after_field(s).or_else(|| (!has_body(s)).then(|| "Mirror needs a body".into())))
             .agents(Agents::Verb, "", tools::mirror_params)
             .undo(Undo::Step),
         // Reference geometry.
@@ -1482,6 +1520,16 @@ fn registry() -> Vec<CommandSpec> {
             .run(|_| AppAction::Export { format: ExportFormat::Obj, path: None })
             .when(can_export)
 .agents(Agents::Mcp, "The result carries the mesh report.", app::obj_path_params),
+        cmd("export_stand_in", "Mass stand-in", Icon::Save, "Export the field's mass stand-in as STEP, not its boundary")
+            .run(|_| AppAction::Export { format: ExportFormat::StandIn, path: None })
+            .when(|s| can_export(s) && s.doc.model().active_field().is_some())
+            .hint(|s| s.doc.model().active_field().is_none().then(|| "A mass stand-in needs a lattice or gyroid".into()))
+            .agents(
+                Agents::Mcp,
+                "A massless surface envelope of the field's source region and unit-density proxy solids whose \
+                 proven moments lie inside the field's. The result carries the moment report.",
+                app::step_path_params,
+            ),
         cmd("quit", "Quit", Icon::Close, "Quit SolidDraft")
             .both()
             .key(Scope::App, ctrl, Key::Q)

@@ -104,6 +104,24 @@ fn entry(sequence: usize, e: &OperationEntry) -> Value {
         "work":{"before":e.work_before,"after":e.work_after,"used":e.work_after-e.work_before},"wall_ms":e.wall_ms})
 }
 
+/// The deterministic work one whole request used: opening, rebuilding and writing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RequestWork {
+    /// Units every kernel call in the request used together.
+    pub used: u64,
+    /// The request's allowance.
+    pub limit: u64,
+    /// The allowance ran out; nothing the request computed may be published.
+    pub exhausted: bool,
+}
+
+/// Runs a whole request on one deterministic allowance that every kernel call in it
+/// shares on this thread, with no fresh allowance for a nested call.
+pub fn with_request_allowance<T>(limit: u64, run: impl FnOnce() -> T) -> (T, RequestWork) {
+    let (value, work) = with_operation_budget(limit, run);
+    (value, RequestWork { used: work.used, limit, exhausted: work.exhausted })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

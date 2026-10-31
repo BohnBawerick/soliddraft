@@ -5,7 +5,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use soliddraft_kernel_api::{Decision, HoleDepth, HoleHead, HoleTip, Plane, Vec3, question_index};
+use soliddraft_kernel_api::{Decision, Grade, HoleDepth, HoleHead, HoleTip, Plane, Vec3, question_index};
 use soliddraft_sketch::{P2, Sketch};
 
 use crate::reference::{EdgeRef, FaceRef};
@@ -445,8 +445,10 @@ pub struct ShellFeature {
 }
 
 /// The final lattice stage. It reads the whole finished body, so it references nothing.
-/// Cell, density and output settings are saved with the feature.
+/// Cell, density and output settings are saved with the feature. Unknown keys are
+/// refused, so a file from a later version is not read as a different lattice.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LatticeFeature {
     /// Missing in legacy files, which keep their earlier body visible until configured.
     #[serde(default)]
@@ -454,9 +456,10 @@ pub struct LatticeFeature {
     /// Cubic cell edge length, in millimetres.
     #[serde(default)]
     pub cell_size_mm: Option<f64>,
-    /// Density expressed as a constant beam radius, in millimetres.
+    /// Density as the beam radius in millimetres: one value, or a linear grade along a
+    /// part axis.
     #[serde(default)]
-    pub radius_mm: Option<f64>,
+    pub radius_mm: Option<Grade>,
     /// Grid fixed to the part origin and axes.
     #[serde(default)]
     pub frame: soliddraft_kernel_api::FieldFrame,
@@ -471,7 +474,7 @@ impl Default for LatticeFeature {
         LatticeFeature {
             cell: Some(soliddraft_kernel_api::LatticeCell::Cubic),
             cell_size_mm: Some(5.0),
-            radius_mm: Some(1.0),
+            radius_mm: Some(Grade::Constant(1.0)),
             frame: soliddraft_kernel_api::FieldFrame::Part,
             accuracy_mm: 0.1,
             min_detail_mm: 0.5,
@@ -481,14 +484,17 @@ impl Default for LatticeFeature {
 
 /// The final gyroid stage. It reads the whole finished body, so it references nothing.
 /// The level is the dimensionless value of the gyroid function, not a wall thickness.
+/// Unknown keys are refused, as for [`LatticeFeature`].
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GyroidFeature {
     /// Only the network is supported.
     pub kind: soliddraft_kernel_api::GyroidKind,
     /// Length of one period, in millimetres.
     pub period_mm: f64,
-    /// Constant dimensionless level. Zero and negative networks are valid.
-    pub level: f64,
+    /// Dimensionless level: one value, or a linear grade along a part axis. Zero and
+    /// negative levels are valid.
+    pub level: Grade,
     /// Gyroid fixed to the part origin and axes.
     pub frame: soliddraft_kernel_api::FieldFrame,
     /// Accuracy the gyroid is proven to, in millimetres.
@@ -502,7 +508,7 @@ impl Default for GyroidFeature {
         GyroidFeature {
             kind: soliddraft_kernel_api::GyroidKind::Network,
             period_mm: 10.0,
-            level: 0.0,
+            level: Grade::Constant(0.0),
             frame: soliddraft_kernel_api::FieldFrame::Part,
             accuracy_mm: 0.1,
             min_detail_mm: 0.5,

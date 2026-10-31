@@ -22,6 +22,7 @@ catallax-measure = { git = "https://github.com/BohnBawerick/catallax", rev = "65
 catallax-step = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 
 catallax-field = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
+catallax-features = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 
 [dev-dependencies]
 soliddraft-recipe.workspace = true

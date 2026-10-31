@@ -262,17 +262,29 @@ The document tests also reopen a part containing a chamfer and check that it reb
 
 ## Terminal cubic lattice
 
-With a finished body, choose Lattice on the Features ribbon. Cell size and density are in millimetres; density is the constant beam radius. The cubic grid uses the part's origin and axes. Accuracy and minimum detail control certified STL export. The viewport and tree label the displayed mesh as an unproved preview.
+With a finished body, choose Lattice on the Features ribbon. Cell size and the beam radius, which controls density, are in millimetres. The radius is one value, or linear along a part axis (see [graded fields](#graded-fields)). The cubic grid uses the part's origin and axes. Accuracy and minimum detail control certified STL export. The viewport and tree label the displayed mesh as an unproved preview.
 
 The lattice stays last. Edit an earlier feature to rebuild it, or return before the lattice to continue CAD work without losing its settings. The `lattice` and `edit_lattice` agent verbs use the same document commands. Old two-setting lattice files open with their earlier body visible and a message naming the missing cell size and density. Configure those inputs to build the field.
 
 ## Terminal network gyroid
 
-With a finished body, choose Gyroid on the Features ribbon. The body becomes the part of it where `sin X cos Y + sin Y cos Z + sin Z cos X` is at most the level, with `X = 2πx/a` and `a` the period. Period, accuracy and minimum detail are in millimetres. The level is a dimensionless constant, not a wall thickness or a volume fraction, and zero and negative levels are valid. The gyroid uses the part's origin and axes. The viewport and tree label the displayed mesh as an unproved preview, and the part has no field volume or mass.
+With a finished body, choose Gyroid on the Features ribbon. The body becomes the part of it where `sin X cos Y + sin Y cos Z + sin Z cos X` is at most the level, with `X = 2πx/a` and `a` the period. Period, accuracy and minimum detail are in millimetres. The level is dimensionless, not a wall thickness or a volume fraction, and zero and negative levels are valid. It is one value, or linear along a part axis (see [graded fields](#graded-fields)). The gyroid uses the part's origin and axes. The viewport and tree label the displayed mesh as an unproved preview, and the preview gives the part no volume or mass.
 
-A gyroid stays last like a lattice, and a part has one terminal field. The `gyroid` and `edit_gyroid` agent verbs use the same document commands. Only the network with a constant level is available. Sheet gyroids, graded levels and position functions come later.
+A gyroid stays last like a lattice, and a part has one terminal field. The `gyroid` and `edit_gyroid` agent verbs use the same document commands. Only the network is available; sheet gyroids come later.
 
 Export can refuse a valid gyroid. The certified STL must be one closed, connected surface, and some levels leave separate pieces. At period 10 mm and level 1/2, the box from (-10, -10, -5) to (10, 10, 15) leaves a separate corner piece, so the export refuses instead of dropping it.
+
+## Graded fields
+
+A lattice's beam radius or a gyroid's level can change linearly along one part axis. In the field's editor choose Linear along an axis, pick x, y or z, and give two anchor coordinates on that axis in millimetres with the value at each: the value is the start value at the from coordinate and before it, the end value at the to coordinate and beyond it, and linear in between. The anchors are part coordinates, not the body's bounds, so editing an upstream size leaves them where they are and the value is held beyond them. Equal start and end values give the same field as the constant. The `grade_field` MCP tool sets a grade; `edit_lattice` with a radius or `edit_gyroid` with a level makes it one value again.
+
+Catallax certifies a radius grade whose endpoints are positive and at most a quarter of the cell size, with a slope of at most 1/2, and a level grade with endpoints in [-1/4, 1/4] and a slope of at most 1/10 per millimetre. Other grades keep the edit, and the field shows Catallax's typed coverage refusal (`lattice.grade-range-unsupported`, `gyroid.grade-range-unsupported`). A grade whose anchors coincide is refused before the document changes. Files store a constant as a number and a grade as `{"linear": {"axis", "from", "to", "start", "end"}}`; a file with a grade form or a field setting this version does not know is refused rather than read as a constant.
+
+The labels say what each value is: the lattice's "Beam radius (mm), controls density" and the gyroid's "Network level (dimensionless)". Neither is a wall thickness or a density percentage.
+
+A field part has two explicit outputs besides its certified STL, each computed only when asked for and within one application allowance of 19,999,999 work units. The `field_mass` tool proves the field's own unit-density volume, centre of gravity and centroidal inertia as exact rational enclosures, within 0.01 mm³, 0.001 mm and 0.1 mm⁵; no preview or mesh contributes, and the display region's placeholder area and centroid are never reported as measured. The Mass stand-in command (in the command palette), the `export_stand_in` tool and `soliddraft export --stand-in` write a STEP file with the field's source envelope as a massless surface and unit-density proxy solids whose proven moments, after the file's rounding, lie inside the field's; see [exchange](exchange.md).
+
+While a field is last, every CAD command (sketch, extrude, revolve, cut, hole, fillet, chamfer, shell, draft, patterns, mirror) and a second field are disabled with the field's reason, and their agent verbs refuse with it before reading any named input. The reason is Catallax's terminal-field policy, `lattice.cad-after-lattice`; Catallax also refuses a CAD operation that reads a field body. Return before the field to continue CAD work.
 
 ## Named values
 

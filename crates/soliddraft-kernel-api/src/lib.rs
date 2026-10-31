@@ -30,6 +30,7 @@ pub mod drawing;
 pub mod measure;
 pub use measure::{Certainty, Measurement, PairEndpoint, PairQuantity, PointProof};
 mod edit;
+mod field;
 mod geometry;
 mod history;
 mod ids;
@@ -37,6 +38,10 @@ mod import;
 mod profile;
 
 pub use edit::{ConstructionEdit, ConstructionFace, ConstructionMesh, ProofWork, ScalarEdit, ScalarParameter};
+pub use field::{
+    ExactRange, ExchangedMoments, FieldMass, FieldMassAccuracy, Grade, GradeAxis, LinearGrade, ProxyMoments,
+    StandInExport, StandInReport,
+};
 pub use geometry::{Aabb, Plane, Point2, Vec3};
 pub use history::{EntityChanges, FaceOrigin, FaceRole, HistoryRecord, HolePart, OpKind, Origin, Split};
 pub use ids::{BodyId, EdgeId, FaceId, OpTag, VertexId};
@@ -250,16 +255,22 @@ pub struct FieldExport {
 /// Proof and approximation metadata of a field mesh.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FieldReport {
+    /// The label format in the file's header, `catallax-print-stl/1`.
+    pub label: String,
     /// Field meshes approximate the native field.
     pub approximate: bool,
     /// Native export route.
     pub route: String,
     /// Exact rational requested accuracy in millimetres.
     pub requested_accuracy_mm: String,
+    /// Exact rational smallest detail the stage keeps, in millimetres.
+    pub minimum_detail_mm: String,
     /// Proven two-sided bound, including file rounding.
     pub deviation_bound_mm: f64,
     /// Closed, oppositely paired surface.
     pub closed: bool,
+    /// Free of self-intersection by its conforming construction.
+    pub non_self_intersecting: bool,
     /// One connected component.
     pub connected: bool,
     /// Number of components.
@@ -268,6 +279,12 @@ pub struct FieldReport {
     pub triangles: usize,
     /// Shared vertices.
     pub vertices: usize,
+    /// Candidate-grid and certificate cells the export may visit, across all attempts.
+    pub max_cells: usize,
+    /// Vertices the mesh may have.
+    pub max_vertices: usize,
+    /// Deterministic work units the export used.
+    pub work: u64,
     /// SHA-256 of the labelled file.
     pub sha256: String,
 }
@@ -279,8 +296,8 @@ pub struct Lattice {
     pub cell: LatticeCell,
     /// Cubic cell edge length in millimetres.
     pub cell_size_mm: f64,
-    /// Constant beam radius in millimetres.
-    pub radius_mm: f64,
+    /// Beam radius in millimetres, read at each point; it controls density.
+    pub radius_mm: Grade,
     /// Fixed part frame.
     pub frame: FieldFrame,
     /// Accuracy the lattice is proven to, in millimetres.
@@ -296,8 +313,9 @@ pub struct Gyroid {
     pub kind: GyroidKind,
     /// Length of one period in millimetres.
     pub period_mm: f64,
-    /// Constant dimensionless level of the gyroid function, which may be negative.
-    pub level: f64,
+    /// Dimensionless level of the gyroid function, which may be negative. It is not a
+    /// wall thickness.
+    pub level: Grade,
     /// Fixed part frame.
     pub frame: FieldFrame,
     /// Accuracy the gyroid is proven to, in millimetres.
@@ -795,6 +813,20 @@ pub trait Kernel: Send + Sync {
     fn export_field_stl(&self, body: BodyId) -> KernelResult<FieldExport> {
         let _ = body;
         Err(KernelError::Unsupported("labelled field export".into()))
+    }
+
+    /// Proves unit-density moments of an active field's own definition to `accuracy`.
+    /// Only an explicit request computes them; no preview or mesh contributes.
+    fn field_mass(&self, body: BodyId, accuracy: &FieldMassAccuracy) -> KernelResult<FieldMass> {
+        let _ = (body, accuracy);
+        Err(KernelError::Unsupported("field mass".into()))
+    }
+
+    /// Writes an active field's explicit mass stand-in STEP: its source envelope as a
+    /// massless surface and unit-density proxy solids within the field's enclosures.
+    fn export_field_stand_in(&self, body: BodyId, accuracy: &FieldMassAccuracy) -> KernelResult<StandInExport> {
+        let _ = (body, accuracy);
+        Err(KernelError::Unsupported("field mass stand-in".into()))
     }
 
     /// Triangulates a body within its supported controls. The screen uses [`preview`](Self::preview).

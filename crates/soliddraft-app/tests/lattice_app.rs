@@ -63,10 +63,10 @@ fn ribbon_and_editor_create_a_terminal_unproved_lattice() {
         panic!("lattice editor")
     };
     l.cell_size_mm = Some(6.0);
-    l.radius_mm = Some(2.0);
+    l.radius_mm = Some(2.0.into());
     app.run_steps(2);
     field(&mut app, "Cell size value", "5");
-    field(&mut app, "Density (beam radius) value", "1");
+    field(&mut app, "Beam radius (mm), controls density value", "1");
     assert!(app.query_by_label("unproved preview").is_some());
     button(&mut app, "OK (Enter)");
     app.run_steps(12);
@@ -75,7 +75,7 @@ fn ribbon_and_editor_create_a_terminal_unproved_lattice() {
     assert_eq!(last.name, "Lattice1");
     let FeatureKind::Lattice(l) = last.kind else { panic!("last feature is lattice") };
     assert_eq!(l.cell_size_mm, Some(5.0));
-    assert_eq!(l.radius_mm, Some(1.0));
+    assert_eq!(l.radius_mm, Some(1.0.into()));
     assert_eq!(last.status, soliddraft_app::document::FeatureStatus::Ok);
     assert!(last.summary().contains("unproved preview"));
     let image = std::path::PathBuf::from(
@@ -123,29 +123,29 @@ fn ribbon_and_editor_create_a_terminal_unproved_gyroid() {
         panic!("gyroid editor")
     };
     g.period_mm = 20.0;
-    g.level = 0.5;
+    g.level = 0.5.into();
     app.run_steps(2);
     field(&mut app, "Period value", "10");
-    field(&mut app, "Level (dimensionless) value", "0");
+    field(&mut app, "Network level (dimensionless) value", "0");
     assert!(app.query_by_label("unproved preview").is_some());
     button(&mut app, "OK (Enter)");
     app.run_steps(12);
     let last = app.state().state.doc.features.last().unwrap();
     assert_eq!(last.name, "Gyroid1");
     let FeatureKind::Gyroid(g) = last.kind else { panic!("last feature is gyroid") };
-    assert_eq!((g.period_mm, g.level), (10.0, 0.0));
+    assert_eq!((g.period_mm, g.level), (10.0, soliddraft_kernel_api::Grade::Constant(0.0)));
     assert_eq!(last.status, soliddraft_app::document::FeatureStatus::Ok);
     assert!(last.summary().contains("unproved preview"));
 
     button(&mut app, "Gyroid1");
     button(&mut app, "Edit feature");
-    field(&mut app, "Level (dimensionless) value", "0.5");
+    field(&mut app, "Network level (dimensionless) value", "0.5");
     button(&mut app, "OK (Enter)");
     app.run_steps(12);
     let last = app.state().state.doc.features.last().unwrap();
     assert_eq!(last.name, "Gyroid1");
     let FeatureKind::Gyroid(g) = last.kind else { panic!("last feature is gyroid") };
-    assert_eq!((g.period_mm, g.level), (10.0, 0.5));
+    assert_eq!((g.period_mm, g.level), (10.0, soliddraft_kernel_api::Grade::Constant(0.5)));
     assert_eq!(last.status, soliddraft_app::document::FeatureStatus::Ok);
     assert!(app.query_by_label("unproved preview").is_some(), "the viewport keeps its label");
     let image = std::path::PathBuf::from(

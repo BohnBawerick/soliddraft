@@ -342,6 +342,22 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     assert!(!edited.is_null(), "edit_gyroid must succeed");
     s.call("undo", json!({}));
     s.call("undo", json!({}));
+    // D0 of the graded-field design: its grade, its moments and its mass stand-in.
+    s.call("new_part", json!({}));
+    s.call(
+        "sketch",
+        json!({"plane":"top", "offset":20, "shapes":[
+            {"shape":"rectangle", "center":[0,0,20], "width":6, "height":6}
+        ]}),
+    );
+    s.call("extrude", json!({"sketch":"Sketch1", "depth":10, "flip":false}));
+    s.call("lattice", json!({"cell":"cubic", "cell_size":100, "radius":1, "accuracy":0.1, "min_detail":0.1}));
+    s.call("grade_field", json!({"feature":"Lattice1", "axis":"z", "from":20, "to":30, "start":1, "end":2}));
+    let mass = s.call("field_mass", json!({}));
+    assert_eq!(mass["field_mass"]["scope"], "original-field-definition", "{mass}");
+    let stand_in = s.path("stand-in.step");
+    s.call("export_stand_in", json!({ "path": stand_in }));
+    assert!(dir.join("stand-in.step").is_file(), "export_stand_in wrote no stand-in.step");
     s.call("open", json!({ "path": part }));
     assert!(s.state.doc.features.iter().any(|f| f.name == "Hole"), "the saved part opens with its features");
 

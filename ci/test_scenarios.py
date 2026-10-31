@@ -76,6 +76,29 @@ class Checks(unittest.TestCase):
         self.assertFalse(above["pass"])
         self.assertEqual(above["status"], "edit-work-regression")
 
+    def test_action_work_counts_click_and_background_work_against_the_ceiling(self):
+        latency = {"work": {"edit": 5, "display": 4}, "background": {"work": {"display": 1}}}
+        self.assertTrue(scenarios.action_work_check(10, latency)["pass"])
+        self.assertFalse(scenarios.action_work_check(9, latency)["pass"])
+        for ceiling in (-1, True, 1.5, None):
+            with self.subTest(ceiling=ceiling), self.assertRaises(ValueError):
+                scenarios.action_work_check(ceiling, latency)
+
+    def test_graded_oracles_name_their_checker_and_exact_inputs(self):
+        oracle = {"kind": "graded-gyroid", "box": [-1, -1, -1, 1, 1, 1], "tight": [-1, -1, -1, 1, 1, 1],
+                  "period": 10, "grade": ["z", "-1", "1", "-1/10", "1/10"], "accuracy": "1/10",
+                  "caps": [2000000, 1000000]}
+        command = scenarios.oracle_command(oracle, "part.stl")
+        self.assertTrue(command[0].endswith("check-graded-stl.py"))
+        self.assertEqual(command[command.index("--kind") + 1], "gyroid")
+        self.assertIn("--grade=z,-1,1,-1/10,1/10", command)
+        lattice = dict(oracle, kind="graded-lattice", cell=100)
+        self.assertIn("--cell", scenarios.oracle_command(lattice, "part.stl"))
+        moments = scenarios.moments_command({"reference": "D1", "max_work": 19999999}, "report.json", "s.step")
+        self.assertTrue(moments[0].endswith("check-field-moments.py"))
+        self.assertEqual(moments[moments.index("--reference") + 1], "D1")
+        self.assertEqual(moments[-2:], ["--step", "s.step"])
+
     def test_edit_work_ceiling_rejects_invalid_limits(self):
         for ceiling in (-1, True, 1.5, None):
             with self.subTest(ceiling=ceiling), self.assertRaises(ValueError):

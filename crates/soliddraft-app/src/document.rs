@@ -2933,12 +2933,20 @@ impl Document {
                         details.push(("Layout".to_owned(), f.summary()));
                     }
                     FeatureKind::Lattice(l) => {
+                        // A constant lattice keeps the rows it always had; a grade is shown.
+                        if let Some(radius @ soliddraft_kernel_api::Grade::Linear(_)) = &l.radius_mm {
+                            details.push(("Beam radius, controls density".to_owned(), grade_text(radius, " mm")));
+                        }
                         details.push(("Accuracy".to_owned(), format!("{} mm", fmt_mm(l.accuracy_mm))));
                         details.push(("Minimum detail".to_owned(), format!("{} mm", fmt_mm(l.min_detail_mm))));
                     }
                     FeatureKind::Gyroid(g) => {
                         details.push(("Period".to_owned(), format!("{} mm", fmt_mm(g.period_mm))));
-                        details.push(("Level".to_owned(), fmt_mm(g.level)));
+                        let level = match g.level {
+                            soliddraft_kernel_api::Grade::Constant(v) => fmt_mm(v),
+                            graded => grade_text(&graded, ""),
+                        };
+                        details.push(("Level".to_owned(), level));
                         details.push(("Accuracy".to_owned(), format!("{} mm", fmt_mm(g.accuracy_mm))));
                         details.push(("Minimum detail".to_owned(), format!("{} mm", fmt_mm(g.min_detail_mm))));
                     }
@@ -3326,6 +3334,17 @@ fn display_mesh(
 
 pub fn fmt_mm(v: f64) -> String {
     if (v - v.round()).abs() < 1e-6 { format!("{}", v.round() as i64) } else { format!("{v:.2}") }
+}
+
+/// A field grade as the user entered it, each number exact: "1 mm", or
+/// "1 mm to 2 mm along z from 20 to 30 mm".
+pub fn grade_text(grade: &soliddraft_kernel_api::Grade, unit: &str) -> String {
+    match grade {
+        soliddraft_kernel_api::Grade::Constant(v) => format!("{v}{unit}"),
+        soliddraft_kernel_api::Grade::Linear(l) => {
+            format!("{}{unit} to {}{unit} along {} from {} to {} mm", l.start, l.end, l.axis.name(), l.from, l.to)
+        }
+    }
 }
 
 #[cfg(test)]

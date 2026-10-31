@@ -97,7 +97,7 @@ fn settings_must_be_positive() {
     }
     for (radius, size) in [(0.0, 5.0), (-1.0, 5.0), (f64::NAN, 5.0), (1.0, 0.0)] {
         let kind = FeatureKind::Lattice(LatticeFeature {
-            radius_mm: Some(radius),
+            radius_mm: Some(radius.into()),
             cell_size_mm: Some(size),
             ..Default::default()
         });
@@ -115,7 +115,7 @@ fn settings_must_be_positive() {
     assert!(matches!(
         d.execute(Command::EditFeature {
             id: l,
-            kind: FeatureKind::Lattice(LatticeFeature { radius_mm: Some(0.0), ..Default::default() })
+            kind: FeatureKind::Lattice(LatticeFeature { radius_mm: Some(0.0.into()), ..Default::default() })
         }),
         Err(CommandError::Invalid(_))
     ));
@@ -476,8 +476,8 @@ fn gyroid_commands_preserve_terminal_document_contract() {
         GyroidFeature { period_mm: 0.0, ..base },
         GyroidFeature { period_mm: -10.0, ..base },
         GyroidFeature { period_mm: f64::NAN, ..base },
-        GyroidFeature { level: f64::NAN, ..base },
-        GyroidFeature { level: f64::INFINITY, ..base },
+        GyroidFeature { level: f64::NAN.into(), ..base },
+        GyroidFeature { level: f64::INFINITY.into(), ..base },
         GyroidFeature { accuracy_mm: 0.0, ..base },
         GyroidFeature { min_detail_mm: 0.0, ..base },
     ];
@@ -501,7 +501,7 @@ fn gyroid_commands_preserve_terminal_document_contract() {
     }
     // A network level is not a radius: zero and negative levels pass validation.
     for level in [0.0, -0.5] {
-        let kind = gyroid(GyroidFeature { level, ..base });
+        let kind = gyroid(GyroidFeature { level: level.into(), ..base });
         d.execute(Command::EditFeature { id: g, kind }).unwrap();
         assert!(status(&d, g).is_ok(), "level {level}: {:?}", status(&d, g));
     }

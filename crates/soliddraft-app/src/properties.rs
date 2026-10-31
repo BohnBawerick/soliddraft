@@ -340,6 +340,50 @@ fn error_row(ui: &mut egui::Ui, err: &str) {
     });
 }
 
+/// A field parameter: one value, or a linear grade between two anchors on a part axis.
+/// `unit` suffixes the values, such as " mm"; the anchors are always millimetres.
+fn grade_field(ui: &mut egui::Ui, label: &str, grade: &mut soliddraft_kernel_api::Grade, unit: &str, speed: f64) {
+    use soliddraft_kernel_api::{Grade, GradeAxis, LinearGrade};
+    ui.label(label);
+    let linear = matches!(grade, Grade::Linear(_));
+    ui.horizontal(|ui| {
+        if ui.selectable_label(!linear, "Constant").clicked()
+            && let Grade::Linear(l) = *grade
+        {
+            *grade = Grade::Constant(l.start);
+        }
+        if ui.selectable_label(linear, "Linear along an axis").clicked()
+            && let Grade::Constant(v) = *grade
+        {
+            *grade = Grade::Linear(LinearGrade { axis: GradeAxis::Z, from: 0.0, to: 10.0, start: v, end: v });
+        }
+    });
+    let value = |ui: &mut egui::Ui, name: &str, v: &mut f64, suffix: &str| {
+        ui.horizontal(|ui| {
+            ui.label(name);
+            let response = ui.add(egui::DragValue::new(v).speed(speed).suffix(suffix));
+            let info = if name.is_empty() { format!("{label} value") } else { format!("{label} {name} value") };
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, info.clone()));
+        });
+    };
+    match grade {
+        Grade::Constant(v) => value(ui, "", v, unit),
+        Grade::Linear(l) => {
+            ui.horizontal(|ui| {
+                ui.label("Axis");
+                for axis in GradeAxis::ALL {
+                    ui.selectable_value(&mut l.axis, axis, axis.name());
+                }
+            });
+            value(ui, "from", &mut l.from, " mm");
+            value(ui, "to", &mut l.to, " mm");
+            value(ui, "start", &mut l.start, unit);
+            value(ui, "end", &mut l.end, unit);
+            hint(ui, "Start at the from coordinate, end at the to coordinate, held beyond them. Part coordinates.");
+        }
+    }
+}
+
 fn editor(ui: &mut egui::Ui, state: &mut AppState) {
     let (title, icon) = match state.editor.as_ref().map(|e| &e.params) {
         Some(EditorParams::Revolve(_)) => (state.editor.as_ref().unwrap().title(), Icon::Revolve),
@@ -689,17 +733,16 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
             EditorParams::Lattice(l) => {
                 theme::section_label(ui, "Cubic lattice");
                 hint(ui, "Grid at the part origin. Unproved preview; export certifies the mesh.");
-                for (label, value) in [("Cell size", &mut l.cell_size_mm), ("Density (beam radius)", &mut l.radius_mm)]
-                {
-                    let v = value.get_or_insert(0.0);
-                    ui.horizontal(|ui| {
-                        ui.label(label);
-                        let response = ui.add(egui::DragValue::new(v).speed(0.1).suffix(" mm"));
-                        response.widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
-                        });
+                let v = l.cell_size_mm.get_or_insert(0.0);
+                ui.horizontal(|ui| {
+                    ui.label("Cell size");
+                    let response = ui.add(egui::DragValue::new(v).speed(0.1).suffix(" mm"));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Cell size value")
                     });
-                }
+                });
+                let radius = l.radius_mm.get_or_insert(soliddraft_kernel_api::Grade::Constant(0.0));
+                grade_field(ui, "Beam radius (mm), controls density", radius, " mm", 0.1);
                 for (label, v) in [("Accuracy", &mut l.accuracy_mm), ("Minimum detail", &mut l.min_detail_mm)] {
                     ui.horizontal(|ui| {
                         ui.label(label);
@@ -724,13 +767,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                     response
                         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Period value"));
                 });
-                ui.horizontal(|ui| {
-                    ui.label("Level (dimensionless)");
-                    let response = ui.add(egui::DragValue::new(&mut g.level).speed(0.01));
-                    response.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Level (dimensionless) value")
-                    });
-                });
+                grade_field(ui, "Network level (dimensionless)", &mut g.level, "", 0.01);
                 for (label, v) in [("Accuracy", &mut g.accuracy_mm), ("Minimum detail", &mut g.min_detail_mm)] {
                     ui.horizontal(|ui| {
                         ui.label(label);
