@@ -142,15 +142,13 @@ struct Tile {
 
 fn tile(app: &App, label: &str, within: Rect) -> Tile {
     let control = ribbon::control(app, label, within);
-    let icons = ribbon::images_in(app, control.rect);
-    assert_eq!(icons.len(), 1, "the button {label} shows one drawing: {icons:?}");
-    let texts: Vec<Painted> = ribbon::painted(app)
-        .into_iter()
-        .filter(|p| p.text == label && control.rect.intersects(p.full))
-        .collect();
+    let icon = ribbon::art_on(app, control.rect, label);
+    assert!(icon.is_positive(), "the button {label} shows its art");
+    let texts: Vec<Painted> =
+        ribbon::painted(app).into_iter().filter(|p| p.text == label && control.rect.intersects(p.full)).collect();
     assert_eq!(texts.len(), 1, "the button {label} paints its label once at {:?}", control.rect);
     let label = texts.into_iter().next().unwrap();
-    Tile { control, icon: icons[0], label }
+    Tile { control, icon, label }
 }
 
 fn linear(channel: u8) -> f32 {
@@ -198,11 +196,8 @@ fn label_below(tile: &Tile, region: Rect, what: &str) {
         label.full
     );
     if !control.selected {
-        let (seen, floor) = (contrast(label.color, theme::panel()), if control.enabled {
-            MIN_CONTRAST
-        } else {
-            MIN_DISABLED_CONTRAST
-        });
+        let (seen, floor) =
+            (contrast(label.color, theme::panel()), if control.enabled { MIN_CONTRAST } else { MIN_DISABLED_CONTRAST });
         assert!(seen >= floor, "{name}: contrast {seen} of {floor}");
     }
 }
@@ -233,9 +228,16 @@ fn every_tile(app: &App, tab: Tab, what: &str) {
     }
 }
 
+/// A panel's title. The View tab has a Feature tree tile, so the band above does not count.
+fn panel_title(app: &App, title: &str) -> Rect {
+    let bottom = body(app).bottom();
+    let found = ribbon::painted(app).into_iter().find(|p| p.text == title && p.rect.top() >= bottom);
+    found.unwrap_or_else(|| panic!("no panel {title} in the frame")).rect
+}
+
 /// The tree, the properties and the viewport, for comparing before and after.
 fn panel_rects(app: &App, tree: &str) -> [Rect; 3] {
-    [ribbon::title_rect(app, tree), ribbon::title_rect(app, "Properties"), app.state().state.viewport.rect]
+    [panel_title(app, tree), panel_title(app, "Properties"), app.state().state.viewport.rect]
 }
 
 fn open_sketch(app: &mut App) {
@@ -282,7 +284,7 @@ fn plate_and_sketch() -> Document {
 
 /// Clicks a Shell tile at a point in a fresh plate, and returns the editor it opened.
 fn shell_from(case: &Case, half: &str) -> EditorParams {
-    let mut plate = ribbon::app(ribbon::plate());
+    let mut plate = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, 1.0);
     let mut opened = None;
     case.run(&mut plate, |app| {
         settle(app);
@@ -311,7 +313,7 @@ fn every_ribbon_command_has_a_visible_label_below_its_icon() {
     let case = ribbon::case("l1");
 
     // Each part category, then the assembly's ribbon.
-    let mut plate = ribbon::app(ribbon::plate());
+    let mut plate = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, 1.0);
     case.run(&mut plate, |app| {
         settle(app);
         let start = ribbon::fingerprint(app);
@@ -331,7 +333,7 @@ fn every_ribbon_command_has_a_visible_label_below_its_icon() {
     drop(plate);
 
     // Each drawing category.
-    let mut drawing = ribbon::app(ribbon::plate());
+    let mut drawing = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, 1.0);
     case.run(&mut drawing, |app| {
         settle(app);
         open_drawing(app);
@@ -351,7 +353,7 @@ fn every_ribbon_command_has_a_visible_label_below_its_icon() {
     for mode in MODES {
         for ppp in SCALES {
             let what = format!("{mode:?} {ppp}");
-            let mut plate = ribbon::app_at(ribbon::plate(), ribbon::WINDOW, ppp);
+            let mut plate = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, ppp);
             case.run(&mut plate, |app| {
                 theme::set_mode(&app.ctx.clone(), mode);
                 settle(app);
@@ -366,7 +368,7 @@ fn every_ribbon_command_has_a_visible_label_below_its_icon() {
                 }
             });
             drop(plate);
-            let mut sketch = ribbon::app_at(ribbon::sketch(), ribbon::WINDOW, ppp);
+            let mut sketch = ribbon::app_unrendered(ribbon::sketch(), ribbon::WINDOW, ppp);
             case.run(&mut sketch, |app| {
                 theme::set_mode(&app.ctx.clone(), mode);
                 settle(app);
@@ -418,7 +420,7 @@ fn open_group(app: &mut App, group: &str, what: &str) {
     assert_eq!(shown.len(), 1, "{what}: the collapsed {group} shows its name");
     let before = ribbon::fingerprint(app);
     ribbon::click_at(app, button.rect.center());
-    settle(app);
+    app.run_steps(4);
     assert_eq!(ribbon::fingerprint(app), before, "{what}: opening {group} runs nothing");
     assert!(popup_open(app), "{what}: clicking {group} opens it");
 }
@@ -426,7 +428,7 @@ fn open_group(app: &mut App, group: &str, what: &str) {
 fn dismiss(app: &mut App) {
     if popup_open(app) {
         app.key_press(Key::Escape);
-        settle(app);
+        app.run_steps(4);
         assert!(!popup_open(app), "Escape closes the row");
     }
 }
@@ -446,8 +448,8 @@ fn layout_holds(app: &App, tree: &str, what: &str) {
     assert!(view.top() >= body.bottom() - TOLERANCE, "{what}: the ribbon stays above the viewport: {view:?}");
     assert!(view.right() >= window.right() - TOLERANCE, "{what}: nothing is right of the viewport: {view:?}");
     assert!(view.width() >= panels::VIEWPORT_MIN_WIDTH - TOLERANCE, "{what}: the viewport keeps its width: {view:?}");
-    let tree = ribbon::title_rect(app, tree);
-    let properties = ribbon::title_rect(app, "Properties");
+    let tree = panel_title(app, tree);
+    let properties = panel_title(app, "Properties");
     assert!(tree.right() <= view.left() + TOLERANCE, "{what}: the tree is left of the viewport");
     assert!(properties.right() <= view.left() + TOLERANCE, "{what}: so are the properties");
     assert!(properties.top() > tree.bottom(), "{what}: the properties are below the tree");
@@ -463,7 +465,6 @@ fn walk(app: &mut App, tab_name: Option<&str>, tab: Tab, runs: &[&str], tree: &s
     for entry in entries(app, tab) {
         if let Some(name) = tab_name {
             ribbon::click_tab(app, name);
-            settle(app);
         }
         layout_holds(app, tree, what);
         let name = format!("{what}, {}", entry.label);
@@ -471,7 +472,6 @@ fn walk(app: &mut App, tab_name: Option<&str>, tab: Tab, runs: &[&str], tree: &s
         let before = ribbon::fingerprint(app);
         if !tile.control.enabled {
             ribbon::click_at(app, tile.control.rect.center());
-            settle(app);
             assert_eq!(ribbon::fingerprint(app), before, "{name}: disabled, so clicking it does nothing");
         } else if runs.contains(&entry.command.id) {
             ribbon::click_at(app, tile.control.rect.center());
@@ -550,8 +550,7 @@ fn same_commands_after_another_tab(app: &mut App, what: &str) {
         };
         open_group(app, group, what);
         let first = ids(app);
-        let expected: Vec<&str> =
-            entries(app, tab).iter().filter(|e| e.group == group).map(|e| e.command.id).collect();
+        let expected: Vec<&str> = entries(app, tab).iter().filter(|e| e.group == group).map(|e| e.command.id).collect();
         assert_eq!(first, expected, "{what}: {group} shows its commands");
         dismiss(app);
         ribbon::click_tab(app, "View");
@@ -626,7 +625,14 @@ fn narrow_window(case: &Case, size: Vec2, ppp: f32) {
         }
         walk(app, Some("Solid"), RibbonTab::Solid.into(), &[], "Feature tree", &format!("{what} solid"));
         walk(app, Some("Assembly"), RibbonTab::Assembly.into(), &[], "Feature tree", &format!("{what} assembly tab"));
-        walk(app, Some("Inspect"), RibbonTab::Inspect.into(), &INSPECT_RUNS, "Feature tree", &format!("{what} inspect"));
+        walk(
+            app,
+            Some("Inspect"),
+            RibbonTab::Inspect.into(),
+            &INSPECT_RUNS,
+            "Feature tree",
+            &format!("{what} inspect"),
+        );
     });
     drop(plate);
     let mut plate = ribbon::app_unrendered(ribbon::plate(), size, ppp);
@@ -692,7 +698,6 @@ fn the_drawing_ribbon_narrows_the_same_way() {
             let body = body(app);
             for entry in entries(app, tab.into()) {
                 ribbon::click_tab(app, tab.label());
-                settle(app);
                 reveal(app, &entry, &what);
                 dismiss(app);
                 for (name, rect) in ribbon::buttons_in(app, body) {
@@ -739,7 +744,7 @@ fn chip_opens_shell(app: &mut App) {
 #[test]
 fn labels_and_art_follow_the_same_command_through_pin_and_search() {
     let case = ribbon::case("l3");
-    let mut app = ribbon::app(ribbon::plate());
+    let mut app = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, 1.0);
     case.run(&mut app, |app| {
         settle(app);
         let body = body(app);
@@ -772,7 +777,7 @@ fn labels_and_art_follow_the_same_command_through_pin_and_search() {
     drop(app);
 
     // The next run starts from the saved chip.
-    let mut again = ribbon::app(ribbon::plate());
+    let mut again = ribbon::app_unrendered(ribbon::plate(), ribbon::WINDOW, 1.0);
     case.run(&mut again, |app| {
         settle(app);
         assert_eq!(tools(app).iter().filter(|t| *t == "shell").count(), 1, "{:?}", tools(app));
@@ -782,7 +787,7 @@ fn labels_and_art_follow_the_same_command_through_pin_and_search() {
 
     // A tile in an open row drags the same way, and the row goes when it lands.
     let size = vec2(960.0, 600.0);
-    let mut narrow = ribbon::app_at(ribbon::plate(), size, 1.0);
+    let mut narrow = ribbon::app_unrendered(ribbon::plate(), size, 1.0);
     case.run(&mut narrow, |app| {
         settle(app);
         let tab = Tab::from(RibbonTab::Solid);

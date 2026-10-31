@@ -128,8 +128,8 @@ impl Workspace {
     }
 }
 
-/// How big a ribbon button is: a large one with its label under the icon, or a small
-/// one in a stack of three.
+/// How big a ribbon tile's icon is: large for a main verb, small for its variants. Either
+/// way the label sits under the icon.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Size {
     Large,

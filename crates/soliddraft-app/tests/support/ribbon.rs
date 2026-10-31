@@ -420,6 +420,31 @@ pub fn images_in(app: &App, region: Rect) -> Vec<Rect> {
     found
 }
 
+fn walk_order(shape: &Shape, found: &mut Vec<(Option<String>, Rect)>) {
+    match shape {
+        Shape::Vec(shapes) => shapes.iter().for_each(|s| walk_order(s, found)),
+        Shape::Noop => {}
+        Shape::Text(text) => found.push((Some(text.galley.text().to_owned()), text.visual_bounding_rect())),
+        art => found.push((None, art.visual_bounding_rect())),
+    }
+}
+
+/// The art of a button: whatever was drawn on it, raster or strokes, in the run of shapes
+/// up to its label. Paint order keeps out what a row covers on the layers underneath.
+pub fn art_on(app: &App, button: Rect, label: &str) -> Rect {
+    let mut shapes = Vec::new();
+    for clipped in &app.output().shapes {
+        walk_order(&clipped.shape, &mut shapes);
+    }
+    let on = |r: &Rect| button.expand(TOLERANCE).contains_rect(*r);
+    let Some(end) = shapes.iter().rposition(|(text, r)| text.as_deref() == Some(label) && button.intersects(*r)) else {
+        return Rect::NOTHING;
+    };
+    let run = shapes[..end].iter().rev().take_while(|(text, r)| text.is_none() && on(r));
+    let art = run.map(|(_, r)| *r).filter(|r| (r.size() - button.size()).length() > 2.0 * TOLERANCE);
+    art.fold(Rect::NOTHING, Rect::union)
+}
+
 /// The text in the last frame that a user can see, cut to its clip and to the window.
 pub fn painted(app: &App) -> Vec<Painted> {
     let window = window(app);
