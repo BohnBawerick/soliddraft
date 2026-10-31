@@ -1043,6 +1043,107 @@ fn one_click_changes_the_rendered_planes() {
 }
 
 // ---------------------------------------------------------------------------
+// A solid hidden while its proof is pending.
+
+/// The kernel that holds an extrusion back, shared with the drag-preview tests.
+mod gated;
+
+/// Hiding a solid while an edit's proof is pending hides the replacement body the
+/// viewport shows meanwhile, from the frame and from picking, and leaves the proof
+/// and the model as they were; showing it brings the replacement back.
+#[test]
+fn hiding_a_solid_hides_its_pending_replacement_body() {
+    let mut case = Case::gpu("pending-proof");
+    let kernel = std::sync::Arc::new(gated::Gated::default());
+    let b = &manifest()["fixtures"]["B20"];
+    let mut doc = Document::new("B20", kernel.clone());
+    doc.apply(Command::AddExtrude {
+        params: ExtrudeParams {
+            profile: ProfileKind::Rectangle { width: f(&b["width_mm"]), height: f(&b["height_mm"]) },
+            depth: f(&b["depth_mm"]),
+            ..Default::default()
+        },
+        via_assistant: false,
+    })
+    .unwrap();
+    let mut app = launch(&mut case, doc, "standard");
+    case.run(&mut app, |case, app| {
+        frame_fixture(case, app);
+        let (solid, name) = extrusion(app);
+        click_row_name(app, &name);
+        assert_eq!(app.state().state.doc.selection, Some(Selection::Feature(solid)));
+
+        // A real scalar edit: drag the Depth field, with the exact proof held back.
+        kernel.rules.lock().unwrap().hold_next = true;
+        let start = app.get_by_label("Depth value").rect().center();
+        app.hover_at(start);
+        app.run_steps(2);
+        app.drag_at(start);
+        app.run_steps(2);
+        let mut end = start;
+        for step in 1..=20 {
+            end = pos2(start.x + 4.0 * step as f32, start.y);
+            app.hover_at(end);
+            app.run_steps(1);
+        }
+        app.drop_at(end);
+        until(app, "the edit shows its replacement body with its proof pending", |app| {
+            let s = &app.state().state;
+            s.drag_preview.is_none() && s.doc.proof_pending() && s.doc.provisional_mesh().is_some()
+        });
+        settle(app);
+        let pending = |app: &App| {
+            let doc = &app.state().state.doc;
+            (doc.proof_pending(), doc.provisional_mesh().is_some(), geometry(app).features, doc.undo_depth())
+        };
+        let before = pending(app);
+        case.note(format!("pending edit: {:?}", before.2));
+        pointer_away(app);
+        let shown = case.frame(app, "p1-replacement-shown");
+
+        click_eye(case, app, &name);
+        assert_reported(app, &name, false);
+        assert_eq!(app.state().state.doc.selection, Some(Selection::Feature(solid)), "the eye keeps the selection");
+        assert_eq!(pending(app), before, "hiding leaves the pending proof and the model as they were");
+        pointer_away(app);
+        let hidden = case.frame(app, "p2-replacement-hidden");
+        let covered = body_samples().iter().filter(|p| changed(&shown, &hidden, app, project(app, **p), 1.0)).count();
+        case.note(format!("body samples painted while shown: {covered} of {}", body_samples().len()));
+        assert!(covered as f64 / body_samples().len() as f64 >= detection("covered_sample_fraction"));
+        for p in body_samples().into_iter().chain(edge_samples()) {
+            assert!(bare(&hidden, app, project(app, p), 2.0), "no replacement face or edge remains near {p}");
+        }
+        let top = Vec3::new(0.0, 0.0, f(&manifest()["expected"]["B20"]["bounds_mm"]["max"][2]) as f32);
+        rest_on(app, top, false);
+        assert_eq!(app.state().state.viewport.hover, None, "no pick of the hidden replacement");
+        click_at(app, project(app, top));
+        assert!(
+            !matches!(app.state().state.doc.selection, Some(Selection::Face(_) | Selection::Edge(_))),
+            "a click there picks nothing of the hidden replacement: {:?}",
+            app.state().state.doc.selection
+        );
+        assert_eq!(pending(app), before);
+
+        click_eye(case, app, &name);
+        assert_reported(app, &name, true);
+        assert_eq!(pending(app), before, "showing leaves the pending proof as it was");
+        pointer_away(app);
+        let back = case.frame(app, "p3-replacement-shown-again");
+        let covered = body_samples().iter().filter(|p| changed(&back, &hidden, app, project(app, **p), 1.0)).count();
+        assert!(covered as f64 / body_samples().len() as f64 >= detection("covered_sample_fraction"), "{covered}");
+        rest_on(app, top, true);
+        click_at(app, project(app, top));
+        assert!(matches!(app.state().state.doc.selection, Some(Selection::Face(_))), "the replacement is pickable");
+
+        kernel.rules.lock().unwrap().hold = None;
+        kernel.changed.notify_all();
+        until(app, "the held proof answers", |app| !app.state().state.doc.proof_pending());
+        settle(app);
+        assert_reported(app, &name, true);
+    });
+}
+
+// ---------------------------------------------------------------------------
 // T2.
 
 #[test]

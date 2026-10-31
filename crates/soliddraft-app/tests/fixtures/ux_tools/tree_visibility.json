@@ -2,7 +2,8 @@
   "scenario": "ux-tree-visibility",
   "design": [
     "sdc-d-ux-tools report of 31 October 2026, Merge T (Codex test designer)",
-    "sdc-d-ux-tree-click ruling of 31 October 2026, option (b): an eye per row toggles visibility, a row-name click keeps selecting"
+    "sdc-d-ux-tree-click ruling of 31 October 2026, option (b): an eye per row toggles visibility, a row-name click keeps selecting",
+    "dot-finding-1928 review of 31 October 2026: a hidden solid also hides its pending replacement body"
   ],
   "author": "Expected results: Codex test designer. Test implementation: Merge T builder, who may not change these values.",
   "pair": {
@@ -15,7 +16,8 @@
     "T1_small_dark": "one_click_changes_the_rendered_item_and_its_row_small_dark",
     "T1_step_5": "one_click_changes_the_rendered_planes",
     "T2": "view_choices_survive_undo_and_native_reopen",
-    "serializer": "view_choices_serialize_outside_the_part_truth"
+    "serializer": "view_choices_serialize_outside_the_part_truth",
+    "pending_proof": "hiding_a_solid_hides_its_pending_replacement_body"
   },
   "windows": {
     "standard": { "size": [1440, 900], "pixels_per_point": 1.0, "theme": "light" },

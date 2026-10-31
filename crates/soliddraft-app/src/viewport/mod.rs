@@ -187,8 +187,11 @@ impl ViewportState {
         let Overlay { ghost, preview, sketch, passive_sketches, dimension_edit, visible } = overlay;
         let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
         let provisional = doc.provisional_mesh();
-        let preview_pickable =
-            preview.as_ref().zip(provisional.as_ref()).is_some_and(|(shown, bound)| Arc::ptr_eq(shown, bound));
+        let is_provisional = |shown: &Arc<DisplayMesh>| provisional.as_ref().is_some_and(|b| Arc::ptr_eq(shown, b));
+        // While its proof is pending the provisional body is the part's own, so it hides with
+        // the body; an open tool's preview still shows.
+        let preview = preview.filter(|shown| visible.body || !is_provisional(shown));
+        let preview_pickable = preview.as_ref().is_some_and(is_provisional);
         let sketching = sketch.is_some();
         let mut events = ViewportEvents::default();
         let rect = ui.available_rect_before_wrap();
