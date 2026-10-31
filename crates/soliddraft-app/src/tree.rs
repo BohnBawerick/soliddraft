@@ -1,7 +1,7 @@
 //! FeatureManager-style tree: origin group, then one row per feature with its
 //! absorbed sketch nested under it, and the rollback bar. Rows select,
-//! double-click edits, F2 or a slow second click renames, drag reorders,
-//! right-click offers the rest.
+//! double-click shows a solid feature's dimensions or edits the rest, F2 or a slow
+//! second click renames, drag reorders, right-click offers the rest.
 
 use crate::document::{
     AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Reference, Selection, SketchPlane,
@@ -380,11 +380,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             }
             if resp.double_clicked() {
                 state.rename = None;
-                actions.push(if item.is_sketch {
-                    AppAction::EditSketch(item.id)
-                } else {
-                    AppAction::EditFeature(item.id)
-                });
+                actions.push(crate::dimension_edit::row_double_click(state, item.id));
             }
             let id = item.id;
             let (is_sketch, suppressed, index) = (item.is_sketch, item.suppressed, item.index);

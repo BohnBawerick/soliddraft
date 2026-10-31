@@ -14,6 +14,7 @@ pub mod command_line;
 #[macro_use]
 pub mod command_tools;
 pub mod commands;
+pub mod dimension_edit;
 pub mod display_quality;
 pub mod document;
 pub mod drag;

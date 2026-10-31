@@ -144,7 +144,13 @@ impl TabViewer for Panels<'_> {
                 } else {
                     None
                 };
-                let overlay = Overlay { ghost, preview, sketch: st.sketch.as_mut(), passive_sketch: passive };
+                let overlay = Overlay {
+                    ghost,
+                    preview,
+                    sketch: st.sketch.as_mut(),
+                    passive_sketch: passive,
+                    dimension_edit: st.dimension_edit.as_mut(),
+                };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref(), &st.navigation);
                 let (dt, ppp) = ui.input(|i| (i.stable_dt.min(0.1), i.pixels_per_point));
                 if st.doc.update_display(&st.viewport.projection(ppp), dt) {

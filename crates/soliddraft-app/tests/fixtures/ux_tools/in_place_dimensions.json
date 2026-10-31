@@ -1,0 +1,71 @@
+{
+  "scenario": "ux-in-place-dimensions",
+  "author": "Codex test designer; expected results copied unchanged from the report of 31 October 2026",
+  "source": "firstmate data/sdc-d-ux-tools/report.md, Merge D manifest and hand-derived fixture results",
+  "tests": [
+    "double_click_edit_rebuilds_the_existing_depth_in_place",
+    "double_click_edit_rebuilds_the_existing_depth_in_place_small_dark",
+    "escape_and_invalid_text_preserve_the_accepted_part"
+  ],
+  "pair": {
+    "parent_app": "3403d2134d5f1d8e76e6f2d143eedd48648fdd5f",
+    "candidate_app": "the pull request head, recorded in the pull request body",
+    "catallax": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc"
+  },
+  "fixture": {
+    "B20": "Centred 60 x 40 mm rectangle on Top, blind upward extrusion 20 mm, one solid-producing feature"
+  },
+  "supported": "The built-in blind extrusion's Width, Height and Depth. General expressions and every other feature parameter are outside this merge.",
+  "setups": {
+    "standard": { "size": [1440, 900], "pixels_per_point": 1, "theme": "as configured" },
+    "small_dark": { "size": [960, 600], "pixels_per_point": 2, "theme": "dark" }
+  },
+  "expected": {
+    "B20": {
+      "volume": 48000,
+      "min": [-30, -20, 0],
+      "max": [30, 20, 20],
+      "faces": 6,
+      "edges": 12,
+      "vertices": 8,
+      "width": 60,
+      "height": 40,
+      "depth": 20
+    },
+    "B30": {
+      "volume": 72000,
+      "min": [-30, -20, 0],
+      "max": [30, 20, 30],
+      "faces": 6,
+      "edges": 12,
+      "vertices": 8,
+      "width": 60,
+      "height": 40,
+      "depth": 30
+    },
+    "W70": {
+      "volume": 56000,
+      "min": [-35, -20, 0],
+      "max": [35, 20, 20],
+      "faces": 6,
+      "edges": 12,
+      "vertices": 8,
+      "width": 70,
+      "height": 40,
+      "depth": 20
+    }
+  },
+  "tolerance": {
+    "volume_mm3": 1e-6,
+    "bounds_mm": 0.001,
+    "control_bounds_points": 1
+  },
+  "gestures": {
+    "top_face": [0, 0, 20],
+    "accepted_depth": "30",
+    "cancelled_depth": "35",
+    "accepted_width": "70",
+    "refused": ["0", "-5", "abc", "NaN", "inf"]
+  },
+  "evidence": "target/ux-tools/<test>/ holds run.log, the full frames and their viewport crops, and failure.png with failure.txt when a case fails"
+}
