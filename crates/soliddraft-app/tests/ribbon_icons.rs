@@ -584,7 +584,7 @@ fn the_complete_icon_catalogue_survives_real_size_rendering() {
         let dark = mode == Mode::Dark;
         for ppp in SCALES {
             // The sizes the ribbon ships.
-            for side in [26.0, 15.0] {
+            for side in [26.0, 22.0] {
                 let panel = Color32::TRANSPARENT;
                 let ink = {
                     let probe = Harness::builder().with_size(vec2(8.0, 8.0)).build_ui(|_| {});

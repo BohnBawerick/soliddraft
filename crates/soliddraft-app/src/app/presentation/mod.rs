@@ -30,8 +30,11 @@ impl SolidDraftApp {
         // (Onshape's N) leaves that command off the key.
         let view_keys = (context.part() && !typing).then(|| crate::navigation::view_keys::in_use(&state.navigation));
         let superseded: Vec<(&str, Key)> = view_keys.iter().flat_map(|v| v.superseded()).collect();
+        // Escape closes an open menu or ribbon row, not what is underneath it.
+        let popup = egui::Popup::is_any_open(ctx);
         let bindings: Vec<_> = commands::bindings(context)
             .into_iter()
+            .filter(|(_, k)| !(popup && k.key == Key::Escape))
             .filter(|(c, k)| (!typing || k.fires_while_typing()) && (c.is_enabled(state) || (c.hint)(state).is_some()))
             .filter(|(c, k)| !superseded.contains(&(c.id, k.key)))
             .collect();
