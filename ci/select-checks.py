@@ -14,6 +14,8 @@ LINUX = {'lint', 'kernel', 'step-opencascade', 'test-linux', 'web', 'msrv', 'int
 PLATFORM = {'test-macos', 'test-windows', 'interactive-macos'}
 PACKAGES = {'package-linux', 'package-windows', 'package-macos', 'package-web'}
 UNITS = LINUX | PLATFORM
+# Deferred until a later catch-up. Every rule below still names these; select() drops them.
+WINDOWS = {'test-windows', 'package-windows'}
 CATALLAX_GIT = 'https://github.com/BohnBawerick/catallax'
 CATALLAX_SOURCE = re.compile(r'git\+https://github\.com/BohnBawerick/catallax\?rev=([0-9a-f]{40})#\1')
 OWNERS = {
@@ -304,7 +306,7 @@ def narrow_units(path, sources):
     return None
 
 
-def select(changes, event, ref, packages, read_sources):
+def route(changes, event, ref, packages, read_sources):
     reasons = {'lint': ['always: formatting, lint and CI unit tests']}
 
     def add(units, reason):
@@ -357,6 +359,12 @@ def select(changes, event, ref, packages, read_sources):
     return reasons
 
 
+def select(changes, event, ref, packages, read_sources, windows=False):
+    # The accepted selector runs through this too, with no windows argument, so the deferral covers both policies.
+    reasons = route(changes, event, ref, packages, read_sources)
+    return reasons if windows else {unit: why for unit, why in reasons.items() if unit not in WINDOWS}
+
+
 def changes_between(root, base, head):
     if not base or set(base) == {'0'}:
         return None
@@ -386,7 +394,8 @@ def with_base_rules(result, base_script, changes, event, ref, packages, sources)
             selected = namespace['select'](changes, event, ref, packages, bound)
         except namespace.get('PolicyError', ()) as error:
             # A path new to the accepted map arrives with a map edit, which selects everything anyway.
-            selected = {unit: [f'accepted map cannot judge this change: {error}'] for unit in UNITS | PACKAGES}
+            selected = {unit: [f'accepted map cannot judge this change: {error}']
+                        for unit in (UNITS | PACKAGES) - WINDOWS}
         for unit, reasons in selected.items():
             result.setdefault(unit, []).extend(f'base: {reason}' for reason in reasons)
     return result
@@ -399,6 +408,8 @@ def main():
     parser.add_argument('--head', default='HEAD')
     parser.add_argument('--event', required=True)
     parser.add_argument('--ref', default='')
+    parser.add_argument('--windows', choices=('true', 'false', ''), default='',
+                        help="the windows_catch_up input; only a manual run may select the deferred Windows jobs")
     parser.add_argument('--output', type=pathlib.Path, required=True)
     args = parser.parse_args()
     # The running checkout's selector and map are the candidate policy; --head names the tree they judge.
@@ -409,7 +420,8 @@ def main():
         check_inventory(args.root, args.head, parse_consumers(policy))
         changes = changes_between(args.root, args.base, args.head)
         packages = graph(args.root, args.base if changes is not None else None)
-        result = select(changes, args.event, args.ref, packages, sources)
+        windows = args.windows == 'true' and args.event == 'workflow_dispatch'
+        result = select(changes, args.event, args.ref, packages, sources, windows)
         base_script = content(args.root, 'ci/select-checks.py', args.base)
         result = with_base_rules(result, base_script, changes, args.event, args.ref, packages, sources)
     except PolicyError as error:

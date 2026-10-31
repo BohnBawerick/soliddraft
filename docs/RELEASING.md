@@ -20,7 +20,7 @@ The freeze selects release candidates, not a development stop. Record both repos
 | Browser | `.zip`, with relative asset URLs suitable for a GitHub Pages project path |
 | Release metadata | `SHA256SUMS`, SPDX JSON SBOM, generated `release-notes.md` |
 
-Windows builds link the C runtime statically. Assembly inspects the portable executable's imports and rejects a dependency on the separately installed Visual C++ runtime.
+Windows packages are [deferred](ci.md#windows-is-deferred): until the catch-up, a release has no Windows downloads, and `.msi` and `.zip` appear only in a Hosted CI run with `windows_catch_up` on. Windows builds link the C runtime statically. Assembly inspects the portable executable's imports and rejects a dependency on the separately installed Visual C++ runtime.
 
 Linux packages build on Ubuntu 22.04. The portable tar needs the host's graphics drivers and desktop libraries; the AppImage bundles dependencies through cargo-packager. The archive packages include LICENSE and NOTICE. The Debian package and installers also include them as resources.
 
@@ -50,7 +50,7 @@ Feature-branch dry runs cancel their superseded runs. Each run on `main`, a `rel
 
 Download these run artifacts:
 
-- `release-dry-run`, the exact seven packages, SBOM, notes and SHA256SUMS.
+- `release-dry-run`, the exact packages, SBOM, notes and SHA256SUMS. That is five packages, or seven with the deferred Windows pair.
 - `github-pages`, the deploy-ready Pages tar payload. Uploading this artifact does not enable a site.
 - `appimage-smoke` and `browser-smoke`, screenshots from the packaged builds.
 
@@ -64,7 +64,7 @@ Before release, also download the AppImage and browser zip from the successful r
 2. Confirm the candidate release commit is green in Hosted CI, including application scenarios and survival checks. Hosted CI reports click budgets as warnings; the strict release verdict below confirms them. Packaging success does not replace these checks. The tag workflow requires a successful Hosted CI push run on `release/<version>` at the tagged commit.
 3. Test the supported desktop part and drawing flows. Open older supported `.dwprt` and `.dwdrw` documents, save and reopen them, and check document identities and references.
    Separately, run the `.dwasm` assembly-format and schema checks. Desktop assemblies are created, saved and reopened from inside the application. Installers do not register an assembly file association, so double-clicking a `.dwasm` file does not open it. Keep the format and extension unchanged.
-4. Commit the final kernel pin, workspace version and generated lockfile on the release branch. Run the full release dry run at that exact commit. Inspect all seven packages, the SBOM, SHA256SUMS, generated notes and both smoke screenshots. After installation, double-click a `.dwprt` part and a `.dwdrw` drawing and confirm that each opens in the application.
+4. Commit the final kernel pin, workspace version and generated lockfile on the release branch. Run the full release dry run at that exact commit. Inspect all five packages, the SBOM, SHA256SUMS, generated notes and both smoke screenshots. After installation, double-click a `.dwprt` part and a `.dwdrw` drawing and confirm that each opens in the application.
 5. Review the generated source revisions and document-format lines. Notes record the exact SolidDraft commit and Catallax pin, and generation rejects disagreement between the adapter dependencies, backend identity and locked kernel sources. These identities do not substitute for acceptance of that source pair. The generator reads `DocKind::format` at the release commit and the nearest reachable previous released tag. It reports each current format and explicitly names a changed previous version. The first release prints all current format versions. Migration details belong in the merged change's pull request and `docs/documents.md`, not a hand-edited changelog.
 6. Review signing status. Until credentials exist, macOS and Windows builds are unsigned. Warn users about Gatekeeper and SmartScreen; do not claim that an attestation is an operating-system signing certificate.
 7. Only after approval, push the version tag from that green release commit. For example, `git tag v0.1.0 <commit>` followed by `git push origin v0.1.0`. The tag must match the workspace version exactly and its commit must be reachable from the matching `release/0.1.0` branch, not merely `main`.

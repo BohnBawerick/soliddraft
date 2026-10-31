@@ -77,6 +77,58 @@ class ReleaseSourceTests(unittest.TestCase):
 
 
 
+class DeferredWindowsTests(unittest.TestCase):
+    NAMES = ("linux-x86_64.AppImage", "linux-x86_64.deb", "linux-x86_64.tar.gz", "macos-universal.dmg", "web.zip")
+    WINDOWS = ("windows-x64.msi", "windows-x64.zip")
+
+    def inventory(self, names):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / "Cargo.toml").write_text('[workspace.package]\nversion = "0.1.0"\n')
+        (root / "dist").mkdir()
+        for name in ("release-notes.md", "soliddraft-0.1.0.spdx.json", *(f"soliddraft-0.1.0-{n}" for n in names)):
+            (root / "dist" / name).write_text(name)
+        return root
+
+    def test_a_package_run_has_no_windows_cell_unless_asked(self):
+        self.assertEqual([cell["platform"] for cell in release.desktop(False)], ["linux", "macos"])
+        self.assertEqual(release.desktop(True), [
+            {"platform": "linux", "os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "formats": "appimage,deb"},
+            {"platform": "windows", "os": "windows-2022", "target": "x86_64-pc-windows-msvc", "formats": "wix"},
+            {"platform": "macos", "os": "macos-26", "target": "universal-apple-darwin", "formats": "dmg"}])
+
+    def test_inventory_needs_windows_files_exactly_when_windows_ran(self):
+        for names, windows, words in ((self.NAMES, False, None), (self.NAMES + self.WINDOWS, True, None),
+                                      (self.NAMES, True, "missing"), (self.NAMES + self.WINDOWS[:1], True, "missing"),
+                                      (self.NAMES + self.WINDOWS, False, "extra")):
+            with self.subTest(names=names, windows=windows):
+                root = self.inventory(names)
+                with patch.object(release, "ROOT", root):
+                    if words:
+                        with self.assertRaisesRegex(ValueError, words):
+                            release.checksums(windows)
+                        self.assertFalse((root / "dist/SHA256SUMS").exists())
+                    else:
+                        release.checksums(windows)
+                        self.assertEqual("windows" in (root / "dist/SHA256SUMS").read_text(), windows)
+
+    def test_notes_say_when_a_release_has_no_windows_packages(self):
+        for windows, present, absent in ((False, "no Windows packages", "SmartScreen"),
+                                         (True, "SmartScreen", "no Windows packages")):
+            with self.subTest(windows=windows):
+                root = self.inventory(())
+                with patch.object(release, "ROOT", root), patch.object(release, "formats", return_value={}), \
+                        patch.object(release, "source_revisions", return_value=("a", "b")), \
+                        patch.object(release, "known_gap_notes", return_value=[]), \
+                        patch.object(release, "pull_request_notes", return_value=""):
+                    release.notes(root / "pulls.json", None, windows)
+                text = (root / "dist/release-notes.md").read_text()
+                self.assertIn(present, text)
+                self.assertNotIn(absent, text)
+                self.assertIn("macOS Gatekeeper", text)
+
+
 class KnownGapNotesTests(unittest.TestCase):
     def test_lists_every_known_gap_by_scenario(self):
         with tempfile.TemporaryDirectory() as directory:
