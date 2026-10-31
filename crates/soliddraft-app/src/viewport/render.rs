@@ -84,6 +84,15 @@ impl DisplayMode {
 /// Existing document identity, display version and retained body; never sent to the GPU.
 pub type PickRevision = (soliddraft_document::DocumentId, u64, Option<BodyId>);
 
+/// What a frame was drawn for. An id-buffer pixel means the same thing only under all of
+/// these: the view, the projection with its aspect, and the size of the render target.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PickView {
+    pub view: Mat4,
+    pub proj: Mat4,
+    pub size: [u32; 2],
+}
+
 /// Window of the id buffer around the cursor, read back from the GPU.
 #[derive(Clone, Debug, Default)]
 pub struct PickSample {
@@ -94,8 +103,8 @@ pub struct PickSample {
     pub data: Vec<[u32; 2]>,
     pub serial: u64,
     pub revision: Option<PickRevision>,
-    /// The view the sample was drawn from.
-    pub view: Mat4,
+    /// The frame the sample was read from.
+    pub seen: PickView,
 }
 
 impl PickSample {
@@ -155,6 +164,12 @@ pub struct FrameInput {
     pub grid: Option<GridFrame>,
     /// The origin planes, when any shows.
     pub planes: Option<PlaneFrame>,
+}
+
+impl FrameInput {
+    fn pick_view(&self) -> PickView {
+        PickView { view: self.view, proj: self.proj, size: self.size_px }
+    }
 }
 
 pub struct ViewportCallback(pub FrameInput);
@@ -402,7 +417,7 @@ struct Readback {
     origin: [u32; 2],
     serial: u64,
     revision: Option<PickRevision>,
-    view: Mat4,
+    seen: PickView,
 }
 
 struct Layouts {
@@ -1200,9 +1215,9 @@ impl ViewportRenderer {
 
         // Pump map callbacks and publish a finished readback before issuing a new one.
         let _ = device.poll(wgpu::PollType::Poll);
-        let (pending, ready, origin, serial, revision, seen_from) = {
+        let (pending, ready, origin, serial, revision, seen) = {
             let rb = self.readback.lock().unwrap();
-            (rb.pending, rb.ready, rb.origin, rb.serial, rb.revision, rb.view)
+            (rb.pending, rb.ready, rb.origin, rb.serial, rb.revision, rb.seen)
         };
         if ready {
             {
@@ -1215,7 +1230,7 @@ impl ViewportRenderer {
                 out.data = data;
                 out.serial = serial;
                 out.revision = revision;
-                out.view = seen_from;
+                out.seen = seen;
             }
             self.pick_buffer.unmap();
             let mut rb = self.readback.lock().unwrap();
@@ -1454,7 +1469,7 @@ impl ViewportRenderer {
                 rb.origin = origin;
                 rb.serial = self.frame;
                 rb.revision = input.pick_revision;
-                rb.view = input.view;
+                rb.seen = input.pick_view();
             }
             let state = self.readback.clone();
             self.pick_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {

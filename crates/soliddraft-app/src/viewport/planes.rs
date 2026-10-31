@@ -7,11 +7,11 @@
 //! tints it. A reference is picked only where no model is under the pointer.
 
 use super::camera::Camera;
-use super::render::{PickRevision, PickSample};
+use super::render::{PickRevision, PickSample, PickView};
 use crate::document::{AxisKind, PlaneKind, Reference, Selection};
 use crate::tree_visibility::Visible;
 use egui::{Color32, Pos2, Rect};
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 
 /// The planes are never smaller than this, half their side in millimetres.
 const SMALLEST_HALF: f32 = 50.0;
@@ -62,9 +62,9 @@ pub fn ray_plane(origin: Vec3, along: Vec3, at: Vec3, u: Vec3, v: Vec3) -> Optio
 }
 
 /// Whether the id-buffer sample shows the pixel `px` of the frame now on screen: the same
-/// part, seen from the same place. Until it does it cannot say that nothing is there.
-pub fn sample_is_current(sample: &PickSample, revision: Option<PickRevision>, view: Mat4, px: [u32; 2]) -> bool {
-    sample.revision == revision && sample.view == view && sample.texel(px[0], px[1]).is_some()
+/// part, drawn the same way. Until it does it cannot say that nothing is there.
+pub fn sample_is_current(sample: &PickSample, revision: Option<PickRevision>, seen: PickView, px: [u32; 2]) -> bool {
+    sample.revision == revision && sample.seen == seen && sample.texel(px[0], px[1]).is_some()
 }
 
 /// One frame's planes as the renderer draws them.
@@ -188,6 +188,8 @@ fn segment_distance(p: Pos2, a: Pos2, b: Pos2) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use glam::Mat4;
+
     use super::*;
 
     const RECT: Rect = Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1200.0, 800.0) };
@@ -332,19 +334,29 @@ mod tests {
         assert_eq!(half_size(Some((Vec3::new(-400.0, 0.0, 0.0), Vec3::new(10.0, 0.0, 0.0)))), 500.0);
     }
 
-    fn sample(view: Mat4, revision: Option<PickRevision>) -> PickSample {
-        PickSample { origin: [100, 100], width: 1, height: 1, data: vec![[0, 0]], view, revision, ..Default::default() }
+    fn sample(seen: PickView, revision: Option<PickRevision>) -> PickSample {
+        PickSample { origin: [100, 100], width: 1, height: 1, data: vec![[0, 0]], seen, revision, ..Default::default() }
     }
 
     #[test]
     fn a_reference_waits_for_a_sample_of_this_frame() {
-        let camera = Camera::default();
-        let view = camera.view();
-        assert!(sample_is_current(&sample(view, None), None, view, [100, 100]));
-        let moved = Mat4::from_rotation_z(0.1) * view;
-        assert!(!sample_is_current(&sample(moved, None), None, view, [100, 100]), "the camera moved since");
-        assert!(!sample_is_current(&sample(view, None), None, view, [200, 100]), "the pointer moved off the sample");
+        let mut camera = Camera::default();
+        let drawn = PickView { view: camera.view(), proj: camera.projection(1.6), size: [1600, 1000] };
+        let current = |seen, revision, px| sample_is_current(&sample(seen, revision), None, drawn, px);
+        assert!(current(drawn, None, [100, 100]));
+        let moved = PickView { view: Mat4::from_rotation_z(0.1) * drawn.view, ..drawn };
+        assert!(!current(moved, None, [100, 100]), "the camera moved since");
+        camera.orthographic = true;
+        let parallel = PickView { proj: camera.projection(1.6), ..drawn };
+        assert_eq!(parallel.view, drawn.view, "a projection toggle leaves the view alone");
+        assert!(!current(parallel, None, [100, 100]), "the projection changed since");
+        camera.orthographic = false;
+        let wider = PickView { proj: camera.projection(2.0), size: [2000, 1000], ..drawn };
+        assert!(!current(wider, None, [100, 100]), "the window changed shape since");
+        let larger = PickView { size: [3200, 2000], ..drawn };
+        assert!(!current(larger, None, [100, 100]), "the render target was rebuilt at another size");
+        assert!(!current(drawn, None, [200, 100]), "the pointer moved off the sample");
         let revision = Some((soliddraft_document::DocumentId::new(), 1, None));
-        assert!(!sample_is_current(&sample(view, revision), None, view, [100, 100]), "the part changed since");
+        assert!(!current(drawn, revision, [100, 100]), "the part changed since");
     }
 }

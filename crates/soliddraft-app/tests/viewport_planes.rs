@@ -9,7 +9,7 @@ mod support;
 use egui::{Vec2, pos2, vec2};
 use glam::Vec3;
 use soliddraft_app::document::{AxisKind, PlaneKind, Reference, Selection};
-use soliddraft_app::state::EditorParams;
+use soliddraft_app::state::{AppAction, EditorParams};
 use soliddraft_app::viewport::render::DisplayMode;
 use support::*;
 
@@ -447,6 +447,79 @@ fn picking_origin_plane_and_axis_shows_the_triad() {
     assert_eq!(app.state().state.doc.selection, None, "a click on the grid selects nothing");
     assert_eq!(camera(&app), view);
     assert_eq!(model(&app), before);
+}
+
+/// A little inside the far top corner of the part, as the camera and window are now.
+fn inside_the_far_corner(app: &App) -> egui::Pos2 {
+    let (min, max) = app.state().state.doc.bounds().expect("a part");
+    let corner = projected(app, Vec3::new(min.x, max.y, max.z)).expect("in view");
+    corner + (viewport(app).center() - corner) * 0.02
+}
+
+/// With the pointer resting on a plane at `at`, `change` puts the model there without moving
+/// the camera, and a click lands before an id-buffer sample of the new frame arrives.
+fn click_before_the_sample_arrives(case: &mut Case, app: &mut App, at: egui::Pos2, change: impl FnOnce(&mut App)) {
+    app.hover_at(at);
+    app.run_steps(8);
+    let viewport_state = &app.state().state.viewport;
+    assert!(viewport_state.hover.is_none(), "no model under the pointer: {:?}", viewport_state.hover);
+    assert!(viewport_state.hover_reference.is_some(), "a plane under the pointer");
+    let view = viewport_state.camera.view();
+    case.frame(app, "before");
+
+    change(app);
+    assert_eq!(app.state().state.viewport.camera.view(), view, "the camera did not move");
+    for pressed in [true, false] {
+        app.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::default(),
+        });
+        app.step();
+    }
+    app.run_steps(2);
+    assert_eq!(reference(app), None, "the sample showed the old frame, so it cannot say that no model is there");
+    settle(app);
+
+    case.frame(app, "after");
+    click(app, at);
+    assert!(app.state().state.doc.selection.is_some(), "the model is there");
+    assert_eq!(reference(app), None, "and a click picks it");
+}
+
+#[test]
+fn a_projection_toggle_retires_the_pick_sample() {
+    let mut case = Case::gpu("sample_after_projection");
+    let mut app = launch(box_part());
+    // What every projection control sends, so that the pointer can stay where it rests.
+    let toggle = |app: &mut App| app.state_mut().state.push(AppAction::ToggleProjection);
+    toggle(&mut app);
+    settle(&mut app);
+    assert!(app.state().state.viewport.camera.orthographic);
+    let at = inside_the_far_corner(&app);
+    toggle(&mut app);
+    settle(&mut app);
+    click_before_the_sample_arrives(&mut case, &mut app, at, |app| {
+        toggle(app);
+        app.step();
+        assert!(app.state().state.viewport.camera.orthographic, "the toggle took effect");
+    });
+}
+
+#[test]
+fn a_resize_retires_the_pick_sample() {
+    let mut case = Case::gpu("sample_after_resize");
+    let mut app = launch(box_part());
+    let narrower = SIZE - vec2(60.0, 0.0);
+    app.set_size(narrower);
+    settle(&mut app);
+    let at = inside_the_far_corner(&app);
+    app.set_size(SIZE);
+    settle(&mut app);
+    click_before_the_sample_arrives(&mut case, &mut app, at, |app| {
+        app.set_size(narrower);
+    });
 }
 
 #[test]

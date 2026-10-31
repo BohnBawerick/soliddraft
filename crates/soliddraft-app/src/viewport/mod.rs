@@ -28,7 +28,7 @@ use glam::Vec3;
 use grid::{GridFrame, GridPlane, Spacing};
 use look::Preset;
 use planes::ReferenceScene;
-use render::{DisplayMode, FrameInput, PickSample, Picked, ViewportCallback};
+use render::{DisplayMode, FrameInput, PickSample, PickView, Picked, ViewportCallback};
 use soliddraft_kernel_api::Plane;
 use std::sync::{Arc, Mutex};
 
@@ -222,7 +222,7 @@ impl ViewportState {
         if let (Some(px), Some(pos)) = (cursor_px, hover_pos) {
             let sample = self.pick.lock().unwrap();
             self.hover = (sample.revision == pick_revision).then(|| decode_pick(&sample, px[0], px[1])).flatten();
-            let current = planes::sample_is_current(&sample, pick_revision, self.camera.view(), px);
+            let current = planes::sample_is_current(&sample, pick_revision, self.pick_view(rect, ppp), px);
             drop(sample);
             if let Some(picked) = self.hover {
                 let (o, d) = self.camera.ray(pos, rect);
@@ -397,12 +397,21 @@ impl ViewportState {
 
     /// What every frame hands the renderer from the camera and the look, with nothing in
     /// the scene yet. The grid lies on the ground until a sketch moves it.
-    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+    /// The camera and render size of a frame of `rect` drawn now.
+    fn pick_view(&self, rect: Rect, ppp: f32) -> PickView {
         let aspect = rect.width() / rect.height().max(1.0);
-        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
-        FrameInput {
+        PickView {
             view: self.camera.view(),
             proj: self.camera.projection(aspect),
+            size: [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32],
+        }
+    }
+
+    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+        let PickView { view, proj, size: size_px } = self.pick_view(rect, ppp);
+        FrameInput {
+            view,
+            proj,
             eye: self.camera.eye(),
             basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
             orthographic: self.camera.orthographic,
