@@ -63,6 +63,7 @@ impl Document {
             next_id: self.next_id,
             materials: self.materials.clone(),
             settings: self.settings.clone(),
+            view: self.view.clone(),
             kernel: self.kernel.clone(),
             built: self.built.clone(),
             dirty: self.dirty,

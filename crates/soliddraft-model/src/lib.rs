@@ -19,7 +19,8 @@
 //!   its features' faces and single faces, each scoped to configurations, with copies
 //!   of what they use (see [`materials`]). Mass comes from the material's density.
 //! - **Files.** [`Document::save`] and [`Document::open`] read and write the versioned
-//!   native format (see [`file`]); a saved file round-trips exactly.
+//!   native format (see [`file`]); a saved file round-trips exactly. What the user shows
+//!   and hides travels with the part, outside its truth (see [`view`]).
 //!
 //! Units are millimetres and degrees.
 
@@ -36,6 +37,7 @@ pub mod rebuild;
 pub mod reference;
 pub mod tracked;
 pub mod values;
+pub mod view;
 
 pub use command::{Command, CommandError, Executed};
 pub use document::{BuiltSketch, Document, FaceLabel, FeatureStatus, feature_of_tag};

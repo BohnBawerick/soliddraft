@@ -19,6 +19,7 @@ use crate::settings::ReferenceDisplay;
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
 use crate::theme;
+use crate::tree_visibility::Visible;
 use camera::{Camera, StandardView};
 use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use glam::Vec3;
@@ -56,10 +57,12 @@ pub struct Overlay<'a> {
     pub preview: Option<Arc<DisplayMesh>>,
     /// The open sketch, which takes the pointer.
     pub sketch: Option<&'a mut SketchSession>,
-    /// A closed sketch to show quietly on its plane.
-    pub passive_sketch: Option<(Plane, &'a Sketch)>,
+    /// Closed sketches to show quietly on their planes.
+    pub passive_sketches: Vec<(Plane, &'a Sketch)>,
     /// The feature value being typed at its dimension.
     pub dimension_edit: Option<&'a mut crate::dimension_edit::DimensionEdit>,
+    /// Which of the part's items the user shows.
+    pub visible: Visible,
 }
 
 pub struct ViewportState {
@@ -181,7 +184,7 @@ impl ViewportState {
         hover_label: Option<&str>,
         nav: &NavigationSettings,
     ) -> ViewportEvents {
-        let Overlay { ghost, preview, sketch, passive_sketch, dimension_edit } = overlay;
+        let Overlay { ghost, preview, sketch, passive_sketches, dimension_edit, visible } = overlay;
         let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
         let provisional = doc.provisional_mesh();
         let preview_pickable =
@@ -220,7 +223,9 @@ impl ViewportState {
         // Hand the frame to the GPU.
         // Sent every frame: egui may discard a pass before its paint callbacks run,
         // so the renderer decides what to upload by comparing versions.
-        let meshes = (doc.mesh_version, doc.meshes.iter().map(|(id, m)| (*id, m.clone())).collect());
+        // A hidden body leaves the scene and the pick pass; the version changed with it.
+        let shown = if visible.body { doc.meshes.iter().map(|(id, m)| (*id, m.clone())).collect() } else { Vec::new() };
+        let meshes = (doc.mesh_version, shown);
         // The shader compares face pick ids; edges and vertices are highlighted by the painter.
         let hover_id = match self.hover {
             Some(Picked::Face(p)) => p,
@@ -254,7 +259,7 @@ impl ViewportState {
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
 
         let painter = ui.painter().with_clip_rect(rect);
-        if let Some((plane, sk)) = passive_sketch {
+        for (plane, sk) in passive_sketches {
             crate::sketcher::paint_passive(&painter, &self.camera, rect, plane, sk, theme::muted().gamma_multiply(0.9));
         }
         if let Some(session) = sketch {
@@ -267,21 +272,23 @@ impl ViewportState {
                 egui::Label::new(egui::RichText::new("unproved preview").color(theme::muted())),
             );
         }
-        // The origin axes stay out of the way until a reference is selected or the user
-        // keeps them on.
-        if self.references.always_show_origin_axes || matches!(selection, Some(Selection::Reference(_))) {
+        // The origin axes stay out of the way until a reference is selected, the user keeps
+        // them on or shows one from the tree.
+        if visible.axes.contains(&true) {
             let reach = match doc.bounds() {
                 Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
                 None => self.camera.distance * 0.25,
             };
-            self.paint_origin_axes(&painter, reach, rect);
+            self.paint_origin_axes(&painter, reach, rect, visible.axes);
         }
-        self.paint_highlights(&painter, doc, selection, rect);
+        if visible.body {
+            self.paint_highlights(&painter, doc, selection, rect);
+        }
         // A selected body shows the dimensions that build it. A click on one keeps the
         // body selected and a double-click edits it, at the dimension when it is a value
         // the viewport can take; a double-click on the part selects the body.
         let pointer = response.hover_pos();
-        let dims = if selection == Some(Selection::Body) && !sketching {
+        let dims = if selection == Some(Selection::Body) && !sketching && visible.body {
             dimensions::paint(&painter, &self.camera, rect, doc, pointer)
         } else {
             Vec::new()
@@ -357,7 +364,7 @@ impl ViewportState {
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(rect, ViewportCallback(input)));
         if self.references.always_show_origin_axes {
             let painter = ui.painter().with_clip_rect(rect);
-            self.paint_origin_axes(&painter, self.camera.distance * 0.25, rect);
+            self.paint_origin_axes(&painter, self.camera.distance * 0.25, rect, [true; 3]);
         }
         self.paint_hud(ui, rect, &mut events);
         self.paint_view_cube(ui, rect, &mut events);
@@ -500,13 +507,14 @@ impl ViewportState {
         }
     }
 
-    /// The origin axes through the part origin, `reach` long on both sides. The positive
-    /// half is solid and labelled; the negative half is fainter.
-    fn paint_origin_axes(&self, painter: &egui::Painter, reach: f32, rect: Rect) {
+    /// The origin axes through the part origin that `shown` names, in [`AxisKind::ALL`]
+    /// order, `reach` long on both sides. The positive half is solid and labelled; the
+    /// negative half is fainter.
+    fn paint_origin_axes(&self, painter: &egui::Painter, reach: f32, rect: Rect, shown: [bool; 3]) {
         let Some(o) = self.camera.project(Vec3::ZERO, rect) else { return };
         // Labels stay inside the view, so an axis that runs off the edge is still named.
         let inside = rect.shrink(10.0);
-        for axis in AxisKind::ALL {
+        for (axis, _) in AxisKind::ALL.into_iter().zip(shown).filter(|(_, shown)| *shown) {
             let color = theme::axis_color(axis);
             let dir = axis.direction();
             if let Some(tail) = self.camera.project(-dir * reach, rect) {
