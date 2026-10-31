@@ -17,6 +17,7 @@ This checker belongs to CI. The application never runs OpenCASCADE.
 """
 
 import json
+import math
 import sys
 
 from OCP.BRepCheck import BRepCheck_Analyzer
@@ -43,6 +44,21 @@ def count(shape, kind):
     return found.Extent()
 
 
+def fit_of(step):
+    """The report's fit to exact definitions and what is wrong with it. Absent means 0, and
+    an unusable fit also counts as 0, so it can never widen the volume allowance."""
+    fit = step.get("fit_mm", 0.0)
+    if type(fit) not in (int, float):
+        return 0.0, f"the report's fit_mm is {fit!r}, not a number"
+    try:
+        value = float(fit)
+    except OverflowError:
+        value = math.inf
+    if not math.isfinite(value) or value < 0:
+        return 0.0, f"the report's fit_mm is {fit!r}, not a finite number of at least 0"
+    return value, None
+
+
 def check(step_path, report):
     exact = report["body"]
     step = report["report"]
@@ -55,7 +71,8 @@ def check(step_path, report):
     props = GProp_GProps()
     integration_error = BRepGProp.VolumeProperties_s(shape, props, INTEGRATION_EPS)
     volume = props.Mass()
-    deviation = step["max_deviation_mm"] + step.get("fit_mm", 0.0)
+    fit, unusable_fit = fit_of(step)
+    deviation = step["max_deviation_mm"] + fit
     allowance = exact["area"] * deviation + abs(integration_error * volume) + MEASUREMENT_WIDTH * exact["volume"]
     seen = {
         "solids": count(shape, TopAbs_SOLID),
@@ -66,6 +83,7 @@ def check(step_path, report):
         "volume_difference": volume - exact["volume"],
         "allowance": allowance,
         "max_deviation_mm": deviation,
+        "fit_mm": fit,
         "integration_error": integration_error,
     }
     failures = []
@@ -84,6 +102,10 @@ def check(step_path, report):
         failures.append("OpenCASCADE's shape check failed")
     if not step["within_tolerance"]:
         failures.append(f"the export reports a deviation over its tolerance: {step['max_deviation']} mm")
+    if unusable_fit:
+        failures.append(unusable_fit)
+    if not math.isfinite(allowance):
+        failures.append(f"the reported deviation gives a volume allowance of {allowance!r}")
     if abs(volume - exact["volume"]) > allowance:
         failures.append(
             f"volume {volume!r} is {abs(volume - exact['volume'])!r} from the exact {exact['volume']!r}; "
