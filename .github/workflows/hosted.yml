@@ -33,7 +33,7 @@ concurrency:
 jobs:
   select:
     name: Select affected checks
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       packaging: ${{ steps.select.outputs.packaging }}
@@ -377,6 +377,9 @@ jobs:
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends mesa-vulkan-drivers
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: python3 -m pip install cadquery-ocp==7.9.3.1.1
       - name: Install the direct no-healing STEP check's OCP 8 binding
         run: |
@@ -489,7 +492,7 @@ jobs:
     name: Merge gate
     if: always()
     needs: [select, lint, kernel, step-opencascade, test-linux, test-macos, test-windows, web, msrv, interactive-linux, interactive-macos, application-loop, packaging]
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
