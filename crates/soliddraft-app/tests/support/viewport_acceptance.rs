@@ -201,9 +201,18 @@ fn start(doc: Document, size: Vec2, pixels_per_point: f32, render_every_step: bo
     app
 }
 
-/// Half a second of virtual time: animations end, a later click is not a double click.
+/// Half a second of virtual time, so a later click is not a double click, and then until a
+/// view transition has come to rest.
 pub fn settle(app: &mut App) {
     app.run_steps(30);
+    let mut resting = 0;
+    let mut last = app.state().state.viewport.camera.eye();
+    while resting < 4 {
+        app.step();
+        let eye = app.state().state.viewport.camera.eye();
+        resting = if eye == last { resting + 1 } else { 0 };
+        last = eye;
+    }
 }
 
 pub fn viewport(app: &App) -> Rect {
@@ -894,4 +903,189 @@ pub fn crossing_at(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, lat
     [(0.25, 0.0), (-0.25, 0.0), (0.0, 0.25), (0.0, -0.25)]
         .iter()
         .all(|(di, dj)| difference_near(on, off, at(i + di, j + dj), ppp, (2.0 * ppp) as i32) >= 4)
+}
+
+// ---------------------------------------------------------------------------
+// The planes' oracle: one frame with them and one without, nothing else changed.
+
+pub fn plane_directions(plane: PlaneKind) -> (Vec3, Vec3) {
+    match plane {
+        PlaneKind::Top => (Vec3::X, Vec3::Y),
+        PlaneKind::Front => (Vec3::X, Vec3::Z),
+        PlaneKind::Right => (Vec3::Y, Vec3::Z),
+    }
+}
+
+/// Where a world point lands on screen, when it does.
+pub fn projected(app: &App, world: Vec3) -> Option<Pos2> {
+    let state = &app.state().state;
+    state.viewport.camera.project(world, state.viewport.rect)
+}
+
+/// The largest difference within 1 point of a world point.
+fn changed_at(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, world: Vec3) -> Option<u8> {
+    let ppp = app.ctx.pixels_per_point();
+    Some(difference_near(on, off, projected(app, world)?, ppp, ppp.round() as i32))
+}
+
+/// The difference at exactly one world point.
+fn changed_exactly(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, world: Vec3) -> Option<u8> {
+    let ppp = app.ctx.pixels_per_point();
+    Some(difference_near(on, off, projected(app, world)?, ppp, 0))
+}
+
+/// How far a plane reaches from the origin along `direction`, read from the frames: the
+/// outermost changed point before the difference is gone. The view must face the plane.
+pub fn plane_reach(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, offset: Vec3, direction: Vec3) -> f32 {
+    let crop = viewport(app).shrink(12.0);
+    let mut reach = 0.0;
+    let mut t = 2.0;
+    while t < 600.0 {
+        let world = offset + direction * t;
+        match projected(app, world).filter(|p| crop.contains(*p)) {
+            Some(_) if changed_at(on, off, app, world).unwrap_or(0) >= 4 => reach = t,
+            Some(_) if t > reach + 4.0 => break,
+            Some(_) => {}
+            None => panic!("{direction}: the plane runs off the view at {t} mm, so its outline cannot be closed"),
+        }
+        t += 0.5;
+    }
+    reach
+}
+
+/// A plane's outline as read from a view facing it: half its side along `u` and `v`. The
+/// outline is closed around the origin, and past it the background is left alone.
+pub fn assert_plane_faces_the_view(
+    on: &image::RgbaImage,
+    off: &image::RgbaImage,
+    app: &App,
+    plane: PlaneKind,
+    when: &str,
+) -> (f32, f32) {
+    let (u, v) = plane_directions(plane);
+    // Off the lines where the others cross this one.
+    let (along_u, along_v) = (v * 7.0, u * 7.0);
+    let sides = [
+        plane_reach(on, off, app, along_u, u),
+        plane_reach(on, off, app, along_u, -u),
+        plane_reach(on, off, app, along_v, v),
+        plane_reach(on, off, app, along_v, -v),
+    ];
+    assert!(sides.iter().all(|s| *s > 10.0), "{when}: the outline surrounds the origin, {sides:?}");
+    assert!((sides[0] - sides[1]).abs() < 2.0 && (sides[2] - sides[3]).abs() < 2.0, "{when}: {sides:?}");
+    let (half_u, half_v) = (sides[0], sides[2]);
+    for (direction, half, aside) in [(u, half_u, v), (-u, half_u, v), (v, half_v, u), (-v, half_v, u)] {
+        let beyond = direction * (half * 1.12) + aside * 7.0;
+        let changed = changed_at(on, off, app, beyond).expect("in view");
+        assert!(changed < 4, "{when}: past the outline at {beyond} the background is left alone, {changed}");
+    }
+    (half_u, half_v)
+}
+
+/// The plane's own picture, wherever it is seen from: fill over the middle of it, and an
+/// outline that stands out from the fill.
+pub fn assert_plane_reads(
+    on: &image::RgbaImage,
+    off: &image::RgbaImage,
+    app: &App,
+    plane: PlaneKind,
+    (half_u, half_v): (f32, f32),
+    when: &str,
+) {
+    let (u, v) = plane_directions(plane);
+    let at = |s: f32, t: f32| u * (s * half_u) + v * (t * half_v);
+    let mut filled = 0;
+    let mut interior = Vec::new();
+    for i in 0..10 {
+        for j in 0..10 {
+            // The central half, off the lines where the other planes cross it.
+            let (s, t) = (-0.45 + i as f32 * 0.1, -0.45 + j as f32 * 0.1);
+            let change = changed_exactly(on, off, app, at(s, t)).expect("in view");
+            filled += usize::from(change >= 4);
+            interior.push(f32::from(change));
+        }
+    }
+    assert!(filled >= 80, "{when}: {filled} of 100 points of the middle show the fill");
+    let outline: Vec<f32> = (0..40)
+        .flat_map(|k| {
+            let s = -0.9 + k as f32 * 0.045;
+            [at(s, 1.0), at(s, -1.0), at(1.0, s), at(-1.0, s)]
+        })
+        .map(|p| f32::from(changed_at(on, off, app, p).expect("in view")))
+        .collect();
+    let (edge, fill) = (median(outline), median(interior));
+    assert!(edge >= fill + 4.0, "{when}: the outline stands {edge}, the fill {fill}");
+}
+
+/// The share of `points` left as they were: a difference of 3 or less.
+pub fn untouched_share(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, points: &[Pos2]) -> f32 {
+    let ppp = app.ctx.pixels_per_point();
+    let kept = points.iter().filter(|p| difference_near(on, off, **p, ppp, 0) <= 3).count();
+    kept as f32 / points.len().max(1) as f32
+}
+
+/// Points inside the faces of the 60 x 40 x 20 box that the view can see, at least 3
+/// points from every face boundary.
+pub fn opaque_points(app: &App) -> Vec<Pos2> {
+    let state = &app.state().state;
+    let camera = &state.viewport.camera;
+    let (lo, hi) = (Vec3::new(-30.0, -20.0, 0.0), Vec3::new(30.0, 20.0, 20.0));
+    let faces = [
+        (Vec3::Z, hi, Vec3::X * 60.0, Vec3::Y * 40.0),
+        (Vec3::NEG_Y, Vec3::new(0.0, lo.y, 10.0), Vec3::X * 60.0, Vec3::Z * 20.0),
+        (Vec3::Y, Vec3::new(0.0, hi.y, 10.0), Vec3::X * 60.0, Vec3::Z * 20.0),
+        (Vec3::X, Vec3::new(hi.x, 0.0, 10.0), Vec3::Y * 40.0, Vec3::Z * 20.0),
+        (Vec3::NEG_X, Vec3::new(lo.x, 0.0, 10.0), Vec3::Y * 40.0, Vec3::Z * 20.0),
+        (Vec3::NEG_Z, Vec3::new(0.0, 0.0, lo.z), Vec3::X * 60.0, Vec3::Y * 40.0),
+    ];
+    let mut points = Vec::new();
+    for (normal, centre, u, v) in faces {
+        // The top's centre is at z = 20, whatever `hi` says about x and y.
+        let centre = if normal == Vec3::Z { Vec3::new(0.0, 0.0, hi.z) } else { centre };
+        if camera.direction().dot(normal) < 0.2 {
+            continue;
+        }
+        let corners: Vec<Pos2> = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+            .iter()
+            .filter_map(|(s, t)| projected(app, centre + u * *s + v * *t))
+            .collect();
+        for i in 1..20 {
+            for j in 1..20 {
+                let (s, t) = (i as f32 / 20.0 - 0.5, j as f32 / 20.0 - 0.5);
+                let Some(p) = projected(app, centre + u * s + v * t) else { continue };
+                let clear = (0..corners.len()).all(|k| {
+                    let (a, b) = (corners[k], corners[(k + 1) % corners.len()]);
+                    let along = b - a;
+                    let t = ((p - a).dot(along) / along.length_sq().max(1e-3)).clamp(0.0, 1.0);
+                    p.distance(a + along * t) >= 3.0
+                });
+                if clear {
+                    points.push(p);
+                }
+            }
+        }
+    }
+    points
+}
+
+/// Whether an outline of one world edge kept its ink: the darkest pixel near each sample
+/// stands about where it did. The share of samples that did.
+pub fn edge_kept(on: &image::RgbaImage, off: &image::RgbaImage, app: &App, samples: &[Vec3]) -> f32 {
+    let ppp = app.ctx.pixels_per_point();
+    let darkest = |image: &image::RgbaImage, p: Pos2| {
+        let (x, y) = ((p.x * ppp) as i32, (p.y * ppp) as i32);
+        (-1..=1)
+            .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+            .map(|(x, y)| image.get_pixel(x as u32, y as u32).0.iter().take(3).map(|c| u32::from(*c)).sum::<u32>() / 3)
+            .min()
+            .unwrap()
+    };
+    let points: Vec<Pos2> = samples.iter().filter_map(|w| projected(app, *w)).collect();
+    let kept = points.iter().filter(|p| darkest(on, **p).abs_diff(darkest(off, **p)) <= 16).count();
+    kept as f32 / points.len().max(1) as f32
+}
+
+/// Whether the viewport shows `plane`'s name, in the accessibility tree.
+pub fn plane_named(app: &App, plane: PlaneKind) -> bool {
+    app.query_by_label(&format!("{} in the view", plane.label())).is_some()
 }

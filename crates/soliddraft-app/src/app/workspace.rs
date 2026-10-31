@@ -1,6 +1,6 @@
 //! Workspace lifetime, recovery and the frame loop.
 
-use crate::document::Document;
+use crate::document::{Document, Selection};
 use crate::panels::{Layout, Side};
 use crate::state::{AppAction, AppState, NoteKind};
 use crate::theme;
@@ -390,11 +390,11 @@ impl eframe::App for SolidDraftApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Hover info is derived from the viewport's last pick so every panel sees the same name.
-        self.state.hover_info = self
-            .state
-            .viewport
+        let viewport = &self.state.viewport;
+        self.state.hover_info = viewport
             .hover
             .and_then(|p| selection_of(&self.state.doc, p))
+            .or(viewport.hover_reference.map(Selection::Reference))
             .and_then(|sel| self.state.doc.describe(sel));
         self.state.hover_point = self.state.viewport.hover_point;
 

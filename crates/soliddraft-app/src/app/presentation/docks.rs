@@ -1,5 +1,6 @@
 //! Part, drawing and assembly docks.
 
+use crate::document::Selection;
 use crate::icons::{self, Icon};
 use crate::panels::Side;
 use crate::state::{AppAction, AppState};
@@ -165,7 +166,8 @@ impl TabViewer for Panels<'_> {
                     st.push(a);
                 }
                 if let Some(picked) = events.clicked {
-                    let sel = picked.and_then(|p| selection_of(&st.doc, p));
+                    let reference = events.clicked_reference.map(Selection::Reference);
+                    let sel = picked.and_then(|p| selection_of(&st.doc, p)).or(reference);
                     st.push(AppAction::Select(sel));
                 }
                 if let Some(v) = events.set_view {

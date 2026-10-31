@@ -112,6 +112,7 @@ impl View {
             pick_revision: None,
             pick_out: self.pick.clone(),
             grid: None,
+            planes: None,
             assembly: Some(AssemblyFrame {
                 scene: scene.clone(),
                 meshes,

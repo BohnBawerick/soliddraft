@@ -4,18 +4,18 @@
 //! is the part's, saved in its file (see [`Document::set_view_choice`]), never a change
 //! to the model.
 //!
-//! An item the user has not chosen for follows the defaults: the body shows, the planes
-//! follow the Show origin planes setting, the axes show while a reference is selected
-//! or when the user keeps them on, and a sketch shows quietly while it is selected. A
-//! choice wins over its default, so selecting the origin cannot bring back an axis the
-//! user hid.
+//! An item the user has not chosen for follows the defaults: the body shows, a plane
+//! follows the Show origin planes setting and shows while it is selected, the axes show
+//! while a reference is selected, while a Revolve or Pattern editor is open or when the
+//! user keeps them on, and a sketch shows quietly while it is selected. A choice wins
+//! over its default, so selecting the origin cannot bring back an axis the user hid.
 //!
 //! The part has one body, so a hidden feature that shapes it hides all of it, and
 //! showing any of them shows it again. A hidden sketch hides its wires, not the
 //! extrusion made from it.
 
-use crate::document::{AxisKind, Document, FeatureId, PlaneKind, Selection, ViewItem};
-use crate::state::AppState;
+use crate::document::{AxisKind, Document, FeatureId, PlaneKind, Reference, Selection, ViewItem};
+use crate::state::{AppState, EditorParams};
 use crate::theme;
 use egui::{Rect, Sense, Stroke, pos2, vec2};
 
@@ -37,15 +37,25 @@ pub fn shown(state: &AppState, item: ViewItem) -> bool {
     let choice = doc.view_choice(item);
     let references = &state.viewport.references;
     match item {
-        ViewItem::Plane(_) => choice.unwrap_or(references.show_origin_planes),
-        ViewItem::Axis(_) => choice
-            .unwrap_or(references.always_show_origin_axes || matches!(doc.selection, Some(Selection::Reference(_)))),
+        ViewItem::Plane(plane) => choice.unwrap_or(
+            references.show_origin_planes || doc.selection == Some(Selection::Reference(Reference::Plane(plane))),
+        ),
+        ViewItem::Axis(_) => choice.unwrap_or(
+            references.always_show_origin_axes
+                || matches!(doc.selection, Some(Selection::Reference(_)))
+                || tool_wants_an_axis(state),
+        ),
         ViewItem::Feature(id) => match doc.feature(id) {
             Some(f) if f.is_sketch() => choice.unwrap_or(state.selected_sketch() == Some(id)),
             Some(_) => body_shown(doc),
             None => false,
         },
     }
+}
+
+/// An axis is one of the open editor's inputs, so it has to be there to pick.
+fn tool_wants_an_axis(state: &AppState) -> bool {
+    state.editor.as_ref().is_some_and(|e| matches!(e.params, EditorParams::Revolve(_) | EditorParams::Pattern(_)))
 }
 
 /// The body shows unless a feature that shapes it is hidden.

@@ -43,6 +43,11 @@ struct Globals {
     grid_ink: vec4<f32>,
     // x, y: minor and major opacity. z, w: minor and major width in pixels.
     grid_lines: vec4<f32>,
+    // The origin planes. x: half their side in mm. y: fill opacity. z: outline opacity.
+    // w: outline width in pixels.
+    plane_size: vec4<f32>,
+    // Top, Front and Right. rgb: their colour. a: their strength, 0 when hidden.
+    planes: array<vec4<f32>, 3>,
     // Diffuse environment light as nine spherical-harmonic coefficients (environment.rs).
     sh: array<vec4<f32>, 9>,
     hover_id: u32,
@@ -381,6 +386,66 @@ fn fs_grid(in: GridVaryings) -> GridFragment {
     var out: GridFragment;
     out.color = vec4<f32>(globals.grid_ink.rgb * alpha, alpha);
     out.depth = depth;
+    return out;
+}
+
+// Origin planes ----------------------------------------------------------------
+// Each is a finite square through the origin. Every fragment writes the far plane's depth
+// and tests it against the faces, so a plane shows only where no face drew: it can never
+// tint a part it passes through or stands in front of. The depth buffer stays as it was.
+
+struct PlaneVaryings {
+    @builtin(position) clip: vec4<f32>,
+    // Millimetres from the origin along the plane's two directions.
+    @location(0) local: vec2<f32>,
+    @location(1) world: vec3<f32>,
+    @location(2) normal: vec3<f32>,
+    @location(3) ink: vec4<f32>,
+};
+
+@vertex
+fn vs_plane(@builtin(vertex_index) i: u32) -> PlaneVaryings {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
+        vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0),
+    );
+    // planes.rs `directions` gives the same frames.
+    let plane = i / 6u;
+    var u = vec3<f32>(1.0, 0.0, 0.0);
+    var v = vec3<f32>(0.0, 1.0, 0.0);
+    if (plane == 1u) {
+        v = vec3<f32>(0.0, 0.0, 1.0);
+    } else if (plane == 2u) {
+        u = vec3<f32>(0.0, 1.0, 0.0);
+        v = vec3<f32>(0.0, 0.0, 1.0);
+    }
+    var out: PlaneVaryings;
+    out.local = corners[i % 6u] * globals.plane_size.x;
+    out.world = u * out.local.x + v * out.local.y;
+    out.normal = cross(u, v);
+    out.ink = globals.planes[plane];
+    out.clip = globals.view_proj * vec4<f32>(out.world, 1.0);
+    return out;
+}
+
+@fragment
+fn fs_plane(in: PlaneVaryings) -> GridFragment {
+    if (in.ink.a <= 0.0) {
+        discard;
+    }
+    var toward = normalize(globals.eye.xyz - in.world);
+    if (globals.eye.w > 0.5) {
+        toward = vec3<f32>(globals.view[0][2], globals.view[1][2], globals.view[2][2]);
+    }
+    // Pixels from the outline, measured inward. Turning edge-on, the fill fades, so the
+    // plane thins to its outline.
+    let inside = (globals.plane_size.x - abs(in.local)) / (fwidth(in.local) + vec2<f32>(1e-6));
+    let line = clamp(globals.plane_size.w + 0.5 - min(inside.x, inside.y), 0.0, 1.0);
+    let fill = globals.plane_size.y * smoothstep(0.03, 0.2, abs(dot(toward, in.normal)));
+    let alpha = min(max(fill, line * globals.plane_size.z) * in.ink.a, 1.0);
+    var out: GridFragment;
+    out.color = vec4<f32>(in.ink.rgb * alpha, alpha);
+    out.depth = 0.0;
     return out;
 }
 

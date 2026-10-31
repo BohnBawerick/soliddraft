@@ -363,6 +363,26 @@ fn menu(case: &mut Case, app: &mut App, path: &[&str]) {
     }
 }
 
+/// Sets Show origin planes through Preferences. The fixture starts with it off so the image
+/// oracles read a plain backdrop, and the cases about planes turn it on, its own default.
+fn show_planes(case: &mut Case, app: &mut App, on: bool) {
+    menu(case, app, &["Tools", "Preferences…"]);
+    assert!(app.state().preferences.is_some(), "the menu opened Preferences");
+    let press = |app: &mut App, label: &str| {
+        app.get_by_label(label).hover();
+        app.run_steps(2);
+        app.get_by_label(label).click();
+        app.run_steps(3);
+    };
+    press(app, "Grid and planes");
+    if app.state().state.viewport.references.show_origin_planes != on {
+        press(app, "Show origin planes");
+    }
+    assert_eq!(app.state().state.viewport.references.show_origin_planes, on, "the checkbox took the click");
+    press(app, "Close window");
+    assert!(app.state().preferences.is_none(), "the window closed");
+}
+
 // ---------------------------------------------------------------------------
 // What must and must not change.
 
@@ -479,6 +499,11 @@ fn around(image: &image::RgbaImage, app: &App, p: Pos2, r: f32) -> Vec<(Pos2, [i
 fn bare(image: &image::RgbaImage, app: &App, p: Pos2, r: f32) -> bool {
     let tolerance = detection("backdrop_channel_tolerance") as i32;
     around(image, app, p, r).iter().all(|(q, c)| diff(*c, backdrop(image, app, *q)) <= tolerance)
+}
+
+/// The largest channel difference between two frames within `r` points of `p`.
+fn difference(image: &image::RgbaImage, other: &image::RgbaImage, app: &App, p: Pos2, r: f32) -> i32 {
+    around(image, app, p, r).iter().map(|(q, c)| diff(*c, px(other, app, *q))).max().unwrap()
 }
 
 /// Something painted within `r` points of `p` that `other` does not have there.
@@ -927,6 +952,7 @@ fn one_click(window: &str) {
 
         // 5. The plane eyes: their rows and eyes here; their rendering in
         // `one_click_changes_the_rendered_planes`.
+        show_planes(case, app, true);
         for plane in PlaneKind::ALL {
             let name = plane.label();
             assert_reported(app, name, true);
@@ -1018,41 +1044,47 @@ fn one_click_changes_the_rendered_item_and_its_row_small_dark() {
 }
 
 /// T1 step 5 on the viewport: each plane eye removes and restores that plane's fill,
-/// outline, label and hit target. The reference planes are drawn by the viewport lane's
-/// plane renderer (grid merge C), which this build does not have yet; without it there
-/// is nothing to hide, a dependency failure rather than a pass.
+/// outline, label and hit target.
 #[test]
-#[ignore = "needs the viewport lane's plane renderer (grid merge C)"]
 fn one_click_changes_the_rendered_planes() {
     let mut case = Case::gpu("t1-planes");
     let mut app = launch(&mut case, b20(), "standard");
     case.run(&mut app, |case, app| {
         frame_fixture(case, app);
         open_origin(app);
+        show_planes(case, app, true);
         let b = &manifest()["expected"]["B20"]["bounds_mm"];
         let reach = v3(&b["max"]).max_element() * 1.6;
-        // A point inside each plane beyond the part, in its own quadrant.
+        // A point inside each plane beyond the part, in its own quadrant. The view looks over
+        // the +x, -y corner, so the -x, +y corner of the Top plane is behind the part.
         let inside = |plane: PlaneKind| match plane {
-            PlaneKind::Top => Vec3::new(-reach, reach, 0.0),
+            PlaneKind::Top => Vec3::new(-reach, -reach, 0.0),
             PlaneKind::Front => Vec3::new(-reach, 0.0, reach),
             PlaneKind::Right => Vec3::new(0.0, reach, reach),
         };
         pointer_away(app);
         let all = case.frame(app, "05-planes-shown");
+        // A plane's fill is a light tint, so the frames are read in pairs at its threshold.
+        let fill = detection("plane_fill_channel_difference") as i32;
         for hide in PlaneKind::ALL {
             click_eye(case, app, hide.label());
             pointer_away(app);
             let image = case.frame(app, &format!("05-{:?}-hidden", hide));
             for plane in PlaneKind::ALL {
                 let p = project(app, inside(plane));
+                let change = difference(&all, &image, app, p, 2.0);
                 if plane == hide {
                     assert!(bare(&image, app, p, 2.0), "{plane:?} is gone at {p:?}");
+                    assert!(change >= fill, "{plane:?} was painted at {p:?}: {change}");
                 } else {
-                    assert!(!bare(&all, app, p, 2.0), "{plane:?} is painted at {p:?}");
-                    assert!(!bare(&image, app, p, 2.0), "{plane:?} remains at {p:?}");
+                    assert!(change < fill, "{plane:?} remains at {p:?}: {change}");
                 }
             }
             click_eye(case, app, hide.label());
+            pointer_away(app);
+            let back = case.frame(app, &format!("05-{:?}-shown", hide));
+            let change = difference(&all, &back, app, project(app, inside(hide)), 2.0);
+            assert!(change < fill, "{hide:?} is back: {change}");
         }
     });
 }
@@ -1192,8 +1224,10 @@ fn view_choices_survive_undo_and_native_reopen() {
         click_empty(case, app);
         assert_eq!(app.state().state.doc.selection, None);
         click_eye(case, app, "Y axis");
+        show_planes(case, app, true);
         assert_reported(app, "Top plane", true);
         click_eye(case, app, "Top plane");
+        show_planes(case, app, false);
         let expect = &manifest()["expected"]["T2_choices"];
         let want = |key: &str| Some(expect[key] == "shown");
         let choices = |app: &App| {
@@ -1264,8 +1298,11 @@ fn view_choices_survive_undo_and_native_reopen() {
         open_origin(app);
         assert_reported(app, &solid_name, false);
         assert_reported(app, "Top plane", false);
+        show_planes(case, app, true);
+        assert_reported(app, "Top plane", false);
         assert_reported(app, "Front plane", true);
         assert_reported(app, "Right plane", true);
+        show_planes(case, app, false);
         assert_axes(case, app, "t2-reopened", &[AxisKind::Y]);
         pointer_away(app);
         let image = case.frame(app, "t2-reopened-hidden-solid");
@@ -1305,6 +1342,7 @@ fn view_choices_survive_undo_and_native_reopen() {
         let defaults = &manifest()["expected"]["defaults"];
         let solids: Vec<String> = doc.features.iter().filter(|f| !f.is_sketch()).map(|f| f.name.clone()).collect();
         open_origin(app);
+        show_planes(case, app, true);
         for name in &solids {
             assert_reported(app, name, defaults["body_shown"] == true);
         }
@@ -1314,6 +1352,7 @@ fn view_choices_survive_undo_and_native_reopen() {
         for a in AxisKind::ALL {
             assert_reported(app, a.label(), defaults["axes_shown"] == true);
         }
+        show_planes(case, app, false);
         pointer_away(app);
         let image = case.frame(app, "t2-legacy");
         assert_eq!(axis_pixels_anywhere(&image, app), [0, 0, 0], "no axis is shown in the old part");

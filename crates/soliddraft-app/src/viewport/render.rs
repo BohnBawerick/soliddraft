@@ -10,12 +10,13 @@
 //!
 //! Passes, in order: the shadow map from the light fixed above the model (only
 //! when the geometry changed), the ambient occlusion prepass, sampling and blur
-//! (full tier only), the colour pass (faces, the ground shadow, the grid, edges as
-//! wide lines, ghosts) and the id pass. Depth is reversed (near 1, far 0) on every
+//! (full tier only), the colour pass (faces, the ground shadow, the origin planes, the
+//! grid, edges as wide lines, ghosts) and the id pass. Depth is reversed (near 1, far 0) on every
 //! camera pass. `look.rs` holds the presets and the tiers.
 
 use super::assembly::{AssemblyFrame, AssemblyRenderer};
 use super::grid::{self, GridFrame};
+use super::planes::{self, PlaneFrame};
 use crate::document::DisplayMesh;
 use crate::viewport::environment;
 use crate::viewport::look::{Preset, Tier};
@@ -83,6 +84,15 @@ impl DisplayMode {
 /// Existing document identity, display version and retained body; never sent to the GPU.
 pub type PickRevision = (soliddraft_document::DocumentId, u64, Option<BodyId>);
 
+/// What a frame was drawn for. An id-buffer pixel means the same thing only under all of
+/// these: the view, the projection with its aspect, and the size of the render target.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PickView {
+    pub view: Mat4,
+    pub proj: Mat4,
+    pub size: [u32; 2],
+}
+
 /// Window of the id buffer around the cursor, read back from the GPU.
 #[derive(Clone, Debug, Default)]
 pub struct PickSample {
@@ -93,6 +103,8 @@ pub struct PickSample {
     pub data: Vec<[u32; 2]>,
     pub serial: u64,
     pub revision: Option<PickRevision>,
+    /// The frame the sample was read from.
+    pub seen: PickView,
 }
 
 impl PickSample {
@@ -150,6 +162,14 @@ pub struct FrameInput {
     pub assembly: Option<AssemblyFrame>,
     /// The modelling grid, when one shows.
     pub grid: Option<GridFrame>,
+    /// The origin planes, when any shows.
+    pub planes: Option<PlaneFrame>,
+}
+
+impl FrameInput {
+    fn pick_view(&self) -> PickView {
+        PickView { view: self.view, proj: self.proj, size: self.size_px }
+    }
 }
 
 pub struct ViewportCallback(pub FrameInput);
@@ -205,6 +225,8 @@ struct Globals {
     grid_v: [f32; 4],
     grid_ink: [f32; 4],
     grid_lines: [f32; 4],
+    plane_size: [f32; 4],
+    planes: [[f32; 4]; 3],
     sh: [[f32; 4]; 9],
     hover_id: u32,
     selected_id: u32,
@@ -395,6 +417,7 @@ struct Readback {
     origin: [u32; 2],
     serial: u64,
     revision: Option<PickRevision>,
+    seen: PickView,
 }
 
 struct Layouts {
@@ -411,6 +434,7 @@ pub struct ViewportRenderer {
     face_pipeline: wgpu::RenderPipeline,
     ground_pipeline: wgpu::RenderPipeline,
     grid_pipeline: wgpu::RenderPipeline,
+    plane_pipeline: wgpu::RenderPipeline,
     edge_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     id_face_pipeline: wgpu::RenderPipeline,
@@ -523,7 +547,8 @@ impl ViewportRenderer {
             })
         };
         let scene_layout = pipeline_layout("scene", &[&globals_layout, &layouts.body, &layouts.frame]);
-        // The grid reads only the globals: nothing else is bound with an empty document.
+        // The grid and the planes read only the globals: nothing else is bound with an
+        // empty document.
         let grid_layout = pipeline_layout("grid", &[&globals_layout]);
         let uniforms_layout = pipeline_layout("uniforms", &[&layouts.uniforms]);
         let ao_layout = pipeline_layout("occlusion", &[&layouts.uniforms, &layouts.ao_inputs]);
@@ -631,6 +656,18 @@ impl ViewportRenderer {
             layout: &grid_layout,
             vs: "vs_grid",
             fs: Some("fs_grid"),
+            buffers: &[],
+            format: Some(COLOR_FORMAT),
+            blend: premul,
+            samples: MSAA,
+            cull: None,
+            depth: depth(false),
+        });
+        let plane_pipeline = pipeline(Desc {
+            label: "planes",
+            layout: &grid_layout,
+            vs: "vs_plane",
+            fs: Some("fs_plane"),
             buffers: &[],
             format: Some(COLOR_FORMAT),
             blend: premul,
@@ -842,6 +879,7 @@ impl ViewportRenderer {
             face_pipeline,
             ground_pipeline,
             grid_pipeline,
+            plane_pipeline,
             edge_pipeline,
             shadow_pipeline,
             id_face_pipeline,
@@ -1115,6 +1153,12 @@ impl ViewportRenderer {
             pull: 0.0,
             ink: egui::Color32::TRANSPARENT,
         });
+        let plane_ink = |plane: usize| {
+            input.planes.map_or([0.0; 4], |p| {
+                let [r, g, b, _] = egui::Rgba::from(p.planes[plane].0).to_array();
+                [r, g, b, p.planes[plane].1]
+            })
+        };
         queue.write_buffer(
             &self.globals,
             0,
@@ -1154,6 +1198,13 @@ impl ViewportRenderer {
                     grid::MINOR_LINE.1 * input.pixels_per_point,
                     grid::MAJOR_LINE.1 * input.pixels_per_point,
                 ],
+                plane_size: [
+                    input.planes.map_or(0.0, |p| p.half),
+                    planes::FILL,
+                    planes::OUTLINE,
+                    planes::OUTLINE_POINTS * input.pixels_per_point,
+                ],
+                planes: [plane_ink(0), plane_ink(1), plane_ink(2)],
                 sh: self.sh,
                 hover_id: input.hover_id,
                 selected_id: input.selected_id,
@@ -1164,9 +1215,9 @@ impl ViewportRenderer {
 
         // Pump map callbacks and publish a finished readback before issuing a new one.
         let _ = device.poll(wgpu::PollType::Poll);
-        let (pending, ready, origin, serial, revision) = {
+        let (pending, ready, origin, serial, revision, seen) = {
             let rb = self.readback.lock().unwrap();
-            (rb.pending, rb.ready, rb.origin, rb.serial, rb.revision)
+            (rb.pending, rb.ready, rb.origin, rb.serial, rb.revision, rb.seen)
         };
         if ready {
             {
@@ -1179,6 +1230,7 @@ impl ViewportRenderer {
                 out.data = data;
                 out.serial = serial;
                 out.revision = revision;
+                out.seen = seen;
             }
             self.pick_buffer.unmap();
             let mut rb = self.readback.lock().unwrap();
@@ -1316,6 +1368,11 @@ impl ViewportRenderer {
                 pass.set_pipeline(&self.ground_pipeline);
                 pass.draw(0..6, 0..1);
             }
+            if input.planes.is_some() {
+                // Only where no face drew, and over the ground's shadow.
+                pass.set_pipeline(&self.plane_pipeline);
+                pass.draw(0..18, 0..1);
+            }
             if input.grid.is_some() {
                 // Tested against the faces and written to no buffer, so it can hide nothing.
                 pass.set_pipeline(&self.grid_pipeline);
@@ -1412,6 +1469,7 @@ impl ViewportRenderer {
                 rb.origin = origin;
                 rb.serial = self.frame;
                 rb.revision = input.pick_revision;
+                rb.seen = input.pick_view();
             }
             let state = self.readback.clone();
             self.pick_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
@@ -1519,6 +1577,7 @@ mod tests {
             "vs_face",
             "vs_ground",
             "vs_grid",
+            "vs_plane",
             "vs_edge",
             "vs_shadow",
             "vs_id_face",
@@ -1526,7 +1585,8 @@ mod tests {
             "vs_id_vertex",
             "vs_blit",
         ];
-        let fragment = ["fs_face", "fs_ground", "fs_grid", "fs_edge", "fs_id", "fs_blit_linear", "fs_blit_gamma"];
+        let fragment =
+            ["fs_face", "fs_ground", "fs_grid", "fs_plane", "fs_edge", "fs_id", "fs_blit_linear", "fs_blit_gamma"];
         let stages = vertex
             .iter()
             .map(|e| (naga::ShaderStage::Vertex, e))
@@ -1544,8 +1604,8 @@ mod tests {
 
     #[test]
     fn globals_match_the_shader_layout() {
-        // Five matrices, fifteen vectors, nine harmonics and four ids.
-        assert_eq!(std::mem::size_of::<Globals>(), 5 * 64 + 15 * 16 + 9 * 16 + 16);
+        // Five matrices, nineteen vectors, nine harmonics and four ids.
+        assert_eq!(std::mem::size_of::<Globals>(), 5 * 64 + 19 * 16 + 9 * 16 + 16);
         assert_eq!(std::mem::size_of::<LineInstance>(), 28);
         assert_eq!(std::mem::size_of::<BodyUniform>(), 32 + 48 * MAX_APPEARANCES);
     }

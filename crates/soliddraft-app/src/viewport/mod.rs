@@ -1,5 +1,6 @@
 //! The 3D viewport: camera input, picking, overlays (heads-up toolbar, view
-//! cube, origin axes, grid readout, hover label) and the hand-off to the wgpu renderer.
+//! cube, origin axes, plane names, grid readout, hover label) and the hand-off to the wgpu
+//! renderer.
 
 pub mod assembly;
 pub mod camera;
@@ -9,10 +10,11 @@ pub mod grid;
 pub mod look;
 pub mod offscreen;
 pub mod pick;
+pub mod planes;
 pub mod render;
 
 use crate::dimension_edit::DimensionAction;
-use crate::document::{AxisKind, DisplayMesh, Document, Selection};
+use crate::document::{AxisKind, DisplayMesh, Document, Reference, Selection};
 use crate::icons::{self, Icon};
 use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Routed, Router, ZoomAnchor};
 use crate::settings::ReferenceDisplay;
@@ -25,7 +27,8 @@ use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, StrokeKind,
 use glam::Vec3;
 use grid::{GridFrame, GridPlane, Spacing};
 use look::Preset;
-use render::{DisplayMode, FrameInput, PickSample, Picked, ViewportCallback};
+use planes::ReferenceScene;
+use render::{DisplayMode, FrameInput, PickSample, PickView, Picked, ViewportCallback};
 use soliddraft_kernel_api::Plane;
 use std::sync::{Arc, Mutex};
 
@@ -33,6 +36,8 @@ use std::sync::{Arc, Mutex};
 pub struct ViewportEvents {
     /// A primary click happened; the payload is what was under the cursor.
     pub clicked: Option<Option<Picked>>,
+    /// With a click on no model: the reference it found.
+    pub clicked_reference: Option<Reference>,
     pub set_view: Option<StandardView>,
     pub fit: bool,
     pub set_display: Option<DisplayMode>,
@@ -61,7 +66,7 @@ pub struct Overlay<'a> {
     pub passive_sketches: Vec<(Plane, &'a Sketch)>,
     /// The feature value being typed at its dimension.
     pub dimension_edit: Option<&'a mut crate::dimension_edit::DimensionEdit>,
-    /// Which of the part's items the user shows.
+    /// Which of the part's items show.
     pub visible: Visible,
 }
 
@@ -72,6 +77,8 @@ pub struct ViewportState {
     /// What the viewport shows of the part's reference geometry without being asked.
     pub references: ReferenceDisplay,
     pub hover: Option<Picked>,
+    /// The reference under the pointer, when no model is.
+    pub hover_reference: Option<Reference>,
     pub hover_point: Option<Vec3>,
     pub rect: Rect,
     /// The dimensions a selected body showed last frame.
@@ -90,6 +97,7 @@ impl Default for ViewportState {
             preset: Preset::default(),
             references: ReferenceDisplay::default(),
             hover: None,
+            hover_reference: None,
             hover_point: None,
             rect: Rect::NOTHING,
             dimensions: Vec::new(),
@@ -200,6 +208,7 @@ impl ViewportState {
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "3D viewport"));
         let ppp = ui.ctx().pixels_per_point();
         events.fit = self.navigate(ui, &response, rect, sketching, nav);
+        let scene = ReferenceScene::new(&visible, sketching, doc.bounds(), &self.camera);
 
         // Hover pick from the last id-buffer readback. The readback lags one
         // frame, so keep repainting briefly while the pointer rests on the view.
@@ -208,19 +217,24 @@ impl ViewportState {
         let cursor_px = hover_pos
             .map(|p| [((p.x - rect.left()) * ppp).max(0.0) as u32, ((p.y - rect.top()) * ppp).max(0.0) as u32]);
         self.hover = None;
+        self.hover_reference = None;
         self.hover_point = None;
         if let (Some(px), Some(pos)) = (cursor_px, hover_pos) {
             let sample = self.pick.lock().unwrap();
             self.hover = (sample.revision == pick_revision).then(|| decode_pick(&sample, px[0], px[1])).flatten();
+            let current = planes::sample_is_current(&sample, pick_revision, self.pick_view(rect, ppp), px);
             drop(sample);
             if let Some(picked) = self.hover {
                 let (o, d) = self.camera.ray(pos, rect);
                 self.hover_point = pick::hit_point(doc, picked, o, d);
+            } else if current {
+                self.hover_reference = scene.hit(&self.camera, rect, pos);
             }
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
         }
         if response.clicked_by(egui::PointerButton::Primary) && !sketching {
             events.clicked = Some(self.hover);
+            events.clicked_reference = self.hover_reference;
         }
 
         // Hand the frame to the GPU.
@@ -256,6 +270,7 @@ impl ViewportState {
         input.preview = preview;
         input.preview_pickable = preview_pickable;
         input.pick_revision = pick_revision;
+        input.planes = scene.frame(theme::accent(), self.hover_reference, selection);
         if let Some(session) = &sketch {
             input.grid = self.grid(rect, &GridPlane::of_sketch(&session.plane));
         }
@@ -275,15 +290,10 @@ impl ViewportState {
                 egui::Label::new(egui::RichText::new("unproved preview").color(theme::muted())),
             );
         }
-        // The origin axes stay out of the way until a reference is selected, the user keeps
-        // them on or shows one from the tree.
-        if visible.axes.contains(&true) {
-            let reach = match doc.bounds() {
-                Some((lo, hi)) => lo.abs().max(hi.abs()).max_element() * 1.15 + 5.0,
-                None => self.camera.distance * 0.25,
-            };
-            self.paint_origin_axes(&painter, reach, rect, visible.axes);
+        if scene.axes.contains(&true) {
+            self.paint_origin_axes(&painter, scene.reach, rect, scene.axes);
         }
+        self.paint_plane_names(ui, &scene, rect);
         if visible.body {
             self.paint_highlights(&painter, doc, selection, rect);
         }
@@ -387,12 +397,21 @@ impl ViewportState {
 
     /// What every frame hands the renderer from the camera and the look, with nothing in
     /// the scene yet. The grid lies on the ground until a sketch moves it.
-    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+    /// The camera and render size of a frame of `rect` drawn now.
+    fn pick_view(&self, rect: Rect, ppp: f32) -> PickView {
         let aspect = rect.width() / rect.height().max(1.0);
-        let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
-        FrameInput {
+        PickView {
             view: self.camera.view(),
             proj: self.camera.projection(aspect),
+            size: [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32],
+        }
+    }
+
+    fn frame_input(&self, rect: Rect, ppp: f32, cursor_px: Option<[u32; 2]>) -> FrameInput {
+        let PickView { view, proj, size: size_px } = self.pick_view(rect, ppp);
+        FrameInput {
+            view,
+            proj,
             eye: self.camera.eye(),
             basis: [self.camera.right(), self.camera.up(), self.camera.direction()],
             orthographic: self.camera.orthographic,
@@ -415,6 +434,7 @@ impl ViewportState {
             pick_out: self.pick.clone(),
             assembly: None,
             grid: self.grid(rect, &GridPlane::GROUND),
+            planes: None,
         }
     }
 
@@ -540,6 +560,19 @@ impl ViewportState {
                     color,
                 );
             }
+        }
+    }
+
+    /// Each visible plane's name, near its far corner. The tree rows hold the plain names,
+    /// so what a screen reader finds here says where it is.
+    fn paint_plane_names(&self, ui: &mut egui::Ui, scene: &ReferenceScene, rect: Rect) {
+        for (plane, at) in scene.labels(&self.camera, rect) {
+            let name = plane.label();
+            let painter = ui.painter().with_clip_rect(rect);
+            let shown = painter.text(at, Align2::RIGHT_TOP, name, theme::font(11.0), theme::muted());
+            let response = ui.interact(shown, ui.id().with(("plane name", name)), Sense::hover());
+            let description = format!("{name} in the view");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &description));
         }
     }
 
