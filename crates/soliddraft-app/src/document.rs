@@ -1895,13 +1895,53 @@ impl Document {
     }
 
     /// Abandons the steps since `depth`, and those since `drawn` too if the part at
-    /// `depth` cannot be displayed either.
-    fn withdraw(&mut self, depth: usize, drawn: Option<usize>) -> Result<(), String> {
+    /// `depth` cannot be displayed either. With nothing drawn to return to, the part at
+    /// `depth` may not display, and `retained` stays on screen at its own revision.
+    fn withdraw(&mut self, depth: usize, drawn: Option<usize>, retained: Option<(Shown, u64)>) -> Result<(), String> {
         self.abandon(depth)?;
         match drawn {
             Some(drawn) if drawn < depth && self.display_failure.is_some() => self.abandon(drawn),
-            _ => Ok(()),
+            Some(_) => Ok(()),
+            None => {
+                if self.display_failure.is_some()
+                    && let Some((shown, revision)) = retained
+                {
+                    self.keep_shown(shown, revision);
+                }
+                Ok(())
+            }
         }
+    }
+
+    /// The display on screen and the revision it was drawn at, when that is not the
+    /// current revision, as after an undo the viewport could not draw.
+    fn retained_display(&self) -> Option<(Shown, u64)> {
+        let body = self.shown.filter(|_| self.shown_revision != self.revision)?;
+        let shown = Shown {
+            body,
+            params: self.tess_params,
+            mesh: self.meshes.get(&body)?.clone(),
+            picks: self.picks.clone(),
+            faces: self.faces.clone(),
+            edges: self.edges.clone(),
+        };
+        Some((shown, self.shown_revision))
+    }
+
+    /// Puts a display back on screen without calling it the current model: the displayed
+    /// revision stays the one it was drawn at.
+    fn keep_shown(&mut self, shown: Shown, revision: u64) {
+        self.recent.retain(|s| s.body != shown.body);
+        self.meshes.clear();
+        self.meshes.insert(shown.body, shown.mesh);
+        self.shown = Some(shown.body);
+        self.tess_params = shown.params;
+        self.picks = shown.picks;
+        self.faces = shown.faces;
+        self.edges = shown.edges;
+        self.apply_appearances();
+        self.shown_revision = revision;
+        self.mesh_version += 1;
     }
 
     /// Adds a line to the command log.
@@ -1954,6 +1994,7 @@ impl Document {
             // Rolling back helps only when the part on screen can come back.
             let showing = self.display_body().is_none() || !self.meshes.is_empty();
             let drawn = self.edit_depth.or((showing && self.shown_revision == self.revision).then_some(depth));
+            let retained = if deferred || drawn.is_some() { None } else { self.retained_display() };
             let commands = self.to_model(command)?;
             let batch = model::Command::Batch { label, commands };
             let done = if deferred { self.model.execute_deferred(batch) } else { self.model.execute(batch) }
@@ -1973,7 +2014,7 @@ impl Document {
                 // A refused fillet or chamfer is rolled back, as the command tools do: left
                 // red, it would block every later edge and face reference.
                 if rounding {
-                    self.withdraw(depth, drawn).map_err(|e| format!("{msg}; {e}"))?;
+                    self.withdraw(depth, drawn, retained).map_err(|e| format!("{msg}; {e}"))?;
                 }
                 return Err(msg);
             }
@@ -1983,7 +2024,7 @@ impl Document {
                 && showing
                 && let Some(message) = self.display_failure.take()
             {
-                self.withdraw(depth, drawn).map_err(|e| format!("{message}; {e}"))?;
+                self.withdraw(depth, drawn, retained).map_err(|e| format!("{message}; {e}"))?;
                 self.display_failure = Some(message.clone());
                 return Err(message);
             }
