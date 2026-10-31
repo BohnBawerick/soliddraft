@@ -1,14 +1,17 @@
 //! FeatureManager-style tree: origin group, then one row per feature with its
 //! absorbed sketch nested under it, and the rollback bar. Rows select,
 //! double-click shows a solid feature's dimensions or edits the rest, F2 or a slow
-//! second click renames, drag reorders, right-click offers the rest.
+//! second click renames, drag reorders, right-click offers the rest. The eye at the end
+//! of a feature, plane or axis row shows or hides it (see
+//! [`tree_visibility`](crate::tree_visibility)).
 
 use crate::document::{
-    AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Reference, Selection, SketchPlane,
+    AxisKind, Command, FeatureId, FeatureKind, FeatureStatus, PlaneKind, Reference, Selection, SketchPlane, ViewItem,
 };
 use crate::icons::{self, Icon};
 use crate::state::{AppAction, AppState, EditorParams, NoteKind, Rename};
 use crate::theme;
+use crate::tree_visibility;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 /// A row the tree shows, flattened from the feature list.
@@ -86,19 +89,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
         }
         if open {
             for plane in [PlaneKind::Front, PlaneKind::Top, PlaneKind::Right] {
-                let name = state.doc.model().datum_name(plane.to_model());
+                let name = state.doc.model().datum_name(plane.to_model()).to_owned();
                 let reference = Selection::Reference(Reference::Plane(plane));
+                let item = ViewItem::Plane(plane);
                 let r = row(
                     ui,
                     RowSpec {
                         indent: 1,
                         icon: Icon::Plane,
-                        name,
-                        dim: !picking_plane,
+                        name: &name,
+                        shown: Some(tree_visibility::shown(state, item)),
                         selected: state.doc.selection == Some(reference),
                         ..RowSpec::plain()
                     },
                 );
+                tree_visibility::eye(ui, state, r.rect, item, &name);
                 let r = r.on_hover_text(if picking_plane {
                     "Click to sketch on this plane"
                 } else {
@@ -112,6 +117,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
             }
             for axis in AxisKind::ALL {
                 let reference = Selection::Reference(Reference::Axis(axis));
+                let item = ViewItem::Axis(axis);
                 let r = row(
                     ui,
                     RowSpec {
@@ -119,11 +125,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         icon: Icon::Axis,
                         icon_color: Some(theme::axis_color(axis)),
                         name: axis.label(),
-                        dim: !picking_axis,
+                        shown: Some(tree_visibility::shown(state, item)),
                         selected: state.doc.selection == Some(reference),
                         ..RowSpec::plain()
                     },
                 );
+                tree_visibility::eye(ui, state, r.rect, item, axis.label());
                 let r = if picking_axis { r.on_hover_text("Click to use this axis") } else { r };
                 if r.clicked() {
                     actions.push(AppAction::Select(Some(reference)));
@@ -322,7 +329,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 }
                 resp
             } else {
-                row(
+                let shown = tree_visibility::shown(state, ViewItem::Feature(item.id));
+                let resp = row(
                     ui,
                     RowSpec {
                         indent: item.indent,
@@ -333,6 +341,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                         sub: &item.sub,
                         selected: selected_feature == Some(item.id),
                         dim: inactive,
+                        shown: Some(shown),
                         error: error.as_deref(),
                         warn: repair.as_deref(),
                         via_assistant: item.via_assistant,
@@ -343,7 +352,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                                 r.contains(pos2(r.center().x, p.y))
                             }),
                     },
-                )
+                );
+                tree_visibility::eye(ui, state, resp.rect, ViewItem::Feature(item.id), &item.name);
+                resp
             };
             last_bottom = resp.rect.bottom();
             if item.indent == 0 {
@@ -542,6 +553,9 @@ pub(crate) struct RowSpec<'a> {
     pub(crate) sub: &'a str,
     pub(crate) selected: bool,
     pub(crate) dim: bool,
+    /// For an item with an eye: whether it shows. A hidden row is grey, and the row keeps
+    /// its right end free for the eye.
+    pub(crate) shown: Option<bool>,
     pub(crate) error: Option<&'a str>,
     pub(crate) warn: Option<&'a str>,
     pub(crate) via_assistant: bool,
@@ -560,6 +574,7 @@ impl RowSpec<'static> {
             sub: "",
             selected: false,
             dim: false,
+            shown: None,
             error: None,
             warn: None,
             via_assistant: false,
@@ -572,6 +587,13 @@ impl RowSpec<'static> {
 pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), theme::ROW_HEIGHT), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, spec.selected, spec.name));
+    if let Some(shown) = spec.shown {
+        ui.ctx().accesskit_node_builder(resp.id, |node| {
+            node.set_state_description(if shown { "Shown" } else { "Hidden" });
+        });
+    }
+    let hidden = spec.shown == Some(false);
+    let dim = spec.dim || hidden;
     if !ui.is_rect_visible(rect) {
         return resp;
     }
@@ -588,7 +610,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
     let x0 = rect.left() + 10.0 + spec.indent as f32 * 20.0;
     let ink = if spec.selected {
         theme::selection_ink()
-    } else if spec.dim {
+    } else if dim {
         theme::muted()
     } else {
         theme::ink()
@@ -606,6 +628,8 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
         theme::error()
     } else if spec.warn.is_some() {
         theme::warn()
+    } else if hidden {
+        ink
     } else {
         spec.icon_color.unwrap_or(ink)
     };
@@ -615,7 +639,7 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
         Rect::from_center_size(pos2(x0 + 22.0, rect.center().y), vec2(15.0, 15.0)),
         icon_color,
     );
-    let font = if spec.dim { theme::font(12.0) } else { theme::font(12.5) };
+    let font = if dim { theme::font(12.0) } else { theme::font(12.5) };
     let name_rect = painter.text(pos2(x0 + 35.0, rect.center().y), Align2::LEFT_CENTER, spec.name, font, ink);
     let mut after = name_rect.right() + 6.0;
     if spec.suppressed {
@@ -636,8 +660,9 @@ pub(crate) fn row(ui: &mut egui::Ui, spec: RowSpec<'_>) -> egui::Response {
         );
     }
     if !spec.sub.is_empty() {
+        let eye = if spec.shown.is_some() { crate::tree_visibility::EYE_WIDTH } else { 0.0 };
         painter.text(
-            pos2(inner.right() - 8.0, rect.center().y),
+            pos2(inner.right() - 8.0 - eye, rect.center().y),
             Align2::RIGHT_CENTER,
             spec.sub,
             theme::font(11.0),

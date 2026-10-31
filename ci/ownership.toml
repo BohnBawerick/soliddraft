@@ -232,6 +232,13 @@ paths = ["crates/soliddraft-app/src/tree.rs"]
 module = ["tree"]
 
 [[areas]]
+name = "app.tree_visibility"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/tree_visibility.rs"]
+module = ["tree_visibility"]
+
+[[areas]]
 name = "app.viewport"
 owner = "core"
 crate = "soliddraft-app"
@@ -286,6 +293,13 @@ owner = "core"
 crate = "soliddraft-model"
 paths = ["crates/soliddraft-model/src/file.rs"]
 module = ["file"]
+
+[[areas]]
+name = "model.view"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/view.rs"]
+module = ["view"]
 
 [[areas]]
 name = "model.lib"

@@ -66,6 +66,10 @@ outside both hashes, so changing a setting never gives the part a new revision. 
 that cannot read it opens the part with the default settings. With "save display data"
 on (the default), it also has `cache/mesh/coarse.bin` and `cache/mesh/standard.bin`
 (optional): its meshes at two display levels. See [tessellation.md](tessellation.md).
+A part file has `view.json` (optional) when the user showed or hid a feature, reference
+plane or origin axis from the tree: those choices by feature id and datum, outside both
+hashes and outside undo, so hiding never gives the part a new revision. A reader that
+cannot read it opens the part with every item at its default.
 
 The drawing file has `drawing.json` (required), `cache/views/<id>.json` (optional, each
 view's line work) and `thumbnail.png` (optional). Entries carry a fixed timestamp, so the

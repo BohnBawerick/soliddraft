@@ -19,6 +19,7 @@ use crate::rebuild::BuildCache;
 use crate::reference::{
     self, EdgeRef, FaceRef, Generator, NameMap, NamedFace, NamingError, ReferenceSlot, RepairNeeded, View,
 };
+use crate::view::{ViewItem, Visibility};
 
 /// The state of a feature after the last rebuild.
 #[derive(Clone, Debug, PartialEq)]
@@ -97,6 +98,9 @@ pub struct Document {
     /// Viewport quality, export accuracy and whether to save display data: kept in the
     /// file's `settings.json`, outside the part's truth and hashes.
     pub(crate) settings: Settings,
+    /// What the user shows and hides: kept in the file's `view.json`, outside the part's
+    /// truth, its hashes and its undo history.
+    pub(crate) view: Visibility,
     pub(crate) kernel: Arc<dyn Kernel>,
     pub(crate) built: Vec<Built>,
     /// Index of the first feature whose cached build is stale.
@@ -137,6 +141,7 @@ impl Document {
             next_id: 1,
             materials: PartMaterials::default(),
             settings: Settings::default(),
+            view: Visibility::default(),
             kernel,
             built: Vec::new(),
             dirty: 0,
@@ -190,6 +195,17 @@ impl Document {
             self.settings = settings;
             Ok(())
         })())
+    }
+
+    /// What the user chose to show and hide in the part.
+    pub fn visibility(&self) -> &Visibility {
+        &self.view
+    }
+
+    /// Shows or hides `item`, or with `None` lets it follow the defaults again. Like the
+    /// settings, not an undoable command and not a change to the part.
+    pub fn set_visibility(&mut self, item: ViewItem, shown: Option<bool>) {
+        self.view.set(item, shown);
     }
 
     /// What the part's viewport quality gives its body's certified mesh: each level's

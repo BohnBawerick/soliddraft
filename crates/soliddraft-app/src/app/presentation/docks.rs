@@ -135,21 +135,25 @@ impl TabViewer for Panels<'_> {
                 let preview = st.preview_body();
                 let selection = st.doc.selection;
                 let hover_label = st.hover_info.as_ref().map(|i| i.title.clone());
-                // A selected sketch shows quietly on its plane while no sketch is open.
-                let passive = if st.sketch.is_none() {
-                    st.selected_sketch().and_then(|id| {
-                        let f = st.doc.feature(id)?;
+                // Shown sketches lie quietly on their planes, except the one open for editing.
+                let visible = crate::tree_visibility::visible(st);
+                let editing = st.sketch.as_ref().map(|s| s.feature);
+                let passive = visible
+                    .sketches
+                    .iter()
+                    .filter(|id| Some(**id) != editing)
+                    .filter_map(|id| {
+                        let f = st.doc.feature(*id)?;
                         Some((f.plane?, &f.sketch()?.sketch))
                     })
-                } else {
-                    None
-                };
+                    .collect();
                 let overlay = Overlay {
                     ghost,
                     preview,
                     sketch: st.sketch.as_mut(),
-                    passive_sketch: passive,
+                    passive_sketches: passive,
                     dimension_edit: st.dimension_edit.as_mut(),
+                    visible,
                 };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref(), &st.navigation);
                 st.after_viewport(ui, &events);

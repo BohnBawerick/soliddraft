@@ -17,6 +17,10 @@
 //!   It is an optional section outside both hashes, so a quality change never gives the
 //!   part a new revision. A reader that cannot read it opens the part with the default
 //!   settings.
+//! - `view.json`, when the user showed or hid anything: the features, reference planes
+//!   and origin axes chosen, by id (see [`view`](crate::view)). An optional section
+//!   outside both hashes, like the settings; a reader that cannot read it opens the part
+//!   with every item at its default.
 //! - `cache/mesh/coarse.bin` and `cache/mesh/standard.bin`, when the settings save
 //!   display data and the part has a body: its meshes at two display levels, so it can
 //!   be shown without a rebuild (see [`display`](crate::display)). Optional, outside both
@@ -54,6 +58,7 @@ use crate::display;
 use crate::document::Document;
 use crate::feature::{DatumPlane, Feature, FeatureId};
 use crate::materials::{AppearanceAssignment, MaterialAssignment, PartMaterials};
+use crate::view::{self, Visibility};
 
 /// The format tag of the current version.
 pub const FORMAT: &str = "soliddraft-part/2";
@@ -142,6 +147,7 @@ pub struct Snapshot {
     id: DocumentId,
     recipe: Recipe,
     settings: Settings,
+    view: Visibility,
     backend: BackendInfo,
 }
 
@@ -150,11 +156,9 @@ impl Snapshot {
     /// Display data and thumbnails are deliberately absent.
     pub fn encode(&self) -> Result<(Manifest, Vec<u8>), FileError> {
         let truth = serde_json::to_value(&self.recipe)?;
-        let m = part_manifest(self.id, &self.backend, &truth, &self.settings);
+        let m = part_manifest(self.id, &self.backend, &truth, &self.settings, &self.view);
         let mut entries = vec![Entry::new(PART, (serde_json::to_string_pretty(&self.recipe)? + "\n").into_bytes())];
-        if !self.settings.is_default() {
-            entries.push(Entry::new(settings::ENTRY, self.settings.to_json().into_bytes()));
-        }
+        entries.extend(optional_entries(&self.settings, &self.view));
         let bytes = manifest::write_package(&m, &entries)?;
         Ok((m, bytes))
     }
@@ -163,7 +167,13 @@ impl Snapshot {
 impl Document {
     /// Copies the data a recovery file needs without serializing it or retaining builds.
     pub fn snapshot(&self) -> Snapshot {
-        Snapshot { id: self.id, recipe: self.recipe(), settings: self.settings.clone(), backend: self.kernel.backend() }
+        Snapshot {
+            id: self.id,
+            recipe: self.recipe(),
+            settings: self.settings.clone(),
+            view: self.view.clone(),
+            backend: self.kernel.backend(),
+        }
     }
 
     fn recipe(&self) -> Recipe {
@@ -212,7 +222,7 @@ impl Document {
     }
 
     fn manifest_for(&self, extras: &Extras<'_>) -> Manifest {
-        let mut m = part_manifest(self.id, &self.kernel.backend(), &self.truth(), &self.settings);
+        let mut m = part_manifest(self.id, &self.kernel.backend(), &self.truth(), &self.settings, &self.view);
         if self.saves_display_data(extras) {
             m.sections.push(Section::optional(display::FOLDER));
         }
@@ -238,9 +248,7 @@ impl Document {
     /// The part file's bytes, with what `extras` adds or leaves out.
     pub fn to_bytes_with(&self, extras: &Extras<'_>) -> Result<Vec<u8>, FileError> {
         let mut entries = vec![Entry::new(PART, self.part_json().into_bytes())];
-        if !self.settings.is_default() {
-            entries.push(Entry::new(settings::ENTRY, self.settings.to_json().into_bytes()));
-        }
+        entries.extend(optional_entries(&self.settings, &self.view));
         let mut m = self.manifest_for(extras);
         if self.saves_display_data(extras) {
             match self.display_data(&self.settings.viewport, &display::SAVED) {
@@ -304,6 +312,9 @@ impl Document {
         doc.id = m.id;
         if let Ok(Some(text)) = package.read_text(settings::ENTRY) {
             doc.settings = Settings::from_json(&text).unwrap_or_default();
+        }
+        if let Ok(Some(text)) = package.read_text(view::ENTRY) {
+            doc.view = Visibility::from_json(&text).unwrap_or_default();
         }
         Ok(doc)
     }
@@ -408,7 +419,13 @@ pub struct Extras<'a> {
     pub no_display_data: bool,
 }
 
-fn part_manifest(id: DocumentId, backend: &BackendInfo, truth: &Value, settings: &Settings) -> Manifest {
+fn part_manifest(
+    id: DocumentId,
+    backend: &BackendInfo,
+    truth: &Value,
+    settings: &Settings,
+    view: &Visibility,
+) -> Manifest {
     let mut m = Manifest::new(id, DocKind::Part, manifest::semantic_hash(DocKind::Part, truth));
     m.kernel = Some(format!("{} {}", backend.name, backend.version));
     m.geometry_hash = Some(shape_hash(truth));
@@ -416,7 +433,17 @@ fn part_manifest(id: DocumentId, backend: &BackendInfo, truth: &Value, settings:
     if !settings.is_default() {
         m.sections.push(Section::optional(settings::ENTRY));
     }
+    if !view.is_empty() {
+        m.sections.push(Section::optional(view::ENTRY));
+    }
     m
+}
+
+/// The entries of the settings and the view choices, each only when it holds something.
+fn optional_entries<'a>(settings: &Settings, view: &Visibility) -> impl Iterator<Item = Entry<'a>> + use<'a> {
+    let settings = (!settings.is_default()).then(|| Entry::new(settings::ENTRY, settings.to_json().into_bytes()));
+    let view = (!view.is_empty()).then(|| Entry::new(view::ENTRY, view.to_json().into_bytes()));
+    settings.into_iter().chain(view)
 }
 
 fn shape_hash(truth: &Value) -> ContentHash {

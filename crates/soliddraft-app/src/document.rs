@@ -134,6 +134,32 @@ impl AxisKind {
             AxisKind::Z => Vec3::Z,
         }
     }
+
+    fn to_model(self) -> model::view::DatumAxis {
+        match self {
+            AxisKind::X => model::view::DatumAxis::X,
+            AxisKind::Y => model::view::DatumAxis::Y,
+            AxisKind::Z => model::view::DatumAxis::Z,
+        }
+    }
+}
+
+/// Something the user shows or hides: a feature, a reference plane or an origin axis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewItem {
+    Feature(FeatureId),
+    Plane(PlaneKind),
+    Axis(AxisKind),
+}
+
+impl ViewItem {
+    fn to_model(self) -> model::view::ViewItem {
+        match self {
+            ViewItem::Feature(id) => model::view::ViewItem::Feature(model_id(id)),
+            ViewItem::Plane(plane) => model::view::ViewItem::Plane(plane.to_model()),
+            ViewItem::Axis(axis) => model::view::ViewItem::Axis(axis.to_model()),
+        }
+    }
 }
 
 /// A fixed reference of every part: the origin, a reference plane or an origin axis.
@@ -2474,6 +2500,24 @@ impl Document {
         self.quality.set_quality(&quality);
         self.touch();
         Ok(())
+    }
+
+    /// Whether the user showed (`Some(true)`) or hid `item` in this part, or left it at
+    /// its default.
+    pub fn view_choice(&self, item: ViewItem) -> Option<bool> {
+        self.model.visibility().choice(item.to_model())
+    }
+
+    /// Shows or hides `item`, saved in the part's file. Not an undoable command and not a
+    /// change to the part: its revision and history stay. The renderer uploads the scene
+    /// again, so no readback of the old one picks a hidden face.
+    pub fn set_view_choice(&mut self, item: ViewItem, shown: Option<bool>) {
+        if self.view_choice(item) == shown {
+            return;
+        }
+        self.model.set_visibility(item.to_model(), shown);
+        self.touch();
+        self.mesh_version += 1;
     }
 
     /// Labels every face and edge of the displayed body by the feature that

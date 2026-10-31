@@ -43,6 +43,7 @@ pub mod sketcher;
 pub mod state;
 pub mod theme;
 pub mod tree;
+pub mod tree_visibility;
 pub mod viewport;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
