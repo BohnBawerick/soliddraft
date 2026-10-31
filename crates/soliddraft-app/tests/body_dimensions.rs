@@ -10,7 +10,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use soliddraft_app::app::{Automation, SolidDraftApp};
 use soliddraft_app::document::{Command, Document, ExtrudeParams, PlaneKind, Selection, SketchPlane};
-use soliddraft_app::state::{AppAction, EditorParams};
+use soliddraft_app::state::AppAction;
 use soliddraft_app::viewport::dimensions::DimensionTarget;
 use soliddraft_sketch::{P2, Sketch};
 use std::path::PathBuf;
@@ -87,7 +87,7 @@ fn the_selected_body_shows_its_feature_dimensions() {
         assert!(dims.iter().any(|(t, tip)| *t == DimensionTarget::Feature(*id) && tip.ends_with("Depth")));
     }
 
-    // A double-click on the boss's depth opens the boss in its editor.
+    // A double-click on the boss's depth opens its in-place value editor.
     let boss = ids[2];
     let depth = harness
         .state()
@@ -100,11 +100,13 @@ fn the_selected_body_shows_its_feature_dimensions() {
         .rect
         .center();
     double_click(&mut harness, depth);
-    let editor = harness.state().state.editor.as_ref().expect("the double-click opens the boss's editor");
-    assert_eq!(editor.target, Some(boss));
-    assert!(matches!(editor.params, EditorParams::Extrude(_)));
-    harness.state_mut().state.push(AppAction::CancelEditor);
+    assert!(
+        harness.state().state.dimension_edit.is_some(),
+        "the double-click opens the boss's Depth value editor in the viewport"
+    );
+    harness.key_press(Key::Escape);
     harness.run_steps(4);
+    assert!(harness.state().state.dimension_edit.is_none(), "Escape closes the in-place value editor");
 
     // Clearing the selection hides the dimensions.
     harness.state_mut().state.push(AppAction::Select(None));
