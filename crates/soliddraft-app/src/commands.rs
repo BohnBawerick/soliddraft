@@ -1268,15 +1268,18 @@ fn registry() -> Vec<CommandSpec> {
             .lit(|s| s.chat.book.auto_apply)
 .app_only("It sets what the app's own assistant may do this session; MCP clients and scripts run commands directly"),
         // Inspect.
-        cmd("measure", "Measure", Icon::Cad("measure"), "Distance between two entities' reference points")
+        cmd("measure", "Measure", Icon::Cad("measure"), "Prove a distance or angle between two edges or faces")
             .on(Inspect, "Measure", Large)
             .run(|_| AppAction::MeasureEntity)
             .agents(
                 Agents::Tool,
                 concat!(
-                    "The Measure panel proves a picked edge length or face area and can track it. This two-entity tool reports reference-point offsets. A reference point is a face's centroid, an edge's midpoint, a vertex's position or a feature's \
-                 centre of mass; the result has the x, y and z offsets, and for two parallel planar faces also the \
-                 gap between them. ",
+                    "Proves one scalar between two entities of the part, in the part frame, with its bounds and \
+                 certainty, without changing the part. minimum_distance (the default) is the finite minimum \
+                 between two straight edges or two parallel planar faces; point_distance joins two straight \
+                 edges' midpoints (a_point and b_point: midpoint); direction_angle is 0 or 90 degrees between \
+                 parallel or perpendicular straight edges. Other pairs are refused by name, never estimated. \
+                 distance_mm repeats a minimum distance and gap_mm a face gap. ",
                     names_help!()
                 ),
                 tools::measure_params,

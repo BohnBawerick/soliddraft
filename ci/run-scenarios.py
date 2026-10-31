@@ -444,11 +444,17 @@ def rebuilds(features, repair):
         "pass": not broken and not missing}
 
 
-def references_kept(known, references, repair, deleted, *, replaced=False):
-    """Each reference names the origin it named before, and resolves or raises the repair prompt."""
+def references_kept(known, references, repair, deleted, *, replaced=False, reopened=False):
+    """Each reference names the origin it named before, and resolves or raises the repair prompt.
+
+    An opened file replaces the document: a reference it does not hold left with the old
+    document, while one it does hold must still name the same origin."""
     if replaced:
         known.clear()
     now = {(r["feature_id"], r["slot"]): r for r in references}
+    if reopened:
+        for key in [key for key in known if key not in now]:
+            del known[key]
     changed = [{"reference": list(key), "was": identity, "now": now[key]["origin"]}
         for key, identity in known.items() if key in now
         and (now[key]["origin"] != identity["name"]
@@ -810,7 +816,8 @@ def run(args):
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair))
             checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature",
-                replaced=step["tool"] == "new_part" and not result.get("isError")))
+                replaced=step["tool"] == "new_part" and not result.get("isError"),
+                reopened=step["tool"] == "open" and not result.get("isError")))
             if step.get("refusal"):
                 code = step["refusal"]
                 checks.append({"check": "application refusal", "actual": command["output"], "pass": code in command["output"]})

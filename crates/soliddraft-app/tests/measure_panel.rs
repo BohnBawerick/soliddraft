@@ -1,4 +1,8 @@
-//! V2 G1: a real viewport pick, proven readout, Track this, and an interactive edit.
+//! V2 G1: a real viewport pick, proven readout, Track this, and an interactive edit;
+//! V2 batch 2 G1: a hovered midpoint, a picked pair, its tracked row, an edit and reopen.
+
+#[path = "support/measure_window.rs"]
+mod window;
 
 use egui::{Key, Modifiers, Pos2, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
@@ -125,4 +129,110 @@ fn pick_measure_track_and_edit() {
     h.get_by_label("Check: fail");
     assert_eq!(measure::panel::row_color("fail"), theme::error());
     snapshot(&mut h, "failed-check");
+}
+
+/// V2 batch 2 G1.
+#[test]
+fn hover_pick_pair_track_edit_and_reopen_in_window() {
+    use soliddraft_app::state::AppAction;
+    let mut doc = Document::new("Paired block", Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new()));
+    let id = doc
+        .apply(Command::AddExtrude {
+            params: ExtrudeParams {
+                profile: ProfileKind::Rectangle { width: 40.0, height: 30.0 },
+                depth: 10.0,
+                ..Default::default()
+            },
+            via_assistant: false,
+        })
+        .unwrap()
+        .unwrap();
+    let Some(mut h) = window::window(doc, "measure-pairs") else { return };
+    window::button(&mut h, "Inspect tab");
+    window::button(&mut h, "Measure");
+    h.key_press(Key::Z);
+    window::settle(&mut h);
+    let midpoint = "Midpoint (0, -15, 0) mm";
+    // Half a millimetre along E0 from its midpoint: the label is the proof, not the ray.
+    let near_m0 = |h: &App<'_>| window::screen_of(h, Vec3::new(0.5, -15.0, 0.0));
+    let at = near_m0(&h);
+    window::hover(&mut h, at);
+    assert!(window::shows(&h, midpoint), "no proven midpoint target near E0");
+    window::snapshot(&mut h, "pair-hover-midpoint");
+    window::click_at(&mut h, at);
+    window::settle(&mut h);
+    let m2 = window::screen_of(&h, Vec3::new(20.0, 0.0, 10.0));
+    window::click_at(&mut h, m2);
+    window::settle(&mut h);
+    h.get_by_label("26.93 mm");
+    window::snapshot(&mut h, "pair-midpoints");
+    window::button(&mut h, "Minimum distance");
+    window::settle(&mut h);
+    h.get_by_label("10 mm");
+    // E1, away from its midpoint, replaces the second pick.
+    let e1 = window::screen_of(&h, Vec3::new(-10.0, 15.0, 10.0));
+    window::click_at(&mut h, e1);
+    window::settle(&mut h);
+    h.get_by_label("31.62 mm");
+    h.get_by_label("bounded");
+    for (field, text) in [("Tracked value name", "diagonal_gap"), ("Measurement check", "< 32 mm")] {
+        h.get_by_label(field).focus();
+        h.run_steps(2);
+        h.get_by_label(field).type_text(text);
+        h.run_steps(2);
+    }
+    window::button(&mut h, "Track this");
+    window::settle(&mut h);
+    h.get_by_label("diagonal_gap: 31.62 mm");
+    h.get_by_label("Check: pass");
+
+    let edit_depth = |h: &mut App<'_>, depth: &str| {
+        let feature = h.state().state.doc.feature(id).unwrap().name.clone();
+        window::button(h, &feature);
+        window::settle(h);
+        h.get_by_label("Depth value").click();
+        h.run_steps(2);
+        h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+        h.get_by_label("Depth value").type_text(depth);
+        h.run_steps(2);
+        h.key_press(Key::Enter);
+        window::settle(h);
+    };
+    edit_depth(&mut h, "15");
+    h.get_by_label("diagonal_gap: 33.54 mm");
+    h.get_by_label("Check: fail");
+    window::snapshot(&mut h, "pair-changed-row");
+    h.state_mut().state.push(AppAction::Undo);
+    window::settle(&mut h);
+    h.get_by_label("diagonal_gap: 31.62 mm");
+    h.state_mut().state.push(AppAction::Redo);
+    window::settle(&mut h);
+    h.get_by_label("diagonal_gap: 33.54 mm");
+
+    let path = std::env::temp_dir().join(format!("soliddraft-measure-pairs-{}.dwprt", std::process::id()));
+    h.state_mut().state.push(AppAction::SaveAs(Some(path.clone())));
+    window::settle(&mut h);
+    h.state_mut().state.push(AppAction::Open(Some(path)));
+    window::settle(&mut h);
+    h.get_by_label("diagonal_gap: 33.54 mm");
+    edit_depth(&mut h, "10");
+    h.get_by_label("diagonal_gap: 31.62 mm");
+    h.get_by_label("Check: pass");
+
+    // A zoom changes the screen, not the proven point.
+    let centre = h.state().state.viewport.rect.center();
+    window::hover(&mut h, centre);
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: vec2(0.0, 1.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    window::settle(&mut h);
+    if !h.state().state.measure.open {
+        window::button(&mut h, "Measure");
+    }
+    let at = near_m0(&h);
+    window::hover(&mut h, at);
+    assert!(window::shows(&h, midpoint), "the midpoint moved with the camera");
 }

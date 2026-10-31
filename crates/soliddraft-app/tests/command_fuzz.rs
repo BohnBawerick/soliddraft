@@ -375,8 +375,21 @@ fn sane_call(pools: Pools) -> BoxedStrategy<Call> {
     let apply = pick(pools.proposals.clone()).prop_map(move |id| call("apply", json!({ "proposal_id": id })));
     let step =
         prop::sample::select(vec!["undo", "redo", "model_summary", "selection"]).prop_map(|tool| call(tool, json!({})));
-    let measure = (pick(pools.any.clone()), pick(pools.any.clone()))
-        .prop_map(move |(a, b)| call("measure", json!({ "a": a, "b": b })));
+    let quantity =
+        prop::option::of(prop::sample::select(vec!["minimum_distance", "point_distance", "direction_angle"]));
+    let measure = (pick(pools.any.clone()), pick(pools.any.clone()), quantity, any::<bool>()).prop_map(
+        move |(a, b, quantity, midpoints)| {
+            let mut input = json!({ "a": a, "b": b });
+            if let Some(q) = quantity {
+                input["quantity"] = q.into();
+            }
+            if midpoints {
+                input["a_point"] = "midpoint".into();
+                input["b_point"] = "midpoint".into();
+            }
+            call("measure", input)
+        },
+    );
     let rollback = prop::option::of(pick(pools.features.clone()))
         .prop_map(move |before| call("rollback", json!({ "before": before })));
     let configurations =

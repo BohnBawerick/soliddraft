@@ -6,8 +6,9 @@
 use crate::drawing::mesh_hlr::{self, visible_length_by_source};
 use crate::drawing::{Curve3, CurveSource, SectionSpec, SectionView, StandardView, ViewCurves, ViewSpec, deviation};
 use crate::{
-    BodyId, BooleanOp, CurveKind, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, Loop, OpKind, OpTag, Plane,
-    Point2, Profile, Revolve, Segment, SurfaceKind, TessellationParams, Topology, Vec3, VertexId,
+    BodyId, BooleanOp, Certainty, CurveKind, EdgeId, Extrude, FaceId, FaceRole, Kernel, KernelError, Loop, Measurement,
+    OpKind, OpTag, PairEndpoint, PairQuantity, Plane, Point2, Profile, Revolve, Segment, SurfaceKind,
+    TessellationParams, Topology, Vec3, VertexId,
 };
 
 fn tag(s: &str) -> OpTag {
@@ -1173,7 +1174,6 @@ pub fn mesh_sections_match_boolean_sections(k: &dyn Kernel) {
 
 /// Single-entity measurements carry exact or bounded evidence, and reject foreign ids.
 pub fn measures_say_how_they_are_known(k: &dyn Kernel) {
-    use crate::Certainty;
     for depth in [10.0, 76.2] {
         let profile = k
             .create_body_from_profile(
@@ -1204,5 +1204,186 @@ pub fn measures_say_how_they_are_known(k: &dyn Kernel) {
     assert_eq!(m.certainty, Certainty::Bounded);
     assert!(m.lo <= 1256.6370614359173 && 1256.6370614359173 <= m.hi, "{m:?}");
     assert!(m.hi - m.lo <= 3e-9);
+    k.release(body).unwrap();
+}
+
+/// The V2 batch 1 part: the 40 x 30 x `depth` block minus a radius 6 bore about Z.
+pub fn holed_block(k: &dyn Kernel, depth: f64) -> BodyId {
+    let p = k
+        .create_body_from_profile(
+            &tag("pair_sketch"),
+            &Profile::rectangle(Plane::XY, Point2::new(0.0, 0.0), 40.0, 30.0),
+        )
+        .expect("block profile");
+    let block = k.extrude(&tag("pair_block"), p.body, &Extrude { distance: depth, direction: None }).unwrap().body;
+    let bore = cylinder(k, Vec3::new(0.0, 0.0, -1.0), 6.0, depth + 2.0);
+    k.boolean(&tag("pair_bore"), BooleanOp::Subtract, block, bore).expect("bore").body
+}
+
+/// The straight edge from `a` to `b`, found by its display box. The query under test
+/// proves which edge this is.
+fn line_between(t: &Topology, a: Vec3, b: Vec3) -> EdgeId {
+    let (lo, hi) =
+        (Vec3::new(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z)), Vec3::new(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z)));
+    let near = |p: Vec3, q: Vec3| (p - q).length() < 0.01;
+    t.edges
+        .iter()
+        .find(|e| e.curve == CurveKind::Line && near(e.bbox.min, lo) && near(e.bbox.max, hi))
+        .unwrap_or_else(|| panic!("no line from {a:?} to {b:?}"))
+        .id
+}
+
+/// The planar face lying in the plane `axis` = `at`, found by its centroid.
+fn plane_face(t: &Topology, axis: usize, at: f64) -> FaceId {
+    t.faces
+        .iter()
+        .find(|f| {
+            f.surface == SurfaceKind::Plane && ([f.centroid.x, f.centroid.y, f.centroid.z][axis] - at).abs() < 1e-3
+        })
+        .unwrap_or_else(|| panic!("no plane at {at} on axis {axis}"))
+        .id
+}
+
+/// An outward nonzero enclosure of sqrt(`n`) no wider than 1e-8. `mul_add` rounds
+/// once, so the sign of `lo * lo - n` is exact.
+fn encloses_root(m: Measurement, n: f64) {
+    assert_eq!(m.certainty, Certainty::Bounded, "{m:?}");
+    assert!(m.lo.mul_add(m.lo, -n) <= 0.0 && m.hi.mul_add(m.hi, -n) >= 0.0, "sqrt({n}) outside {m:?}");
+    assert!(m.lo < m.hi && m.hi - m.lo <= 1e-8, "{m:?}");
+    assert!((m.value - n.sqrt()).abs() <= 1e-8, "{m:?}");
+}
+
+/// A rational result, exact or honestly bounded, enclosing `v` within 1e-8.
+fn encloses(m: Measurement, v: f64) {
+    assert!(m.lo <= v && v <= m.hi && m.hi - m.lo <= 1e-8 && (m.value - v).abs() <= 1e-8, "{v} outside {m:?}");
+}
+
+fn exactly(m: Measurement, v: f64) {
+    assert_eq!((m.value, m.lo, m.hi, m.certainty), (v, v, v, Certainty::Exact));
+}
+
+/// V2 batch 2 K1: finite straight-edge pairs and midpoints on the holed block. E0 is
+/// the bottom front edge, E1 the top back edge, E2 the top right edge, E3 the front
+/// right vertical edge.
+pub fn finite_edge_pairs_and_points_have_proven_bounds(k: &dyn Kernel) {
+    use PairEndpoint::{Edge, EdgeMidpoint};
+    use PairQuantity::{DirectionAngle, MinimumDistance, PointDistance};
+    for depth in [10.0, 15.0] {
+        let body = holed_block(k, depth);
+        let t = k.topology(body).unwrap();
+        let v = Vec3::new;
+        let e0 = line_between(&t, v(-20.0, -15.0, 0.0), v(20.0, -15.0, 0.0));
+        let e1 = line_between(&t, v(-20.0, 15.0, depth), v(20.0, 15.0, depth));
+        let e2 = line_between(&t, v(20.0, -15.0, depth), v(20.0, 15.0, depth));
+        let e3 = line_between(&t, v(20.0, -15.0, 0.0), v(20.0, -15.0, depth));
+        for (edge, point) in [(e0, [0.0, -15.0, 0.0]), (e2, [20.0, 0.0, depth])] {
+            let proof = k.edge_midpoint(body, edge).unwrap();
+            for (c, v) in proof.coordinates.iter().zip(point) {
+                assert!(c.lo <= v && v <= c.hi && c.hi - c.lo <= 1e-9 && (c.value - v).abs() <= 1e-9, "{v} {c:?}");
+            }
+        }
+        let pair = |a, b, q| {
+            let m = k.measure_pair(body, a, b, q).unwrap();
+            assert_eq!(m, k.measure_pair(body, b, a, q).unwrap(), "{q:?} is symmetric");
+            m
+        };
+        encloses_root(pair(Edge(e0), Edge(e1), MinimumDistance), 900.0 + depth * depth);
+        encloses(pair(Edge(e0), Edge(e2), MinimumDistance), depth);
+        exactly(pair(Edge(e0), Edge(e3), MinimumDistance), 0.0);
+        exactly(pair(Edge(e0), Edge(e0), MinimumDistance), 0.0);
+        encloses_root(pair(EdgeMidpoint(e0), EdgeMidpoint(e2), PointDistance), 625.0 + depth * depth);
+        exactly(pair(Edge(e0), Edge(e1), DirectionAngle), 0.0);
+        exactly(pair(Edge(e0), Edge(e2), DirectionAngle), 90.0);
+        exactly(pair(Edge(e0), Edge(e3), DirectionAngle), 90.0);
+        k.release(body).unwrap();
+    }
+}
+
+/// V2 batch 2 K2: the holed caps' trimmed minimum distance, before and after rounding
+/// E0. The supporting planes alone would answer the same here; Catallax's own contract
+/// covers disjoint patches whose plane gap is not the answer.
+pub fn parallel_face_distance_respects_trims_and_completion(k: &dyn Kernel) {
+    use PairEndpoint::Face;
+    for (depth, fillet) in [(10.0, false), (15.0, false), (15.0, true)] {
+        let mut body = holed_block(k, depth);
+        if fillet {
+            let t = k.topology(body).unwrap();
+            let e0 = line_between(&t, Vec3::new(-20.0, -15.0, 0.0), Vec3::new(20.0, -15.0, 0.0));
+            body = k.fillet(&tag("pair_fillet"), body, &[e0], 2.0).expect("fillet E0").body;
+        }
+        let t = k.topology(body).unwrap();
+        let (f0, f1) = (plane_face(&t, 2, 0.0), plane_face(&t, 2, depth));
+        for (a, b) in [(f0, f1), (f1, f0)] {
+            encloses(k.measure_pair(body, Face(a), Face(b), PairQuantity::MinimumDistance).unwrap(), depth);
+        }
+    }
+}
+
+/// V2 batch 2 K3: named refusals for every unsupported pair, with the valid request
+/// still answering after each one.
+pub fn query_domains_and_work_are_explicit(k: &dyn Kernel) {
+    use PairEndpoint::{Edge, EdgeMidpoint, Face};
+    use PairQuantity::{DirectionAngle, MinimumDistance, PointDistance};
+    let body = holed_block(k, 10.0);
+    let t = k.topology(body).unwrap();
+    let v = Vec3::new;
+    let e0 = line_between(&t, v(-20.0, -15.0, 0.0), v(20.0, -15.0, 0.0));
+    let e1 = line_between(&t, v(-20.0, 15.0, 10.0), v(20.0, 15.0, 10.0));
+    let rim = t.edges.iter().find(|e| e.curve != CurveKind::Line && e.bbox.max.z < 0.01).expect("bottom bore rim").id;
+    let wall = t.faces.iter().find(|f| f.surface == SurfaceKind::Cylinder).expect("bore wall").id;
+    let (f0, front) = (plane_face(&t, 2, 0.0), plane_face(&t, 1, -15.0));
+    let refused = |code: &str, body: BodyId, a, b, q| {
+        let error = k.measure_pair(body, a, b, q).expect_err(code).to_string();
+        assert!(error.contains(code), "{code}: {error}");
+    };
+    let valid = || encloses_root(k.measure_pair(body, Edge(e0), Edge(e1), MinimumDistance).unwrap(), 1000.0);
+    let cases = [
+        ("measure.unsupported-curve", Edge(e0), Edge(rim), MinimumDistance),
+        ("measure.unsupported-curve", Edge(rim), Edge(e0), DirectionAngle),
+        ("measure.unsupported-curve", EdgeMidpoint(e0), EdgeMidpoint(rim), PointDistance),
+        ("measure.unsupported-pair", Edge(e0), Face(f0), MinimumDistance),
+        ("measure.unsupported-pair", Face(f0), Edge(e0), MinimumDistance),
+        ("measure.unsupported-pair", Face(f0), Face(front), DirectionAngle),
+        ("measure.unsupported-pair", Edge(e0), Edge(e1), PointDistance),
+        ("measure.unsupported-pair", EdgeMidpoint(e0), EdgeMidpoint(e1), MinimumDistance),
+        ("measure.nonplanar-face", Face(wall), Face(f0), MinimumDistance),
+        ("measure.nonparallel-faces", Face(f0), Face(front), MinimumDistance),
+    ];
+    for (code, a, b, q) in cases {
+        refused(code, body, a, b, q);
+        valid();
+    }
+    let error = k.edge_midpoint(body, rim).expect_err("a closed rim has no unique midpoint").to_string();
+    assert!(error.contains("measure.unsupported-curve"), "{error}");
+    valid();
+
+    // A line along (1, 1, 0) is neither parallel nor perpendicular to X.
+    let profile = Profile {
+        plane: Plane::XY,
+        outer: Loop(vec![
+            Segment::Line { from: Point2::new(0.0, 0.0), to: Point2::new(10.0, 0.0) },
+            Segment::Line { from: Point2::new(10.0, 0.0), to: Point2::new(10.0, 10.0) },
+            Segment::Line { from: Point2::new(10.0, 10.0), to: Point2::new(0.0, 0.0) },
+        ]),
+        holes: Vec::new(),
+    };
+    let p = k.create_body_from_profile(&tag("wedge_sketch"), &profile).unwrap();
+    let wedge = k.extrude(&tag("wedge"), p.body, &Extrude { distance: 5.0, direction: None }).unwrap().body;
+    let w = k.topology(wedge).unwrap();
+    let x = line_between(&w, v(0.0, 0.0, 0.0), v(10.0, 0.0, 0.0));
+    let diagonal = line_between(&w, v(0.0, 0.0, 0.0), v(10.0, 10.0, 0.0));
+    refused("measure.angle-domain", wedge, Edge(diagonal), Edge(x), DirectionAngle);
+    exactly(k.measure_pair(wedge, Edge(diagonal), Edge(x), MinimumDistance).unwrap(), 0.0);
+
+    // Handles from another body, or unknown ones, keep their typed errors.
+    for (a, b) in [(Edge(x), Edge(e1)), (Edge(e0), Edge(EdgeId::from_raw(u64::MAX)))] {
+        let error = k.measure_pair(body, a, b, MinimumDistance).expect_err("foreign or unknown edge");
+        assert!(matches!(error, KernelError::UnknownEdge { .. }), "{error}");
+    }
+    let error = k.measure_pair(body, Face(FaceId::from_raw(u64::MAX)), Face(f0), MinimumDistance).unwrap_err();
+    assert!(matches!(error, KernelError::UnknownFace { .. }), "{error}");
+    assert!(matches!(k.edge_midpoint(body, EdgeId::from_raw(u64::MAX)), Err(KernelError::UnknownEdge { .. })));
+    valid();
+    k.release(wedge).unwrap();
     k.release(body).unwrap();
 }

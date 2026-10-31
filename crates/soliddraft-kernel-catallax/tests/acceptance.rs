@@ -604,3 +604,18 @@ fn other_unsupported_controls_stay_labelled_with_an_edge_length() {
 fn measures_say_how_they_are_known() {
     contract::measures_say_how_they_are_known(&CatallaxKernel::new());
 }
+
+#[test]
+fn finite_edge_pairs_and_points_have_proven_bounds() {
+    contract::finite_edge_pairs_and_points_have_proven_bounds(&CatallaxKernel::new());
+}
+
+#[test]
+fn parallel_face_distance_respects_trims_and_completion() {
+    contract::parallel_face_distance_respects_trims_and_completion(&CatallaxKernel::new());
+}
+
+#[test]
+fn query_domains_and_work_are_explicit() {
+    contract::query_domains_and_work_are_explicit(&CatallaxKernel::new());
+}

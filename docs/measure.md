@@ -16,6 +16,34 @@ MCP example:
 
 Pass that object to `track`; pass only `entity` to `measure_entity`. `model_summary.values` reports the row's current source label, certainty, bounds, frame, proof geometry, stale reason and check state.
 
-This batch covers B-rep edge lengths and face areas in the part frame. Pair measurements, other frames, hover points, guides and row removal remain follow-up work. The older two-entity `measure` tool retains its rounded reference-point output and does not feed tracked rows.
+## Pairs and midpoints
+
+With Measure open, hover a straight edge: within eight points of its midpoint the viewport marks the proven midpoint and labels its part-frame coordinates. The id buffer chooses the edge; the coordinate is the kernel's arc-length midpoint proof, never the pick ray or a display polyline. Click there to pick the point, or anywhere else on an edge or face to pick the entity. A single midpoint pick shows the coordinates beside the edge's length.
+
+A second pick proves one scalar between the two, in the part frame, and a third replaces the second. Choose the quantity in the panel:
+
+| Quantity | Supported pair | Result |
+|---|---|---|
+| Minimum distance | Two finite straight edges; two parallel planar faces of the part | The finite minimum, respecting trims and holes. Never a supporting-plane gap alone |
+| Midpoint distance | Two straight edges | The distance between their proven midpoints |
+| Direction angle | Two straight edges proven parallel or perpendicular | Exactly 0 or 90 deg, ignoring edge orientation |
+
+Other pairs are refused by name and never estimated: `measure.unsupported-pair` for a mixed or mismatched pair, `measure.unsupported-curve` for a curved edge (including a closed rim's midpoint), `measure.nonparallel-faces`, `measure.nonplanar-face`, `measure.angle-domain` for an oblique angle, `measure.degenerate-edge`, and `measure.bounds-incomplete` for a proof with accuracy marks or no converged upper bound. Kernel causes such as work exhaustion stay in the message.
+
+Track this saves a pair as one row: its quantity and both persistent references, with any midpoint selectors. The row's unit follows the quantity, mm or deg; an angle check takes a degree limit, and a bare limit on an angle row is in degrees. Either end going missing, as when a fillet removes an edge, makes the row stale with `measure.unresolved-reference` and the end's name; no nearby edge takes its place. A stale pair names both ends as they were defined. Undo, save and reopen keep the definitions; proofs are always fresh.
+
+MCP: `measure` takes `a`, `b`, an optional `quantity` (`minimum_distance` by default, `point_distance`, `direction_angle`) and, for `point_distance`, `a_point` and `b_point` set to `midpoint`. Its result names the quantity, unit, value, bounds, certainty, frame, geometry, `source_revision` and both sources with their persistent references. `distance_mm` repeats a proven minimum distance and `gap_mm` a face gap, for the earlier callers of this tool; a refused pair returns no number. `measure_entity` with `quantity: midpoint` returns one enclosure per coordinate. `track` takes `entity_b`, `quantity`, `a_point` and `b_point` for a pair:
+
+```json
+{"name":"diagonal_gap","entity":"Boss-Extrude1 · Edge 4","entity_b":"Boss-Extrude1 · Edge 7","quantity":"minimum_distance","check":"< 32 mm"}
+```
+
+## Sketch guides
+
+While drawing, the sketcher snaps to points, line midpoints, level or plumb alignment with the previous point and curves, in that order, and every snap a click lands becomes the relation it showed: a line started on a midpoint keeps a Midpoint relation, and one drawn plumb keeps Vertical. These are 2D sketch relations, not references to the solid. The Auto relations switch in the viewport corner turns this inference off: the point then stays under the pointer and nothing is inferred, while existing and hand-added relations still solve. Draw construction makes new entities construction geometry, outside the profile. Neither switch changes the document or adds an undo step.
+
+Other frames, oblique angles, curved pairs, cross-component picks and row removal remain follow-up work.
 
 The pre-tracked-values fixture `crates/soliddraft-model/tests/fixtures/bracket-inch.dwprt` is copied from the `application-loop` artifact of hosted run 41034351115 on V1 merge 2 merge commit `aec6be4bc0aacc7369a1f8b778f6c3b6f9aa9fa0`. Its recorded hashes are checked without regenerating it.
+
+The batch 1 fixture `crates/soliddraft-model/tests/fixtures/measure-batch1.dwprt` is the `measure` scenario's `measure.dwprt` from the `application-loop` artifact of hosted run 41137611800 on main `3403d2134d5f1d8e76e6f2d143eedd48648fdd5f`. U3 opens and re-saves it without regenerating it.

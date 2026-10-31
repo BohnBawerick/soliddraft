@@ -960,6 +960,20 @@ impl Kernel for CatallaxKernel {
         self.observe("face_area", || measure::face_area(self, body, face))
     }
 
+    fn edge_midpoint(&self, body: BodyId, edge: EdgeId) -> KernelResult<PointProof> {
+        self.observe("edge_midpoint", || measure::edge_midpoint(self, body, edge))
+    }
+
+    fn measure_pair(
+        &self,
+        body: BodyId,
+        a: PairEndpoint,
+        b: PairEndpoint,
+        quantity: PairQuantity,
+    ) -> KernelResult<Measurement> {
+        self.observe("measure_pair", || measure::measure_pair(self, body, a, b, quantity))
+    }
+
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
         self.observe("history", || Ok(self.state()?.get(body)?.history.clone()))
     }

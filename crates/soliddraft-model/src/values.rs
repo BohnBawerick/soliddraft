@@ -298,6 +298,7 @@ impl Values {
                 return Err(format!("duplicate value name {}", row.name));
             }
             names.push(&row.name);
+            row.source.validate()?;
             if let Some(check) = &row.check
                 && crate::tracked::Check::parse(&check.text, row.source.unit())? != *check
             {
@@ -610,8 +611,13 @@ pub(crate) fn parse_limit(text: &str, unit: &str) -> Result<f64, String> {
         return Err("a check needs one literal limit".into());
     }
     let q = evaluate(&expression.tree, &mut |_| Err("a check cannot read values".into()))?;
-    if !bare_literal(&expression.tree) && (q.length, q.angle) != (if unit == "mm" { 1 } else { 2 }, 0) {
-        return Err(format!("the check needs a {} limit", if unit == "mm" { "length" } else { "area" }));
+    let (dimension, name) = match unit {
+        "mm" => ((1, 0), "a length"),
+        "deg" => ((0, 1), "an angle"),
+        _ => ((2, 0), "a area"),
+    };
+    if !bare_literal(&expression.tree) && (q.length, q.angle) != dimension {
+        return Err(format!("the check needs {name} limit"));
     }
     Ok(q.value)
 }

@@ -22,6 +22,8 @@ pub struct Rules {
     pub refuse_display: bool,
     /// Bodies with more volume than this cannot be meshed for display.
     pub refuse_display_above: Option<f64>,
+    /// Pair proofs fail, as an incomplete bound would.
+    pub refuse_pairs: bool,
 }
 
 impl Gated {
@@ -121,6 +123,21 @@ impl Kernel for Gated {
     }
     fn face_area(&self, body: BodyId, face: FaceId) -> KernelResult<Measurement> {
         self.inner.face_area(body, face)
+    }
+    fn edge_midpoint(&self, body: BodyId, edge: EdgeId) -> KernelResult<PointProof> {
+        self.inner.edge_midpoint(body, edge)
+    }
+    fn measure_pair(
+        &self,
+        body: BodyId,
+        a: PairEndpoint,
+        b: PairEndpoint,
+        quantity: PairQuantity,
+    ) -> KernelResult<Measurement> {
+        if self.rules.lock().unwrap().refuse_pairs {
+            return Err(KernelError::Unsupported("measure.bounds-incomplete: the scenario refuses pair proofs".into()));
+        }
+        self.inner.measure_pair(body, a, b, quantity)
     }
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
         self.inner.history(body)
