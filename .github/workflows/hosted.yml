@@ -33,7 +33,7 @@ concurrency:
 jobs:
   select:
     name: Select affected checks
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
     outputs:
       selected: ${{ steps.select.outputs.selected }}
       packaging: ${{ steps.select.outputs.packaging }}
@@ -487,7 +487,7 @@ jobs:
     name: Merge gate
     if: always()
     needs: [select, lint, kernel, step-opencascade, test-linux, test-macos, test-windows, web, msrv, interactive-linux, interactive-macos, application-loop, packaging]
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.USE_LOCAL_RUNNERS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","ci-linux-local"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
