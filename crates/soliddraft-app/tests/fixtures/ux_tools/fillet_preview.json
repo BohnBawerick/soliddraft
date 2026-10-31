@@ -12,9 +12,10 @@
     "materialised_by": "Claude Opus builder, lane sdc-ux-fillet-tool; expected values, tolerances and fixture geometry copied from the designer's report unchanged"
   },
   "pair": {
-    "parent_app": "3403d2134d5f1d8e76e6f2d143eedd48648fdd5f",
+    "parent_app": "d4d294b4863a0900ca126727d3aeae509e032d40",
     "candidate_app": "the head of branch fm/sdc-ux-fillet-tool; each run records the commit it tested in run.log",
-    "catallax_pin": "e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc"
+    "catallax_pin": "659259eedbd0f156ab601784f29f42e87e419c76",
+    "history": "Designed against app 3403d2134d5f1d8e76e6f2d143eedd48648fdd5f at Catallax e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc; the pair moved to the slot-display pin when https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/100 merged. No expected geometry was regenerated."
   },
   "harness": {
     "window_points": [1440, 900],
@@ -80,7 +81,8 @@
       "vertex_message_mentions": ["edge", "face"],
       "refused_radius_text": ["0", "-1", "abc", "NaN", "inf"],
       "slot_overflow_radius_text": "20",
-      "slot_overflow_reason": "fillet.unsupported-overflow"
+      "slot_overflow_reason": "fillet.unsupported-contact",
+      "slot_overflow_note": "Ruling (a), data/from-main/sdc-d-ux-fillet-f3/report.md: slot R20 exceeds the 5 mm end radius and 10 mm depth. Refuse it; the version-4 tangent-continuation path at Catallax 659259eedbd0f156ab601784f29f42e87e419c76 reports fillet.unsupported-contact. The historical baseline at e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc expected fillet.unsupported-overflow."
     }
   },
   "tolerances": {

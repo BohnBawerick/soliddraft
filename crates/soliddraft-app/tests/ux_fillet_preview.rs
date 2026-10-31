@@ -1090,7 +1090,8 @@ fn unsupported_picks_and_radii_refuse_locally_then_recover() {
         assert_b20(&case, app, "after the refusals");
     });
 
-    // (3) The slot: R20 overflows the 5 mm half-width.
+    // (3) The slot: R20 exceeds the 5 mm end radius and the 10 mm depth, and is refused
+    // with the reason the manifest names for its pin.
     let mut app = launch(&case, slot());
     case.run(&mut app, |app| {
         let before = committed(app);
@@ -1104,10 +1105,10 @@ fn unsupported_picks_and_radii_refuse_locally_then_recover() {
         case.note(format!("R20 on the slot: {error:?}"));
         let error = error.expect("R20 is refused");
         assert!(error.contains(reason), "the refusal is {reason}: {error}");
-        assert!(preview(app).is_none(), "no preview for the overflow");
+        assert!(preview(app).is_none(), "no preview for the refused R20");
         let (top, bottom) = radius_band(app);
-        assert_painted_between(&case, app, reason, top, bottom, "overflow refusal");
-        case.frame(app, "slot-overflow-refused");
+        assert_painted_between(&case, app, reason, top, bottom, "R20 refusal");
+        case.frame(app, "slot-r20-refused");
         assert_eq!(committed(app), before, "a refusal commits nothing");
         assert_s(&case, app, "S under the refusal");
         assert!(app.state().state.doc.triangle_count() > 0, "the slot stays drawn");
