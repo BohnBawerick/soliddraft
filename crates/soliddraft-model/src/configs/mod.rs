@@ -1,4 +1,11 @@
-//! Sparse named-value overrides, resolved from one persisted feature base.
+//! Sparse named-value and text-property overrides, resolved from one persisted feature base.
+
+mod properties;
+mod table;
+
+pub use properties::Properties;
+pub(crate) use properties::check as check_properties;
+pub use table::{DEFAULT_ROW, Grid, GridRefusal, GridRow, GridValue};
 
 use crate::command::Applied;
 use crate::{Command, CommandError, Document, Feature, values::Values};
@@ -23,6 +30,8 @@ struct Row {
     id: ConfigurationId,
     name: String,
     overrides: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    properties: Properties,
 }
 
 impl Configurations {
@@ -33,6 +42,11 @@ impl Configurations {
 
     pub(crate) fn lookup<'a>(&'a self, defaults: &'a Values) -> &'a Values {
         self.resolved.as_ref().unwrap_or(defaults)
+    }
+
+    /// The definitions rows resolve from: the common base, or the tree without rows.
+    fn base_or<'a>(&'a self, features: &'a [Feature]) -> &'a [Feature] {
+        if self.is_empty() { features } else { &self.base }
     }
 
     fn row(&self, name: &str) -> Result<usize, String> {
@@ -68,6 +82,7 @@ impl Configurations {
         let mut active_values = None;
         for row in &self.rows {
             check_name(&row.name)?;
+            properties::check(&row.properties).map_err(|e| format!("{}: {e}", row.name))?;
             if row.id.0.is_empty() || !ids.insert(&row.id) || !names.insert(&row.name) {
                 return Err("duplicate configuration id or name".into());
             }
@@ -120,6 +135,7 @@ pub(crate) fn handles(command: &Command, has_rows: bool) -> bool {
         Command::AddConfiguration { .. }
             | Command::SetConfigurationValue { .. }
             | Command::ActivateConfiguration { .. }
+            | Command::SetConfigurationGrid { .. }
             | Command::RestoreConfigurations { .. }
     ) || has_rows && matches!(command, Command::SetValue { .. } | Command::Drive { .. } | Command::RenameValue { .. })
 }
@@ -128,6 +144,12 @@ impl Document {
     /// The selected row's stable identity; None denotes Default.
     pub fn active_configuration(&self) -> Option<&ConfigurationId> {
         self.configurations.active.as_ref()
+    }
+
+    /// Counts accepted changes to the table, undo and redo included. A change that
+    /// leaves the geometry alone still gives dependants a new source revision.
+    pub fn table_edits(&self) -> u64 {
+        self.table_edits
     }
 
     /// Configuration names and authored overrides in creation order.
@@ -145,10 +167,12 @@ impl Document {
             state: Box::new(self.configurations.clone()),
             values: self.values.clone(),
             features: self.features.clone(),
+            properties: self.properties.clone(),
         };
         let mut state = self.configurations.clone();
         let mut defaults = self.values.clone();
         let mut features = self.features.clone();
+        let mut file_properties = self.properties.clone();
         let result = (|| -> Result<String, String> {
             let label = match &command {
                 Command::AddConfiguration { name } => {
@@ -163,6 +187,7 @@ impl Document {
                         id: ConfigurationId(DocumentId::new().to_string()),
                         name: name.clone(),
                         overrides: BTreeMap::new(),
+                        properties: Properties::new(),
                     });
                     format!("add configuration {name}")
                 }
@@ -207,10 +232,19 @@ impl Document {
                     }
                     format!("rename value {name}")
                 }
-                Command::RestoreConfigurations { state: saved, values, features: saved_features } => {
+                Command::SetConfigurationGrid { grid } => {
+                    let grid = self.check_configuration_grid(grid).map_err(|e| e.to_string())?;
+                    let default = grid.rows.first().ok_or("the table has no Default row")?;
+                    defaults = defaults.overlay(&default.values)?;
+                    file_properties = default.properties.clone();
+                    state.set_grid(&grid);
+                    "edit configuration grid".into()
+                }
+                Command::RestoreConfigurations { state: saved, values, features: saved_features, properties } => {
                     state = *saved.clone();
                     defaults = values.clone();
                     features = saved_features.clone();
+                    file_properties = properties.clone();
                     "restore configurations".into()
                 }
                 _ => unreachable!(),
@@ -234,6 +268,8 @@ impl Document {
         self.configurations = state;
         self.values = defaults;
         self.features = features;
+        self.properties = file_properties;
+        self.table_edits += 1;
         if let Some(i) = first {
             self.touch(i);
         }
@@ -241,6 +277,7 @@ impl Document {
             state: Box::new(self.configurations.clone()),
             values: self.values.clone(),
             features: self.features.clone(),
+            properties: self.properties.clone(),
         };
         Ok(Applied { inverse: old, redo, created: None, label })
     }

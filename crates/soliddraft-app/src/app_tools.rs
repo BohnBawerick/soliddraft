@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use soliddraft_assistant::tools::schema::{any_of, array, boolean, integer, number, one_of, string};
 use soliddraft_assistant::{Caller, ToolHost, ToolOutput, ToolSpec};
 use soliddraft_document::DocKind;
-use soliddraft_drawing::display::annotation_name;
+use soliddraft_drawing::display::{annotation_name, field_value};
 use soliddraft_drawing::export::Format as SheetFormat;
 use soliddraft_drawing::measure::value_text;
 use soliddraft_drawing::project::{self, view_label};
@@ -250,6 +250,9 @@ impl AppTools<'_> {
             return Some(result);
         }
         if let Some(result) = crate::mates::tools::run(self.state, name, input) {
+            return Some(result);
+        }
+        if let Some(result) = crate::grid::tools::run(self.state, name, input) {
             return Some(result);
         }
         let drawing_active = self.state.drawing.is_active();
@@ -716,7 +719,8 @@ fn drawing_json(state: &AppState) -> Option<Value> {
     let sheets: Vec<Value> = d
         .sheets
         .iter()
-        .map(|sheet| {
+        .enumerate()
+        .map(|(index, sheet)| {
             let name_of = |id: ViewId| sheet.view(id).map(|v| view_label(sheet, v));
             let views: Vec<Value> = sheet
                 .views
@@ -783,7 +787,17 @@ fn drawing_json(state: &AppState) -> Option<Value> {
                     })
                 })
                 .collect();
-            json!({ "name": sheet.name, "views": views, "annotations": annotations })
+            let title_block: serde_json::Map<String, Value> =
+                soliddraft_drawing::library::template(sheet.template.as_str())
+                    .title_block
+                    .fields
+                    .iter()
+                    .map(|field| (field.key.clone(), field_value(d, index, field).into()))
+                    .collect();
+            json!({
+                "name": sheet.name, "views": views, "annotations": annotations,
+                "title_block": title_block, "title_bindings": sheet.title_bindings,
+            })
         })
         .collect();
     let part = match s.link_state() {
@@ -801,6 +815,11 @@ fn drawing_json(state: &AppState) -> Option<Value> {
         "sheets": sheets,
         "up_to_date": s.is_up_to_date(),
         "pinned_revision": d.model.pinned.short(),
+        "source": {
+            "revision": d.model.pinned.as_str(),
+            "configuration": d.model.configuration,
+            "properties": d.source_properties,
+        },
         "part_revision": s.doc.seen_digest.short(),
         "views_match_pin": d.views_match_pin(),
         "changed": changed,

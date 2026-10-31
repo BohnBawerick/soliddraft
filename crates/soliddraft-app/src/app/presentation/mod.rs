@@ -408,6 +408,7 @@ impl SolidDraftApp {
             );
         }
         self.assistant_settings(ctx);
+        crate::grid::panel::show(ctx, &mut self.state);
         crate::drawing::reference::window(ctx, &mut self.state);
         crate::locations::window(ctx, &mut self.state);
         crate::import::window(ctx, &mut self.state);

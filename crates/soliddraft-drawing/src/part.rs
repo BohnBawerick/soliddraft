@@ -13,8 +13,9 @@
 //! and its midpoint (or centroid) and length (or area). Kernel ids never leave a
 //! session.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use soliddraft_document::ConfigurationId;
 use soliddraft_kernel_api::drawing::Curve3;
 use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, HistoryRecord, Kernel, SurfaceKind, Vec3};
 
@@ -38,6 +39,17 @@ pub struct Part<'k> {
     /// Draw the views from the kernel's unproved preview mesh, for the screen. Line work
     /// for an export leaves it off.
     pub preview: bool,
+    /// The configuration and text properties this revision resolves to.
+    pub source: PartSource,
+}
+
+/// What a drawing records of its part, beside the revision.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PartSource {
+    /// The selected configuration; `None` for Default.
+    pub configuration: Option<ConfigurationId>,
+    /// Text properties, overrides over file defaults.
+    pub properties: BTreeMap<String, String>,
 }
 
 /// What a part document knows about its entities beyond the kernel: persistent names,

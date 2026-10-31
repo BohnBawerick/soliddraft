@@ -13,7 +13,7 @@ use soliddraft_kernel_api::Point2;
 
 use crate::annotation::{Annotation, AnnotationKind, AnnotationState, Attach, DimensionKind, LinearOrientation};
 use crate::ids::{AnnotationId, SHEET, ViewId};
-use crate::library::{Align, StyleFile, TemplateFile, Weight};
+use crate::library::{Align, FieldDef, StyleFile, TemplateFile, Weight};
 use crate::measure::{CurveShape, display_text, shape_of};
 use crate::project::{effective_scale, view_bounds, view_label};
 use crate::view::Accuracy;
@@ -360,10 +360,34 @@ pub fn resolve_links(text: &str, lookup: &dyn Fn(&str) -> String) -> String {
     out
 }
 
+/// The text of a field bound to a part property, from the source the drawing accepted.
+/// A property that source lacks is named, never filled from another configuration.
+fn bound_property(drawing: &Drawing, sheet: &Sheet, key: &str) -> Option<String> {
+    let name = sheet.title_bindings.get(key)?;
+    Some(drawing.source_properties.get(name).cloned().unwrap_or_else(|| format!("[unresolved property {name}]")))
+}
+
+/// The value a title block field shows, as the sheet draws it.
+pub fn field_value(drawing: &Drawing, sheet_index: usize, field: &FieldDef) -> String {
+    let Some(sheet) = drawing.sheets.get(sheet_index) else { return String::new() };
+    let lookup = |key: &str| property(drawing, sheet, sheet_index, drawing.sheets.len(), key);
+    field_text(drawing, sheet, field, &lookup)
+}
+
+fn field_text(drawing: &Drawing, sheet: &Sheet, field: &FieldDef, lookup: &dyn Fn(&str) -> String) -> String {
+    if let Some(value) = sheet.format_overrides.get(&field.key) {
+        return value.clone();
+    }
+    bound_property(drawing, sheet, &field.key).unwrap_or_else(|| resolve_links(&field.value, lookup))
+}
+
 /// The value of a title block property for a sheet.
 pub fn property(drawing: &Drawing, sheet: &Sheet, sheet_index: usize, sheet_count: usize, key: &str) -> String {
     if let Some(v) = sheet.format_overrides.get(key) {
         return v.clone();
+    }
+    if let Some(bound) = bound_property(drawing, sheet, key) {
+        return bound;
     }
     match key {
         "title" => drawing.meta.title.clone(),
@@ -539,8 +563,7 @@ fn format_items(drawing: &Drawing, sheet: &Sheet, ctx: &Context<'_>, items: &mut
             projection_symbol(sheet.projection, Point2::new(cell.0 + cell.2 / 2.0, cell.1 + 3.2), lines.thin, items);
             continue;
         }
-        let value = resolve_links(&field.value, &lookup);
-        let value = sheet.format_overrides.get(&field.key).cloned().unwrap_or(value);
+        let value = field_text(drawing, sheet, field, &lookup);
         if value.is_empty() {
             continue;
         }

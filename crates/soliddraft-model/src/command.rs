@@ -111,6 +111,11 @@ pub enum Command {
         /// Row to select, including Default.
         name: String,
     },
+    /// Replaces the authored table as one step: file defaults, row overrides, properties.
+    SetConfigurationGrid {
+        /// The whole candidate table.
+        grid: Box<crate::configs::Grid>,
+    },
     /// Restores configuration truth and resolved definitions for undo.
     RestoreConfigurations {
         /// Table and fixed base.
@@ -119,6 +124,9 @@ pub enum Command {
         values: crate::values::Values,
         /// Resolved selected variant.
         features: Vec<Feature>,
+        /// File-default text properties.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        properties: crate::configs::Properties,
     },
     /// Renames a feature.
     RenameFeature {
@@ -719,13 +727,14 @@ impl Document {
         let capture = !self.configurations.is_empty() && !matches!(command, Command::Batch { .. });
         let before =
             capture.then(|| (Box::new(self.configurations.clone()), self.values.clone(), self.features.clone()));
+        let properties = self.properties.clone();
         let mut applied = self.apply_inner(command)?;
         if let Some((state, values, features)) = before
             && self.configurations.capture_edits(&features, &self.features)
         {
             applied.inverse = Command::Batch {
                 label: applied.label.clone(),
-                commands: vec![applied.inverse, Command::RestoreConfigurations { state, values, features }],
+                commands: vec![applied.inverse, Command::RestoreConfigurations { state, values, features, properties }],
             };
         }
         Ok(applied)
@@ -736,6 +745,7 @@ impl Document {
             command @ (Command::AddConfiguration { .. }
             | Command::SetConfigurationValue { .. }
             | Command::ActivateConfiguration { .. }
+            | Command::SetConfigurationGrid { .. }
             | Command::RestoreConfigurations { .. }) => self.apply_configuration(command),
             command @ (Command::Track { .. }
             | Command::SetValue { .. }

@@ -159,6 +159,16 @@ pub enum Command {
         /// The value.
         value: String,
     },
+    /// Bind a title block field to a part property; an empty property removes the
+    /// binding. The value comes from the source the drawing accepted.
+    BindTitleProperty {
+        /// Index of the sheet.
+        sheet: usize,
+        /// The field's key.
+        key: String,
+        /// The part property's name.
+        property: String,
+    },
     /// Delete a view and its annotations. Views derived from it must go first.
     DeleteView {
         /// The view.
@@ -342,6 +352,7 @@ impl Command {
             Command::SetAutomaticUpdate { .. } => "Automatic update",
             Command::SetMeta { .. } => "Document properties",
             Command::SetTitleField { .. } => "Title block",
+            Command::BindTitleProperty { .. } => "Bind title field",
             Command::DeleteView { .. } => "Delete view",
             Command::RenameView { .. } => "Rename view",
             Command::Align { .. } => "Align",
@@ -501,6 +512,15 @@ pub fn apply(drawing: &mut Drawing, command: &Command) -> Result<(), DrawingErro
                 s.format_overrides.remove(key);
             } else {
                 s.format_overrides.insert(key.clone(), value.clone());
+            }
+            Ok(())
+        }
+        Command::BindTitleProperty { sheet, key, property } => {
+            let s = sheet_mut(drawing, *sheet)?;
+            if property.is_empty() {
+                s.title_bindings.remove(key);
+            } else {
+                s.title_bindings.insert(key.clone(), property.clone());
             }
             Ok(())
         }

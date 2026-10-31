@@ -1001,6 +1001,23 @@ fn sheet_panel(ui: &mut egui::Ui, s: &mut DrawingSession, actions: &mut Vec<Draw
             if changed && m != meta {
                 actions.push(DrawingAction::Command(Command::SetMeta { meta: m }));
             }
+            let bound = sheet.title_bindings.get("title").cloned().unwrap_or_default();
+            let mut property = bound.clone();
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    vec2(68.0, 22.0),
+                    egui::Label::new(egui::RichText::new("Title from").size(12.0).color(theme::muted())),
+                );
+                let edit = egui::TextEdit::singleline(&mut property).hint_text("part property");
+                let r = ui.add(edit.desired_width(ui.available_width() - 20.0));
+                if r.lost_focus() && property != bound {
+                    actions.push(DrawingAction::Command(Command::BindTitleProperty {
+                        sheet: si,
+                        key: "title".to_owned(),
+                        property: property.trim().to_owned(),
+                    }));
+                }
+            });
             for key in ["owner", "status", "checked", "approved"] {
                 let current = sheet.format_overrides.get(key).cloned().unwrap_or_default();
                 let mut text = current.clone();

@@ -832,6 +832,27 @@ def summary(reports, machine):
     return "\n".join(rows) + "\n"
 
 
+def start_client(args, scenario, folder):
+    """A new application process, initialized and prepared outside every click."""
+    client = Client(args.soliddraft, folder, scenario.get("max_work", 100_000_000), args.timeout)
+    initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+        "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
+    if initialized["protocolVersion"] != "2025-06-18":
+        raise RuntimeError("MCP initialization version mismatch")
+    client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    # GPU preparation runs once, outside every click.
+    response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
+    if response.get("isError"):
+        raise RuntimeError(f"renderer preparation failed: {response}")
+    return client
+
+
+def helper(arguments, bundle, directory, label, timeout):
+    """A check script beside this runner, given bundle paths."""
+    script, *rest = substitute(arguments, bundle)
+    return cli(sys.executable, [pathlib.Path(__file__).with_name(script), *rest], directory, label, timeout)
+
+
 def run(args):
     scenario = json.loads(args.scenario.read_text())
     if scenario["format"] != "soliddraft-scenario/1" or not scenario.get("steps"):
@@ -846,35 +867,44 @@ def run(args):
               "steps": [], "warnings": [], "over_budget": [], "pass": False,
               "strict_pass": False}
     client = None
+    transcript = []
     try:
         # A malformed file still fails the run: the listings are data, even though timing is not gated.
         known_latency = load_known_over_budget(KNOWN_OVER_BUDGET)
         for name, number in known_latency:
             if name == scenario["name"] and not 1 <= number <= len(scenario["steps"]):
                 advise(report, f"remove missing {name} step {number} from ci/known-over-budget.json", missed=False)
-        client = Client(args.soliddraft, args.out / "commands", scenario.get("max_work", 100_000_000), args.timeout)
-        initialized = client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "soliddraft-scenario", "version": "1"}})
-        if initialized["protocolVersion"] != "2025-06-18":
-            raise RuntimeError("MCP initialization version mismatch")
-        client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        for index, arguments in enumerate(scenario.get("setup", [])):
+            result = helper(arguments, args.out, args.out, f"setup-{index}", args.timeout)
+            if not result["pass"]:
+                raise RuntimeError(f"scenario setup failed: {result['command']}")
+        commands = args.out / "commands"
+        client = start_client(args, scenario, commands)
         known = {}
         previous = {}
         exports = {}
-        # GPU preparation runs once, outside every click.
-        response = client.request("tools/call", {"name": "scenario_prepare", "arguments": {}})
-        if response.get("isError"):
-            raise RuntimeError(f"renderer preparation failed: {response}")
+        folders = {}
+        session = offset = 0
         for number, step in enumerate(scenario["steps"], 1):
             entry = {"number": number, "tool": step["tool"], "checks": [], "pass": False}
             if "label" in step:
                 entry["label"] = step["label"]
             report["steps"].append(entry)
+            if step.get("fresh_process"):
+                # The application exits cleanly and nothing it held survives but its files.
+                # Each process counts its own requests, so its evidence has its own folder.
+                client.close()
+                transcript += client.transcript
+                session, offset = session + 1, number - 1
+                commands = args.out / f"commands-{session}"
+                client = start_client(args, scenario, commands)
+            request = number - offset
             arguments = step_arguments(step, args.out, previous)
             started = time.perf_counter_ns()
             result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000
-            directory = args.out / "commands" / f"{number:04}"
+            directory = commands / f"{request:04}"
+            folders[number] = directory
             # The click ends at the viewport, before the command's evidence is written. A step
             # with no solid to show ends at the command's reply; its display request does not count.
             started = time.perf_counter_ns()
@@ -889,13 +919,13 @@ def run(args):
                          "phase": "refusal" if result.get("isError") else command_phase(step["tool"])}]
             entry["feature_count"] = len(command["summary"]["features"])
             checks = entry["checks"]
-            none, reason = no_solid(number, command, displayed)
+            none, reason = no_solid(request, command, displayed)
             if reason is not None:
                 checks.append({"check": "no-solid reply answers this request", "reason": reason, "pass": False})
             solid = not none
             expected_error = bool(step.get("refusal") or step.get("refused"))
             checks.append({"check": "command outcome", "pass": bool(result.get("isError")) == expected_error})
-            if command.get("request") != number:
+            if command.get("request") != request:
                 checks.append({"check": "command evidence is this request", "actual": command.get("request"),
                                "pass": False})
             checks.append({"check": "Catallax backend", "pass": command["backend"]["name"] == "catallax"})
@@ -961,7 +991,7 @@ def run(args):
                                    "pass": display["backend"]["name"] == "catallax" and display["live_document"]})
                 # The click ends only when the viewport shows this revision with pickable faces.
                 reason = ("display request failed" if displayed.get("isError") else "display evidence missing"
-                          if display is None else answers(number, command, display, True))
+                          if display is None else answers(request, command, display, True))
                 checks.append({"check": "click ends at a visible selectable edit", "reason": reason,
                                "pass": reason is None})
                 checks.append({"check": "viewport PNG", "pass": (directory / "viewport.png").exists()})
@@ -1014,7 +1044,7 @@ def run(args):
                                                   "verdict": verdict(view_latency)}
                     if not viewed.get("isError"):
                         view = json.loads((directory / "view.json").read_text())
-                        reason = answers(number, command, view)
+                        reason = answers(request, command, view)
                         checks.append({"check": "view answers this request", "reason": reason, "pass": reason is None})
                         checks.append({"check": "live Catallax hidden-line view", "actual": view,
                                        "pass": view["backend"]["name"] == "catallax" and view["live_document"]
@@ -1053,7 +1083,7 @@ def run(args):
                 if not measured.get("isError"):
                     measurement = json.loads((directory / "measurement.json").read_text())
                     # A proof for an older request or revision cannot stand in for this one.
-                    reason = answers(number, command, measurement)
+                    reason = answers(request, command, measurement)
                     checks.append({"check": "measurement answers this request", "reason": reason,
                                    "pass": reason is None})
                     if reason is not None:
@@ -1067,14 +1097,15 @@ def run(args):
                 earlier = step["same_geometry_as_step"]
                 if isinstance(earlier, bool) or not isinstance(earlier, int) or not 1 <= earlier < number:
                     raise ValueError("same_geometry_as_step must name an earlier step")
-                checks.append(same_geometry(args.soliddraft, directory,
-                    args.out / "commands" / f"{earlier:04}", args.timeout))
+                checks.append(same_geometry(args.soliddraft, directory, folders[earlier], args.timeout))
             checks.extend(output_files(substitute(step.get("files", []), args.out),
                                        substitute(step.get("absent", []), args.out)))
             # Exports run after the click is timed, as a user's separate request would.
             if "checked_step_export" in step:
                 checks.extend(checked_step_export(args.soliddraft,
                     substitute(step["checked_step_export"], args.out), directory, evidence, args.timeout))
+            for index, arguments in enumerate(step.get("helpers", [])):
+                checks.append(helper(arguments, args.out, directory, f"helper-{index}", args.timeout))
             specifications = [{"format": f} for f in step.get("export", [])] + step.get("exports", [])
             for export_spec in specifications:
                 extension = export_spec["format"]
@@ -1108,7 +1139,7 @@ def run(args):
         except Exception as error:
             report["error"] = str(error)
             report["pass"] = False
-        write(args.out / "protocol.json", client.transcript if client else [])
+        write(args.out / "protocol.json", transcript + (client.transcript if client else []))
         write(args.out / "result.json", report)
     print(json.dumps({"bundle": str(args.out), "pass": report["pass"],
                       "strict_pass": report.get("strict_pass", False),

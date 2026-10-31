@@ -466,4 +466,32 @@ command bundle, scenario runner and CI, not in the model build or normal edit pa
 
 `add_configuration {"name":"Narrow"}` adds an inactive row. `set_configuration_value {"configuration":"Narrow","name":"plate_w","expression":"120"}` sets an override of an existing value. `activate_configuration {"name":"Narrow"}` switches the part in one undo step. Default is implicit and reserved. Each verb follows the shared proposal, dry-run and document-command route. A refused edit preserves the current document.
 
-`model_summary.configurations` always reports the selected row and all row overrides. This increment supports named-value overrides through MCP and scripts. Grid editing, CSV/XLSX and drawing properties follow in later increments.
+`model_summary.configurations` always reports the selected row and all row overrides.
+
+## Configuration grid
+
+The grid shows the file's `Default` row and each named row. It holds authored expressions and text properties, never resolved numbers, and a blank cell in a named row inherits. Blank `flange_d` keeps meaning `plate_w / 2`, so changing the width also changes the depth.
+
+View, Panels, Configuration grid opens the window. Agents use the same steps:
+
+| Tool | What it does |
+|---|---|
+| `configuration_grid` | Reads the live table: columns, stable row ids, authored cells, each row's resolved values and the accepted state |
+| `preview_configuration_grid` | Checks a CSV or XLSX file, or `columns` and `rows`, and returns a `preview_id`, the candidate and its changes. Nothing changes in the part |
+| `cancel_configuration_grid` | Discards a preview, so it cannot be applied |
+| `apply_configuration_grid` | Rebuilds the selected row on a scratch copy, then publishes one undo step |
+| `export_configuration_grid` | Writes the accepted table as CSV or XLSX |
+
+A preview is bound to the document and revision it came from and is used once. Applying one after the part changed, or one that was cancelled or applied, is refused. Other rows keep the rule of the single verbs: their graph is checked now and they build when activated.
+
+Both files use the same columns, mapped by header name, in any order:
+
+```text
+configuration,value:plate_w [mm],value:flange_d [mm],value:hole_d [mm],property:title [text]
+```
+
+Every existing row must appear exactly once. `add_configuration` adds a row; the grid does not rename or delete one. CSV is UTF-8 with quoted fields and CRLF or LF records. XLSX is a workbook with one data sheet named `Configurations`. Expression cells go to the value evaluator, so a unit literal converts as it does elsewhere: `6 in` is stored as `152.4 mm`. A spreadsheet formula is refused even when it has a cached result. No spreadsheet program is involved.
+
+Text properties have two layers: the file's default, then a row's override. A property edit changes the part's revision, keeps its geometry hash and builds nothing.
+
+`bind_title_property` through `drawing_command`, or Title from in the sheet's properties, binds a title block field to a part property. The drawing keeps the configuration and property values it accepted beside its pinned revision. A part switch leaves title and views as they were, and Rebuild moves them together as one drawing undo step. A literal title field still wins, and a property the accepted source lacks shows as unresolved.

@@ -1,0 +1,4 @@
+configuration,value:plate_w [mm],value:flange_d [mm],value:hole_d [mm],property:title [text]
+Default,140,plate_w / 2,12,"Bracket, ""family"""
+Narrow,130 mm,5 mm,200 mm,
+"Wide, ""shop""",152.4 mm,,,"Bracket, ""wide"""

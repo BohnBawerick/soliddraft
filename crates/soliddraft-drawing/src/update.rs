@@ -148,7 +148,7 @@ pub fn update_from_model(drawing: &mut Drawing, part: &Part) -> Result<UpdateRep
         }
     }
     collect(drawing, &mut report);
-    drawing.model.pinned = part.digest.clone();
+    drawing.accept_source(part);
     Ok(report)
 }
 

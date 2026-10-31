@@ -761,6 +761,7 @@ impl SolidDraftApp {
                 self.state.send_chat();
             }
             AppAction::ToggleAutoApply => self.state.toggle_auto_apply(),
+            AppAction::Grid(action) => crate::grid::panel::apply(&mut self.state, action),
             // The web build's provider, model and key are set on its server.
             #[cfg(target_arch = "wasm32")]
             AppAction::ShowProviderSettings => {

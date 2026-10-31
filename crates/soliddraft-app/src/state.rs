@@ -34,6 +34,8 @@ pub enum ExitInto {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AppAction {
     Command(Command),
+    /// A step of the configuration grid window.
+    Grid(crate::grid::panel::GridAction),
     Undo,
     Redo,
     /// Starts a sketch on the selected plane or face, or asks for one.
@@ -564,6 +566,8 @@ pub struct AppState {
     pub drawing: crate::drawing::DrawingState,
     /// The open assembly and whether it is the active document.
     pub assembly: crate::assembly::AssemblyState,
+    /// The configuration grid window and its preview.
+    pub grid: crate::grid::preview::GridState,
     /// Whether the side area is shown and how wide it is.
     pub layout: crate::panels::Layout,
     /// The command line along the bottom and the assistant session above it.
@@ -613,6 +617,7 @@ impl AppState {
             recent: crate::file::recent(),
             frame_ms: 0.0,
             drawing: Default::default(),
+            grid: Default::default(),
             assembly: Default::default(),
             layout: crate::panels::Layout::load(),
             command_line: crate::command_line::CommandLine::load(),

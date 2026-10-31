@@ -527,7 +527,7 @@ impl CommandSpec {
         self
     }
 
-    fn lit(mut self, active: fn(&AppState) -> bool) -> Self {
+    pub(crate) fn lit(mut self, active: fn(&AppState) -> bool) -> Self {
         self.active = active;
         self
     }
