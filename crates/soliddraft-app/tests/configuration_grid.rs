@@ -28,6 +28,11 @@ const WIDE: &str = "Bracket, \"wide\"";
 const WIDE_ROW: &str = "Wide, \"shop\"";
 const WIDTH: &str = "value:plate_w [mm]";
 const TITLE: &str = "property:title [text]";
+/// The report's expected volumes of Narrow at 120 and 130 mm, digit for digit.
+#[allow(clippy::excessive_precision)]
+const VOLUME_120: f64 = 151869.02664470769;
+#[allow(clippy::excessive_precision)]
+const VOLUME_130: f64 = 165369.02664470769;
 
 fn fixture(name: &str) -> String {
     format!("{}/tests/fixtures/configuration_grid/{name}", env!("CARGO_MANIFEST_DIR"))
@@ -197,7 +202,7 @@ fn g_refuse_every_bad_file_changes_nothing_and_a_good_one_still_imports() {
     apply(&mut state, &id).unwrap();
     let wide = call(&mut state, "configuration_grid", json!({}));
     assert_eq!(wide["rows"][1]["cells"][0], "130 mm");
-    assert!((volume(&mut state) - 165369.02664470769).abs() < 0.005);
+    assert!((volume(&mut state) - VOLUME_130).abs() < 0.005);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -360,7 +365,7 @@ fn open_grid(h: &mut App<'_>) {
 fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
     let Some((mut h, config)) = window("window") else { return };
     let start = accepted(&mut h.state_mut().state, None);
-    assert!((volume(&mut h.state_mut().state) - 151869.02664470769).abs() < 0.005);
+    assert!((volume(&mut h.state_mut().state) - VOLUME_120).abs() < 0.005);
 
     // The visible command opens the window on the live table.
     open_grid(&mut h);
@@ -389,7 +394,7 @@ fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
     let st = &mut h.state_mut().state;
     let depth = st.doc.undo_depth();
     assert_eq!(depth, start.journal["undo"].as_array().unwrap().len() + 1);
-    assert!((volume(st) - 165369.02664470769).abs() < 0.005);
+    assert!((volume(st) - VOLUME_130).abs() < 0.005);
     let grid = call(st, "configuration_grid", json!({}));
     assert_eq!(grid["rows"][1]["cells"], json!(["130 mm", "", "", ""]));
     assert_eq!(grid["resolved"][1]["values"][1]["value"], 65.0);
@@ -411,7 +416,7 @@ fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
     assert_eq!(rows[1], json!(["120", "", "", ""]));
     assert_eq!(rows[0], json!(["140", "plate_w / 2", "12", FAMILY]));
     assert_eq!(rows[2], json!(["152.4 mm", "", "", WIDE]));
-    assert!((volume(st) - 151869.02664470769).abs() < 0.005);
+    assert!((volume(st) - VOLUME_120).abs() < 0.005);
     assert_eq!(st.doc.model().geometry_hash().to_string(), start.geometry);
     let _ = std::fs::remove_dir_all(&config);
 }
