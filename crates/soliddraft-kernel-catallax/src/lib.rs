@@ -32,7 +32,7 @@ use soliddraft_kernel_api::*;
 pub use diagnostics::{RequestWork, with_request_allowance};
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "1599a8db3a8cc45be8f87e8ab085be72fb938ef6";
+pub const CATALLAX_REVISION: &str = "25883191687914a3c03b954b620e0c425cc7f224";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -756,8 +756,8 @@ impl Kernel for CatallaxKernel {
     fn hole(&self, tag: &OpTag, body: BodyId, params: &Hole) -> KernelResult<OpResult> {
         self.observe("hole", || {
             let state = self.state()?;
-            state.solid(body)?;
-            let native = native::hole(state.step(body)?, params)?;
+            let solid = state.solid(body)?;
+            let native = native::hole(state.step(body)?, &solid, body, params)?;
             self.native(state, tag, OpKind::Hole, body, &[body], native, None)
         })
     }

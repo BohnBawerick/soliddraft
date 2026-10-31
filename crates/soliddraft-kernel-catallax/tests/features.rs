@@ -24,7 +24,7 @@ fn roles(r: &OpResult) -> Vec<FaceRole> {
 }
 
 fn down(point: Vec3) -> HolePlacement {
-    HolePlacement { point, direction: -Vec3::Z }
+    HolePlacement { point, direction: -Vec3::Z, on_face: None }
 }
 
 #[test]
@@ -189,6 +189,64 @@ fn drafts_tilt_planar_faces_about_the_neutral_plane() {
     let record = history.last().unwrap();
     assert!(record.faces.split.iter().any(|s| s.from == side), "the drafted face descends from the side");
     assert!(k.validate(drafted.body).unwrap().valid);
+}
+
+#[test]
+fn a_hole_on_a_tilted_face_keeps_its_exact_centre_and_direction() {
+    let k = CatallaxKernel::new();
+    // A 40 by 30 rectangle along the 3-4-5 direction (0.8, 0.6), with exact corners.
+    let corners = [(0.0, 0.0), (32.0, 24.0), (14.0, 48.0), (-18.0, 24.0)].map(|(u, v)| Point2::new(u, v));
+    let outer = (0..4).map(|i| Segment::Line { from: corners[i], to: corners[(i + 1) % 4] }).collect();
+    let profile = Profile { plane: Plane::XY, outer: Loop(outer), holes: vec![] };
+    let sheet = k.create_body_from_profile(&OpTag::new("p"), &profile).unwrap().body;
+    let body = k.extrude(&OpTag::new("b"), sheet, &Extrude { distance: 30.0, direction: None }).unwrap().body;
+    let topology = k.topology(body).unwrap();
+    let outward = Vec3::new(-0.6, 0.8, 0.0);
+    let face = topology.faces.iter().find(|f| f.normal.is_some_and(|n| n.distance(outward) < 1e-12)).unwrap();
+    // On this wall the frame's origin is (-18, 24, 0), X is (-0.8, -0.6, 0) and Y is Z, so
+    // the local point (-20, 15) is the wall's centre (-2, 36, 15).
+    let frame = soliddraft_model::plane_on_face(face.normal.unwrap(), face.centroid);
+    let (u, v) = (-20.0, 15.0);
+    let placement = HolePlacement {
+        point: frame.origin + frame.x_dir * u + frame.y_dir() * v,
+        direction: -frame.normal,
+        on_face: Some(FacePoint { face: face.id, u, v }),
+    };
+    assert!(placement.point.distance(Vec3::new(-2.0, 36.0, 15.0)) < 1e-9, "the frames agree");
+    let params = Hole {
+        placements: vec![placement],
+        diameter: 4.0,
+        depth: HoleDepth::Blind { depth: 2.0 },
+        tip: HoleTip::Flat,
+        head: None,
+    };
+    let drilled = k.hole(&OpTag::new("hole"), body, &params).unwrap().body;
+    let recipe = k.body_recipe(drilled).unwrap();
+    let steps = recipe["steps"].as_array().unwrap();
+    let hole = steps.iter().find(|s| s["native"]["op"] == "hole").unwrap();
+    assert_eq!(hole["native"]["at"][0]["point"], serde_json::json!(["-2", "36", "15"]));
+    assert_eq!(hole["native"]["at"][0]["direction"], serde_json::json!(["0.6", "-0.8", "0"]));
+    assert!(k.validate(drilled).unwrap().valid);
+}
+
+#[test]
+fn a_drafted_face_reports_its_own_plane() {
+    let k = CatallaxKernel::new();
+    let b = block(&k, "block", 40.0, 30.0, 0.0, 20.0);
+    let topology = k.topology(b).unwrap();
+    let side = topology.faces.iter().find(|f| f.normal.is_some_and(|n| n.distance(Vec3::X) < 1e-12)).unwrap().id;
+    for angle_deg in [3.0f64, 5.0] {
+        let params = Draft { pull: Vec3::Z, neutral_origin: Vec3::ZERO, neutral_normal: Vec3::Z, angle_deg };
+        let tag = OpTag::new(format!("draft-{angle_deg}"));
+        let drafted = k.draft(&tag, b, &[side], &params).unwrap().body;
+        let (sin, cos) = angle_deg.to_radians().sin_cos();
+        let topology = k.topology(drafted).unwrap();
+        let face = topology.faces.iter().find(|f| f.normal.is_some_and(|n| n.x > 0.5)).unwrap();
+        assert!(face.normal.unwrap().distance(Vec3::new(cos, 0.0, sin)) < 1e-12, "{:?}", face.normal);
+        // The wall leans in from x = 20 at z = 0, so its centre is 10 tan a in at z = 10.
+        let centre = Vec3::new(20.0 - 10.0 * sin / cos, 0.0, 10.0);
+        assert!(face.centroid.distance(centre) < 1e-9, "{:?}", face.centroid);
+    }
 }
 
 #[test]

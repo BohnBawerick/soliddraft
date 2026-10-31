@@ -12,6 +12,7 @@
     "ci/check-lattice-stl.py": ["application-loop"],
     "ci/check-ownership.py": ["lint"],
     "ci/check-registry.json": "all",
+    "ci/check-step-oracle.py": ["application-loop"],
     "ci/check-step.py": ["step-opencascade", "application-loop"],
     "ci/check-unchanged-tests.py": [],
     "ci/compare-scenario-bundles.py": [],

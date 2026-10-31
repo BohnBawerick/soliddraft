@@ -34,3 +34,24 @@ the automatic chord, so it costs far more than the screen view.
 
 Timing is advisory here, as it is for every scenario outside `--strict`. The fillet and
 its edit spend most of their time in the certified display and the exact measurements.
+
+## Clearing the mouths
+
+Steps 17 to 41 continue from the accepted radius 2.5. At radius 0.999 the fillet's rail
+stops 0.001 mm short of every mouth, so the blend is one analytic torus, and its name
+carries no region index. The steps edit to it, undo, redo, save, and reopen in a new
+process with checked STEP. Radius 3.5 refuses and keeps radius 0.999, then an edit returns
+to radius 2.5 and the geometry of step 8.
+
+| State | Faces and kinds | Volume, mm³ |
+| --- | --- | ---: |
+| Radius 0.999 | 15: 3 plane, 7 cylinder, 4 cone, 1 torus | 12511.609716045489 |
+
+## The placed housing
+
+`p5-placed-housing.json` builds the same housing rotated in the sketch plane by the
+3-4-5 quaternion (2,0,0,1) and moved by (7,11,-13), through a sketch on the top plane at
+offset -13 and a revolve about the tilted axis. It uses only existing commands, and its
+28 steps cover radius 2, the radius 2.5 edit, undo, redo, a reopen in a new process with
+checked STEP, and the radius 3.5 refusal. Volumes equal the canonical table above. The
+housing and drilled boxes are checked tight; a fitted body's box is a display estimate.

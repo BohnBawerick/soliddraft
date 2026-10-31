@@ -337,6 +337,96 @@ class SavedGeometry(unittest.TestCase):
                 self.assertIn('8.0.1.1.0', command[2])
 
 
+    def test_checked_step_runs_on_the_scenarios_allowance(self):
+        evidence = {"summary": {"body": {"faces": 6, "edges": 12}},
+                    "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
+        report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True, "work": 5}
+        for request, passed in (({"used": 7, "limit": 20, "exhausted": False}, True),
+                                ({"used": 21, "limit": 20, "exhausted": False}, False),
+                                ({"used": 7, "limit": 20, "exhausted": True}, False),
+                                ({"used": 7, "limit": 19, "exhausted": False}, False), (None, False)):
+            with tempfile.TemporaryDirectory() as temp:
+                directory = pathlib.Path(temp)
+                (directory / "part.step").write_bytes(b"STEP bytes")
+                done = scenarios.subprocess.CompletedProcess([], 0, "", "")
+                replies = [scenarios.subprocess.CompletedProcess(
+                    [], 0, json.dumps({"report": report, "request_work": request}), ""), done, done]
+                with mock.patch.object(scenarios.subprocess, "run", side_effect=replies) as run:
+                    checks = scenarios.checked_step_export("soliddraft", "saved.dwprt", directory, evidence, 5, 20)
+                self.assertEqual(all(c["pass"] for c in checks), passed)
+                self.assertEqual(run.call_args_list[0].args[0][-2:], ["--max-work", "20"])
+
+    def test_checked_step_oracle_runs_after_the_raw_check_and_fails_closed(self):
+        evidence = {"summary": {"body": {"faces": 6, "edges": 12}},
+                    "measurement": {"volume_mm3": 1000, "area_mm2": 600}}
+        report = {"kind": "step", "solids": 1, "faces": 6, "within_tolerance": True}
+        oracle = {"surfaces": {"plane": 6}, "volume": 1000, "inside": [[0, 0, 0]], "outside": [[9, 9, 9]]}
+        for code in (0, 1):
+            with tempfile.TemporaryDirectory() as temp:
+                directory = pathlib.Path(temp)
+                (directory / "part.step").write_bytes(b"STEP bytes")
+                done = scenarios.subprocess.CompletedProcess([], 0, "", "")
+                replies = [scenarios.subprocess.CompletedProcess([], 0, json.dumps({"report": report}), ""), done, done,
+                           scenarios.subprocess.CompletedProcess([], code, "", "FAIL: raw: volume")]
+                with mock.patch.object(scenarios.subprocess, "run", side_effect=replies) as run:
+                    checks = scenarios.checked_step_export(
+                        "soliddraft", "saved.dwprt", directory, evidence, 5, oracle=oracle)
+                self.assertEqual(all(c["pass"] for c in checks), code == 0)
+                self.assertEqual(checks[-1]["check"], "step-oracle")
+                self.assertEqual(json.loads((directory / "step-oracle.json").read_text()), oracle)
+                command = run.call_args_list[-1].args[0]
+                self.assertTrue(command[0].endswith("/.ci-ocp8/bin/python"))
+                self.assertTrue(command[1].endswith("/check-step-oracle.py"))
+
+
+def step_oracle():
+    spec = importlib.util.spec_from_file_location(
+        "check_step_oracle", pathlib.Path(__file__).with_name("check-step-oracle.py"))
+    oracle = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oracle)
+    return oracle
+
+
+class CheckStepOracle(unittest.TestCase):
+    SPEC = {"surfaces": {"plane": 6}, "volume": 1000.0, "fixed": 0.01, "inside": [[0, 0, 0]], "outside": [[9, 9, 9]]}
+
+    def failures(self, *, kinds=None, values=(1000.002, 1000.0005, 1000.0005), valid=True, states=None, spec=None):
+        oracle = step_oracle()
+        states = states or {(0, 0, 0): "inside", (9, 9, 9): "outside"}
+        names = {"OCP": mock.MagicMock(), "OCP.BRepCheck": mock.MagicMock()}
+        names["OCP.BRepCheck"].BRepCheck_Analyzer.return_value.IsValid.return_value = valid
+        with mock.patch.dict(sys.modules, names), \
+                mock.patch.object(oracle, "surfaces", return_value=kinds or {"plane": 6}), \
+                mock.patch.object(oracle, "volumes", return_value=list(values)), \
+                mock.patch.object(oracle, "area", return_value=600.0), \
+                mock.patch.object(oracle, "state", side_effect=lambda _, point: states[tuple(point)]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return oracle.failures("raw", object(), spec or self.SPEC)
+
+    def test_the_expected_solid_passes(self):
+        self.assertEqual(self.failures(), [])
+
+    def test_an_invalid_solid_or_other_surfaces_fail(self):
+        self.assertIn("invalid", self.failures(valid=False)[0])
+        self.assertIn("surfaces", self.failures(kinds={"plane": 5, "spline": 1})[0])
+
+    def test_the_allowance_is_the_fixed_part_plus_the_file_bound_and_the_spread(self):
+        # 0.01 + 600 * 1e-7 = 0.01006, and the spread adds 0.0005.
+        self.assertEqual(self.failures(values=(1000.0, 1000.0005, 1000.0005)), [])
+        self.assertEqual(self.failures(values=(1000.01, 1000.0105, 1000.0105)), [])
+        self.assertIn("volume", self.failures(values=(1000.0101, 1000.0101, 1000.0101))[0])
+        self.assertEqual(self.failures(values=(1000.0, 1000.0, 1000.0), spec={**self.SPEC, "floor": 1.0}), [])
+
+    def test_an_unconverged_volume_fails(self):
+        self.assertIn("converge", self.failures(values=(1000.0, 1000.0, 1000.001))[0])
+
+    def test_a_point_on_the_wrong_side_or_undecided_fails(self):
+        for state in ("outside", "boundary"):
+            found = self.failures(states={(0, 0, 0): state, (9, 9, 9): "outside"})
+            self.assertEqual(len(found), 1)
+            self.assertIn("expected inside", found[0])
+
+
 class Latency(unittest.TestCase):
     @staticmethod
     def call(name, elapsed, operations=(), *, nested=False, refused=False, work=None, foreground=True):
@@ -742,6 +832,37 @@ class RunnerEndToEnd(unittest.TestCase):
         self.assertTrue(separate)
         report, _ = self.run_fresh("g0")
         self.assertFalse(report["pass"])
+
+    def test_a_fresh_process_step_runs_after_the_old_process_exits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            log = root / "log"
+            scenario = root / "scenario.json"
+            scenario.write_text(json.dumps({"format": "soliddraft-scenario/1", "name": "synthetic-gate", "steps": [
+                {"tool": "save", "arguments": {}},
+                {"tool": "open", "arguments": {}, "fresh_process": True},
+                {"tool": "feature", "arguments": {}, "same_geometry_as_step": 1}]}))
+            args = argparse.Namespace(scenario=scenario, out=root / "run", soliddraft=str(FAKE),
+                                      catallax_verify="unused", timeout=30, strict=False)
+            info = {"pass": True, "geometry_hash": "same"}
+            with mock.patch.dict(os.environ, {"FAKE_MODE": "ok", "FAKE_PIN": scenarios.pinned_revision(),
+                                              "FAKE_LOG": str(log)}), \
+                    mock.patch.object(scenarios, "load_known_over_budget", return_value={}), \
+                    mock.patch.object(scenarios, "same_geometry", return_value=info) as same, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                code = scenarios.run(args)
+            report = json.loads((args.out / "result.json").read_text())
+            events = [line.split() for line in log.read_text().splitlines()]
+            self.assertEqual(code, 0, report)
+            self.assertEqual([event for _, event in events], ["save", "exit", "open", "feature", "exit"])
+            self.assertEqual(events[0][0], events[1][0])
+            self.assertEqual(events[2][0], events[4][0])
+            self.assertNotEqual(events[0][0], events[2][0])
+            self.assertTrue((args.out / "commands/0001/command.json").exists())
+            self.assertTrue((args.out / "commands-1/0001/command.json").exists())
+            self.assertEqual(same.call_args.args[1:3], (args.out / "commands-1/0002", args.out / "commands/0001"))
+            methods = [entry["request"]["method"] for entry in json.loads((args.out / "protocol.json").read_text())]
+            self.assertEqual(methods.count("initialize"), 2)
 
     def test_only_the_declared_field_view_refusal_is_accepted(self):
         for mode, declared, expected in [("field-view", True, True), ("field-view", False, False),
