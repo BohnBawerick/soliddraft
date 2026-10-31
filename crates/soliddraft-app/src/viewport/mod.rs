@@ -11,6 +11,7 @@ pub mod offscreen;
 pub mod pick;
 pub mod render;
 
+use crate::dimension_edit::DimensionAction;
 use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
 use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Routed, Router, ZoomAnchor};
@@ -57,6 +58,8 @@ pub struct Overlay<'a> {
     pub sketch: Option<&'a mut SketchSession>,
     /// A closed sketch to show quietly on its plane.
     pub passive_sketch: Option<(Plane, &'a Sketch)>,
+    /// The feature value being typed at its dimension.
+    pub dimension_edit: Option<&'a mut crate::dimension_edit::DimensionEdit>,
 }
 
 pub struct ViewportState {
@@ -178,7 +181,7 @@ impl ViewportState {
         hover_label: Option<&str>,
         nav: &NavigationSettings,
     ) -> ViewportEvents {
-        let Overlay { ghost, preview, sketch, passive_sketch } = overlay;
+        let Overlay { ghost, preview, sketch, passive_sketch, dimension_edit } = overlay;
         let pick_revision = Some((doc.model().id(), doc.mesh_version, doc.display_body()));
         let provisional = doc.provisional_mesh();
         let preview_pickable =
@@ -275,8 +278,8 @@ impl ViewportState {
         }
         self.paint_highlights(&painter, doc, selection, rect);
         // A selected body shows the dimensions that build it. A click on one keeps the
-        // body selected and a double-click edits it; a double-click on the part selects
-        // the body.
+        // body selected and a double-click edits it, at the dimension when it is a value
+        // the viewport can take; a double-click on the part selects the body.
         let pointer = response.hover_pos();
         let dims = if selection == Some(Selection::Body) && !sketching {
             dimensions::paint(&painter, &self.camera, rect, doc, pointer)
@@ -287,7 +290,7 @@ impl ViewportState {
             events.clicked = None;
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             if response.double_clicked_by(egui::PointerButton::Primary) {
-                events.actions.push(AppAction::EditDimension(d.target));
+                events.actions.push(d.edit_action());
             }
             response.clone().on_hover_text_at_pointer(format!("{} · double-click to edit", d.tip));
         } else if response.double_clicked_by(egui::PointerButton::Primary)
@@ -297,6 +300,18 @@ impl ViewportState {
         {
             events.clicked = None;
             events.actions.push(AppAction::Select(Some(Selection::Body)));
+        }
+        for (i, d) in dims.iter().enumerate() {
+            d.expose(ui, i);
+        }
+        if let Some(edit) = dimension_edit {
+            // The value goes when its dimension does, or when the part changes under it.
+            match dims.iter().find(|d| d.is_field(edit.feature, edit.field)) {
+                Some(d) if edit.revision == doc.revision() => {
+                    dimensions::value_editor(ui, &painter, rect, d.rect, edit, &mut events.actions);
+                }
+                _ => events.actions.push(AppAction::Dimension(DimensionAction::Cancel)),
+            }
         }
         self.dimensions = dims;
         self.paint_hud(ui, rect, &mut events);

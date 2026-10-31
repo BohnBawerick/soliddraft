@@ -2,15 +2,17 @@
 //! applications show a feature's dimensions on selection: every dimension of the
 //! sketches the body's features consume, on their planes, and each feature's own values
 //! (depth, angle, radius, count and so on) at the feature. Double-clicking one edits it:
-//! a sketch dimension in its sketch's value editor, a feature value in the feature's
-//! editor.
+//! a sketch dimension in its sketch's value editor, an extrude's sizes and depth in a
+//! field right there, and other feature values in the feature's editor.
 
 use super::camera::Camera;
+use crate::dimension_edit::{DimensionAction, DimensionEdit, FeatureField};
 use crate::document::{Document, EndKind, Feature, FeatureId, FeatureKind, FeatureStatus, ProfileKind, fmt_mm};
-use crate::sketch::{ConstraintId, P2, Sketch};
-use crate::sketcher::{arrow, paint_closed_dimensions, value_pill};
+use crate::sketch::{ConstraintId, ConstraintKind, DistanceKind, P2, Sketch};
+use crate::sketcher::{arrow, dim_text, paint_closed_dimensions, value_pill};
+use crate::state::AppAction;
 use crate::theme;
-use egui::{Color32, Pos2, Rect, Stroke, vec2};
+use egui::{Color32, CornerRadius, Pos2, Rect, Sense, Stroke, vec2};
 use glam::Vec3;
 use soliddraft_kernel_api::{HoleDepth, HoleHead, HoleTip, Plane, Point2};
 use soliddraft_model as model;
@@ -21,7 +23,8 @@ use std::collections::HashMap;
 pub enum DimensionTarget {
     /// A dimension of a sketch, edited in the sketch.
     Sketch { sketch: FeatureId, constraint: ConstraintId },
-    /// A value of a feature, edited in the feature's editor.
+    /// A value of a feature, edited in the feature's editor unless the shown dimension
+    /// names its [`FeatureField`], which types it in place.
     Feature(FeatureId),
 }
 
@@ -33,6 +36,46 @@ pub struct ShownDimension {
     pub rect: Rect,
     /// What the hover tip says: the feature and the value's name.
     pub tip: String,
+    /// The value as painted.
+    pub text: String,
+    /// Which of the feature's values this is, when the viewport can take it.
+    pub field: Option<FeatureField>,
+    /// The ends of a depth's dimension line on the model: at the profile and at the depth
+    /// reached.
+    pub witness: Option<[Vec3; 2]>,
+}
+
+impl ShownDimension {
+    /// What a double-click on the value does.
+    pub fn edit_action(&self) -> AppAction {
+        match (self.target, self.field) {
+            (DimensionTarget::Feature(feature), Some(field)) => {
+                AppAction::Dimension(DimensionAction::Open { feature, field })
+            }
+            (target, _) => AppAction::EditDimension(target),
+        }
+    }
+
+    pub fn is_field(&self, feature: FeatureId, field: FeatureField) -> bool {
+        self.target == DimensionTarget::Feature(feature) && self.field == Some(field)
+    }
+
+    /// Names the painted value for assistive tools and automation.
+    pub fn expose(&self, ui: &egui::Ui, index: usize) {
+        let label = format!("{} {}", self.tip, self.text);
+        ui.interact(self.rect, ui.id().with(("dimension", index)), Sense::hover())
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, label.clone()));
+    }
+}
+
+/// The field of a built-in profile that a dimension of its sketch shows.
+fn profile_field(kind: ConstraintKind) -> Option<FeatureField> {
+    match kind {
+        ConstraintKind::Distance { kind: DistanceKind::Horizontal, .. } => Some(FeatureField::Width),
+        ConstraintKind::Distance { kind: DistanceKind::Vertical, .. } => Some(FeatureField::Height),
+        ConstraintKind::Radius { diameter: true, .. } => Some(FeatureField::Diameter),
+        _ => None,
+    }
 }
 
 fn gv(v: soliddraft_kernel_api::Vec3) -> Vec3 {
@@ -61,13 +104,23 @@ pub fn paint(
         |shown: &mut Vec<ShownDimension>, f: &Feature, plane: Plane, sketch: &Sketch, edit_sketch: bool| {
             let taken: Vec<Rect> = shown.iter().map(|d| d.rect).collect();
             for (constraint, r) in paint_closed_dimensions(painter, camera, rect, plane, sketch, &taken, pointer) {
-                let name = sketch.constraint(constraint).map(|c| c.name()).unwrap_or("Dimension");
+                let c = sketch.constraint(constraint);
                 let target = if edit_sketch {
                     DimensionTarget::Sketch { sketch: f.id, constraint }
                 } else {
                     DimensionTarget::Feature(f.id)
                 };
-                shown.push(ShownDimension { target, rect: r, tip: format!("{} · {name}", f.name) });
+                // A built-in profile's sizes are the extrude's own values.
+                let field = c.and_then(|c| profile_field(c.kind)).filter(|_| !edit_sketch);
+                let name = field.map(FeatureField::label).or(c.map(|c| c.name())).unwrap_or("Dimension");
+                shown.push(ShownDimension {
+                    target,
+                    rect: r,
+                    tip: format!("{} · {name}", f.name),
+                    text: c.map(dim_text).unwrap_or_default(),
+                    field,
+                    witness: None,
+                });
             }
         };
     for f in &built {
@@ -121,19 +174,31 @@ pub fn paint(
                     continue;
                 }
                 let Some(at) = anchors.get(&(f.id as u32)).copied().or_else(|| body_centre(doc)) else { continue };
-                for r in paint_leader(painter, camera, rect, at, values, pointer) {
-                    shown.push(ShownDimension { target: DimensionTarget::Feature(f.id), rect: r, tip: f.name.clone() });
+                let texts = values.clone();
+                for (r, text) in paint_leader(painter, camera, rect, at, values, pointer).into_iter().zip(texts) {
+                    shown.push(ShownDimension {
+                        target: DimensionTarget::Feature(f.id),
+                        rect: r,
+                        tip: f.name.clone(),
+                        text,
+                        field: None,
+                        witness: None,
+                    });
                 }
             }
         }
         let taken: Vec<Rect> = shown.iter().map(|d| d.rect).collect();
         if let Some((plane, sk, value)) = depth
-            && let Some(r) = paint_depth(painter, camera, rect, plane, sk, value, &taken, pointer)
+            && let Some((r, witness)) = paint_depth(painter, camera, rect, plane, sk, value, &taken, pointer)
         {
             shown.push(ShownDimension {
                 target: DimensionTarget::Feature(f.id),
                 rect: r,
                 tip: format!("{} · Depth", f.name),
+                text: fmt_mm(value.abs()),
+                // A cut's depth keeps the cut's editor for now.
+                field: FeatureField::Depth.get(&f.kind).map(|_| FeatureField::Depth),
+                witness: Some(witness),
             });
         }
     }
@@ -255,7 +320,7 @@ fn paint_depth(
     depth: f64,
     taken: &[Rect],
     pointer: Option<Pos2>,
-) -> Option<Rect> {
+) -> Option<(Rect, [Vec3; 2])> {
     let dir = P2::new(-1.0, 1.0).normalized();
     let corner = sketch
         .drawn()
@@ -297,5 +362,80 @@ fn paint_depth(
         arrow(painter, bo, -d, color);
         arrow(painter, to, d, color);
     }
-    Some(pill(painter, at, text, pointer).0)
+    Some((pill(painter, at, text, pointer).0, [base + out, top + out]))
+}
+
+/// The field where a value is typed, over its dimension in the viewport. It stays inside
+/// `view`, on a short leader when that moves it off the dimension, and a refused value
+/// says why right under it. Enter submits; Escape or a click elsewhere gives up.
+pub fn value_editor(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    view: Rect,
+    at: Rect,
+    edit: &mut DimensionEdit,
+    actions: &mut Vec<AppAction>,
+) {
+    /// About the field's size, to centre it on the dimension.
+    const SIZE: egui::Vec2 = vec2(110.0, 30.0);
+    let mut submitted = false;
+    let area = egui::Area::new(egui::Id::new("dimension_value"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(at.center() - SIZE / 2.0)
+        .constrain_to(view.shrink(4.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::new()
+                .fill(theme::panel())
+                .stroke(Stroke::new(1.0, theme::accent()))
+                .corner_radius(CornerRadius::same(7))
+                .shadow(ui.style().visuals.popup_shadow)
+                .inner_margin(egui::Margin::symmetric(8, 5))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let field = egui::TextEdit::singleline(&mut edit.text)
+                            .id(egui::Id::new("dimension_value_text"))
+                            .desired_width(60.0)
+                            .font(theme::font_medium(12.5))
+                            .show(ui);
+                        let resp = field.response.response;
+                        let name = format!("{} dimension value", edit.field.label());
+                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, name.clone()));
+                        if edit.focus {
+                            edit.focus = false;
+                            resp.request_focus();
+                            let mut state = field.state;
+                            let all = egui::text::CCursorRange::select_all(&field.galley);
+                            state.cursor.set_char_range(Some(all));
+                            state.store(ui.ctx(), resp.id);
+                        }
+                        ui.label(egui::RichText::new("mm").size(11.0).italics().color(theme::muted()));
+                        if resp.lost_focus() {
+                            submitted = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            if !submitted {
+                                actions.push(AppAction::Dimension(DimensionAction::Cancel));
+                            }
+                        }
+                    });
+                    if let Some(error) = &edit.error {
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(error).size(11.0).color(theme::error()))
+                                .wrap_mode(egui::TextWrapMode::Extend),
+                        );
+                    }
+                });
+        });
+    if submitted {
+        match edit.typed() {
+            Ok(Some(value)) => actions.push(AppAction::Dimension(DimensionAction::Commit(value))),
+            Ok(None) => actions.push(AppAction::Dimension(DimensionAction::Cancel)),
+            Err(message) => {
+                edit.error = Some(message);
+                edit.focus = true;
+            }
+        }
+    }
+    if !area.response.rect.contains(at.center()) {
+        let end = area.response.rect.clamp(at.center());
+        painter.line_segment([at.center(), end], Stroke::new(1.0, theme::accent()));
+    }
 }

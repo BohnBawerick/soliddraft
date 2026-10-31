@@ -993,7 +993,7 @@ fn label_rects(frame: &Frame<'_>, sketch: &Sketch, ui: &egui::Ui) -> Vec<(Constr
         .collect()
 }
 
-fn dim_text(c: &Constraint) -> String {
+pub(crate) fn dim_text(c: &Constraint) -> String {
     match c.kind {
         ConstraintKind::Radius { value, diameter: true, .. } => format!("Ø{}", fmt_value(value)),
         ConstraintKind::Radius { value, diameter: false, .. } => format!("R{}", fmt_value(value)),

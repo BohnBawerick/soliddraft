@@ -1615,11 +1615,14 @@ fn registry() -> Vec<CommandSpec> {
             "cancel",
             "Cancel",
             Icon::Close,
-            "Cancel a drag or the open feature, leave the sketch, or clear the selection",
+            "Cancel a typed value, a drag or the open feature, leave the sketch, or clear the selection",
         )
         .key(Scope::Part, none, Key::Escape)
         .run(|s| {
-            if s.drawing.new.is_some() {
+            if s.dimension_edit.is_some() {
+                // Escape takes the keyboard from a text field before the shortcuts run.
+                AppAction::Dimension(crate::dimension_edit::DimensionAction::Cancel)
+            } else if s.drawing.new.is_some() {
                 AppAction::Drawing(DrawingAction::CancelNewDrawing)
             } else if s.editor.is_some() {
                 AppAction::CancelEditor

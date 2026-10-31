@@ -132,6 +132,8 @@ pub enum AppAction {
     DragDimension(DragStep),
     /// Opens a dimension the selected body shows for editing.
     EditDimension(crate::viewport::dimensions::DimensionTarget),
+    /// Shows dimensions in the viewport and types a value at one of them.
+    Dimension(crate::dimension_edit::DimensionAction),
 }
 
 /// The steps of a drag of a feature's dimension, in the order a drag makes them.
@@ -525,6 +527,8 @@ pub struct AppState {
     pub drag_feature: Option<FeatureId>,
     /// The feature dimension being dragged, with its previews.
     pub drag_preview: Option<DragPreview>,
+    /// The feature value being typed at its dimension in the viewport.
+    pub dimension_edit: Option<crate::dimension_edit::DimensionEdit>,
     pub drag_rollback: bool,
     /// The feature whose row the tree last scrolled to.
     pub tree_followed: Option<FeatureId>,
@@ -577,6 +581,7 @@ impl AppState {
             rename: None,
             drag_feature: None,
             drag_preview: None,
+            dimension_edit: None,
             drag_rollback: false,
             tree_followed: None,
             recent: crate::file::recent(),

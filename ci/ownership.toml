@@ -43,6 +43,13 @@ paths = ["crates/soliddraft-app/src/commands.rs"]
 module = ["commands"]
 
 [[areas]]
+name = "app.dimension_edit"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/dimension_edit.rs"]
+module = ["dimension_edit"]
+
+[[areas]]
 name = "app.display_quality"
 owner = "core"
 crate = "soliddraft-app"

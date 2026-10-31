@@ -513,6 +513,7 @@ impl SolidDraftApp {
                     }
                 }
             },
+            AppAction::Dimension(action) => self.state.dimension(action),
             AppAction::Select(sel) => {
                 // Editors that collect picks take the click instead of selecting.
                 if let Some(e) = self.state.editor.as_mut() {
