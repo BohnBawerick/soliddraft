@@ -557,8 +557,11 @@ def export_check(args, directory, spec, previous):
     stand_in = spec.get("stand_in", False)
     path = directory / ("stand-in.step" if stand_in else f"part.{extension}")
     label = "export-stand-in" if stand_in else f"export-{extension}"
+    # A ceiling runs the fresh process's whole request, opening and rebuilding the part
+    # included, on one allowance, and the CLI reports what it used.
+    ceiling = ["--max-work", spec["max_work"]] if "max_work" in spec else []
     exported = cli(args.soliddraft, ["export", directory / "part.dwprt", "--json",
-                                     "--stand-in" if stand_in else "--out", path],
+                                     "--stand-in" if stand_in else "--out", path, *ceiling],
                    directory, label, args.timeout)
     if "refused" in spec:
         exported["pass"] = (exported["exit"] != 0 and not path.exists() and
@@ -575,6 +578,13 @@ def export_check(args, directory, spec, previous):
             exported["checks"].append({"check": "export work within the application allowance",
                                        "work": value["report"].get("work"), "ceiling": spec["max_work"],
                                        "pass": 0 < value["report"].get("work", 0) <= spec["max_work"]})
+            request = value.get("request_work") or {}
+            exported["checks"].append({"check": "fresh open, rebuild and export within one allowance",
+                                       "request_work": request, "ceiling": spec["max_work"],
+                                       "pass": request.get("limit") == spec["max_work"]
+                                               and request.get("exhausted") is False
+                                               and value["report"].get("work", 0) <= request.get("used", 0)
+                                               <= spec["max_work"]})
         if stand_in:
             exported["checks"].append({"check": "stand-in report describes the written bytes",
                                        "pass": value["report"].get("sha256") == exported["sha256"]})

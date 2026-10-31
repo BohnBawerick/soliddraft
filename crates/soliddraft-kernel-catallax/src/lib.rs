@@ -27,6 +27,8 @@ use catallax_recipe::StepId;
 use serde_json::{Value, json};
 use soliddraft_kernel_api::*;
 
+pub use diagnostics::{RequestWork, with_request_allowance};
+
 /// The pinned Catallax application entry revision.
 pub const CATALLAX_REVISION: &str = "659259eedbd0f156ab601784f29f42e87e419c76";
 

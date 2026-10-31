@@ -8,12 +8,12 @@ use serde_json::json;
 use soliddraft_document::DocKind;
 use soliddraft_exchange::{Export, Format, Report};
 use soliddraft_kernel_api::Kernel;
-use soliddraft_kernel_catallax::CatallaxKernel;
+use soliddraft_kernel_catallax::{CatallaxKernel, RequestWork};
 use soliddraft_model::Document;
 use soliddraft_tessellation::ExportTolerance;
 
 pub(crate) const USAGE: &str = "\
-usage: soliddraft export <part.dwprt | recipe.json> --out <file>... [--stand-in <file.step>] [--json]
+usage: soliddraft export <part.dwprt | recipe.json> --out <file>... [--stand-in <file.step>] [--max-work <units>] [--json]
 
 Exports a part file, rebuilt on the Catallax kernel, or a recipe's result. The
 extension of each --out file picks its format:
@@ -36,6 +36,9 @@ whose proven moments lie inside the field's, never the field's boundary.
 
   --out       a file to write; repeat it for several formats
   --stand-in  a .step file for a field part's mass stand-in
+  --max-work  run the whole request, opening and rebuilding the part included,
+              on one deterministic work allowance; refuse and write nothing
+              when it runs out. --json reports the work used
   --json      print one JSON export report per file
 ";
 
@@ -45,14 +48,20 @@ struct Args {
     input: PathBuf,
     outputs: Vec<(PathBuf, Format)>,
     json: bool,
+    max_work: Option<u64>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let (mut input, mut outputs, mut json) = (None, Vec::new(), false);
+    let (mut input, mut outputs, mut json, mut max_work) = (None, Vec::new(), false, None);
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--json" => json = true,
+            "--max-work" => {
+                let value = it.next().ok_or("--max-work needs a number of units")?;
+                max_work =
+                    Some(value.parse().map_err(|_| format!("--max-work {value}: give a whole number of units"))?);
+            }
             "--out" => {
                 let path = PathBuf::from(it.next().ok_or("--out needs a file")?);
                 let format = Format::of_path(&path)
@@ -75,7 +84,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
     if outputs.is_empty() {
         return Err("no --out file given".into());
     }
-    Ok(Args { input, outputs, json })
+    Ok(Args { input, outputs, json, max_work })
 }
 
 pub(crate) fn run(args: &[String]) -> ExitCode {
@@ -96,6 +105,19 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
 }
 
 fn export(a: &Args) -> Result<(), String> {
+    let Some(limit) = a.max_work else { return build(a).and_then(|exports| publish(a, &exports, None)) };
+    let (exports, work) = soliddraft_kernel_catallax::with_request_allowance(limit, || build(a));
+    if work.exhausted {
+        return Err(format!(
+            "{}: numbers.operation-budget: the request's {limit}-unit work allowance ran out",
+            a.input.display()
+        ));
+    }
+    publish(a, &exports?, Some(work))
+}
+
+/// Opens or builds the input and makes every requested file, writing nothing.
+fn build(a: &Args) -> Result<Vec<Export>, String> {
     let kernel: Arc<dyn Kernel> = Arc::new(CatallaxKernel::new());
     let at = |e: String| format!("{}: {e}", a.input.display());
     let exports = match DocKind::of_path(&a.input) {
@@ -117,10 +139,10 @@ fn export(a: &Args) -> Result<(), String> {
                 .map_err(|e| at(e.to_string()))?
         }
     };
-    publish(a, &exports)
+    Ok(exports)
 }
 
-fn publish(a: &Args, exports: &[Export]) -> Result<(), String> {
+fn publish(a: &Args, exports: &[Export], work: Option<RequestWork>) -> Result<(), String> {
     // A successful kernel call can still report a bound over the requested tolerance.
     // Validate the whole batch before creating or replacing any destination.
     for ((path, _), out) in a.outputs.iter().zip(exports) {
@@ -136,7 +158,7 @@ fn publish(a: &Args, exports: &[Export]) -> Result<(), String> {
     }
     for ((path, format), out) in a.outputs.iter().zip(exports) {
         write(path, out)?;
-        report(path, *format, out, a.json);
+        report(path, *format, out, a.json, work);
     }
     Ok(())
 }
@@ -145,9 +167,13 @@ fn write(path: &Path, out: &Export) -> Result<(), String> {
     soliddraft_document::save_atomic(path, &out.bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
-fn report(path: &Path, format: Format, out: &Export, json: bool) {
+fn report(path: &Path, format: Format, out: &Export, json: bool, work: Option<RequestWork>) {
     if json {
-        println!("{}", json!({"file": path, "format": format, "bytes": out.bytes.len(), "report": out.report}));
+        let mut line = json!({"file": path, "format": format, "bytes": out.bytes.len(), "report": out.report});
+        if let Some(work) = work {
+            line["request_work"] = json!({"used": work.used, "limit": work.limit, "exhausted": work.exhausted});
+        }
+        println!("{line}");
     } else {
         println!("{}: {}, {}", path.display(), format.name(), out.report.summary());
     }
@@ -173,6 +199,8 @@ mod tests {
         let a = parse(&args("part.dwprt --stand-in mass.stp --out part.stl")).unwrap();
         assert_eq!(a.outputs.iter().map(|(_, f)| *f).collect::<Vec<_>>(), [Format::StandIn, Format::Stl]);
         assert!(parse(&args("part.dwprt --stand-in mass.stl")).unwrap_err().contains(".step or .stp"));
+        assert_eq!(parse(&args("part.dwprt --out p.stl --max-work 19999999")).unwrap().max_work, Some(19_999_999));
+        assert!(parse(&args("part.dwprt --out p.stl --max-work lots")).unwrap_err().contains("whole number"));
     }
 
     #[test]
@@ -185,6 +213,7 @@ mod tests {
             input: "unused.json".into(),
             outputs: vec![(first.clone(), Format::Stl), (second.clone(), Format::Step)],
             json: true,
+            max_work: None,
         };
         let step = |within_tolerance| Export {
             bytes: b"must not be published".to_vec(),
@@ -215,7 +244,7 @@ mod tests {
             }),
         };
         let exports = [mesh, step(false)];
-        let error = publish(&a, &exports).unwrap_err();
+        let error = publish(&a, &exports, None).unwrap_err();
         assert!(error.contains("second.step"));
         assert!(error.contains("0.001"));
         assert!(error.contains("exceeds the requested tolerance"));
@@ -224,7 +253,7 @@ mod tests {
 
         std::fs::write(&first, b"existing first").unwrap();
         std::fs::write(&second, b"existing second").unwrap();
-        assert!(publish(&a, &exports).is_err());
+        assert!(publish(&a, &exports, None).is_err());
         assert_eq!(std::fs::read(&first).unwrap(), b"existing first");
         assert_eq!(std::fs::read(&second).unwrap(), b"existing second");
 
@@ -232,7 +261,7 @@ mod tests {
         let first = dir.join("first.step");
         let a = Args { outputs: vec![(first.clone(), Format::Step), (second.clone(), Format::Step)], ..a };
         let accepted = [step(true), step(true)];
-        publish(&a, &accepted).unwrap();
+        publish(&a, &accepted, None).unwrap();
         assert_eq!(std::fs::read(&first).unwrap(), accepted[0].bytes);
         assert_eq!(std::fs::read(&second).unwrap(), accepted[1].bytes);
         std::fs::remove_dir_all(dir).unwrap();
