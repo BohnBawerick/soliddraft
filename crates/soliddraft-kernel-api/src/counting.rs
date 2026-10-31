@@ -50,6 +50,19 @@ impl Counting {
 }
 
 impl Kernel for Counting {
+    fn propose_import(&self, source: &[u8], options: &crate::ImportOptions) -> KernelResult<crate::ProposalSet> {
+        self.inner.propose_import(source, options)
+    }
+
+    fn import_step(
+        &self,
+        tag: &OpTag,
+        request: &crate::ImportStepRequest<'_>,
+    ) -> KernelResult<crate::ImportStepResult> {
+        self.op(tag);
+        self.inner.import_step(tag, request)
+    }
+
     fn backend(&self) -> BackendInfo {
         self.inner.backend()
     }

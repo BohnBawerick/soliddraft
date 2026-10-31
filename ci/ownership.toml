@@ -405,3 +405,10 @@ owner = "V4"
 crate = "soliddraft-assembly"
 paths = ["crates/soliddraft-assembly/"]
 module = []
+
+[[areas]]
+name = "v9.import"
+owner = "V9"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/import/"]
+module = ["import"]

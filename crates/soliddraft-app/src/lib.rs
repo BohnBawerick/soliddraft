@@ -23,6 +23,7 @@ pub mod file;
 pub mod fillet_collect;
 mod grid;
 pub mod icons;
+pub mod import;
 pub mod journal;
 #[cfg(target_arch = "wasm32")]
 pub mod journal_browser;

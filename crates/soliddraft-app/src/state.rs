@@ -100,6 +100,7 @@ pub enum AppAction {
     NewPart,
     /// `None` asks with a file dialog.
     Open(Option<PathBuf>),
+    ImportStep(Option<PathBuf>),
     Save,
     SaveAs(Option<PathBuf>),
     /// Exports the part's body. `None` asks with a file dialog.
@@ -540,6 +541,7 @@ pub struct AppState {
     /// The open command palette.
     pub palette: Option<crate::palette::Palette>,
     /// The open Provider dialog.
+    pub import_dialog: Option<crate::import::Preview>,
     pub provider_dialog: Option<crate::chat::ProviderDialog>,
     /// The open File locations page.
     pub locations_dialog: Option<crate::locations::LocationsDialog>,
@@ -598,6 +600,7 @@ impl AppState {
             show_about: false,
             show_shortcuts: false,
             palette: None,
+            import_dialog: None,
             provider_dialog: None,
             locations_dialog: None,
             locations_epoch: 0,

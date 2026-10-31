@@ -774,9 +774,19 @@ impl SolidDraftApp {
                 self.close_editor();
                 self.state.sketch = None;
                 self.state.chat.preview = None;
+                self.state.import_dialog = None;
                 self.state.doc = crate::new_document();
                 self.state.viewport.camera.fit(None);
                 self.state.note("New part", NoteKind::Info);
+            }
+            AppAction::ImportStep(path) => {
+                let path = path.or_else(|| crate::platform::open_path("Import STEP", "STEP", &["step", "stp"]));
+                if let Some(path) = path {
+                    match crate::import::Preview::read(&self.state.doc, &path) {
+                        Ok(preview) => self.state.import_dialog = Some(preview),
+                        Err(message) => self.state.note(message, NoteKind::Error),
+                    }
+                }
             }
             AppAction::Open(path) => {
                 let path =
@@ -791,6 +801,9 @@ impl SolidDraftApp {
                     }
                     _ => {
                         let opened = file::open(&path, self.state.doc.kernel().clone(), Some(self.state.doc.model()));
+                        if opened.is_ok() {
+                            self.state.import_dialog = None;
+                        }
                         self.opened(opened);
                     }
                 }

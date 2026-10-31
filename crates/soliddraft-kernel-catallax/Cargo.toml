@@ -11,7 +11,9 @@ publish.workspace = true
 [dependencies]
 soliddraft-kernel-api.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 sha2.workspace = true
+catallax-import = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 catallax-app = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 catallax-mesh = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 catallax-numbers = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
@@ -25,6 +27,7 @@ catallax-field = { git = "https://github.com/BohnBawerick/catallax", rev = "6592
 catallax-features = { git = "https://github.com/BohnBawerick/catallax", rev = "659259eedbd0f156ab601784f29f42e87e419c76" }
 
 [dev-dependencies]
+soliddraft-model.workspace = true
 soliddraft-recipe.workspace = true
 soliddraft-kernel-api = { workspace = true, features = ["contract"] }
 

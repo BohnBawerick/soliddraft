@@ -2353,6 +2353,14 @@ impl CommandTools<'_> {
     pub fn summary(&self) -> Value {
         let doc = &*self.doc;
         let (lo, hi) = doc.bounds().unwrap_or((Vec3::ZERO, Vec3::ZERO));
+        let imported =
+            doc.features.iter().any(|f| matches!(&f.kind, FeatureKind::ImportStep(_)) && f.status == FeatureStatus::Ok);
+        // A repair smaller than 0.01 mm must remain visible in the imported bounds.
+        let bounds = if imported {
+            json!({"min": lo.to_array(), "max": hi.to_array()})
+        } else {
+            json!({"min": vec3(lo), "max": vec3(hi)})
+        };
         let proof = doc.proof_state();
         let current = proof.current_proved_display();
         let mass = if current && doc.model().active_field().is_none() { cached_body_mass(doc) } else { None };
@@ -2371,13 +2379,16 @@ impl CommandTools<'_> {
                 }
                 v["name"] = f.name.clone().into();
                 v["status"] = status_text(doc, f.id).into();
+                if let Some(record) = doc.model().import_record(soliddraft_model::FeatureId(f.id as u32)) {
+                    v["record"] = json!(record);
+                }
                 if f.via_assistant {
                     v["via_assistant"] = true.into();
                 }
                 v
             }).collect::<Vec<_>>(),
             "body": {
-                "bounding_box": { "min": vec3(lo), "max": vec3(hi) },
+                "bounding_box": bounds,
                 "volume_mm3": mass.map(|m| round(m.volume)),
                 "area_mm2": mass.map(|m| round(m.area)),
                 "faces": current.then_some(doc.faces.len()),
@@ -2398,6 +2409,9 @@ impl CommandTools<'_> {
         let mut v = params_json(doc, &f.kind);
         v["name"] = f.name.clone().into();
         v["status"] = status_text(doc, id).into();
+        if let Some(record) = doc.model().import_record(soliddraft_model::FeatureId(id as u32)) {
+            v["record"] = json!(record);
+        }
         let topology = doc.display_body().and_then(|b| doc.kernel().topology(b).ok());
         v["faces"] = doc.faces.iter().filter(|x| x.feature == id).map(|x| face_json(doc, x.id)).collect();
         v["edges"] =
@@ -2536,6 +2550,26 @@ impl ToolHost for CommandTools<'_> {
                 let part = crate::drawing::part::PartContext::new(self.doc);
                 drawing.run_journal_command(command, part.as_ref())?;
                 Ok(json!({"status":"applied"}))
+            })(),
+            "preview_import" if mcp => (|| {
+                let preview = crate::import::Preview::read(self.doc, &crate::import::source_path(&input)?)?;
+                Ok(preview.summary())
+            })(),
+            "import_step" if mcp => (|| {
+                let expected = input["preview_token"]
+                    .as_str()
+                    .filter(|token| !token.is_empty())
+                    .ok_or("preview_token is required; review the source with preview_import first")?;
+                let preview = crate::import::Preview::read(self.doc, &crate::import::source_path(&input)?)?;
+                if preview.token() != expected {
+                    return Err(
+                        "the STEP source or repair questions changed since review; run preview_import again".into()
+                    );
+                }
+                let decline: Vec<String> = serde_json::from_value(input.get("decline").cloned().unwrap_or(json!([])))
+                    .map_err(|e| format!("bad decline list: {e}"))?;
+                crate::import::commit(self.doc, &preview, &decline)?;
+                Ok(self.summary())
             })(),
             "model_summary" => Ok(self.summary()),
             "feature" => self.feature(input["name"].as_str().unwrap_or_default()),

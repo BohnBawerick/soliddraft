@@ -181,6 +181,41 @@ class Checks(unittest.TestCase):
         self.assertEqual(scenarios.at({"a/b": [{"~": 2}]}, "/a~1b/0/~0"), 2)
 
 
+class ReviewedArguments(unittest.TestCase):
+    def test_token_is_copied_from_the_preview_evidence(self):
+        step = {"arguments": {"path": "{bundle}/source.step"},
+                "arguments_from": {"preview_token": {"step": 3, "pointer": "/result/token"}}}
+        previous = {3: {"result": {"token": "reviewed source and questions"}}}
+        self.assertEqual(scenarios.step_arguments(step, "/run", previous),
+                         {"path": "/run/source.step", "preview_token": "reviewed source and questions"})
+        with self.assertRaises(KeyError):
+            scenarios.step_arguments(step, "/run", {})
+        with self.assertRaises(KeyError):
+            scenarios.step_arguments(step, "/run", {3: {"result": {}}})
+        step["arguments"]["preview_token"] = "ambiguous literal"
+        with self.assertRaises(ValueError):
+            scenarios.step_arguments(step, "/run", previous)
+
+
+class ExpectedFailedFeature(unittest.TestCase):
+    def test_absent_derivative_and_present_digest(self):
+        self.assertTrue(scenarios.check({}, {"pointer": "/derivative", "absent": True})["pass"])
+        for value in ({"derivative": None}, {"derivative": {"sha256": "a" * 64}}):
+            self.assertFalse(scenarios.check(value, {"pointer": "/derivative", "absent": True})["pass"])
+        self.assertTrue(scenarios.check({"sha256": "a" * 64}, {"pointer": "/sha256", "absent": False})["pass"])
+        self.assertFalse(scenarios.check({}, {"pointer": "/sha256", "absent": False})["pass"])
+
+    def test_only_the_named_failure_with_the_expected_text_passes(self):
+        expected = {"Import1": "not imported until the gap is resolved"}
+        failure = {"name": "Import1", "status": "error: #178 not imported until the gap is resolved"}
+        self.assertTrue(scenarios.rebuilds([failure], [], expected)["pass"])
+        for features in ([dict(failure, status="ok")],
+                         [dict(failure, status="error: another failure")],
+                         [failure, {"name": "Other", "status": "error: broken"}], []):
+            self.assertFalse(scenarios.rebuilds(features, [], expected)["pass"])
+        self.assertFalse(scenarios.rebuilds([failure], [], {"Import1": ""})["pass"])
+
+
 class SavedGeometry(unittest.TestCase):
     def test_recipe_hash_equality_and_missing_hash_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:

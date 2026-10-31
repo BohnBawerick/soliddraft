@@ -387,6 +387,17 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("open", json!({ "path": assembly_file }));
     assert_eq!(s.call("model_summary", json!({}))["assembly"]["active"], true);
 
+    s.call("assembly_show_part", json!({}));
+    s.call("new_part", json!({}));
+    std::fs::write(s.dir.join("source.step"), include_bytes!("../../../ci/fixtures/import/block-seam-4um.step"))
+        .unwrap();
+    let source = s.path("source.step");
+    let preview = s.call("preview_import", json!({"path": source}));
+    let imported = s.call("import_step", json!({"path": source, "preview_token": preview["token"], "decline": []}));
+    assert_eq!(imported["features"][0]["type"], "import_step");
+    s.call("undo", json!({}));
+    s.call("redo", json!({}));
+
     let tools: BTreeSet<String> = tool_specs(Surface::Mcp).into_iter().map(|t| t.name).collect();
     let missed: Vec<_> = tools.difference(&s.ran).collect();
     assert!(missed.is_empty(), "this test calls no {missed:?}; add each to it");

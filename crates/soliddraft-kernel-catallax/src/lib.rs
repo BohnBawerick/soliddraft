@@ -11,6 +11,7 @@ mod drawing_queries;
 mod edge_control;
 mod frames;
 mod identity;
+mod import;
 mod lattice;
 mod measure;
 mod native;
@@ -247,7 +248,12 @@ impl CatallaxKernel {
         }
         let state = self.state()?;
         let stored = state.get(body)?;
-        Ok(json!({"format":"soliddraft-recipe/1", "name":"SolidDraft",
+        let format = if stored.steps.values().any(|s| s["op"] == "import_step") {
+            "catallax-recipe/3"
+        } else {
+            "soliddraft-recipe/1"
+        };
+        Ok(json!({"format":format, "name":"SolidDraft",
             "steps":stored.steps.values().collect::<Vec<_>>(), "result":stored.result}))
     }
 
@@ -577,6 +583,14 @@ fn options(params: &TessellationParams) -> KernelResult<MeshOptions> {
 }
 
 impl Kernel for CatallaxKernel {
+    fn propose_import(&self, source: &[u8], options: &ImportOptions) -> KernelResult<ProposalSet> {
+        self.observe("propose_import", || import::propose(source, options))
+    }
+
+    fn import_step(&self, tag: &OpTag, request: &ImportStepRequest<'_>) -> KernelResult<ImportStepResult> {
+        self.observe("import_step", || self.import_body(tag, request))
+    }
+
     fn backend(&self) -> BackendInfo {
         BackendInfo { name: "catallax".into(), version: CATALLAX_REVISION.into() }
     }

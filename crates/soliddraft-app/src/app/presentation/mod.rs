@@ -119,6 +119,7 @@ impl SolidDraftApp {
             ui.menu_button("File", |ui| {
                 menu_command(ui, st, "new_part", "New part");
                 menu_command(ui, st, "open", "Open…");
+                menu_command(ui, st, "import_step", "Import STEP…");
                 menu_command(ui, st, "make_drawing", "New drawing from part…");
                 menu_command(ui, st, "new_assembly", "New assembly");
                 menu_command(ui, st, "make_assembly", "Make assembly from part");
@@ -409,6 +410,7 @@ impl SolidDraftApp {
         self.assistant_settings(ctx);
         crate::drawing::reference::window(ctx, &mut self.state);
         crate::locations::window(ctx, &mut self.state);
+        crate::import::window(ctx, &mut self.state);
         crate::recovery::window(ctx, &mut self.state);
         #[cfg(target_arch = "wasm32")]
         crate::journal_browser::window(ctx, &mut self.state);

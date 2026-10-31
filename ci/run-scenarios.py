@@ -410,6 +410,12 @@ def at(value, pointer):
 
 def check(value, spec, previous=None):
     try:
+        if isinstance(spec.get("absent"), bool) and len(spec) == 2:
+            try:
+                actual = at(value, spec["pointer"])
+            except KeyError:
+                return {"check": spec, "pass": spec["absent"]}
+            return {"check": spec, "actual": actual, "pass": not spec["absent"]}
         actual = at(value, spec["pointer"])
         comparisons = [key for key in ("equals", "approx", "minimum", "maximum", "length", "contains", "same_as_step", "same_as", "differs_from") if key in spec]
         if len(comparisons) != 1:
@@ -440,16 +446,22 @@ def check(value, spec, previous=None):
         return {"check": spec, "error": str(error), "pass": False}
 
 
-def rebuilds(features, repair):
+def rebuilds(features, repair, failed=None):
     """Every feature builds, except the expected repairs and the features waiting for them."""
+    failed = {} if failed is None else failed
+    expected_failed = {f["name"] for f in features if f["status"].startswith("error:")
+                       and isinstance(failed.get(f["name"]), str) and failed[f["name"]]
+                       and failed[f["name"]] in f["status"]}
     waiting = tuple(f"error: {name} needs repair first" for name in repair)
     broken = [f for f in features if f["status"].startswith(("error", "needs repair"))
         and not (f["name"] in repair and f["status"].startswith("needs repair"))
-        and not f["status"].startswith(waiting)]
+        and not f["status"].startswith(waiting)
+        and f["name"] not in expected_failed]
     prompted = {f["name"] for f in features if f["status"].startswith("needs repair")}
     missing = [name for name in repair if name not in prompted]
+    missing_failed = sorted(set(failed) - expected_failed)
     return {"check": "feature rebuilds", "actual": broken, "missing_repairs": missing,
-        "pass": not broken and not missing}
+        "missing_failures": missing_failed, "pass": not broken and not missing and not missing_failed}
 
 
 def references_kept(known, references, repair, deleted, *, replaced=False, reopened=False):
@@ -487,6 +499,16 @@ def substitute(value, bundle):
     if isinstance(value, dict):
         return {k: substitute(v, bundle) for k, v in value.items()}
     return value
+
+
+def step_arguments(step, bundle, previous):
+    """Bind arguments to evidence returned by an earlier step."""
+    arguments = substitute(step.get("arguments", {}), bundle)
+    for name, source in step.get("arguments_from", {}).items():
+        if name in arguments:
+            raise ValueError(f"argument {name} has both a literal and an evidence source")
+        arguments[name] = at(previous[source["step"]], source["pointer"])
+    return arguments
 
 
 def cli(binary, arguments, directory, label, timeout):
@@ -840,7 +862,7 @@ def run(args):
             if "label" in step:
                 entry["label"] = step["label"]
             report["steps"].append(entry)
-            arguments = substitute(step.get("arguments", {}), args.out)
+            arguments = step_arguments(step, args.out, previous)
             started = time.perf_counter_ns()
             result = wait(client, entry, step["tool"], arguments)
             command_ms = (time.perf_counter_ns() - started) / 1_000_000
@@ -894,7 +916,7 @@ def run(args):
             except (TypeError, ValueError):
                 command["result"] = None
             repair = step.get("repair", [])
-            checks.append(rebuilds(command["summary"]["features"], repair))
+            checks.append(rebuilds(command["summary"]["features"], repair, step.get("failed")))
             checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature",
                 replaced=step["tool"] == "new_part" and not result.get("isError"),
                 reopened=step["tool"] == "open" and not result.get("isError")))
