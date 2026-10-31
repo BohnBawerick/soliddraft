@@ -2,6 +2,11 @@ name: Build release packages
 
 on:
   workflow_call:
+    inputs:
+      windows:
+        description: Build the deferred Windows packages
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      desktop: ${{ steps.desktop.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +41,9 @@ jobs:
         run: |
           version=$(python3 packaging/release.py version)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-
+      - id: desktop
+        name: Choose the desktop packages
+        run: echo "matrix=$(python3 packaging/release.py desktop ${{ inputs.windows && '--windows' || '' }})" >> "$GITHUB_OUTPUT"
 
   desktop:
     name: Package ${{ matrix.platform }}
@@ -43,19 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: linux
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            formats: appimage,deb
-          - platform: windows
-            os: windows-2022
-            target: x86_64-pc-windows-msvc
-            formats: wix
-          - platform: macos
-            os: macos-26
-            target: universal-apple-darwin
-            formats: dmg
+        include: ${{ fromJSON(needs.plan.outputs.desktop) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -221,6 +217,7 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Require the portable Windows executable to carry its C runtime
+        if: inputs.windows
         run: |
           unzip -p dist/*-windows-x64.zip soliddraft-app.exe > "$RUNNER_TEMP/soliddraft-app.exe"
           objdump -p "$RUNNER_TEMP/soliddraft-app.exe" > "$RUNNER_TEMP/windows-imports.txt"
@@ -240,7 +237,7 @@ jobs:
           previous=$(python3 packaging/release.py previous "$RUNNER_TEMP/releases.json")
           gh api "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" --paginate --slurp \
             > "$RUNNER_TEMP/pulls.json"
-          note_args=()
+          note_args=(${{ inputs.windows && '--windows' || '' }})
           if [[ -n "$previous" ]]; then note_args+=(--previous "$previous"); fi
           python3 packaging/release.py notes "$RUNNER_TEMP/pulls.json" "${note_args[@]}"
       - uses: anchore/sbom-action@v0
@@ -251,7 +248,7 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
       - name: Require the complete artifact set and hash every download
-        run: python3 packaging/release.py checksums
+        run: python3 packaging/release.py checksums ${{ inputs.windows && '--windows' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: release-dry-run

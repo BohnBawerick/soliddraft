@@ -19,6 +19,12 @@ TARGETS = {
     "windows": ("x86_64-pc-windows-msvc", ["msi"]),
     "macos": ("universal-apple-darwin", ["dmg"]),
 }
+# The Windows cell runs only for a manual catch-up; see docs/ci.md.
+DESKTOP = [
+    {"platform": "linux", "os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "formats": "appimage,deb"},
+    {"platform": "windows", "os": "windows-2022", "target": "x86_64-pc-windows-msvc", "formats": "wix"},
+    {"platform": "macos", "os": "macos-26", "target": "universal-apple-darwin", "formats": "dmg"},
+]
 
 
 def version():
@@ -91,13 +97,18 @@ def collect(platform):
         archive(platform, ROOT / "target" / TARGETS[platform][0] / "release")
 
 
-def checksums():
+def desktop(windows):
+    return [cell for cell in DESKTOP if windows or cell["platform"] != "windows"]
+
+
+def checksums(windows):
     output = ROOT / "dist"
     expected = {
         f"{prefix('linux')}.AppImage", f"{prefix('linux')}.deb", f"{prefix('linux')}.tar.gz",
-        f"{prefix('windows')}.msi", f"{prefix('windows')}.zip", f"{prefix('macos')}.dmg",
-        f"{prefix('web')}.zip", "release-notes.md", f"soliddraft-{version()}.spdx.json",
+        f"{prefix('macos')}.dmg", f"{prefix('web')}.zip", "release-notes.md", f"soliddraft-{version()}.spdx.json",
     }
+    if windows:
+        expected |= {f"{prefix('windows')}.msi", f"{prefix('windows')}.zip"}
     actual = {p.name for p in output.iterdir() if p.is_file()}
     if actual != expected:
         raise ValueError(f"Release inventory mismatch: missing={expected - actual}, extra={actual - expected}")
@@ -175,7 +186,7 @@ def known_gap_notes():
     return lines + [f"- {scenario}: steps {', '.join(numbers)}." for scenario, numbers in steps.items()] + [""]
 
 
-def notes(pulls, previous):
+def notes(pulls, previous, windows):
     current = formats("HEAD")
     old = formats(previous) if previous else {}
     revision, kernel = source_revisions()
@@ -194,7 +205,8 @@ def notes(pulls, previous):
     lines += known_gap_notes()
     lines += [
               "## Installation and verification", "",
-              "Unsigned downloads trigger Windows SmartScreen and macOS Gatekeeper warnings. "
+              *([] if windows else ["This release has no Windows packages.", ""]),
+              f"Unsigned downloads trigger {'Windows SmartScreen and ' if windows else ''}macOS Gatekeeper warnings. "
               "Signing is enabled only when the release credentials are configured. "
               "Check SHA256SUMS and verify GitHub build attestations before installing.", "",
               "The browser zip runs the kernel locally. GitHub Pages has no assistant relay or API keys.", "",
@@ -212,10 +224,12 @@ def main():
     for name in ("configure", "collect"):
         commands.add_parser(name).add_argument("platform", choices=TARGETS)
     commands.add_parser("web").add_argument("source", type=Path)
-    commands.add_parser("checksums")
+    commands.add_parser("desktop").add_argument("--windows", action="store_true")
+    commands.add_parser("checksums").add_argument("--windows", action="store_true")
     note = commands.add_parser("notes")
     note.add_argument("pulls", type=Path)
     note.add_argument("--previous")
+    note.add_argument("--windows", action="store_true")
     args = parser.parse_args()
     if args.command == "version":
         print(version())
@@ -229,10 +243,12 @@ def main():
         collect(args.platform)
     elif args.command == "web":
         archive("web", args.source)
+    elif args.command == "desktop":
+        print(json.dumps(desktop(args.windows), separators=(",", ":")))
     elif args.command == "checksums":
-        checksums()
+        checksums(args.windows)
     elif args.command == "notes":
-        notes(args.pulls, args.previous)
+        notes(args.pulls, args.previous, args.windows)
 
 
 if __name__ == "__main__":

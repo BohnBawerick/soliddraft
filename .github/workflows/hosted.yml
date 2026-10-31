@@ -10,6 +10,10 @@ on:
         description: Generate Catallax view and drawing baselines as artifacts for review
         type: boolean
         default: false
+      windows_catch_up:
+        description: Also run the deferred Windows tests and packages
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -47,9 +51,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
+          WINDOWS: ${{ inputs.windows_catch_up }}
         run: |
           mkdir -p "$RUNNER_TEMP/check-selection"
-          python3 ci/select-checks.py --base "$BASE_SHA" --event "$EVENT" --ref "$REF" --output "$RUNNER_TEMP/check-selection/selection.json"
+          python3 ci/select-checks.py --base "$BASE_SHA" --event "$EVENT" --ref "$REF" --windows "$WINDOWS" --output "$RUNNER_TEMP/check-selection/selection.json"
           python3 - "$RUNNER_TEMP/check-selection/selection.json" "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
           import json, sys
           result = json.load(open(sys.argv[1]))
@@ -189,6 +194,7 @@ jobs:
           echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
       - run: cargo test --workspace --all-features --locked --no-fail-fast
 
+  # Deferred until a later catch-up: only a manual run with windows_catch_up selects this job.
   test-windows:
     needs: select
     if: contains(fromJSON(needs.select.outputs.selected), 'test-windows')
@@ -487,6 +493,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/packages.yml
+    with:
+      windows: ${{ contains(fromJSON(needs.select.outputs.selected), 'package-windows') }}
 
   gate:
     name: Merge gate
