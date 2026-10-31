@@ -13,8 +13,10 @@ are in `crates/soliddraft-app/src/mates/`.
 | Origin | A component's origin on the assembly's. With `align_axes` its axes match too |
 | Distance | The relation between two planar faces' normals, and one translation |
 
-Faces must be axis-aligned planes with rational offsets, on part components placed directly
-in the root, in the default configuration. A face placed off the world axes is refused. Only
+Faces must be axis-aligned planes with rational offsets, on parts in the default
+configuration. The commands below name the root's own part components; a mate read from a
+file may also name a part inside a sub-assembly by its path, as forming one leaves it (see
+[subassemblies.md](subassemblies.md)). A face placed off the world axes is refused. Only
 identity and exact half-turn placements carry the exact claim below: a quarter turn is
 accepted when its normals round onto the axes, but a later general rotation needs a bounded
 transform contract and does not inherit this one.
@@ -83,8 +85,14 @@ An unconstrained coordinate keeps its authored value. A group with no Origin mat
 first component where it is, because something has to stay put, and it still reports its
 freedoms. Nothing is ever a hidden fixed flag.
 
+The root solves its own mates and those of every sub-assembly in it, each with the
+sub-assembly's path in front, over part occurrences at any depth. A sub-assembly's frame
+stays where it is authored; a part inside it that a solve moves is kept as an override in
+the root, never written to the sub-assembly's file.
+
 Freedoms come from the rank of the rigid-body constraint Jacobian at the solved pose, so a
-shared rotation about an anchored origin counts. A partial mate is valid: mates go on one at
+shared rotation about an anchored origin counts. Every part occurrence that moves on its own
+has six, wherever it is in the tree; a pattern member follows its seed. A partial mate is valid: mates go on one at
 a time. `require_fully_constrained` refuses a result with any freedom left.
 
 ## Commands
@@ -148,5 +156,5 @@ still shows, solves nothing and reports `proof_unavailable` per mate until Updat
 
 ## Limits for later batches
 
-Other mate families, mates on sub-assembly occurrences or pattern members, configurations,
-dragging, general rotations and curved faces. See M6 in the plan.
+Other mate families, picking a face inside a sub-assembly for a new mate, mates on pattern
+members, configurations, dragging, general rotations and curved faces. See M6 in the plan.

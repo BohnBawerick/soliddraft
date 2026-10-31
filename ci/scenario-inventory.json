@@ -449,6 +449,21 @@
       "route": "MCP grid and drawing tools -> document transaction -> drawing source snapshot -> SVG writer; Catallax adapter -> pinned kernel",
       "supported_limits": "One title field bound to a text property of the part the drawing pins; automatic update off; no component configuration selector; app work cap 20M",
       "evidence": "result.json, protocol.json, commands/NNNN and commands-N/NNNN/{command.json,kernel.json,helper-*.stdout}; out/{family,revised}.svg; title-wide.dwprt; title-wide.dwdrw; commands-1/0003/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
+    },
+    {
+      "id": "subassembly-form",
+      "file": "ci/scenarios/subassembly-form.json",
+      "acceptance": false,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-assembly",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
+      "route": "MCP assembly, mate and Form subassembly commands -> formation plan -> assembly transaction -> proven plane query -> Catallax adapter -> pinned kernel",
+      "supported_limits": "Increment 1 of 4 of V6 batch 1: root part occurrences in their default state formed into a new separate file with internal and crossing distance mates, default configuration, no patterns; partial M4/M6 evidence. The typed refusal step lands with increment 2.",
+      "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,inspect-*.stdout}; work/parts/base.dwprt, work/parts/pin.dwprt, work/root.dwasm and work/modules/pack.dwasm"
     }
   ]
 }

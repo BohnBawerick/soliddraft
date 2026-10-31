@@ -12,8 +12,9 @@ use soliddraft_kernel_api::Certainty;
 use soliddraft_model::{FaceRef, ValueTable};
 
 use crate::document::{AssemblyDocument, EditError, key_of};
-use crate::mates::reference::{check_configurations, check_endpoint};
-use crate::mates::solver::{self, Constraint, FreeMotion, LocalPlane, SolverState, SolverStatus};
+use crate::mates::bodies::{Gathered, Problem, Scope};
+use crate::mates::reference::check_endpoint;
+use crate::mates::solver::{self, Body, Constraint, FreeMotion, LocalPlane, SolverState, SolverStatus};
 use crate::mates::{
     Alignment, EndpointSelector, FaceEndpoint, Mate, MateEntry, MateId, MateRefusal, PlaneProof, RefusalCode,
 };
@@ -35,7 +36,8 @@ pub enum MateEdit {
 
 /// What a solve found.
 pub(crate) struct Solved {
-    pub placements: BTreeMap<ComponentId, Placement>,
+    /// The parts it moved, in the root's frame.
+    pub placements: BTreeMap<Body, Placement>,
     pub status: SolverStatus,
 }
 
@@ -84,7 +86,7 @@ pub struct PlaneMeasurement {
     pub rational: String,
 }
 
-fn value_refusal(what: &str, message: String) -> MateRefusal {
+pub(crate) fn value_refusal(what: &str, message: String) -> MateRefusal {
     let code = match message.as_str() {
         "value cycle" | "value graph is too deep" => RefusalCode::ValueCycle,
         "incompatible units in sum" | "the input needs a length" => RefusalCode::UnitMismatch,
@@ -150,18 +152,16 @@ impl AssemblyDocument {
                 )
             });
         }
-        for (c, p) in &solved.placements {
-            if let Some(component) = candidate.component_mut(*c) {
-                component.placement = *p;
-            }
-        }
+        let kept = crate::mates::bodies::locals(&Scope::new(&candidate, &self.table, &self.store), &solved.placements);
+        crate::mates::bodies::keep(&mut candidate, kept);
         if candidate != self.assembly {
             self.publish(label, candidate);
         }
         Ok(out)
     }
 
-    /// Makes `candidate`, which differs in mates, values and placements only, the truth.
+    /// Makes `candidate`, which differs in mates, values, placements and the overrides
+    /// that place parts inside sub-assemblies only, the truth.
     fn publish(&mut self, label: &str, candidate: Assembly) {
         let moved: Vec<(ComponentId, Placement)> = candidate
             .components
@@ -170,9 +170,24 @@ impl AssemblyDocument {
             .map(|c| (c.id, c.placement))
             .collect();
         let ids: Vec<ComponentId> = moved.iter().map(|(c, _)| *c).collect();
-        let rows: Vec<_> = ids.iter().filter_map(|c| self.table.find(&component_path(*c))).collect();
+        let mut overrides: Vec<OccurrencePath> = self
+            .assembly
+            .overrides
+            .iter()
+            .chain(&candidate.overrides)
+            .map(|o| o.path.clone())
+            .filter(|p| self.assembly.override_at(p) != candidate.override_at(p))
+            .collect();
+        overrides.sort();
+        overrides.dedup();
+        let rows: Vec<_> = ids
+            .iter()
+            .map(|c| component_path(*c))
+            .chain(overrides.iter().cloned())
+            .filter_map(|p| self.table.find(&p))
+            .collect();
         let rows_before = rows.iter().map(|r| self.row_state(*r)).collect();
-        let mut before = self.image(&ids, &[]);
+        let mut before = self.image(&ids, &overrides);
         before.design = Some(crate::document::Design::of(&self.assembly));
         crate::document::Design::of(&candidate).restore(&mut self.assembly);
         self.assembly.next_id = candidate.next_id;
@@ -181,8 +196,17 @@ impl AssemblyDocument {
                 c.placement = *placement;
             }
         }
-        for (id, placement) in &moved {
-            if let Some(row) = self.table.find(&component_path(*id)) {
+        for p in &overrides {
+            self.assembly.overrides.retain(|o| o.path != *p);
+            self.assembly.overrides.extend(candidate.override_at(p).cloned());
+        }
+        self.assembly.overrides.sort_by(|a, b| a.path.cmp(&b.path));
+        let mut placed: Vec<(OccurrencePath, Placement)> =
+            moved.iter().map(|(id, placement)| (component_path(*id), *placement)).collect();
+        let scope = Scope::new(&self.assembly, &self.table, &self.store);
+        placed.extend(overrides.iter().filter_map(|p| Some((p.clone(), scope.local(p)?))));
+        for (path, placement) in &placed {
+            if let Some(row) = self.table.find(path) {
                 let shifted = self.table.set_local(row, *placement, &self.store);
                 self.bvh_moved.extend(shifted.iter().copied());
                 self.changes.moved.extend(shifted);
@@ -196,61 +220,49 @@ impl AssemblyDocument {
     }
 
     /// Proves every face `truth`'s mates name at the revisions it pins, and solves it.
+    /// `truth` has the structure the document shows; its sub-assemblies bring their own
+    /// mates.
     pub(crate) fn solve_truth(&mut self, truth: &Assembly) -> Result<Solved, MateRefusal> {
-        if let Some(future) = truth.mates.iter().find(|m| m.known().is_none()) {
-            return Err(MateRefusal::new(
-                RefusalCode::UnknownMate,
-                format!("this version cannot solve the mate {}", serde_json::to_string(future).unwrap_or_default()),
-            ));
-        }
-        check_configurations(truth)?;
-        let mut bodies = BTreeMap::new();
+        let problem = self.gather(&Scope::new(truth, &self.table, &self.store))?;
+        self.solve_problem(problem)
+    }
+
+    /// Proves the faces `problem` reads and solves it.
+    pub(crate) fn solve_problem(&mut self, problem: Problem) -> Result<Solved, MateRefusal> {
         let mut constraints = Vec::new();
         let mut dangling: Vec<(String, String)> = Vec::new();
-        let place = |c: ComponentId| {
-            truth
-                .component(c)
-                .map(|x| x.placement)
-                .ok_or_else(|| MateRefusal::invalid(format!("the assembly has no component {c}")))
-        };
-        for mate in truth.known_mates() {
+        for mate in problem.mates {
             match mate {
-                Mate::Origin { name, component, align_axes, .. } => {
-                    bodies.insert(*component, place(*component)?);
-                    constraints.push(Constraint::Origin { mate: name.clone(), body: *component, axes: *align_axes });
+                Gathered::Origin { mate, body, axes, at } => {
+                    constraints.push(Constraint::Origin { mate, body, axes, at })
                 }
-                Mate::Distance { name, a, b, alignment, distance, .. } => {
-                    let d = truth.values.length(distance).map_err(|e| value_refusal(name, e))?;
+                Gathered::Distance { mate, ends, sign, distance } => {
                     let mut planes = Vec::new();
-                    for end in [a, b] {
-                        let c = end.component().ok_or_else(|| {
-                            MateRefusal::invalid(format!("{name}: this version mates the root's own components"))
-                        })?;
-                        bodies.insert(c, place(c)?);
-                        let source = Self::part_source(truth, c)?;
+                    for end in &ends {
+                        let source = self.rebased(end);
                         match self.prove(&source, &end.face) {
-                            Ok(proof) => planes.push((c, local_plane(name, &proof)?)),
+                            Ok(proof) => planes.push((end.body.clone(), local_plane(&mate, &proof)?)),
                             Err(r) if r.code == RefusalCode::DanglingReference => {
                                 let label = &end.face.label;
                                 let feature = end.face.feature;
                                 let at = format!(
                                     "{}: occurrence {}, {label} of feature {feature}: {}",
-                                    source.path, end.path, r.message
+                                    end.source.path, end.body, r.message
                                 );
-                                dangling.push((name.clone(), at));
+                                dangling.push((mate.clone(), at));
                             }
-                            Err(r) => return Err(MateRefusal { mates: vec![name.clone()], ..r }),
+                            Err(r) => return Err(MateRefusal { mates: vec![mate.clone()], ..r }),
                         }
                     }
-                    if let [(ca, plane_a), (cb, plane_b)] = &planes[..] {
+                    if let [(a, plane_a), (b, plane_b)] = &planes[..] {
                         constraints.push(Constraint::Distance {
-                            mate: name.clone(),
-                            a: *ca,
-                            b: *cb,
+                            mate,
+                            a: a.clone(),
+                            b: b.clone(),
                             plane_a: plane_a.clone(),
                             plane_b: plane_b.clone(),
-                            sign: alignment.sign(),
-                            distance: d,
+                            sign,
+                            distance,
                         });
                     }
                 }
@@ -263,10 +275,11 @@ impl AssemblyDocument {
             let message = format!("{}; mates {}", list.join("; "), mates.join(", "));
             return Err(MateRefusal { mates, ..MateRefusal::new(RefusalCode::DanglingReference, message) });
         }
-        let placements = solver::solve(&bodies, &constraints)?;
+        let placements = solver::solve(&problem.bodies, &constraints)?;
         let (dof, free) = solver::freedoms(&placements, &constraints)?;
-        let unmated = truth.components.len() - bodies.len();
-        Ok(Solved { placements, status: status_of(dof + 6 * unmated, free) })
+        let unmated = problem.parts.saturating_sub(problem.bodies.len());
+        let moved = placements.into_iter().filter(|(b, p)| problem.bodies[b] != *p).collect();
+        Ok(Solved { placements: moved, status: status_of(dof + 6 * unmated, free) })
     }
 
     /// The accepted assembly's status, from its definitions: reads no part and proves nothing.
@@ -280,45 +293,29 @@ impl AssemblyDocument {
     }
 
     fn read_status(&self) -> Result<SolverStatus, String> {
-        let truth = &self.assembly;
-        if truth.mates.iter().any(|m| m.known().is_none()) {
-            return Err("unknown_mate: the assembly holds a mate this version cannot solve".into());
-        }
-        check_configurations(truth).map_err(|r| r.to_string())?;
-        let mut bodies = BTreeMap::new();
-        let mut constraints = Vec::new();
-        let place = |c: ComponentId| truth.component(c).map(|x| x.placement).ok_or(format!("no component {c}"));
-        let stored = |end: &FaceEndpoint| {
-            let normal = end.face.fingerprint.normal.ok_or("a mate's face has no stored normal")?;
+        let problem = self.gather(&Scope::new(&self.assembly, &self.table, &self.store)).map_err(|r| r.to_string())?;
+        let stored = |face: &soliddraft_model::FaceRef| {
+            let normal = face.fingerprint.normal.ok_or("a mate's face has no stored normal")?;
             let n = [normal.x, normal.y, normal.z].map(|c| c.round() as i8);
             Ok::<_, String>(LocalPlane { normal: n, offset: num_traits::Zero::zero() })
         };
-        for mate in truth.known_mates() {
-            match mate {
-                Mate::Origin { name, component, align_axes, .. } => {
-                    bodies.insert(*component, place(*component)?);
-                    constraints.push(Constraint::Origin { mate: name.clone(), body: *component, axes: *align_axes });
-                }
-                Mate::Distance { name, a, b, alignment, .. } => {
-                    let (Some(ca), Some(cb)) = (a.component(), b.component()) else {
-                        return Err(format!("{name}: this version mates the root's own components"));
-                    };
-                    bodies.insert(ca, place(ca)?);
-                    bodies.insert(cb, place(cb)?);
-                    constraints.push(Constraint::Distance {
-                        mate: name.clone(),
-                        a: ca,
-                        b: cb,
-                        plane_a: stored(a)?,
-                        plane_b: stored(b)?,
-                        sign: alignment.sign(),
-                        distance: 0.0,
-                    });
-                }
-            }
+        let mut constraints = Vec::new();
+        for mate in problem.mates {
+            constraints.push(match mate {
+                Gathered::Origin { mate, body, axes, at } => Constraint::Origin { mate, body, axes, at },
+                Gathered::Distance { mate, ends: [a, b], sign, .. } => Constraint::Distance {
+                    mate,
+                    plane_a: stored(&a.face)?,
+                    plane_b: stored(&b.face)?,
+                    a: a.body,
+                    b: b.body,
+                    sign,
+                    distance: 0.0,
+                },
+            });
         }
-        let (dof, free) = solver::freedoms(&bodies, &constraints).map_err(|r| r.to_string())?;
-        Ok(status_of(dof + 6 * (truth.components.len() - bodies.len()), free))
+        let (dof, free) = solver::freedoms(&problem.bodies, &constraints).map_err(|r| r.to_string())?;
+        Ok(status_of(dof + 6 * problem.parts.saturating_sub(problem.bodies.len()), free))
     }
 
     /// How many parts were rebuilt so far to prove planes.
@@ -358,14 +355,18 @@ impl AssemblyDocument {
     }
 
     fn measure(&mut self, a: &FaceEndpoint, b: &FaceEndpoint) -> Result<PlaneMeasurement, MateRefusal> {
-        let invalid = || MateRefusal::invalid("this version measures the root's own components");
-        let (ca, cb) = (a.component().ok_or_else(invalid)?, b.component().ok_or_else(invalid)?);
         check_endpoint(a)?;
         check_endpoint(b)?;
-        let (ra, rb) = (Self::part_source(&self.assembly, ca)?, Self::part_source(&self.assembly, cb)?);
+        let (ea, eb, placements) = {
+            let scope = Scope::new(&self.assembly, &self.table, &self.store);
+            let world = |e: &FaceEndpoint| {
+                scope.world(&e.path).ok_or_else(|| MateRefusal::invalid(format!("no occurrence at {}", e.path)))
+            };
+            let placements = [world(a)?, world(b)?];
+            (self.end_of(&scope, a.path.clone(), a, "")?, self.end_of(&scope, b.path.clone(), b, "")?, placements)
+        };
+        let (ra, rb) = (self.rebased(&ea), self.rebased(&eb));
         let (pa, pb) = (self.prove(&ra, &a.face)?, self.prove(&rb, &b.face)?);
-        let at = |c: ComponentId| self.assembly.component(c).map(|x| x.placement).unwrap_or_default();
-        let placements = [at(ca), at(cb)];
         let gap = signed_gap(&pa, &pb, &placements)?;
         let value = solver::nearest(&gap);
         let (mut lo, mut hi) = (value, value);
@@ -557,10 +558,13 @@ impl AssemblyDocument {
         let before = self.assembly.clone();
         self.transact("Move", false, |_, truth| {
             for (path, placement) in moves {
-                if let Ok(c) = Self::owner(path)
-                    && let Some(component) = truth.component_mut(c)
-                {
-                    component.placement = *placement;
+                match Self::owner(path) {
+                    Ok(c) => {
+                        if let Some(component) = truth.component_mut(c) {
+                            component.placement = *placement;
+                        }
+                    }
+                    Err(p) => truth.override_mut(&p).placement = Some(*placement),
                 }
             }
             Ok(())

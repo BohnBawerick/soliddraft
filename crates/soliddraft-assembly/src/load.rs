@@ -13,7 +13,8 @@
 //!    with the pin ([`LoadEvent::Freshness`]), for the "newer version available" marks.
 //!
 //! When a copy is missing, the loader falls back, in order, to: the copies held by
-//! other assembly files it has opened (sub-assemblies), the referenced file when it is
+//! other assembly files it has opened (sub-assemblies) or one of those files itself when
+//! it is the sub-assembly at the pinned revision, the referenced file when it is
 //! at the pinned revision, the revision store, and finally the referenced file at its
 //! current revision, which marks the definition stale. Without any of those the
 //! definition fails, and the rest of the assembly still opens.
@@ -138,6 +139,10 @@ impl Lookup {
     /// lookup's own.
     pub fn fetch_structure(&self, r: &DocRef) -> Result<Fetched, String> {
         let id = r.id.ok_or("the reference has no document id")?;
+        // A file the lookup already holds may be the sub-assembly itself at that revision.
+        if let Some(p) = self.packages.iter().find(|p| p.id() == id && p.manifest().semantic_hash == r.pinned) {
+            return Ok(Fetched { assembly: p.assembly().clone(), stale: None, package: None });
+        }
         for p in &self.packages {
             if let Some(t) = p.reader().assembly_truth(id, &r.pinned).map_err(|e| e.to_string())? {
                 let a = Assembly::from_truth(&t.json, t.bulk.as_deref()).map_err(|e| e.to_string())?;
