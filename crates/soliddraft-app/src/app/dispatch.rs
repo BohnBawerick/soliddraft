@@ -281,18 +281,19 @@ impl SolidDraftApp {
             }
             AppAction::StartFillet | AppAction::StartChamfer => {
                 let chamfer = matches!(action, AppAction::StartChamfer);
-                let edges = match self.state.doc.selection {
-                    Some(Selection::Edge(e)) => self.state.doc.edge_ref(e).into_iter().collect(),
-                    // A face stands for every edge on its boundary.
-                    Some(Selection::Face(f)) => self.state.doc.face_edge_refs(f).unwrap_or_default(),
-                    _ => Vec::new(),
-                };
                 let params = if chamfer {
-                    EditorParams::Chamfer(ChamferParams { edges, distance: 2.0 })
+                    EditorParams::Chamfer(ChamferParams { edges: Vec::new(), distance: 2.0 })
                 } else {
-                    EditorParams::Fillet(FilletParams { edges, radius: 4.0 })
+                    EditorParams::Fillet(FilletParams { edges: Vec::new(), radius: 4.0 })
                 };
                 self.open_editor(None, params);
+                // A picked edge or face is the panel's first pick, as if made with it open.
+                if let Some(pick @ (Selection::Edge(_) | Selection::Face(_) | Selection::Vertex(_))) =
+                    self.state.doc.selection
+                    && let Some(editor) = self.state.editor.as_mut()
+                {
+                    crate::fillet_collect::collect(editor, &self.state.doc, pick);
+                }
                 self.state.doc.selection = None;
             }
             AppAction::StartHole => {
@@ -415,6 +416,12 @@ impl SolidDraftApp {
                 self.state.doc.selection = Some(Selection::Feature(id));
             }
             AppAction::CommitEditor => {
+                // A refused size stays open for correction: OK cannot apply the last
+                // accepted one in its place.
+                if let Some(why) = self.state.editor.as_ref().and_then(|e| e.feedback.size.clone()) {
+                    self.state.note(format!("Not applied: {why}"), NoteKind::Error);
+                    return;
+                }
                 let Some(e) = self.close_editor() else { return };
                 let cmd = match (e.target, e.params) {
                     (target, EditorParams::Revolve(r)) => match target {
@@ -517,16 +524,11 @@ impl SolidDraftApp {
                 // Editors that collect picks take the click instead of selecting.
                 if let Some(e) = self.state.editor.as_mut() {
                     match (&mut e.params, sel) {
-                        (EditorParams::Fillet(_) | EditorParams::Chamfer(_), Some(Selection::Edge(edge))) => {
-                            if let Some(r) = self.state.doc.edge_ref(edge)
-                                && let Some(list) = e.edges_mut()
-                            {
-                                if let Some(i) = list.iter().position(|x| x.label == r.label) {
-                                    list.remove(i);
-                                } else {
-                                    list.push(r);
-                                }
-                            }
+                        (
+                            EditorParams::Fillet(_) | EditorParams::Chamfer(_),
+                            Some(pick @ (Selection::Edge(_) | Selection::Face(_) | Selection::Vertex(_))),
+                        ) => {
+                            crate::fillet_collect::collect(e, &self.state.doc, pick);
                             return;
                         }
                         (EditorParams::Hole(h), Some(Selection::Face(f))) => {
