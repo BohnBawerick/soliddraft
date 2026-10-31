@@ -47,6 +47,8 @@ fn the_bracket_in_light_and_dark() {
     // Choosing a theme saves it, so the test keeps its settings away from the user's.
     let config = std::env::temp_dir().join(format!("soliddraft-theme-test-{}", std::process::id()));
     std::fs::create_dir_all(&config).unwrap();
+    // The samples below read the backdrop, which the origin planes would tint.
+    std::fs::write(config.join("settings.json"), r#"{"view":{"show_origin_planes":false}}"#).unwrap();
     soliddraft_app::file::set_config_dir(Some(config.clone()));
     let mut harness = Harness::builder()
         .with_size(vec2(1440.0, 900.0))

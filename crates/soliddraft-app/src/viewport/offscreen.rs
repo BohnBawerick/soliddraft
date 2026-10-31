@@ -90,6 +90,7 @@ impl Offscreen {
             assembly: None,
             // A picture shows the part, not the workspace around it.
             grid: None,
+            planes: None,
         };
         self.renderer.prepare(device, queue, &input);
         let texture = device.create_texture(&wgpu::TextureDescriptor {

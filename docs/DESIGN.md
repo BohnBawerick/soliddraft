@@ -32,7 +32,9 @@ Operations use the catalogue under `crates/soliddraft-app/assets/icons`: 65 CAD 
 - The heads-up toolbar is a single floating strip: isometric, fit, F, T, R, then display style. Section and measure are present but disabled until phase 2.
 - A units and view pill in the lower left and a hover label in the lower right that names what is under the cursor.
 - A grid lies on the ground, or on the open sketch's plane, in every look and with no part open. Minor lines stay 16 to 40 points apart in steps of 1, 2 and 5 mm times a power of ten, every fifth line is a major line, and a pill beside the view pill gives both spacings. Faces hide it, and it takes no clicks.
+- The origin planes are finite squares through the part origin, with a fill, an outline and a name near one corner. They reach a quarter past the part and step aside for an open sketch. They draw only where no face did, so they never tint a part, and a click finds a plane only where no model is under the pointer. A click on one selects it; only the Sketch command turns a pick into a sketch.
 - The origin axes are off at rest. Selecting the origin, a reference plane or an origin axis shows them, and Always show origin axes keeps them on. Clearing the selection hides them again.
+- The origin, an axis and a plane are picked with the camera's ray in `viewport/planes.rs`, not the id buffer, from the same scene the renderer draws. The origin beats an axis, and an axis beats a plane. The id buffer must show the current frame before a click can say no model is there.
 - Preferences > Viewport > Grid and planes holds Show grid, Show origin planes and Always show origin axes, saved in the `view` section of the settings file.
 
 ## Picking

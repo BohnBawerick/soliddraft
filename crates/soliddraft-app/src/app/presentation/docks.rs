@@ -1,8 +1,9 @@
 //! Part, drawing and assembly docks.
 
+use crate::document::Selection;
 use crate::icons::{self, Icon};
 use crate::panels::Side;
-use crate::state::{AppAction, AppState};
+use crate::state::{AppAction, AppState, EditorParams};
 use crate::theme;
 use crate::viewport::Overlay;
 use crate::{properties, tree};
@@ -144,12 +145,17 @@ impl TabViewer for Panels<'_> {
                 } else {
                     None
                 };
+                let axes_wanted = st
+                    .editor
+                    .as_ref()
+                    .is_some_and(|e| matches!(e.params, EditorParams::Revolve(_) | EditorParams::Pattern(_)));
                 let overlay = Overlay {
                     ghost,
                     preview,
                     sketch: st.sketch.as_mut(),
                     passive_sketch: passive,
                     dimension_edit: st.dimension_edit.as_mut(),
+                    axes_wanted,
                 };
                 let events = st.viewport.show(ui, &st.doc, overlay, selection, hover_label.as_deref(), &st.navigation);
                 st.after_viewport(ui, &events);
@@ -161,7 +167,8 @@ impl TabViewer for Panels<'_> {
                     st.push(a);
                 }
                 if let Some(picked) = events.clicked {
-                    let sel = picked.and_then(|p| selection_of(&st.doc, p));
+                    let reference = events.clicked_reference.map(Selection::Reference);
+                    let sel = picked.and_then(|p| selection_of(&st.doc, p)).or(reference);
                     st.push(AppAction::Select(sel));
                 }
                 if let Some(v) = events.set_view {
