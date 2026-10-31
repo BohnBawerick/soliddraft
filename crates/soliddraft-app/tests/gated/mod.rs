@@ -139,6 +139,9 @@ impl Kernel for Gated {
         }
         self.inner.measure_pair(body, a, b, quantity)
     }
+    fn face_support_plane(&self, body: BodyId, face: FaceId) -> KernelResult<soliddraft_kernel_api::ExactAxisPlane> {
+        self.inner.face_support_plane(body, face)
+    }
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {
         self.inner.history(body)
     }

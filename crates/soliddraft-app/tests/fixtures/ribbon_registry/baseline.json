@@ -4335,7 +4335,7 @@
       "workspace": "Part"
     },
     "insert_component": {
-      "agents": "app",
+      "agents": "mcp",
       "availability": {
         "assembly": {
           "enabled": true,
@@ -4361,8 +4361,45 @@
           "while_typing": true
         }
       ],
-      "tool": null,
-      "undo": "none",
+      "tool": {
+        "input": {
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "placement": {
+              "additionalProperties": false,
+              "properties": {
+                "rotation": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "translation": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "type": "object"
+            }
+          },
+          "required": [
+            "paths"
+          ],
+          "type": "object"
+        },
+        "name": "insert_component"
+      },
+      "undo": "step",
       "workspace": "Assembly"
     },
     "lattice": {

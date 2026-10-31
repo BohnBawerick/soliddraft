@@ -29,7 +29,7 @@ PHASES = ("construction", "edit", "display", "measurement", "refusal")
 DISPLAY = {"mesh", "display", "tessellate", "tessellate_edges", "preview", "preview_edges", "view_curves",
            "section_view"}
 MEASUREMENT = {"mass_properties", "measured_topology", "face_area", "face_centroid", "face_bounding_box",
-               "bounding_box", "edge_length", "edge_midpoint", "inertia", "field_mass"}
+               "bounding_box", "edge_length", "edge_midpoint", "inertia", "field_mass", "face_support_plane"}
 TREND_NOISE_MS = 25
 # The one hang guard for every MCP request and CLI command: generous, never a speed limit.
 HANG_TIMEOUT_S = 600
@@ -480,7 +480,11 @@ def references_kept(known, references, repair, deleted, *, replaced=False, reope
         and (now[key]["origin"] != identity["name"]
             or (all(o is not None for o in now[key]["kernel_origins"])
                 and now[key]["kernel_origins"] != identity["kernel"]))]
-    lost = [list(key) for key in known if key not in now and not deleted]
+    lost = [list(key) for key, identity in known.items()
+        if key not in now and not deleted and not identity.get("deleted")]
+    # A delete took these on purpose. They stay known so an undo must bring back the same origin.
+    for key, identity in known.items():
+        identity["deleted"] = key not in now and (deleted or identity.get("deleted", False))
     wrong = [r for r in references
         if (r["resolved"] is not None and r["resolved"] != (r["feature"] not in repair))
         or (r["resolved"] is True and r["matches_origin"] is not True)]
@@ -917,7 +921,8 @@ def run(args):
                 command["result"] = None
             repair = step.get("repair", [])
             checks.append(rebuilds(command["summary"]["features"], repair, step.get("failed")))
-            checks.append(references_kept(known, command["references"], repair, step["tool"] == "delete_feature",
+            checks.append(references_kept(known, command["references"], repair,
+                step["tool"] == "delete_feature" and not result.get("isError"),
                 replaced=step["tool"] == "new_part" and not result.get("isError"),
                 reopened=step["tool"] == "open" and not result.get("isError")))
             if step.get("refusal"):

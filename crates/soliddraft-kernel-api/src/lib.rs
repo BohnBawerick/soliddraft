@@ -28,7 +28,9 @@ pub mod contract;
 pub mod counting;
 pub mod drawing;
 pub mod measure;
+pub use assembly_measure::{Axis, ExactAxisPlane, ExactRational};
 pub use measure::{Certainty, Measurement, PairEndpoint, PairQuantity, PointProof};
+mod assembly_measure;
 mod edit;
 mod field;
 mod geometry;
@@ -935,6 +937,12 @@ pub trait Kernel: Send + Sync {
         _quantity: PairQuantity,
     ) -> KernelResult<Measurement> {
         Err(KernelError::Unsupported("proven pair measurement".into()))
+    }
+
+    /// The exact plane a face lies on, for assembly mates: an axis-aligned plane with a
+    /// rational offset, read from the kernel's own definition. Any other face is refused.
+    fn face_support_plane(&self, _body: BodyId, _face: FaceId) -> KernelResult<ExactAxisPlane> {
+        Err(KernelError::Unsupported("proven support plane".into()))
     }
 
     /// The records of every operation that produced `body`, oldest first.

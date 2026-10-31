@@ -619,3 +619,30 @@ fn parallel_face_distance_respects_trims_and_completion() {
 fn query_domains_and_work_are_explicit() {
     contract::query_domains_and_work_are_explicit(&CatallaxKernel::new());
 }
+
+#[test]
+fn planar_support_is_native_and_revision_scoped() {
+    contract::support_planes_are_native_and_exact(&CatallaxKernel::new());
+}
+
+#[test]
+fn unsupported_and_wrong_plane_handles_refuse() {
+    contract::support_plane_refusals(&CatallaxKernel::new());
+}
+
+/// The query reads exact definitions: it does no numerical work and meshes nothing.
+#[test]
+fn a_support_plane_costs_no_numerical_work() {
+    let k = CatallaxKernel::with_diagnostics(100_000_000);
+    let body = contract::block(&k);
+    let topology = k.topology(body).unwrap();
+    let face = topology.faces.iter().find(|f| f.surface == SurfaceKind::Plane).unwrap();
+    k.take_diagnostics().unwrap();
+    k.face_support_plane(body, face.id).unwrap();
+    let evidence = k.take_diagnostics().unwrap();
+    let calls = evidence["calls"].as_array().unwrap();
+    assert_eq!(calls.len(), 1, "{evidence}");
+    assert_eq!(calls[0]["operation"], "face_support_plane");
+    assert_eq!(calls[0]["work"]["used"], 0, "{evidence}");
+    assert_eq!(calls[0]["operation_log"]["operations"].as_array().unwrap().len(), 0, "{evidence}");
+}

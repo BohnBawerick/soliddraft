@@ -2377,6 +2377,7 @@ impl CommandTools<'_> {
                     let expressions = doc.model().values().expressions(feature);
                     if !expressions.is_empty() { v["expressions"] = json!(expressions); }
                 }
+                v["id"] = f.id.into();
                 v["name"] = f.name.clone().into();
                 v["status"] = status_text(doc, f.id).into();
                 if let Some(record) = doc.model().import_record(soliddraft_model::FeatureId(f.id as u32)) {

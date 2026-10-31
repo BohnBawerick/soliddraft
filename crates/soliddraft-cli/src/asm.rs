@@ -521,6 +521,8 @@ fn info(file: &Path, a: &Args) -> Result<bool, String> {
                 "id": doc.id(),
                 "name": a_.name,
                 "revision": doc.revision(),
+                "mates": a_.mates,
+                "values": a_.values,
                 "sources": a_.sources.len(),
                 "components": a_.components.len(),
                 "patterns": a_.patterns.len(),

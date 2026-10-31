@@ -10,7 +10,8 @@
 //! - anything deeper, or a pattern member, is changed through an override in the root
 //!   (an assembly-level change, like SolidWorks's), and its own file is not touched.
 //!
-//! Every edit is one undo step. What changed for the renderer since it last looked is
+//! Mates and values change through the commands in [`crate::mates`], which solve a
+//! candidate and commit here. Every edit is one undo step. What changed for the renderer since it last looked is
 //! collected in [`Changes`].
 
 use std::collections::{HashMap, HashSet};
@@ -20,11 +21,12 @@ use std::sync::{Arc, Mutex};
 use soliddraft_document::resolve::{Resolution, Resolver, repin};
 use soliddraft_document::{ContentHash, DocKind, DocRef, DocumentId, OpenDocument};
 use soliddraft_materials::{Appearance, Snapshots};
-use soliddraft_model::Document as PartDocument;
+use soliddraft_model::{Document as PartDocument, ValueTable};
 use soliddraft_tessellation::{Level, Quality, Settings};
 
 use crate::file::{AssemblyPackage, FileError, RefCopy, display_entry, level_entry};
 use crate::load::{self, LevelJob, LevelWorker, LoadError, LoadEvent, LoadHandle, Lookup, OpenOptions, Structure};
+use crate::mates::{MateEntry, MateRefusal, Proofs, SolverStatus};
 use crate::occurrence::{Flags, OccurrenceIndex, OccurrenceTable, label_of};
 use crate::path::{ComponentId, OccurrencePath, PatternId, SourceId, Step};
 use crate::placement::Placement;
@@ -81,7 +83,7 @@ pub enum EditError {
 
 /// One row's editable state, for undo.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct RowState {
+pub(crate) struct RowState {
     row: OccurrenceIndex,
     local: Placement,
     hidden: bool,
@@ -101,9 +103,27 @@ struct Record {
     removed: Vec<OccurrenceIndex>,
 }
 
+/// The mates and values, whole: a change to one can touch what reads it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Design {
+    mates: Vec<MateEntry>,
+    values: ValueTable,
+}
+
+impl Design {
+    pub(crate) fn of(truth: &Assembly) -> Design {
+        Design { mates: truth.mates.clone(), values: truth.values.clone() }
+    }
+
+    pub(crate) fn restore(&self, truth: &mut Assembly) {
+        truth.mates = self.mates.clone();
+        truth.values = self.values.clone();
+    }
+}
+
 /// The records of the truth an edit touches.
 #[derive(Clone, Debug, Default)]
-struct TruthImage {
+pub(crate) struct TruthImage {
     components: Vec<(ComponentId, Option<Component>)>,
     overrides: Vec<(OccurrencePath, Option<Override>)>,
     sources: Vec<(SourceId, Option<Source>)>,
@@ -113,6 +133,8 @@ struct TruthImage {
     colours: Option<(Vec<OccurrenceAppearance>, Snapshots, Vec<OccurrencePath>)>,
     /// The display settings, when the edit changed a quality.
     settings: Option<Settings>,
+    /// The mates and values, when the edit changed them.
+    pub(crate) design: Option<Design>,
     next_id: u32,
 }
 
@@ -120,36 +142,40 @@ struct TruthImage {
 pub struct AssemblyDocument {
     path: Option<PathBuf>,
     id: DocumentId,
-    assembly: Assembly,
+    pub(crate) assembly: Assembly,
     /// Files whose display copies the document can carry into its own on save: the
     /// opened file first, then sub-assembly files the loader opened.
     packages: Vec<AssemblyPackage>,
-    store: DefinitionStore,
-    table: OccurrenceTable,
+    pub(crate) store: DefinitionStore,
+    pub(crate) table: OccurrenceTable,
     root: DefinitionIndex,
     refs: HashMap<DefinitionIndex, DocRef>,
     /// The assembly whose file holds each definition's reference.
     parents: HashMap<DefinitionIndex, DefinitionIndex>,
-    options: OpenOptions,
+    pub(crate) options: OpenOptions,
     loading: Option<LoadHandle>,
     /// Loads coarse and fine meshes on request, for the current generation.
     levels: Option<LevelWorker>,
     exact: HashMap<DefinitionIndex, Arc<Mutex<PartDocument>>>,
     undo: Vec<Record>,
     redo: Vec<Record>,
-    changes: Changes,
+    pub(crate) changes: Changes,
     saved: ContentHash,
     /// The display settings as last saved or opened.
     saved_settings: Settings,
     /// The hierarchy, with the row count it was built for.
     bvh: Option<(usize, crate::bvh::Bvh)>,
     /// Rows moved, or whose meshes arrived, since the hierarchy was last refitted.
-    bvh_moved: Vec<OccurrenceIndex>,
+    pub(crate) bvh_moved: Vec<OccurrenceIndex>,
     /// A hierarchy being built in the background, for the structure generation it was
     /// started at.
     bvh_job: Option<(u64, std::sync::mpsc::Receiver<crate::bvh::Bvh>)>,
     /// Bumped whenever the table is rebuilt.
     generation: u64,
+    /// Plane proofs and the parts rebuilt for them. Derived.
+    pub(crate) proofs: Proofs,
+    /// The mates' status, until the truth changes. Derived.
+    pub(crate) solver_status: Option<SolverStatus>,
 }
 
 /// An assembly being opened on another thread ([`AssemblyDocument::open_in_background`]).
@@ -229,6 +255,8 @@ impl AssemblyDocument {
             bvh_moved: Vec::new(),
             bvh_job: None,
             generation: 0,
+            proofs: Proofs::default(),
+            solver_status: None,
         }
     }
 
@@ -637,7 +665,7 @@ impl AssemblyDocument {
         self.table.find(path).ok_or_else(|| EditError::NoOccurrence(path.clone()))
     }
 
-    fn row_state(&self, row: OccurrenceIndex) -> RowState {
+    pub(crate) fn row_state(&self, row: OccurrenceIndex) -> RowState {
         let f = self.table.flags(row);
         RowState {
             row,
@@ -647,7 +675,7 @@ impl AssemblyDocument {
         }
     }
 
-    fn image(&self, components: &[ComponentId], overrides: &[OccurrencePath]) -> TruthImage {
+    pub(crate) fn image(&self, components: &[ComponentId], overrides: &[OccurrencePath]) -> TruthImage {
         TruthImage {
             components: components.iter().map(|c| (*c, self.assembly.component(*c).cloned())).collect(),
             overrides: overrides.iter().map(|p| (p.clone(), self.assembly.override_at(p).cloned())).collect(),
@@ -655,20 +683,22 @@ impl AssemblyDocument {
             patterns: Vec::new(),
             colours: None,
             settings: None,
+            design: None,
             next_id: self.assembly.next_id,
         }
     }
 
     /// Where an occurrence's state lives in the root's truth: its component when it is
     /// one of the root's own, otherwise an override at its path.
-    fn owner(path: &OccurrencePath) -> Result<ComponentId, OccurrencePath> {
+    pub(crate) fn owner(path: &OccurrencePath) -> Result<ComponentId, OccurrencePath> {
         match path.steps() {
             [s] if s.member.is_none() => Ok(s.component),
             _ => Err(path.clone()),
         }
     }
 
-    fn record(&mut self, label: &str, before: TruthImage, rows_before: Vec<RowState>) {
+    pub(crate) fn record(&mut self, label: &str, before: TruthImage, rows_before: Vec<RowState>) {
+        self.solver_status = None;
         let after = self.reimage(&before);
         let rows_after = rows_before.iter().map(|r| self.row_state(r.row)).collect();
         self.undo.push(Record {
@@ -693,6 +723,7 @@ impl AssemblyDocument {
                 (self.assembly.appearances.clone(), self.assembly.snapshots.clone(), paths.clone())
             }),
             settings: like.settings.as_ref().map(|_| self.assembly.settings.clone()),
+            design: like.design.as_ref().map(|_| Design::of(&self.assembly)),
             next_id: self.assembly.next_id,
         }
     }
@@ -701,6 +732,10 @@ impl AssemblyDocument {
     /// each. One undo step.
     pub fn move_to(&mut self, moves: &[(OccurrencePath, Placement)]) -> Result<(), EditError> {
         let rows: Vec<OccurrenceIndex> = moves.iter().map(|(p, _)| self.row(p)).collect::<Result<_, _>>()?;
+        let mated: HashSet<ComponentId> = self.assembly.known_mates().flat_map(|m| m.components()).collect();
+        if moves.iter().any(|(p, _)| Self::owner(p).is_ok_and(|c| mated.contains(&c))) {
+            return self.move_mated(moves);
+        }
         let (comps, ovs) = split_owners(moves.iter().map(|(p, _)| p));
         let before = self.image(&comps, &ovs);
         let rows_before = rows.iter().map(|r| self.row_state(*r)).collect();
@@ -871,6 +906,7 @@ impl AssemblyDocument {
         let id = self.assembly.add_component(source, placement);
         before.components.push((id, None));
         self.reflatten();
+        self.solver_status = None;
         let after = self.reimage(&before);
         self.undo.push(Record {
             label: "Insert component".into(),
@@ -920,6 +956,15 @@ impl AssemblyDocument {
             return Err(EditError::NoComponent(*c));
         }
         let gone: HashSet<ComponentId> = components.iter().copied().collect();
+        let held: Vec<&str> = self
+            .assembly
+            .known_mates()
+            .filter(|m| m.components().iter().any(|c| gone.contains(c)))
+            .map(|m| m.name())
+            .collect();
+        if !held.is_empty() {
+            return Err(EditError::Invalid(format!("delete its mates first: {}", held.join(", "))));
+        }
         let mut before = self.image(components, &[]);
         let overrides: Vec<OccurrencePath> = self
             .assembly
@@ -945,6 +990,7 @@ impl AssemblyDocument {
             }
         }
         self.changes.flags.extend(removed.iter().copied());
+        self.solver_status = None;
         let after = self.reimage(&before);
         self.undo.push(Record {
             label: "Delete".into(),
@@ -961,7 +1007,7 @@ impl AssemblyDocument {
 
     /// Rereads the structure from the truth, keeping loaded meshes, and loads what is
     /// new in the background.
-    fn reflatten(&mut self) {
+    pub(crate) fn reflatten(&mut self) {
         self.finish_loading();
         let mut lookup = Lookup::with_packages(self.packages.clone(), self.path.as_deref(), &self.options);
         if let Err(e) = self.restructure(&mut lookup) {
@@ -975,6 +1021,11 @@ impl AssemblyDocument {
     /// How many accepted edits this assembly can undo.
     pub fn undo_depth(&self) -> usize {
         self.undo.len()
+    }
+
+    /// How many undone edits this assembly can redo.
+    pub fn redo_depth(&self) -> usize {
+        self.redo.len()
     }
 
     /// The label of the step undo would revert.
@@ -1044,12 +1095,23 @@ impl AssemblyDocument {
         if let Some(settings) = &image.settings {
             self.assembly.settings = settings.clone();
         }
+        if let Some(design) = &image.design {
+            design.restore(&mut self.assembly);
+        }
         self.assembly.normalize();
+        self.solver_status = None;
+        let seed_moved = image.design.is_some()
+            && self
+                .assembly
+                .patterns
+                .iter()
+                .any(|p| p.seeds.iter().any(|s| image.components.iter().any(|(c, _)| c == s)));
         let structural = !image.sources.is_empty()
             || !image.patterns.is_empty()
             || !r.removed.is_empty()
             || !r.added.is_empty()
-            || image.settings.is_some();
+            || image.settings.is_some()
+            || seed_moved;
         if structural {
             self.reflatten();
             return;
@@ -1181,28 +1243,39 @@ impl AssemblyDocument {
             return Err("only parts have an exact body".into());
         }
         let r = self.refs.get(&def).ok_or("the definition has no reference")?.clone();
-        let id = r.id.ok_or("the reference has no document id")?;
-        let resolver = self.resolver();
-        let bytes = match resolver.resolve(&r) {
-            Resolution::Found(t) if t.revision() == Some(&r.pinned) => {
-                let p = t.path().ok_or("the document has no file")?;
-                std::fs::read(p).map_err(|e| e.to_string())?
-            }
-            _ => match &self.options.revisions {
-                Some(store) => store.fetch(id, &r.pinned).map_err(|e| e.to_string())?,
-                None => {
-                    return Err(format!(
-                        "revision {} of {} is not available; Rebuild to use the current version",
-                        r.pinned.short(),
-                        label_of(&r)
-                    ));
-                }
-            },
-        };
+        let bytes = self.revision_bytes(&r)?;
         let part = Arc::new(Mutex::new(source.exact(&bytes)?));
         self.exact.insert(def, part.clone());
         self.store.get_mut(def).state = LoadState::ExactReady;
         Ok(part)
+    }
+
+    /// The file of the revision `r` pins: the referenced file while it is at that
+    /// revision, otherwise the revision store's copy. What is found is handed to the
+    /// store, so a pin stays provable after the file moves on.
+    pub(crate) fn revision_bytes(&self, r: &DocRef) -> Result<Vec<u8>, String> {
+        let id = r.id.ok_or("the reference has no document id")?;
+        let on_disk = match self.resolver().resolve(r) {
+            Resolution::Found(t) if t.revision() == Some(&r.pinned) => t.path().and_then(|p| std::fs::read(p).ok()),
+            _ => None,
+        };
+        // An open document's revision can be one its file does not hold yet.
+        let matches =
+            |b: &Vec<u8>| soliddraft_document::identify(std::io::Cursor::new(b)).is_ok_and(|i| i.revision == r.pinned);
+        if let Some(bytes) = on_disk.filter(matches) {
+            if let Some(store) = &self.options.revisions {
+                store.record(id, &r.pinned, &bytes);
+            }
+            return Ok(bytes);
+        }
+        match &self.options.revisions {
+            Some(store) => store.fetch(id, &r.pinned).map_err(|e| e.to_string()),
+            None => Err(format!(
+                "revision {} of {} is not available; Rebuild to use the current version",
+                r.pinned.short(),
+                label_of(r)
+            )),
+        }
     }
 
     /// Drops a definition's exact body.
@@ -1260,8 +1333,28 @@ impl AssemblyDocument {
         }
     }
 
+    /// Solves a loaded candidate's mates and moves its components. Returns those it moved.
+    fn solve_candidate(&mut self, candidate: &mut AssemblyDocument) -> Result<Vec<ComponentId>, MateRefusal> {
+        let solved = self.solve_truth(&candidate.assembly)?;
+        let mut moved = Vec::new();
+        for (id, placement) in solved.placements {
+            let Some(c) = candidate.assembly.component_mut(id) else { continue };
+            if c.placement == placement {
+                continue;
+            }
+            c.placement = placement;
+            moved.push(id);
+            let path = OccurrencePath::root().child(Step::component(id));
+            if let Some(row) = candidate.table.find(&path) {
+                candidate.table.set_local(row, placement, &candidate.store);
+            }
+        }
+        Ok(moved)
+    }
+
     /// Accepts every root source together, only after its proposed revision can be
-    /// shown. A refusal keeps the accepted truth, display and undo history.
+    /// shown and its mates solve on it. A refusal keeps the accepted truth, display and
+    /// undo history.
     pub fn rebuild(&mut self) -> RebuildReport {
         let started = std::time::Instant::now();
         self.finish_loading();
@@ -1326,12 +1419,22 @@ impl AssemblyDocument {
                             problems.push(format!("{label}: cannot be shown at the proposed revision"));
                         }
                     }
-                    if problems.is_empty()
-                        && report.sources.iter().any(|s| s.status == RefChange::Updated || s.moved.is_some())
-                    {
-                        let mut before = self.image(&[], &[]);
+                    let changes = report.sources.iter().any(|s| s.status == RefChange::Updated || s.moved.is_some());
+                    let mut moved = Vec::new();
+                    if problems.is_empty() && changes && !candidate.assembly.mates.is_empty() {
+                        match self.solve_candidate(&mut candidate) {
+                            Ok(placed) => moved = placed,
+                            Err(refusal) => {
+                                problems.push(refusal.to_string());
+                                report.mate_refusal = Some(refusal);
+                            }
+                        }
+                    }
+                    if problems.is_empty() && changes {
+                        let mut before = self.image(&moved, &[]);
                         before.sources = self.assembly.sources.iter().map(|s| (s.id, Some(s.clone()))).collect();
                         self.assembly = candidate.assembly;
+                        self.solver_status = None;
                         self.store = candidate.store;
                         self.table = candidate.table;
                         self.root = candidate.root;
@@ -1412,6 +1515,8 @@ pub struct RebuildReport {
     pub sources: Vec<SourceReport>,
     /// Why Update was refused, with the blocking source paths.
     pub refusal: Option<String>,
+    /// The mates' refusal, when they were why.
+    pub mate_refusal: Option<MateRefusal>,
     /// How long resolution and loading took.
     pub elapsed: std::time::Duration,
 }

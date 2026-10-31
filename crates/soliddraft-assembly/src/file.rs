@@ -37,10 +37,12 @@ use soliddraft_document::{
     kind::{format_major, found_tag},
 };
 use soliddraft_materials::Snapshots;
+use soliddraft_model::ValueTable;
 use soliddraft_tessellation::{Level, Quality, Settings, settings};
 
 use crate::binary::BinaryError;
 use crate::bulk::{self, PLACEMENTS};
+use crate::mates::MateEntry;
 use crate::mesh::{DISPLAY_MESH, DisplayMesh};
 use crate::schema::{Assembly, Component, FORMAT, Invalid, OccurrenceAppearance, Override, Pattern, Source, Units};
 
@@ -171,6 +173,7 @@ impl Assembly {
             configurations: &self.configurations,
             display_states: &self.display_states,
             mates: &self.mates,
+            values: &self.values,
             next_id: self.next_id,
         };
         let json = serde_json::to_value(&out).expect("an assembly always serialises");
@@ -197,6 +200,9 @@ impl Assembly {
             map.remove("display_states");
             map.remove("appearances");
             map.remove("snapshots");
+            // Placements hold what mates decide: the same placements are the same shape.
+            map.remove("mates");
+            map.remove("values");
             for list in ["components", "patterns"] {
                 if let Some(Value::Array(items)) = map.get_mut(list) {
                     for item in items.iter_mut().filter_map(Value::as_object_mut) {
@@ -339,7 +345,9 @@ struct TruthOut<'a> {
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     display_states: &'a [Value],
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    mates: &'a [Value],
+    mates: &'a [MateEntry],
+    #[serde(skip_serializing_if = "ValueTable::is_empty")]
+    values: &'a ValueTable,
     next_id: u32,
 }
 

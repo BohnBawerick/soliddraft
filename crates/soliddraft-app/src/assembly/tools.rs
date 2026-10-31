@@ -1,6 +1,7 @@
 //! Assembly commands shared by MCP and the scenario runner.
 
 use super::*;
+use crate::mates::tools::refused;
 use serde_json::{Value, json};
 
 pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
@@ -22,7 +23,9 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
             Freshness::Missing | Freshness::Unchecked => ("missing", None),
         };
         json!({
+            "path": table.path(row),
             "document": def.key.document,
+            "shown": def.key.revision,
             "pinned": reference.map(|r| &r.pinned),
             "now": now, "status": status, "warning": warning(def), "floating": true,
             "translation": placement.translation.to_array(), "rotation": placement.rotation.to_array(),
@@ -30,11 +33,64 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
             "display": def.state.as_str(),
         })
     }).collect();
+    let (mates, values, solver) = crate::mates::tools::rows(s);
     Some(json!({
         "active": state.assembly.active, "name": s.doc.assembly().name, "path": s.doc.path(),
         "revision": s.doc.revision(), "geometry_hash": s.doc.assembly().geometry_hash(), "dirty": s.doc.is_dirty(), "undo": s.doc.undo_label(),
-        "components": components,
+        "components": components, "mates": mates, "values": values, "solver": solver,
+        "proof_rebuilds": s.doc.parts_rebuilt_for_proofs(),
+        "accepted_state": accepted_state(s),
     }))
+}
+
+/// The accepted state, read without saving: what a refusal must leave exactly as it was.
+/// Freshness, repair messages and timing are not part of it.
+fn accepted_state(s: &AssemblySession) -> Value {
+    let table = s.doc.table();
+    let rows: Vec<_> = (1..table.len() as u32)
+        .map(OccurrenceIndex)
+        .filter(|r| !table.flags(*r).has(Flags::REMOVED))
+        .map(|r| {
+            let key = &s.doc.store().get(table.definition(r)).key;
+            json!({
+                "path": table.path(r), "document": key.document, "revision": key.revision,
+                "local": table.local(r), "world": table.world(r),
+            })
+        })
+        .collect();
+    let mut definitions: Vec<_> = s
+        .doc
+        .store()
+        .iter()
+        .filter(|(i, _)| *i != s.doc.root())
+        .map(|(_, d)| json!({ "document": d.key.document, "revision": d.key.revision, "quality": d.key.quality }))
+        .collect();
+    definitions.sort_by_key(Value::to_string);
+    json!({
+        "truth": s.doc.assembly(), "revision": s.doc.revision(), "geometry": s.doc.assembly().geometry_hash(),
+        "rows": rows, "definitions": definitions, "dirty": s.doc.is_dirty(), "next_id": s.doc.assembly().next_id,
+        "undo": { "label": s.doc.undo_label(), "depth": s.doc.undo_depth() },
+        "redo": { "label": s.doc.redo_label(), "depth": s.doc.redo_depth() },
+    })
+}
+
+/// Places one file, as Insert component does, at `placement` when one is given.
+fn insert_one(state: &mut AppState, input: &Value) -> Result<Value, String> {
+    let paths: Vec<&str> = input["paths"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    let [file] = paths[..] else { return Err("paths names one file to insert".into()) };
+    let placement = match &input["placement"] {
+        Value::Null => None,
+        p => Some(serde_json::from_value::<Placement>(p.clone()).map_err(|e| format!("the placement: {e}"))?),
+    };
+    if placement.is_some_and(|p| !(p.translation.is_finite() && p.rotation.is_finite() && p.rotation.length() > 0.5)) {
+        return Err("a placement needs a finite translation and a unit rotation".into());
+    }
+    let revisions = state.revisions.clone();
+    let s = state.assembly.session.as_mut().ok_or("no assembly is open")?;
+    let path = place(s, &*revisions, Path::new(file), placement)?;
+    s.doc.finish_loading();
+    s.selected = Some(path.clone());
+    Ok(json!({ "inserted": path, "assembly": summary(state) }))
 }
 
 pub(crate) fn open(state: &mut AppState, path: PathBuf) -> Result<Value, String> {
@@ -77,12 +133,18 @@ pub(crate) fn run(state: &mut AppState, name: &str, input: &Value) -> Option<Res
             state.drawing.active = false;
             Ok(json!({ "active": "part" }))
         }
-        "assembly_update" => update(state).map(|report| {
-            json!({
-                "updated": report.updated(), "unchanged": report.sources.len() - report.updated(),
-                "assembly": summary(state),
+        "insert_component" => insert_one(state, input),
+        "assembly_update" => update(state)
+            .map(|report| {
+                json!({
+                    "updated": report.updated(), "unchanged": report.sources.len() - report.updated(),
+                    "assembly": summary(state),
+                })
             })
-        }),
+            .map_err(|report| match report.mate_refusal {
+                Some(r) => refused(r),
+                None => report.refusal.unwrap_or_default(),
+            }),
         "assembly_save" => {
             let path = PathBuf::from(input["path"].as_str().unwrap_or_default());
             if DocKind::of_path(&path) != Some(DocKind::Assembly) {

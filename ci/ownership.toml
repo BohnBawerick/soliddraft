@@ -9,7 +9,7 @@ module = ["app_tools"]
 
 [[areas]]
 name = "app.assembly"
-owner = "V4"
+owner = "core"
 crate = "soliddraft-app"
 paths = ["crates/soliddraft-app/src/assembly.rs", "crates/soliddraft-app/src/assembly/"]
 module = ["assembly"]
@@ -407,6 +407,13 @@ paths = ["crates/soliddraft-model/src/values.rs"]
 module = ["values"]
 
 [[areas]]
+name = "model.value_expr"
+owner = "core"
+crate = "soliddraft-model"
+paths = ["crates/soliddraft-model/src/value_expr.rs"]
+module = ["value_expr"]
+
+[[areas]]
 name = "v2.tracked"
 owner = "V2"
 crate = "soliddraft-model"
@@ -414,8 +421,8 @@ paths = ["crates/soliddraft-model/src/tracked.rs"]
 module = ["tracked"]
 
 [[areas]]
-name = "v4.assembly_crate"
-owner = "V4"
+name = "v5.assembly_crate"
+owner = "V5"
 crate = "soliddraft-assembly"
 paths = ["crates/soliddraft-assembly/"]
 module = []
@@ -426,3 +433,10 @@ owner = "V9"
 crate = "soliddraft-app"
 paths = ["crates/soliddraft-app/src/import/"]
 module = ["import"]
+
+[[areas]]
+name = "v5.mates"
+owner = "V5"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/mates/"]
+module = ["mates"]

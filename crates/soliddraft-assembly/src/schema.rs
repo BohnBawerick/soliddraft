@@ -16,15 +16,18 @@
 //!   replacing the parts' own colours; the part files keep theirs. The
 //!   nearest occurrence with a colour wins. The assembly keeps a copy of every
 //!   appearance it uses in `snapshots`, as parts do;
-//! - reserved lists for configurations, display states and mates, kept verbatim until
-//!   those formats are defined.
+//! - **mates**: authored relationships that decide placements ([`crate::mates`]), and the
+//!   typed **values** that can drive them. A mate of a family this version does not know
+//!   is kept as read and never counted as solved;
+//! - reserved lists for configurations and display states, kept verbatim until those
+//!   formats are defined.
 //!
 //! Beside the truth, an assembly carries its display settings ([`Assembly::settings`]):
 //! a quality for every part, and components shown at their own quality. They are kept
 //! in the file's `settings.json`, outside both hashes, so changing them never gives the
 //! assembly a new revision.
 //!
-//! Placements are fixed: there are no mates yet. Units are millimetres and degrees.
+//! Units are millimetres and degrees.
 
 use std::collections::{HashMap, HashSet};
 
@@ -33,8 +36,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use soliddraft_document::{ConfigScope, ConfigurationId, DocKind, DocRef};
 use soliddraft_materials::{Appearance, AppearanceId, Snapshots, scope};
+use soliddraft_model::{Expression, ValueTable};
 use soliddraft_tessellation::Settings;
 
+use crate::mates::{Mate, MateEntry};
 use crate::path::{ComponentId, OccurrencePath, PatternId, SourceId, Step};
 use crate::placement::Placement;
 
@@ -75,10 +80,14 @@ pub struct Assembly {
     /// Reserved for display states (visibility, colours, exploded poses). Kept as read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub display_states: Vec<Value>,
-    /// Reserved for mates. Kept as read; placements are fixed until mates arrive.
+    /// The mates: known ones by id, then those of a later version as read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mates: Vec<Value>,
-    /// The next free id for a component, pattern or source. Ids are never reused.
+    pub mates: Vec<MateEntry>,
+    /// Typed values that can drive mates.
+    #[serde(default, skip_serializing_if = "ValueTable::is_empty")]
+    pub values: ValueTable,
+    /// The next free id for a component, pattern, source, mate or value. Ids are never
+    /// reused.
     pub next_id: u32,
     /// Display settings, from `settings.json`: not part of the truth or its hashes.
     /// In an assembly, a viewport quality other than auto shows every part at it
@@ -335,6 +344,7 @@ impl Assembly {
             configurations: Vec::new(),
             display_states: Vec::new(),
             mates: Vec::new(),
+            values: ValueTable::default(),
             next_id: 1,
             settings: Settings::default(),
         }
@@ -426,7 +436,13 @@ impl Assembly {
         self.patterns.sort_by_key(|p| p.id);
         self.overrides.sort_by(|a, b| a.path.cmp(&b.path));
         self.appearances.sort_by(|a, b| a.path.cmp(&b.path));
+        self.mates.sort_by_key(MateEntry::order);
         self.snapshots.normalise();
+    }
+
+    /// The mates this version understands.
+    pub fn known_mates(&self) -> impl Iterator<Item = &Mate> {
+        self.mates.iter().filter_map(MateEntry::known)
     }
 
     /// The appearance the occurrence at `path` is given here, in `configuration`
@@ -469,7 +485,9 @@ impl Assembly {
             .iter()
             .map(|s| s.id.0)
             .chain(self.components.iter().map(|c| c.id.0))
-            .chain(self.patterns.iter().map(|p| p.id.0));
+            .chain(self.patterns.iter().map(|p| p.id.0))
+            .chain(self.known_mates().map(|m| m.id().0))
+            .chain(self.values.ids());
         for id in all {
             if !ids.insert(id) {
                 return bad(format!("id {id} is used twice"));
@@ -529,6 +547,7 @@ impl Assembly {
                 _ => return bad(format!("the colour at {} is not on an occurrence of this assembly", c.path)),
             }
         }
+        self.validate_mates()?;
         for o in &self.overrides {
             let Some(first) = o.path.steps().first() else {
                 return bad("an override has an empty path".into());
@@ -557,6 +576,37 @@ impl Assembly {
             }
         }
         Ok(())
+    }
+
+    /// Checks every mate names components and sources that exist, and that its
+    /// expressions parse back to what is stored and come to lengths.
+    fn validate_mates(&self) -> Result<(), Invalid> {
+        let bad = |m: String| Err(Invalid(m));
+        if !self.mates.is_sorted_by_key(MateEntry::order) {
+            return bad("mates are not in id order".into());
+        }
+        let mut names = HashSet::new();
+        for mate in self.known_mates() {
+            if mate.name().trim().is_empty() || !names.insert(mate.name()) {
+                return bad(format!("mate {} has no name of its own", mate.id()));
+            }
+            for c in mate.components() {
+                if self.component(c).is_none() {
+                    return bad(format!("mate {} ties component {c}, which does not exist", mate.name()));
+                }
+            }
+            if let Mate::Distance { a, b, distance, .. } = mate {
+                for end in [a, b] {
+                    let placed = end.component().and_then(|c| self.component(c)).and_then(|c| self.source(c.source));
+                    if placed.is_none_or(|s| s.document.id != Some(end.document)) {
+                        return bad(format!("mate {} names a face of another document", mate.name()));
+                    }
+                }
+                self.values.length(distance).map_err(|e| Invalid(format!("mate {}: {e}", mate.name())))?;
+            }
+        }
+        let expressions: Vec<&Expression> = self.known_mates().filter_map(Mate::expression).collect();
+        self.values.validate(expressions.into_iter()).map_err(Invalid)
     }
 
     /// The number of occurrences this assembly places directly: its components and the

@@ -23,7 +23,7 @@ use egui_dock::DockState;
 use glam::{DMat4, DQuat, DVec3, EulerRot};
 use soliddraft_assembly::{
     AssemblyDocument, DefinitionIndex, Flags, Freshness, KernelSource, LoadState, MeshBounds, OccurrenceIndex,
-    OccurrencePath, OpenOptions, Opening, Placement, Scene, SharedMesh,
+    OccurrencePath, OpenOptions, Opening, Placement, RebuildReport, Scene, SharedMesh,
 };
 use soliddraft_document::kind::ASSEMBLY_EXTENSION;
 use soliddraft_document::{DocKind, DocRef};
@@ -64,6 +64,7 @@ pub enum AssemblyAction {
     Undo,
     Redo,
     ZoomFit,
+    Mate(crate::mates::MateAction),
 }
 
 /// The open assembly, one being opened, and whether the assembly is the active document.
@@ -74,6 +75,8 @@ pub struct AssemblyState {
     pub opening: Option<(PathBuf, Opening)>,
     pub active: bool,
     last_part: Option<soliddraft_document::OpenDocument>,
+    /// The Mate panel's fields.
+    pub mate: crate::mates::Draft,
 }
 
 impl AssemblyState {
@@ -293,7 +296,7 @@ pub(crate) fn refresh(state: &mut AppState) {
     state.assembly.last_part = Some(part);
 }
 
-fn warning(def: &soliddraft_assembly::Definition) -> Option<String> {
+pub(crate) fn warning(def: &soliddraft_assembly::Definition) -> Option<String> {
     match (&def.state, &def.freshness) {
         (LoadState::Stale, _) => def.problem.clone(),
         (_, Freshness::NewerAvailable { .. }) => Some("The part has changed; Update to use it".into()),
@@ -306,7 +309,7 @@ fn from_part(state: &mut AppState) -> Result<(), String> {
     let part =
         state.doc.path.clone().filter(|_| !state.doc.dirty).ok_or("Save the part before making an assembly of it")?;
     let mut session = new_session(state, format!("{} assembly", state.doc.name));
-    session.selected = Some(place(&mut session, &*state.revisions, &part)?);
+    session.selected = Some(place(&mut session, &*state.revisions, &part, None)?);
     session.doc.finish_loading();
     state.assembly.session = Some(session);
     state.assembly.active = true;
@@ -315,12 +318,16 @@ fn from_part(state: &mut AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn update(state: &mut AppState) -> Result<soliddraft_assembly::RebuildReport, String> {
+/// Runs Update. A refusal comes back as the report that says why.
+fn update(state: &mut AppState) -> Result<RebuildReport, Box<RebuildReport>> {
     refresh(state);
-    let session = state.assembly.session.as_mut().ok_or("no assembly is open")?;
+    let Some(session) = state.assembly.session.as_mut() else {
+        let refusal = Some("no assembly is open".into());
+        return Err(Box::new(RebuildReport { refusal, ..RebuildReport::default() }));
+    };
     let report = session.doc.rebuild();
-    if let Some(refusal) = &report.refusal {
-        return Err(refusal.clone());
+    if report.refusal.is_some() {
+        return Err(Box::new(report));
     }
     session.update();
     refresh(state);
@@ -461,8 +468,9 @@ pub fn apply(state: &mut AppState, dock: &mut DockState<Tab>, action: AssemblyAc
         }
         AssemblyAction::Update => match update(state) {
             Ok(report) => state.note(format!("Updated {} sources", report.updated()), NoteKind::Ok),
-            Err(e) => state.note(e, NoteKind::Error),
+            Err(report) => state.note(report.refusal.unwrap_or_default(), NoteKind::Error),
         },
+        AssemblyAction::Mate(action) => crate::mates::apply(state, action),
         AssemblyAction::Open(path) => {
             state.note(format!("Opening {}…", path.display()), NoteKind::Info);
             let opening = AssemblyDocument::open_in_background(&path, options(state));
@@ -529,7 +537,7 @@ fn insert(state: &mut AppState, files: &[PathBuf]) {
     let mut placed = Vec::new();
     let mut problems = Vec::new();
     for file in files {
-        match place(s, &*revisions, file) {
+        match place(s, &*revisions, file, None) {
             Ok(path) => placed.push(path),
             Err(e) => problems.push(format!("{}: {e}", file.display())),
         }
@@ -549,11 +557,13 @@ fn insert(state: &mut AppState, files: &[PathBuf]) {
 }
 
 /// Places one file: reads it for its id and revision, hands its bytes to the revision
-/// store so an assembly with no folder yet can show it, and places it.
+/// store so an assembly with no folder yet can show it, and places it at `placement`, or
+/// beside what is there.
 fn place(
     s: &mut AssemblySession,
     revisions: &dyn soliddraft_document::RevisionStore,
     file: &Path,
+    placement: Option<Placement>,
 ) -> Result<OccurrencePath, String> {
     let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
     let identity = soliddraft_document::identify(std::io::Cursor::new(&bytes)).map_err(|e| e.to_string())?;
@@ -580,7 +590,7 @@ fn place(
             .unwrap_or(0.0);
         DVec3::new(there.max.x + INSERT_GAP - own_min, 0.0, 0.0)
     };
-    let id = s.doc.insert(r, Placement::translation(at)).map_err(|e| e.to_string())?;
+    let id = s.doc.insert(r, placement.unwrap_or(Placement::translation(at))).map_err(|e| e.to_string())?;
     Ok(OccurrencePath::root().child(soliddraft_assembly::Step::component(id)))
 }
 
@@ -624,6 +634,7 @@ pub fn viewport(ui: &mut egui::Ui, state: &mut AppState) {
         texel.and_then(|t| scene.decode(t)).map(|p| p.occurrence)
     };
     let hovered = picked(s, events.hover_texel);
+    let mate_open = state.assembly.mate.open;
     if hovered != s.shown.1 {
         s.scene.lock().expect("the scene lock").set_hover(s.doc.table(), hovered);
         s.shown.1 = hovered;
@@ -632,6 +643,14 @@ pub fn viewport(ui: &mut egui::Ui, state: &mut AppState) {
     let mut actions = Vec::new();
     if let Some(texel) = events.clicked_texel {
         let row = picked(s, texel);
+        // With the Mate panel open a click also names the face under it.
+        let face = texel.filter(|_| mate_open).and_then(|t| s.scene.lock().expect("the scene lock").decode(t));
+        if let Some(selection) = face.map(|f| s.doc.selection(&f))
+            && let Some(name) = selection.face
+        {
+            actions
+                .push(AppAction::Assembly(AssemblyAction::Mate(crate::mates::MateAction::Pick(selection.path, name))));
+        }
         // A click selects the root's component the part belongs to, as SolidWorks does.
         let top = row.map(|mut r| {
             while let Some(p) = s.doc.table().parent(r).filter(|p| *p != OccurrenceIndex::ROOT) {
@@ -770,9 +789,10 @@ pub fn tree(ui: &mut egui::Ui, state: &mut AppState) {
     }
 }
 
-/// The property panel: the selected component's placement, typed; or the assembly's
-/// summary.
+/// The property panel: the Mate panel while it is open, otherwise the selected component's
+/// placement, typed; or the assembly's summary.
 pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
+    let mating = state.assembly.mate.open;
     let Some(s) = state.assembly.session.as_mut() else { return };
     let (head, _) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
     let title = match s.selected_row() {
@@ -793,6 +813,16 @@ pub fn properties(ui: &mut egui::Ui, state: &mut AppState) {
         theme::ink(),
     );
     ui.painter().hline(head.x_range(), head.bottom() - 0.5, Stroke::new(1.0, theme::line()));
+    // The Mate panel takes the whole area while it is open: its form does not fit under the
+    // placement fields.
+    if mating {
+        egui::ScrollArea::vertical().id_salt("assembly_mate").auto_shrink([false, true]).show(ui, |ui| {
+            egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(12, 0))
+                .show(ui, |ui| crate::mates::panel::show(ui, state));
+        });
+        return;
+    }
     let mut actions = Vec::new();
     egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
         let Some(draft) = s.draft.as_mut() else {

@@ -35,6 +35,8 @@ After a deliberate Catallax pin change, manually dispatch Hosted CI with `refres
 
 The `measure` acceptance scenario checks picked edge length and face area, tracked checks, upstream edits, stale sources, undo, reopen and a checked STEP export; `measure_panel` drives the same path through a real viewport pick in each interactive job. The `measure-pairs` scenario extends it to midpoints, edge and face pairs, tracked pairs, a fillet that removes one end, and stale and current reopen; `measure_panel` and `measure_guides` drive the hovered midpoint, the pair, Track this and the sketch guide through the real window.
 
+The `mate-distance` acceptance scenario builds two parts, mates them through the MCP commands, drives the distance from a typed value, edits a part, updates, reopens and refuses a dangling reference, comparing the whole accepted state across every refusal. `mate_panel` makes the same mate in the window with real picks.
+
 Run CI tooling checks with `python3 -m unittest discover -s ci -p 'test_*.py'`. The lint job always runs this suite, including the frozen designer routing and gate fixtures.
 
 ## Windows is deferred

@@ -202,7 +202,7 @@ impl Document {
                             row.overrides.insert(to.clone(), text);
                         }
                         for text in row.overrides.values_mut() {
-                            *text = crate::values::rename_tokens(text, name, to);
+                            *text = crate::value_expr::rename_tokens(text, name, to);
                         }
                     }
                     format!("rename value {name}")

@@ -4,6 +4,7 @@
 //! immutable Catallax application build. Legacy history is derived from Catallax's
 //! origin sets; display estimates never decide topology or operation success.
 
+mod assembly_measure;
 mod construction;
 mod convert;
 mod diagnostics;
@@ -1014,6 +1015,10 @@ impl Kernel for CatallaxKernel {
         quantity: PairQuantity,
     ) -> KernelResult<Measurement> {
         self.observe("measure_pair", || measure::measure_pair(self, body, a, b, quantity))
+    }
+
+    fn face_support_plane(&self, body: BodyId, face: FaceId) -> KernelResult<ExactAxisPlane> {
+        self.observe("face_support_plane", || assembly_measure::face_support_plane(self, body, face))
     }
 
     fn history(&self, body: BodyId) -> KernelResult<Vec<HistoryRecord>> {

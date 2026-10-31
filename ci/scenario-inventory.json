@@ -206,6 +206,22 @@
       "evidence": "result.json and commands/NNNN/{command.json,kernel.json,viewport.png,part.stl,export-stl-oracle.stdout}"
     },
     {
+      "id": "mate-distance",
+      "file": "ci/scenarios/mate-distance.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-assembly",
+        "soliddraft-model",
+        "soliddraft-kernel-api",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "75bc8b56dbf3d2222301c2e8edcf9a4594e9f9e4",
+      "route": "MCP assembly and mate commands -> assembly transaction -> proven plane query -> Catallax adapter -> pinned kernel",
+      "supported_limits": "Origin and distance mates between axis-aligned planar faces of the root's own part components, default configuration; identity and exact half-turn placements carry the exact claim; partial M2/M3/M4/M6 evidence.",
+      "evidence": "result.json, protocol.json, commands/NNNN/{part.dwprt,command.json,kernel.json,inspect-*.stdout}; work/a.dwprt, work/b.dwprt and work/rig.dwasm"
+    },
+    {
       "id": "measure",
       "file": "ci/scenarios/measure.json",
       "acceptance": true,

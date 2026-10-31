@@ -53,6 +53,11 @@ pub trait DisplaySource: Send + Sync {
             _ => Err(format!("the {level} level needs a kernel")),
         }
     }
+
+    /// The kernel source behind this one, for work that needs exact parts.
+    fn kernel_source(&self) -> Option<&KernelSource> {
+        None
+    }
 }
 
 /// Display meshes from the display data part files keep, without a kernel.
@@ -114,6 +119,10 @@ impl KernelSource {
 }
 
 impl DisplaySource for KernelSource {
+    fn kernel_source(&self) -> Option<&KernelSource> {
+        Some(self)
+    }
+
     /// The part file's own standard level when it has one for its current shape and no
     /// other quality was asked for; otherwise the part rebuilt and tessellated.
     fn part_mesh(&self, part_file: &[u8]) -> Result<(DisplayMesh, String), String> {

@@ -43,8 +43,8 @@ Writing is deterministic: the same assembly and copies give the same bytes.
 }
 ```
 
-- **Ids.** Sources, components and patterns take their ids from one counter, `next_id`,
-  and an id is never reused. Ids are stable for the life of the assembly; names are
+- **Ids.** Sources, components, patterns, mates and values take their ids from one
+  counter, `next_id`, and an id is never reused. Ids are stable for the life of the assembly; names are
   labels. A component without a name shows as its source's file name and its id.
 - **Sources** are the documents the assembly places. Each is a `DocRef` (see
   [documents.md](documents.md#references)) with its pinned revision. A thousand
@@ -69,8 +69,11 @@ Writing is deterministic: the same assembly and copies give the same bytes.
   on the component, never by an override.
 - **Appearances** colour occurrences (see [Colours](#colours)), with `snapshots`
   holding the appearances they use.
-- **Reserved.** `configurations`, `display_states` and `mates` are kept exactly as read
-  until those formats are defined. Placements are fixed until mates arrive.
+- **Mates and values** tie components together; see [mates.md](mates.md). A placement is
+  still the truth of where a component is: a solve writes placements, and an assembly with
+  no mates keeps them as authored.
+- **Reserved.** `configurations` and `display_states` are kept exactly as read until those
+  formats are defined.
 
 ## Occurrence paths
 
@@ -104,8 +107,10 @@ BLAKE3 over the canonical `assembly.json` without its format tag, and, when ther
 `placements.bin`, over a hash of its bytes, by the rule in
 [documents.md](documents.md#hashes). The geometry hash leaves out the assembly's,
 components' and patterns' names, hidden flags (in both entries), `appearances` and
-`snapshots`, display states and the sources' paths and locators. Hiding, colouring
-or renaming a component changes the revision and not the geometry.
+`snapshots`, display states, mates, values and the sources' paths and locators. Hiding,
+colouring or renaming a component changes the revision and not the geometry. Mates decide
+placements, and the placements are hashed, so the same placements are the same geometry
+however they were reached.
 
 ## Display copies
 

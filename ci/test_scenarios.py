@@ -137,8 +137,13 @@ class Checks(unittest.TestCase):
         self.assertFalse(scenarios.references_kept(known, [dict(ref, resolved=True)], ["Sketch3"], False)["pass"])
         self.assertTrue(scenarios.references_kept(known, [dict(ref, resolved=None)], [], False)["pass"], "not built")
         self.assertFalse(scenarios.references_kept(known, [], [], False)["pass"], "a reference vanished")
-        known["x"] = "y"
+        known["x"] = {"name": "y", "kernel": []}
         self.assertTrue(scenarios.references_kept(known, [], [], True)["pass"], "its feature was deleted")
+        self.assertTrue(scenarios.references_kept(known, [], [], False)["pass"], "it stays deleted on later steps")
+        undone = dict(ref, origin="F2 Start cap #1")
+        self.assertFalse(scenarios.references_kept(known, [undone], [], False)["pass"], "an undo brings the same origin")
+        self.assertTrue(scenarios.references_kept(known, [ref], [], False)["pass"])
+        self.assertFalse(scenarios.references_kept(known, [], [], False)["pass"], "the undo cleared the deletion")
 
     def test_new_part_starts_its_own_reference_history(self):
         ref = {"feature_id": "F1", "feature": "Sketch1", "slot": "sketch plane", "origin": "Top plane",

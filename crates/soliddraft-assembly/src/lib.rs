@@ -6,7 +6,9 @@
 //!
 //! - **The schema** ([`schema`]): sources, components with stable ids and rigid f64
 //!   placements, patterns stored as generators, sparse overrides by occurrence path,
-//!   and reserved configurations, display states and mates.
+//!   and reserved configurations and display states.
+//! - **Mates** ([`mates`]): driven relationships between components, solved from proven
+//!   plane equations through one transaction.
 //! - **Paths** ([`path`]): component, pattern and source ids, and occurrence paths made
 //!   of them, never of names.
 //! - **The file** ([`file`]): `.dwasm` in the document envelope, `placements.bin` for
@@ -32,6 +34,7 @@ pub mod bvh;
 pub mod document;
 pub mod file;
 pub mod load;
+pub mod mates;
 pub mod mesh;
 pub mod occurrence;
 pub mod path;
@@ -45,6 +48,10 @@ pub use binary::BinaryError;
 pub use document::{AssemblyDocument, Changes, EditError, Opening, RebuildReport, RefChange, Selection, SourceReport};
 pub use file::{AssemblyPackage, CopyReader, FileError, RefCopy, TruthEntries};
 pub use load::{LoadError, LoadEvent, OpenOptions};
+pub use mates::{
+    Alignment, EndpointSelector, FaceEndpoint, FaceSelector, FreeMotion, GeneratorChoice, Mate, MateEdit, MateEntry,
+    MateId, MateRefusal, PlaneMeasurement, PlaneProof, ProofIdentity, RefusalCode, SolverState, SolverStatus,
+};
 pub use mesh::{DisplayMesh, MeshBounds, MeshFace, SharedMesh};
 pub use occurrence::{Counts, Flags, OccurrenceIndex, OccurrenceTable};
 pub use path::{ComponentId, OccurrencePath, PatternId, SourceId, Step};
