@@ -22,8 +22,9 @@ use crate::subassembly::{FormCode, FormRefusal, FormRequest, FormStatus, Migrati
 pub struct FormPlan {
     /// The root's revision it was prepared on.
     root_revision: ContentHash,
-    /// Each selected source's reference, and the revision its file had then.
-    sources: Vec<(DocRef, Option<ContentHash>)>,
+    /// Each selected source's reference, the revision its file had then, and where it
+    /// was: the new file's bytes reference that place.
+    sources: Vec<(DocRef, Option<ContentHash>, PathBuf)>,
     destination: PathBuf,
     child_bytes: Vec<u8>,
     candidate: AssemblyDocument,
@@ -144,8 +145,9 @@ impl AssemblyDocument {
         for s in &source_ids {
             let r = truth.source(*s).expect("checked").document.clone();
             let (now, file) = self.resolved(&r)?;
-            found.push(file.unwrap_or_else(|| r.stored_path(&root_path)));
-            sources.push((r, now));
+            let at = located(file.unwrap_or_else(|| r.stored_path(&root_path)));
+            found.push(at.clone());
+            sources.push((r, now, at));
         }
         check_carried(self, &truth, &chosen, &request.paths)?;
 
@@ -348,8 +350,22 @@ impl AssemblyDocument {
                     .caused_by(self.id().to_string())
             });
         }
-        for (r, then) in &plan.sources {
-            let (current, _) = self.resolved(r)?;
+        // The new file's bytes name each source where it was: one found elsewhere now, even
+        // at the same revision, would leave the new file pointing at nothing.
+        for (r, then, was) in &plan.sources {
+            let (current, file) = self.resolved(r)?;
+            let at = located(file.unwrap_or_else(|| r.stored_path(self.path().unwrap_or(Path::new("")))));
+            if at != *was {
+                return Err(FormRefusal {
+                    expected: Some(was.display().to_string()),
+                    actual: Some(at.display().to_string()),
+                    ..FormRefusal::new(
+                        FormCode::StaleRevision,
+                        format!("{} moved after the formation was prepared; prepare it again", r.path),
+                    )
+                    .caused_by(r.path.clone())
+                });
+            }
             if current != *then {
                 let show = |h: &Option<ContentHash>| h.as_ref().map(ToString::to_string).unwrap_or_default();
                 return Err(FormRefusal {
@@ -367,10 +383,7 @@ impl AssemblyDocument {
             FormRefusal::new(FormCode::Io, format!("cannot write {}: {at}", plan.destination.display()))
                 .caused_by(file_name(&plan.destination))
         };
-        if fault == Fault::Staging {
-            return Err(failed("the write failed while staging"));
-        }
-        publish(&plan.destination, &plan.child_bytes)?;
+        publish(&plan.destination, &plan.child_bytes, fault == Fault::Staging)?;
         match fault {
             Fault::AfterPublication => {
                 withdraw(&plan.destination, &plan.child_bytes);
@@ -399,7 +412,7 @@ impl AssemblyDocument {
 pub enum Fault {
     /// None: the ordinary commit.
     None,
-    /// The new file's write fails before anything is published.
+    /// The new file's write stops halfway, before anything is published.
     Staging,
     /// The new file is published, then the root's change fails.
     AfterPublication,
@@ -419,9 +432,16 @@ fn withdraw(path: &Path, bytes: &[u8]) {
     }
 }
 
-/// Writes the new file, never over another.
-fn publish(path: &Path, bytes: &[u8]) -> Result<(), FormRefusal> {
-    soliddraft_document::save_new(path, bytes).map_err(|e| {
+/// A file's place, absolute, to compare one resolution with another.
+fn located(path: PathBuf) -> PathBuf {
+    std::path::absolute(&path).unwrap_or(path)
+}
+
+/// Writes the new file, never over another; `interrupted` stops the write halfway.
+fn publish(path: &Path, bytes: &[u8], interrupted: bool) -> Result<(), FormRefusal> {
+    let write =
+        if interrupted { soliddraft_document::save::save_new_interrupted } else { soliddraft_document::save_new };
+    write(path, bytes).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
             FormRefusal::new(FormCode::DestinationExists, format!("{} already exists", path.display()))
                 .caused_by(file_name(path))

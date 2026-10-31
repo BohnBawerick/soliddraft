@@ -511,13 +511,15 @@ fn formation_preview_and_publication_fail_without_mutation() {
     assert_eq!((std::fs::read(&fx.pack).unwrap(), identify_file(&fx.pack).unwrap().id), other);
     std::fs::remove_file(&fx.pack).unwrap();
 
-    // d. The write fails while staging, and after publication before the root changes:
-    // the new file this formation wrote goes again, and nothing else.
+    // d. The write stops halfway while staging, and fails after publication before the
+    // root changes: the partial temporary file and the new file this formation wrote go
+    // again, and nothing else.
     for fault in [Fault::Staging, Fault::AfterPublication] {
         let plan = fx.doc.prepare_form(&request).unwrap();
         let r = refused(&mut fx, plan, FormCode::Io, fault);
         assert_eq!(r.cause.as_deref(), Some("pack.dwasm"), "{fault:?}");
         assert!(!fx.pack.exists(), "{fault:?}");
+        assert_eq!(disk(&fx).3, Vec::<String>::new(), "{fault:?}: no partial or temporary file is left");
     }
 
     // e. The pin is moved out of the root's folder, and a cold session has no other copy
@@ -643,4 +645,26 @@ fn placing_the_parent_in_the_child_is_a_cycle() {
     assert!(matches!(refused, soliddraft_assembly::EditError::Cycle(_)), "{refused}");
     assert_eq!(snapshot(&mut child), before, "no source, id or row was added");
     assert_eq!((sha(&fx.root), sha(&fx.pack), sha(&fx.base), sha(&fx.pin)), files);
+}
+
+/// A part renamed between preparing and committing, keeping its id and revision: the
+/// plan's new file names the old location, so the commit refuses rather than publish a
+/// reference the new file could not follow, and nothing changes.
+#[test]
+fn a_part_moved_after_preparing_makes_the_plan_stale() {
+    let mut fx = flat("moved");
+    let plan = fx.doc.prepare_form(&fx.request()).unwrap();
+    let renamed = fx.pin.with_file_name("renamed.dwprt");
+    std::fs::rename(&fx.pin, &renamed).unwrap();
+    let (before, history) = (snapshot(&mut fx.doc), (fx.doc.undo_depth(), fx.doc.redo_depth()));
+    let refusal = fx.doc.commit_form(plan).unwrap_err();
+    assert_eq!((refusal.code, refusal.cause.as_deref()), (FormCode::StaleRevision, Some("parts/pin.dwprt")));
+    assert!(!fx.pack.exists(), "nothing is published");
+    assert_eq!(snapshot(&mut fx.doc), before);
+    assert_eq!((fx.doc.undo_depth(), fx.doc.redo_depth()), history);
+
+    // Prepared again, the new file follows the part where it is now.
+    fx.doc.form_subassembly(&fx.request()).unwrap();
+    let child = AssemblyPackage::open(&fx.pack).unwrap();
+    assert_eq!(child.assembly().sources[0].document.path, "../parts/renamed.dwprt");
 }
