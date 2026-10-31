@@ -12,6 +12,18 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 POLICY = 'ci/check-consumers.json'
 FROZEN_BASE = ROOT / 'ci/routing-replays/select-checks.py.9e81eb4'
+# The selector accepted on main before shared viewport files stopped selecting the desktop legs.
+ROUND3_BASE = ROOT / 'ci/routing-replays/select-checks.py.23e47cd'
+# Round 3 expectations, written independently of the selector: app edits reach app, CLI and web.
+APP = {'application-loop', 'interactive-linux', 'lint', 'step-opencascade', 'test-linux', 'web'}
+DESKTOP = {'interactive-macos', 'test-macos', 'test-windows'}
+VIEWPORT = 'crates/soliddraft-app/src/viewport/'
+CAMERA = VIEWPORT + 'camera.rs'
+F1 = ('wgpu::Backend::Gl | wgpu::Backend::Noop => Tier::Basic,',
+      'wgpu::Backend::Dx12 | wgpu::Backend::Metal | wgpu::Backend::Gl | wgpu::Backend::Noop => Tier::Basic,')
+F2 = {'cfg': '\n#[cfg(target_os = "windows")]\ncompile_error!("narrow3 windows fault");\n',
+      'cfg-attr': '\n#[cfg_attr(target_os = "macos", broken_attribute)]\nstruct Fault;\n',
+      'backend': '\nfn injected() { let _ = egui_wgpu::wgpu::Backend::Metal; }\n'}
 
 
 def load(name):
@@ -245,6 +257,103 @@ class Routing(unittest.TestCase):
                 self.assertLessEqual(selector.PLATFORM, set(selected))
 
 
+class SharedViewport(unittest.TestCase):
+    """Five reviewed viewport files run Linux only; backend, shaders, setup and planted faults keep the desktop."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.packages = selector.graph(ROOT)
+
+    def select(self, changes, sources=None, event='pull_request', ref=''):
+        read = lambda path: list((sources or {}).get(path) or [selector.content(ROOT, path)] * 2)
+        return selector.select(changes, event, ref, self.packages, read)
+
+    def assertSelects(self, changes, expected, sources=None, **options):
+        self.assertEqual(set(self.select(changes, sources, **options)), expected)
+
+    def test_shared_files_select_linux_only(self):
+        for name in ('camera', 'dimensions', 'environment', 'mod', 'pick'):
+            with self.subTest(name):
+                self.assertSelects([['M', f'{VIEWPORT}{name}.rs']], APP)
+
+    def test_backend_files_and_shaders_keep_the_desktop(self):
+        for name in ('assembly.rs', 'look.rs', 'offscreen.rs', 'render.rs', 'assembly.wgsl', 'cull.wgsl', 'scene.wgsl'):
+            with self.subTest(name):
+                self.assertTrue((ROOT / VIEWPORT / name).is_file())
+                self.assertSelects([['M', VIEWPORT + name]], APP | DESKTOP)
+
+    def test_new_and_removed_viewport_paths_keep_the_desktop(self):
+        cull = selector.content(ROOT, VIEWPORT + 'cull.wgsl')
+        for change, sources in ((['A', VIEWPORT + 'new_backend.rs'], ['', 'pub fn draw() {}\n']),
+                                (['A', VIEWPORT + 'grid/lines.rs'], ['', 'pub fn lines() {}\n']),
+                                (['A', VIEWPORT + 'grid.wgsl'], ['', '@vertex fn main() {}\n']),
+                                (['D', VIEWPORT + 'cull.wgsl'], [cull, ''])):
+            with self.subTest(change[1]):
+                self.assertSelects([change], APP | DESKTOP, {change[1]: sources})
+
+    def test_native_setup_keeps_the_desktop(self):
+        for name in ('main.rs', 'app/workspace.rs', 'platform.rs'):
+            with self.subTest(name):
+                self.assertSelects([['M', 'crates/soliddraft-app/src/' + name]], APP | DESKTOP)
+        self.assertSelects([['M', 'crates/soliddraft-cli/src/screenshot.rs']],
+                           {'application-loop', 'interactive-linux', 'interactive-macos', 'lint', 'step-opencascade',
+                            'test-linux', 'test-macos', 'test-windows'})
+
+    def test_f1_backend_tier_fault_keeps_the_desktop(self):
+        path = VIEWPORT + 'look.rs'
+        text = selector.content(ROOT, path)
+        self.assertEqual(text.count(F1[0]), 1)
+        self.assertSelects([['M', path]], APP | DESKTOP, {path: [text, text.replace(*F1)]})
+
+    def test_f2_platform_text_in_a_shared_file_keeps_the_desktop(self):
+        text = selector.content(ROOT, CAMERA)
+        for tag, addition in F2.items():
+            for side in (0, 1):
+                with self.subTest(tag, side=side):
+                    sources = [text, text]
+                    sources[side] += addition
+                    self.assertSelects([['M', CAMERA]], APP | DESKTOP, {CAMERA: sources})
+
+    def test_cfg_attr_outside_the_viewport_keeps_the_desktop(self):
+        path = 'crates/soliddraft-app/src/theme.rs'
+        text = selector.content(ROOT, path)
+        self.assertSelects([['M', path]], APP)
+        self.assertSelects([['M', path]], APP | DESKTOP, {path: [text, text + F2['cfg-attr']]})
+
+    def test_renames_count_both_endpoints(self):
+        render = VIEWPORT + 'render.rs'
+        for change in (['R100', render, CAMERA], ['R100', CAMERA, render]):
+            with self.subTest(change):
+                self.assertSelects([change], APP | DESKTOP)
+
+    def test_other_obligations_are_never_subtracted(self):
+        for other in (VIEWPORT + 'render.rs', 'crates/soliddraft-document/src/save.rs'):
+            with self.subTest(other):
+                alone = set(self.select([['M', other]]))
+                self.assertLessEqual(DESKTOP, alone)
+                self.assertEqual(set(self.select([['M', CAMERA], ['M', other]])), APP | alone)
+
+    def test_events(self):
+        self.assertSelects([['M', CAMERA]], APP | {'kernel', 'msrv'}, event='push', ref='refs/heads/main')
+        for event, ref in (('workflow_dispatch', ''), ('push', 'refs/heads/release/0.1.0')):
+            with self.subTest(event):
+                self.assertSelects([['M', CAMERA]], everything(), event=event, ref=ref)
+        self.assertSelects(None, everything())
+        self.assertSelects([['M', 'ci/select-checks.py']], everything())
+
+    def test_accepted_main_selector_keeps_the_desktop(self):
+        script = ROUND3_BASE.read_text()
+        self.assertEqual(hashlib.sha256(script.encode()).hexdigest(),
+                         'dfa51adb04a1a35924561297f57039cc465e562ced0fcb29993e52f102c37519')
+        candidate = self.select([['M', CAMERA]])
+        self.assertEqual(set(candidate), APP)
+        read = lambda path: [selector.content(ROOT, path)] * 2
+        union = selector.with_base_rules(candidate, script, [['M', CAMERA]], 'pull_request', '', self.packages, read)
+        self.assertEqual(set(union), APP | DESKTOP)
+        for unit in DESKTOP:
+            self.assertEqual(union[unit], [f'base: platform: {CAMERA}'])
+
+
 class Cli(unittest.TestCase):
     """The real command over a throwaway repository holding a copy of this tree."""
 
@@ -345,6 +454,20 @@ class Cli(unittest.TestCase):
             with self.subTest(name):
                 self.commit(files)
                 self.assertEqual(self.selection(self.base, **options)['selected'], expected)
+                self.tearDown()
+
+    def test_shared_viewport_edit_and_planted_faults(self):
+        camera = (self.root / CAMERA).read_text()
+        for name, files, expected in (
+                ('shared', {CAMERA: camera + '// shared edit\n'}, APP),
+                ('f1', self.edited(VIEWPORT + 'look.rs', *F1), APP | DESKTOP),
+                ('f2', {CAMERA: camera + F2['cfg']}, APP | DESKTOP),
+                ('workspace', {'crates/soliddraft-app/src/app/workspace.rs':
+                               (self.root / 'crates/soliddraft-app/src/app/workspace.rs').read_text() + '\n'},
+                 APP | DESKTOP)):
+            with self.subTest(name):
+                self.commit(files)
+                self.assertEqual(self.selection(self.base)['selected'], sorted(expected))
                 self.tearDown()
 
     def test_base_map_comes_from_the_base_commit(self):

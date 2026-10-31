@@ -24,6 +24,7 @@
     "ci/routing-replays/packages.yml.cea2704": ["lint"],
     "ci/routing-replays/round2-replays.json": ["lint"],
     "ci/routing-replays/scenario-inventory.json.cea2704": ["lint"],
+    "ci/routing-replays/select-checks.py.23e47cd": ["lint"],
     "ci/routing-replays/select-checks.py.9e81eb4": ["lint"],
     "ci/routing-replays/soliddraft-kernel-catallax.Cargo.toml.cea2704": ["lint"],
     "ci/run-scenarios.py": ["lint", "application-loop"],
