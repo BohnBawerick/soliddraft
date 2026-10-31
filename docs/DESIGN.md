@@ -20,7 +20,7 @@ assistant and 3D viewport. This document records the interface and kernel bounda
 
 ## Icons
 
-All icons are drawn with the egui painter on a 16 by 16 grid (`icons.rs`). No icon font and no third-party artwork, so there is nothing to license and the set scales crisply with the UI. The CAD glyphs (extrude, revolve, fillet, chamfer, shell, pattern) are original drawings of the operation itself, not copies of any vendor's icon.
+Operations use the catalogue under `crates/soliddraft-app/assets/icons`: 65 CAD drawings and 36 line glyphs, original art with nothing to license. `scripts/generate_cad_icons.py` writes it, and `--check` fails CI if a committed file differs, so nobody edits an SVG by hand. `icons.rs` rasterizes a drawing with resvg at the physical size it is shown at and keeps the texture, so no frame shows a blank. Colour says what a command does: grey the part, blue what it adds, coral what it removes, amber the sketch, teal reference geometry, violet a surface. A disabled drawing fades to grey. On a dark panel only the colours that sit on the bare background get lighter: arrows, axes, lattice struts and point clouds. Commands name their art in the registry with `Icon::Cad` or `Icon::Glyph`, and a line glyph follows the text colour. Everything else is drawn with the egui painter on a 16 by 16 grid (`icons.rs`).
 
 ## Viewport and navigation
 

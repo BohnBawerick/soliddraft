@@ -32,6 +32,7 @@
     "ci/scenarios/p3-rounded-boss.md": [],
     "ci/select-checks.py": "all",
     "ci/test_checks.py": ["lint"],
+    "ci/test_icons.py": ["lint"],
     "ci/test_ownership.py": ["lint"],
     "ci/test_scenario_bundles.py": ["lint"],
     "ci/test_scenarios.py": ["lint", "application-loop"],

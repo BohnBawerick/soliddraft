@@ -62,6 +62,11 @@ impl Case {
         }
     }
 
+    /// Where a named artefact of this case goes.
+    pub fn path(&self, name: &str) -> PathBuf {
+        self.dir.join(name)
+    }
+
     /// Writes the current frame as `<name>.png`, and returns where.
     pub fn frame(&self, app: &mut App, name: &str) -> PathBuf {
         let path = self.dir.join(format!("{name}.png"));
@@ -245,14 +250,18 @@ pub fn tooltip(app: &mut App, rect: Rect) -> String {
     said.join("\n")
 }
 
+/// Where an entry of an open top menu is.
+pub fn menu_entry(app: &App, name: &str, entry: &str) -> Rect {
+    let found: Vec<Rect> = app.query_all(By::new().label_contains(entry)).map(|n| n.rect()).collect();
+    assert_eq!(found.len(), 1, "one entry {entry} in {name}: {found:?}");
+    found[0]
+}
+
 /// Opens a top menu and clicks an entry.
 pub fn menu(app: &mut App, name: &str, entry: &str) {
     let area = window(app);
     click_button(app, name, area);
-    let found: Vec<Rect> =
-        app.query_all(By::new().role(egui::accesskit::Role::Button).label_contains(entry)).map(|n| n.rect()).collect();
-    assert_eq!(found.len(), 1, "one entry {entry} in {name}: {found:?}");
-    click_at(app, found[0].center());
+    click_at(app, menu_entry(app, name, entry).center());
     app.run_steps(4);
 }
 
@@ -261,6 +270,22 @@ pub fn document_tab(app: &mut App, title: &str) {
     let rect = title_rect(app, title);
     click_at(app, rect.center());
     app.run_steps(4);
+}
+
+/// A press and release that stops on the frame the click lands in: the next `render` is
+/// the first paint of whatever it changed.
+pub fn click_for_first_paint(app: &mut App, point: Pos2) {
+    app.hover_at(point);
+    app.run_steps(3);
+    for pressed in [true, false] {
+        app.event(egui::Event::PointerButton {
+            pos: point,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::default(),
+        });
+        app.step();
+    }
 }
 
 /// Two quick presses at a point, as a pointer makes them.
@@ -336,6 +361,31 @@ fn walk(shape: &Shape, clip: Rect, found: &mut Vec<Painted>) {
         }
         _ => {}
     }
+}
+
+fn walk_images(shape: &Shape, found: &mut Vec<Rect>) {
+    match shape {
+        Shape::Vec(shapes) => shapes.iter().for_each(|s| walk_images(s, found)),
+        Shape::Rect(rect) if rect.fill_texture_id() != egui::TextureId::default() => found.push(rect.rect),
+        Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => found.push(mesh.calc_bounds()),
+        _ => {}
+    }
+}
+
+/// The images in a frame's shapes, in paint order, as opposed to its text and lines.
+pub fn images(shapes: &[egui::epaint::ClippedShape]) -> Vec<Rect> {
+    let mut found = Vec::new();
+    for clipped in shapes {
+        walk_images(&clipped.shape, &mut found);
+    }
+    found
+}
+
+/// The images the last frame drew in a region.
+pub fn images_in(app: &App, region: Rect) -> Vec<Rect> {
+    let mut found = images(&app.output().shapes);
+    found.retain(|r| region.expand(TOLERANCE).contains_rect(*r));
+    found
 }
 
 /// The text in the last frame that a user can see, cut to its clip and to the window.

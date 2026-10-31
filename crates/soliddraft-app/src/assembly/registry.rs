@@ -35,19 +35,29 @@ pub(super) fn registry() -> Vec<CommandSpec> {
             .hint(desktop_only)
             .agents(Agents::Mcp, "Places the saved, unmodified part at the origin, floating.", Vec::new)
             .undo(Undo::Step),
-        cmd("insert_component", "Insert component", Icon::Import, "Place a part or an assembly file in the assembly")
-            .assembly()
-            .on(Tab::Assembly, "Component", Large)
-            .key(Scope::Assembly, ctrl, Key::I)
-            .run(|_| AppAction::Assembly(AssemblyAction::Insert(None)))
-            .app_only(ASSEMBLY),
-        cmd("assembly_save", "Save assembly", Icon::Save, "Save the assembly with copies of the parts it shows")
-            .assembly()
-            .on(Tab::Assembly, "File", Small)
-            .key(Scope::Assembly, ctrl, Key::S)
-            .run(|_| AppAction::Assembly(AssemblyAction::Save(None)))
-            .agents(Agents::Mcp, "Saves the assembly and its accepted display copies.", path_params),
-        cmd("assembly_save_as", "Save assembly as", Icon::Save, "Save the assembly under a new name")
+        cmd(
+            "insert_component",
+            "Insert component",
+            Icon::Cad("insert_comp"),
+            "Place a part or an assembly file in the assembly",
+        )
+        .assembly()
+        .on(Tab::Assembly, "Component", Large)
+        .key(Scope::Assembly, ctrl, Key::I)
+        .run(|_| AppAction::Assembly(AssemblyAction::Insert(None)))
+        .app_only(ASSEMBLY),
+        cmd(
+            "assembly_save",
+            "Save assembly",
+            Icon::Glyph("save"),
+            "Save the assembly with copies of the parts it shows",
+        )
+        .assembly()
+        .on(Tab::Assembly, "File", Small)
+        .key(Scope::Assembly, ctrl, Key::S)
+        .run(|_| AppAction::Assembly(AssemblyAction::Save(None)))
+        .agents(Agents::Mcp, "Saves the assembly and its accepted display copies.", path_params),
+        cmd("assembly_save_as", "Save assembly as", Icon::Glyph("save"), "Save the assembly under a new name")
             .assembly()
             .on(Tab::Assembly, "File", Small)
             .key(Scope::Assembly, ctrl_shift, Key::S)

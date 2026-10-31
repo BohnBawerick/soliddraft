@@ -187,7 +187,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
                 FeatureKind::Draft(_) => Icon::Draft,
                 FeatureKind::Shell(_) => Icon::Shell,
                 FeatureKind::ImportStep(_) => Icon::Import,
-                FeatureKind::Lattice(_) | FeatureKind::Gyroid(_) => Icon::LinearPattern,
+                FeatureKind::Lattice(_) | FeatureKind::Gyroid(_) => Icon::Cad("lattice"),
             };
             let child = f.kind.sketch().and_then(|s| state.doc.feature(s));
             let (sub, status) = match &state.drag_preview {

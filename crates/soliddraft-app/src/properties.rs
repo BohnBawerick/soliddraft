@@ -314,7 +314,7 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
         Some(EditorParams::Mirror(_)) => (state.editor.as_ref().unwrap().title(), Icon::Mirror),
         Some(EditorParams::Draft(_)) => (state.editor.as_ref().unwrap().title(), Icon::Draft),
         Some(EditorParams::Lattice(_) | EditorParams::Gyroid(_)) => {
-            (state.editor.as_ref().unwrap().title(), Icon::LinearPattern)
+            (state.editor.as_ref().unwrap().title(), Icon::Cad("lattice"))
         }
         Some(EditorParams::Shell(_)) => (state.editor.as_ref().unwrap().title(), Icon::Shell),
         Some(EditorParams::PickPlane) => ("Sketch".to_owned(), Icon::Sketch),
@@ -1179,7 +1179,7 @@ fn selection(ui: &mut egui::Ui, state: &mut AppState) {
         (
             Selection::Feature(_),
             Some(crate::document::FeatureKind::Lattice(_) | crate::document::FeatureKind::Gyroid(_)),
-        ) => Icon::LinearPattern,
+        ) => Icon::Cad("lattice"),
         (Selection::Feature(_), _) => Icon::Extrude,
         (Selection::Body, _) => Icon::Extrude,
         (Selection::Face(_), _) => Icon::Plane,
