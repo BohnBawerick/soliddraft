@@ -32,7 +32,7 @@ use soliddraft_kernel_api::*;
 pub use diagnostics::{RequestWork, with_request_allowance};
 
 /// The pinned Catallax application entry revision.
-pub const CATALLAX_REVISION: &str = "659259eedbd0f156ab601784f29f42e87e419c76";
+pub const CATALLAX_REVISION: &str = "1599a8db3a8cc45be8f87e8ab085be72fb938ef6";
 
 /// An in-process Catallax backend. There is no global kernel state or kernel thread.
 #[derive(Default)]
@@ -927,13 +927,23 @@ impl Kernel for CatallaxKernel {
                 .mass
                 .get_or_init(|| {
                     let built = solid.app.checkpoint.built();
+                    let accuracy = catallax_measure::Accuracy::default();
                     let mass = numerical("mass_properties", |dec| {
-                        catallax_measure::mass_properties(
-                            &built.model,
-                            built.result,
-                            &catallax_measure::Accuracy::default(),
-                            dec,
-                        )
+                        // A fitted blend has no second moments, so it reports no inertia.
+                        if built.model.blend_base(built.result).is_some() {
+                            let measured =
+                                catallax_measure::volume_area_centroid(&built.model, built.result, &accuracy, dec)?;
+                            return Ok(catallax_numbers::Answer::with_marks(
+                                catallax_measure::MassProperties {
+                                    volume: measured.value.volume,
+                                    area: measured.value.area,
+                                    centroid: measured.value.centroid,
+                                    inertia: None,
+                                },
+                                measured.marks,
+                            ));
+                        }
+                        catallax_measure::mass_properties(&built.model, built.result, &accuracy, dec)
                     })
                     .map_err(|e| query_error("mass_properties", e))?
                     .value;
@@ -1080,7 +1090,8 @@ impl Kernel for CatallaxKernel {
     fn section_view(&self, body: BodyId, spec: &drawing::SectionSpec) -> KernelResult<drawing::SectionView> {
         self.observe("section_view", || {
             if spec.view.preview {
-                drawing::section::by_mesh_slice(self, body, spec)
+                let view = drawing_queries::resolved_view(self, body, &spec.view);
+                drawing::section::by_mesh_slice(self, body, &drawing::SectionSpec { view, ..*spec })
             } else {
                 drawing::section::by_half_space(self, body, spec)
             }

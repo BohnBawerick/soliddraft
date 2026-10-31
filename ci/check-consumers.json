@@ -34,6 +34,7 @@
     "ci/run-scenarios.py": ["lint", "application-loop"],
     "ci/scenario-inventory.json": ["lint"],
     "ci/scenarios/p3-rounded-boss.md": [],
+    "ci/scenarios/p5-flanged-housing.md": [],
     "ci/select-checks.py": "all",
     "ci/test_checks.py": ["lint"],
     "ci/test_icons.py": ["lint"],

@@ -257,8 +257,28 @@ fn surface_kind(surface: &Surface) -> SurfaceKind {
         CatSurface::Cone => SurfaceKind::Cone,
         CatSurface::Sphere => SurfaceKind::Sphere,
         CatSurface::Torus => SurfaceKind::Torus,
+        CatSurface::BSpline => SurfaceKind::Spline,
         _ => SurfaceKind::Other,
     }
+}
+
+// A fitted blend's rails and the faces they trim have no single-entity proof.
+// Those entities keep their display estimates, as an unproven topology does.
+fn display_only(error: &catallax_numbers::Refusal) -> bool {
+    error.code == "measure.unsupported-surface"
+}
+
+// A face's display area and area-weighted centre.
+fn display_face(mesh: &catallax_mesh::Mesh, triangles: &[catallax_mesh::Triangle]) -> (f64, Vec3) {
+    let mut weight_sum = 0.0;
+    let mut center = Vec3::ZERO;
+    for t in triangles {
+        let [a, b, c] = t.vertices.map(|v| Vec3::from(mesh.positions[v]));
+        let weight = (b - a).cross(c - a).length() * 0.5;
+        weight_sum += weight;
+        center = center + (a + b + c) * (weight / 3.0);
+    }
+    (weight_sum, center * (1.0 / weight_sum))
 }
 
 fn bounds(points: impl Iterator<Item = Vec3>, padding: f64) -> Aabb {
@@ -303,36 +323,41 @@ pub(super) fn topology(
     for face_mesh in &mesh.faces {
         let id = face_mesh.face;
         let face = model.face(id);
-        let area = super::numerical("face_area", |dec| catallax_measure::face_area(model, id, &accuracy, dec))
-            .map_err(|e| query("face_area", e))?;
-        let (centroid, bbox) = if proven {
+        let triangles = &mesh.triangles[face_mesh.triangles.clone()];
+        let (display_area, display_center) = display_face(mesh, triangles);
+        let area = match super::numerical("face_area", |dec| catallax_measure::face_area(model, id, &accuracy, dec)) {
+            Ok(area) => midpoint(&area.value),
+            Err(e) if display_only(&e) => display_area,
+            Err(e) => return Err(query("face_area", e)),
+        };
+        let measured = if proven {
             let centroid =
-                super::numerical("face_centroid", |dec| catallax_measure::face_centroid(model, id, &accuracy, dec))
-                    .map_err(|e| query("face_centroid", e))?;
+                super::numerical("face_centroid", |dec| catallax_measure::face_centroid(model, id, &accuracy, dec));
             let bbox = super::numerical("face_bounding_box", |dec| {
                 catallax_measure::face_bounding_box(model, id, &accuracy, dec)
-            })
-            .map_err(|e| query("face_bounding_box", e))?;
-            (enclosed(&centroid.value), proven_box(&bbox.value))
+            });
+            match (centroid, bbox) {
+                (Ok(centroid), Ok(bbox)) => Some((enclosed(&centroid.value), proven_box(&bbox.value))),
+                (Err(e), _) | (_, Err(e)) if display_only(&e) => None,
+                (Err(e), _) => return Err(query("face_centroid", e)),
+                (_, Err(e)) => return Err(query("face_bounding_box", e)),
+            }
         } else {
-            let triangles = &mesh.triangles[face_mesh.triangles.clone()];
-            let mut weight_sum = 0.0;
-            let mut center = Vec3::ZERO;
-            for t in triangles {
-                let [a, b, c] = t.vertices.map(|v| Vec3::from(mesh.positions[v]));
-                let weight = (b - a).cross(c - a).length() * 0.5;
-                weight_sum += weight;
-                center = center + (a + b + c) * (weight / 3.0);
+            None
+        };
+        let (centroid, bbox) = match measured {
+            Some(measured) => measured,
+            None => {
+                if display_area <= 0.0 {
+                    return Err(KernelError::QueryFailed {
+                        query: "topology".into(),
+                        code: 0,
+                        message: "Catallax display face has no nondegenerate triangles (Catallax stage 1)".into(),
+                    });
+                }
+                let bbox = bounds(triangles.iter().flat_map(|t| t.vertices).map(|v| mesh.positions[v].into()), chord);
+                (display_center, bbox)
             }
-            if weight_sum <= 0.0 {
-                return Err(KernelError::QueryFailed {
-                    query: "topology".into(),
-                    code: 0,
-                    message: "Catallax display face has no nondegenerate triangles (Catallax stage 1)".into(),
-                });
-            }
-            let bbox = bounds(triangles.iter().flat_map(|t| t.vertices).map(|v| mesh.positions[v].into()), chord);
-            (center * (1.0 / weight_sum), bbox)
         };
         let mut edges = Vec::new();
         for l in &face.loops {
@@ -363,7 +388,7 @@ pub(super) fn topology(
         faces.push(FaceInfo {
             id: ids.faces[&id],
             surface: surface_kind(surface),
-            area: midpoint(&area.value),
+            area,
             centroid,
             bbox,
             edges,
@@ -376,15 +401,21 @@ pub(super) fn topology(
         let id = e.edge;
         let edge = model.edge(id);
         let points: Vec<Vec3> = e.vertices.iter().map(|v| mesh.positions[*v].into()).collect();
-        let (length, middle) = if proven {
+        let measured = if proven {
             let length =
-                super::numerical("edge_length", |dec| catallax_measure::edge_length(model, id, &accuracy, dec))
-                    .map_err(|e| query("edge_length", e))?;
+                super::numerical("edge_length", |dec| catallax_measure::edge_length(model, id, &accuracy, dec));
             let middle =
-                super::numerical("edge_midpoint", |dec| catallax_measure::edge_midpoint(model, id, &accuracy, dec))
-                    .map_err(|e| query("edge_midpoint", e))?;
-            (midpoint(&length.value), enclosed(&middle.value))
+                super::numerical("edge_midpoint", |dec| catallax_measure::edge_midpoint(model, id, &accuracy, dec));
+            match (length, middle) {
+                (Ok(length), Ok(middle)) => Some((midpoint(&length.value), enclosed(&middle.value))),
+                (Err(e), _) | (_, Err(e)) if display_only(&e) => None,
+                (Err(e), _) => return Err(query("edge_length", e)),
+                (_, Err(e)) => return Err(query("edge_midpoint", e)),
+            }
         } else {
+            None
+        };
+        let (length, middle) = measured.unwrap_or_else(|| {
             let length = points.windows(2).map(|p| p[0].distance(p[1])).sum();
             let middle = if points.len() % 2 == 1 {
                 points[points.len() / 2]
@@ -392,7 +423,7 @@ pub(super) fn topology(
                 (points[points.len() / 2 - 1] + points[points.len() / 2]) * 0.5
             };
             (length, middle)
-        };
+        });
         let curve = match model.geom().curve(edge.curve).kind() {
             CatCurve::Line => CurveKind::Line,
             CatCurve::Circle => CurveKind::Circle,
@@ -419,17 +450,20 @@ pub(super) fn topology(
             edges: edges.iter().filter(|e| e.vertices.contains(id)).map(|e| e.id).collect(),
         })
         .collect();
-    let (bbox, display_chord_height) = if proven {
-        let bbox = super::numerical("bounding_box", |dec| {
+    let measured = if proven {
+        match super::numerical("bounding_box", |dec| {
             catallax_measure::bounding_box(model, app.checkpoint.built().result, &accuracy, dec)
-        })
-        .map_err(|e| query("bounding_box", e))?
-        .value
-        .map(|b| proven_box(&b))
-        .unwrap_or(Aabb { min: Vec3::ZERO, max: Vec3::ZERO });
-        (bbox, None)
+        }) {
+            Ok(bbox) => Some(bbox.value.map(|b| proven_box(&b)).unwrap_or(Aabb { min: Vec3::ZERO, max: Vec3::ZERO })),
+            Err(e) if display_only(&e) => None,
+            Err(e) => return Err(query("bounding_box", e)),
+        }
     } else {
-        (bounds(mesh.positions.iter().copied().map(Vec3::from), chord), Some(chord))
+        None
+    };
+    let (bbox, display_chord_height) = match measured {
+        Some(bbox) => (bbox, None),
+        None => (bounds(mesh.positions.iter().copied().map(Vec3::from), chord), Some(chord)),
     };
     Ok(Topology {
         kind: BodyKind::Solid,

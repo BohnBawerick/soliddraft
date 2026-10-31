@@ -33,6 +33,57 @@ def step_checker():
     return checker
 
 
+class CheckStepFit(unittest.TestCase):
+    AREA = 600.0
+    GAP = 1e-3
+
+    def failures(self, *fit, gap=GAP):
+        checker = step_checker()
+        checker.GProp_GProps.return_value.Mass.return_value = 1000.0 + gap
+        checker.count = lambda shape, kind: 6 if kind is checker.TopAbs_FACE else 1
+        step = {"solids": 1, "faces": 6, "removed_faces": 0, "removed_edges": 0,
+                "max_deviation_mm": 0.0, "max_deviation": "0", "within_tolerance": True}
+        step.update({"fit_mm": value for value in fit})
+        report = {"body": {"faces": 6, "edges": 12, "volume": 1000.0, "area": self.AREA}, "report": step}
+        return checker.check("part.step", report)[0]
+
+    def assert_rejected(self, fit):
+        failures = self.failures(fit)
+        self.assertTrue(any("fit_mm" in failure for failure in failures), f"{fit!r}: {failures}")
+        self.assertTrue(any("volume" in failure for failure in failures), f"{fit!r}: {failures}")
+
+    def test_a_valid_finite_fit_widens_the_allowance_by_its_area(self):
+        self.assertEqual(self.failures(self.GAP / self.AREA * 1.01), [])
+        self.assertTrue(any("volume" in failure for failure in self.failures(self.GAP / self.AREA * 0.5)))
+
+    def test_an_absent_or_zero_fit_adds_nothing(self):
+        self.assertEqual(self.failures(gap=0.0), [])
+        for fit in ((), (0, ), (0.0, )):
+            self.assertTrue(any("volume" in failure for failure in self.failures(*fit)), fit)
+
+    def test_overflow_is_refused(self):
+        self.assert_rejected(json.loads("1e999"))
+        self.assert_rejected(10 ** 400)
+        # Finite, but the area takes it past the largest float.
+        failures = self.failures(1e308)
+        self.assertTrue(any("allowance" in failure for failure in failures), failures)
+
+    def test_non_finite_is_refused(self):
+        for fit in (float("inf"), float("-inf"), float("nan")):
+            self.assert_rejected(fit)
+
+    def test_a_boolean_is_refused(self):
+        for fit in (True, False):
+            self.assert_rejected(fit)
+
+    def test_a_negative_fit_is_refused(self):
+        self.assert_rejected(-1e-6)
+
+    def test_a_fit_that_is_not_a_number_is_refused(self):
+        for fit in ("0.001", None, [0.001]):
+            self.assert_rejected(fit)
+
+
 class CheckStepFaces(unittest.TestCase):
     def failures(self, read, reported, exact, removed, removed_edges=0):
         checker = step_checker()
@@ -110,6 +161,14 @@ class Checks(unittest.TestCase):
         self.assertFalse(scenarios.check({"body": {"volume": 11999}}, rule)["pass"])
         self.assertFalse(scenarios.check({"body": {}}, rule)["pass"])
         self.assertFalse(scenarios.check({"body": {"volume": None}}, rule)["pass"])
+
+    def test_a_tally_counts_a_list_by_field(self):
+        faces = [{"name": "Blend", "surface": "torus"}, {"name": "Blend", "surface": "spline"}]
+        evidence = {"faces": faces}
+        rule = {"pointer": "/faces", "tally": {"surface": {"torus": 1, "spline": 1}, "name": {"Blend": 2}}}
+        self.assertTrue(scenarios.check(evidence, rule)["pass"])
+        self.assertFalse(scenarios.check(evidence, {"pointer": "/faces", "tally": {"surface": {"torus": 2}}})["pass"])
+        self.assertFalse(scenarios.check(evidence, {"pointer": "/faces", "tally": {"kind": {"torus": 2}}})["pass"])
 
     def test_invalid_or_ambiguous_comparisons_fail(self):
         for rule in ({"pointer": ""}, {"pointer": "", "equals": 3, "minimum": 1},
