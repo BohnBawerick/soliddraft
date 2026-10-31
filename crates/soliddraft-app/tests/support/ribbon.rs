@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-use egui::{Key, Modifiers, Pos2, Rect, Shape, Vec2, pos2, vec2};
+use egui::{Color32, Key, Modifiers, Pos2, Rect, Shape, Vec2, pos2, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{By, NodeT, Queryable};
 use soliddraft_app::app::{Automation, SolidDraftApp};
@@ -101,6 +101,19 @@ pub fn app_at(doc: Document, size: Vec2, pixels_per_point: f32) -> App {
 // ---------------------------------------------------------------------------
 // Fixtures.
 
+/// The real app without a GPU pass per step, for walks of thousands of frames that read
+/// the shapes and never the pixels. [`Case::frame`] still renders on request.
+pub fn app_unrendered(doc: Document, size: Vec2, pixels_per_point: f32) -> App {
+    let mut app = Harness::builder()
+        .with_size(size)
+        .with_pixels_per_point(pixels_per_point)
+        .with_step_dt(1.0 / 60.0)
+        .wgpu()
+        .build_eframe(move |cc| SolidDraftApp::new(cc, doc, Automation::default()));
+    app.run_steps(10);
+    app
+}
+
 /// No features, body, selection, editor or sketch session.
 pub fn blank() -> Document {
     Document::new("Ribbon acceptance", soliddraft_app::kernel())
@@ -176,6 +189,14 @@ pub fn button_rect(app: &App, label: &str, within: Rect) -> Rect {
         .collect();
     assert_eq!(found.len(), 1, "one button {label} in {within:?}: {found:?}");
     found[0]
+}
+
+/// Every button in a region, by name, as assistive technology reads them.
+pub fn buttons_in(app: &App, within: Rect) -> Vec<(String, Rect)> {
+    app.query_all(By::new().role(egui::accesskit::Role::Button))
+        .filter(|n| within.expand(TOLERANCE).contains_rect(n.rect()))
+        .map(|n| (n.accesskit_node().label().map(|l| l.to_string()).unwrap_or_default(), n.rect()))
+        .collect()
 }
 
 /// The whole window, as a region.
@@ -347,16 +368,27 @@ pub fn type_command(app: &mut App, line: &str) {
 #[derive(Clone, Debug)]
 pub struct Painted {
     pub text: String,
+    /// What shows: the ink, cut to the clip and the window.
     pub rect: Rect,
+    /// All the ink, however much of it shows.
+    pub full: Rect,
+    /// The text of each row, as it wrapped.
+    pub rows: Vec<String>,
+    pub color: Color32,
 }
 
 fn walk(shape: &Shape, clip: Rect, found: &mut Vec<Painted>) {
     match shape {
         Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, clip, found)),
         Shape::Text(text) => {
-            let rect = text.visual_bounding_rect().intersect(clip);
+            let full = text.visual_bounding_rect();
+            let rect = full.intersect(clip);
             if rect.is_positive() {
-                found.push(Painted { text: text.galley.text().to_owned(), rect });
+                let rows = text.galley.rows.iter().map(|row| row.text().trim_end().to_owned()).collect();
+                let format = text.galley.job.sections.first().map(|s| s.format.color);
+                let color = text.override_text_color.or(format).filter(|c| *c != Color32::PLACEHOLDER);
+                let color = color.unwrap_or(text.fallback_color).gamma_multiply(text.opacity_factor);
+                found.push(Painted { text: text.galley.text().to_owned(), rect, full, rows, color });
             }
         }
         _ => {}
