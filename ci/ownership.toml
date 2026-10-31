@@ -85,6 +85,13 @@ paths = ["crates/soliddraft-app/src/file.rs"]
 module = ["file"]
 
 [[areas]]
+name = "app.fillet_collect"
+owner = "core"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/fillet_collect.rs"]
+module = ["fillet_collect"]
+
+[[areas]]
 name = "app.icons"
 owner = "core"
 crate = "soliddraft-app"

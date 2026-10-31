@@ -1,0 +1,97 @@
+{
+  "scenario": "ux-fillet-preview",
+  "merge": "F",
+  "target": "crates/soliddraft-app/tests/ux_fillet_preview.rs",
+  "tests": [
+    "edge_radius_changes_the_visible_preview_before_commit",
+    "faces_collect_complete_boundaries_and_the_slot_stays_drawable",
+    "unsupported_picks_and_radii_refuse_locally_then_recover"
+  ],
+  "author": {
+    "expected_results": "Codex test designer, 'Tree visibility, in-place dimensions and fillet acceptance', 31 October 2026, Merge F manifest; hand-derived oracle SHA-256 e36959963a0b4f5c4bc9708fca143d2a53645a9d186548f707a6112d13fa562b",
+    "materialised_by": "Claude Opus builder, lane sdc-ux-fillet-tool; expected values, tolerances and fixture geometry copied from the designer's report unchanged"
+  },
+  "pair": {
+    "parent_app": "d4d294b4863a0900ca126727d3aeae509e032d40",
+    "candidate_app": "the head of branch fm/sdc-ux-fillet-tool; each run records the commit it tested in run.log",
+    "catallax_pin": "659259eedbd0f156ab601784f29f42e87e419c76",
+    "history": "Designed against app 3403d2134d5f1d8e76e6f2d143eedd48648fdd5f at Catallax e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc; the pair moved to the slot-display pin when https://github.com/ZIGRAWBOHNBAWERICK/soliddraft/pull/100 merged. No expected geometry was regenerated."
+  },
+  "harness": {
+    "window_points": [1440, 900],
+    "pixels_per_point": 1.0,
+    "step_dt_s": 0.016666666666666666,
+    "hang_guard_s": 600,
+    "renderer": "egui_kittest wgpu; a missing adapter fails the case, software Vulkan counts"
+  },
+  "fixtures": {
+    "B20": {
+      "profile": "centred rectangle on Top",
+      "width_mm": 60.0,
+      "height_mm": 40.0,
+      "depth_mm": 20.0,
+      "volume_mm3": 48000.0,
+      "bounds_min": [-30.0, -20.0, 0.0],
+      "bounds_max": [30.0, 20.0, 20.0],
+      "faces": 6,
+      "edges": 12,
+      "vertices": 8
+    },
+    "S": {
+      "profile": "slot on Top, centred",
+      "length_mm": 50.0,
+      "width_mm": 10.0,
+      "depth_mm": 10.0,
+      "volume_mm3": 4785.398163397448,
+      "bounds_min": [-25.0, -5.0, 0.0],
+      "bounds_max": [25.0, 5.0, 10.0]
+    }
+  },
+  "expected": {
+    "box_single_edge": {
+      "edge_midpoint": [0.0, 20.0, 20.0],
+      "edge_length_mm": 60.0,
+      "volume_r2_mm3": 47948.495559215386,
+      "volume_r4_mm3": 47793.98223686155,
+      "end_profile_x": 30.0,
+      "distinguishing_point_yz": [19.2, 19.2],
+      "note": "Arc centre in y,z is (20-r, 20-r); (19.2, 19.2) lies inside the R2 cross-section and outside R4."
+    },
+    "box_top_face": {
+      "interior": [0.0, 0.0, 20.0],
+      "boundary_edges": 4,
+      "edge_lengths_mm": [40.0, 40.0, 60.0, 60.0],
+      "plane_z": 20.0
+    },
+    "slot_top_face": {
+      "interior": [0.0, 0.0, 10.0],
+      "boundary_edges": 4,
+      "line_edges": 2,
+      "arc_edges": 2,
+      "line_length_mm": 40.0,
+      "arc_midpoints": [[-25.0, 0.0, 10.0], [25.0, 0.0, 10.0]],
+      "volume_r2_mm3": 4692.16739799544
+    },
+    "slot_straight_edge": {
+      "point": [0.0, 5.0, 10.0],
+      "radius_mm": 2.0,
+      "note": "Volume must be positive and below S; no closed-form value is asserted."
+    },
+    "refusals": {
+      "vertex_message_mentions": ["edge", "face"],
+      "refused_radius_text": ["0", "-1", "abc", "NaN", "inf"],
+      "slot_overflow_radius_text": "20",
+      "slot_overflow_reason": "fillet.unsupported-contact",
+      "slot_overflow_note": "Ruling (a), data/from-main/sdc-d-ux-fillet-f3/report.md: slot R20 exceeds the 5 mm end radius and 10 mm depth. Refuse it; the version-4 tangent-continuation path at Catallax 659259eedbd0f156ab601784f29f42e87e419c76 reports fillet.unsupported-contact. The historical baseline at e7f307bd11a95c3051ec22e0eaaa06fdea98e9fc expected fillet.unsupported-overflow."
+    }
+  },
+  "tolerances": {
+    "box_volume_mm3": 1e-6,
+    "slot_volume_mm3": 1e-5,
+    "bounds_mm": 0.001,
+    "outline_physical_px": 2.0,
+    "preview_mesh_volume_fraction_of_removed": 0.06,
+    "counts_ids_undo": "exact"
+  },
+  "evidence": "target/ux-tools/ux-fillet-preview/<test>/: run.log (event trace, pair, adapter, size, scale, expected and measured values, undo depths), full frames, viewport and corner crops, failure.txt and failure.png on a failure"
+}

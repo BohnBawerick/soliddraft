@@ -217,6 +217,8 @@ pub struct FeatureEditor {
     /// The document's rollback before the editor rolled the display back to the
     /// feature being edited.
     pub saved_rollback: Option<usize>,
+    /// The picks and typed sizes a Fillet or Chamfer panel refused.
+    pub feedback: crate::fillet_collect::Feedback,
     last: Option<EditorParams>,
 }
 
@@ -246,7 +248,15 @@ pub enum EditorParams {
 
 impl FeatureEditor {
     pub fn new(target: Option<FeatureId>, params: EditorParams, saved_rollback: Option<usize>) -> Self {
-        Self { target, params, preview: Preview::default(), error: None, saved_rollback, last: None }
+        Self {
+            target,
+            params,
+            preview: Preview::default(),
+            error: None,
+            saved_rollback,
+            feedback: Default::default(),
+            last: None,
+        }
     }
 
     pub fn title(&self) -> String {
@@ -289,8 +299,15 @@ impl FeatureEditor {
         }
     }
 
-    /// Regenerates the preview when the parameters changed.
+    /// Regenerates the preview when the parameters changed. A refused size shows no
+    /// preview, so no picture stands for a value that was not accepted.
     pub fn refresh(&mut self, doc: &Document) {
+        if self.feedback.size.is_some() {
+            self.preview = Preview::default();
+            self.error = None;
+            self.last = None;
+            return;
+        }
         if self.last.as_ref() == Some(&self.params) {
             return;
         }

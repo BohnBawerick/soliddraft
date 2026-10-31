@@ -101,6 +101,27 @@ fn unit_value(
     unit: &str,
     update_while_editing: bool,
 ) -> egui::Response {
+    let r = labelled_field(ui, label, unit, |ui| {
+        ui.add(
+            egui::DragValue::new(value)
+                .speed(0.5)
+                .range(0.01..=100_000.0)
+                .fixed_decimals(2)
+                .update_while_editing(update_while_editing),
+        )
+    });
+    // Named apart from the caption so automation can find the field itself.
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value")));
+    r
+}
+
+/// A caption, then a field framed with its unit.
+fn labelled_field(
+    ui: &mut egui::Ui,
+    label: &str,
+    unit: &str,
+    add: impl FnOnce(&mut egui::Ui) -> egui::Response,
+) -> egui::Response {
     let mut response = None;
     ui.horizontal(|ui| {
         ui.add_sized(vec2(58.0, 22.0), egui::Label::new(egui::RichText::new(label).size(12.0)));
@@ -113,18 +134,7 @@ fn unit_value(
                 ui.visuals_mut().widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
                 ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::NONE;
                 ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::NONE;
-                let r = ui.add(
-                    egui::DragValue::new(value)
-                        .speed(0.5)
-                        .range(0.01..=100_000.0)
-                        .fixed_decimals(2)
-                        .update_while_editing(update_while_editing),
-                );
-                // Named apart from the caption so automation can find the field itself.
-                r.widget_info(|| {
-                    egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("{label} value"))
-                });
-                response = Some(r);
+                response = Some(add(ui));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(unit).size(11.0).italics().color(theme::muted()));
                 });
@@ -132,6 +142,37 @@ fn unit_value(
         });
     });
     response.expect("the field is always added")
+}
+
+/// A fillet radius or chamfer distance, typed as text. Each edit that reads as a
+/// positive number of millimetres is the new size at once; anything else is refused
+/// beside the field and keeps the text, so nothing is silently clamped to another size.
+fn size_field(ui: &mut egui::Ui, label: &str, value: &mut f64, refused: &mut Option<String>) {
+    let what = label.to_lowercase();
+    let id = ui.make_persistent_id(("size", label));
+    // The typed text outlives the frame; it restarts from the size when it no longer
+    // stands for it.
+    let kept = ui.data(|d| d.get_temp::<String>(id));
+    let mut text = kept
+        .filter(|t| refused.is_some() || crate::fillet_collect::parse_size(t, &what) == Ok(*value))
+        .unwrap_or_else(|| crate::document::fmt_mm(*value));
+    let r = labelled_field(ui, label, "mm", |ui| {
+        ui.add(egui::TextEdit::singleline(&mut text).font(theme::font(12.5)).desired_width(ui.available_width() - 24.0))
+    });
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, format!("{label} value")));
+    if r.changed() {
+        match crate::fillet_collect::parse_size(&text, &what) {
+            Ok(v) => {
+                *value = v;
+                *refused = None;
+            }
+            Err(why) => *refused = Some(why),
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(id, text));
+    if let Some(why) = refused {
+        error_row(ui, why);
+    }
 }
 
 /// The selected feature's dimension. Dragging it previews the part off the interface
@@ -484,7 +525,9 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.label(
-                                egui::RichText::new("Click edges in the viewport").size(11.5).color(theme::accent()),
+                                egui::RichText::new("Click edges or faces in the viewport")
+                                    .size(11.5)
+                                    .color(theme::accent()),
                             );
                         });
                 }
@@ -504,22 +547,26 @@ fn editor(ui: &mut egui::Ui, state: &mut AppState) {
                 if let (Some(i), Some(list)) = (remove, editor.edges_mut()) {
                     list.remove(i);
                 }
+                if let Some(why) = &editor.feedback.pick {
+                    error_row(ui, why);
+                }
                 section_gap(ui);
                 theme::section_label(ui, if chamfer { "Chamfer parameters" } else { "Fillet parameters" });
+                let refused = &mut editor.feedback.size;
                 match &mut editor.params {
-                    EditorParams::Fillet(f) => {
-                        mm_field(ui, "Radius", &mut f.radius);
-                    }
-                    EditorParams::Chamfer(c) => {
-                        mm_field(ui, "Distance", &mut c.distance);
-                    }
+                    EditorParams::Fillet(f) => size_field(ui, "Radius", &mut f.radius, refused),
+                    EditorParams::Chamfer(c) => size_field(ui, "Distance", &mut c.distance, refused),
                     _ => {}
                 }
                 if let Some(err) = &editor.error {
                     error_row(ui, err);
                 }
                 ui.add_space(8.0);
-                hint(ui, "Edges stay picked across a rebuild: each one is named by the feature that made it.");
+                hint(
+                    ui,
+                    "A face adds every edge on its boundary. Edges stay picked across a rebuild: each one is \
+                     named by the feature that made it.",
+                );
             }
             EditorParams::Hole(h) => {
                 theme::section_label(ui, "Placement");

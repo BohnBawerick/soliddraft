@@ -20,6 +20,7 @@ pub mod document;
 pub mod drag;
 pub mod drawing;
 pub mod file;
+pub mod fillet_collect;
 mod grid;
 pub mod icons;
 pub mod journal;
