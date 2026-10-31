@@ -26,7 +26,11 @@
   "fixtures": {
     "B20": { "plane": "top", "profile": "rectangle", "width_mm": 60.0, "height_mm": 40.0, "depth_mm": 20.0 },
     "sketch": { "plane": "top", "centre_mm": [80.0, 0.0], "width_mm": 20.0, "height_mm": 10.0, "explicitly_shown": true },
-    "legacy": "tests/data/near-coincident-flange.dwprt"
+    "legacy": "tests/data/near-coincident-flange.dwprt",
+    "config": {
+      "note": "Builder fixture config: the ground grid off, so a hidden face or edge is read against the plain backdrop. The grid's own acceptance belongs to the grid lane.",
+      "view": { "show_grid": false }
+    }
   },
   "expected": {
     "B20": {

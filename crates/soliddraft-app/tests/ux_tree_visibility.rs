@@ -194,9 +194,11 @@ fn sketch(app: &App) -> (FeatureId, String) {
 
 fn launch(case: &mut Case, doc: Document, window: &str) -> App {
     let w = &manifest()["windows"][window];
-    if w["theme"] == "dark" {
-        std::fs::write(case.dir.join("config/settings.json"), r#"{"appearance":{"theme":"dark"}}"#).unwrap();
-    }
+    // The fixture's isolated config: the theme, and the view keys the image oracles need.
+    let mut settings = manifest()["fixtures"]["config"].clone();
+    settings.as_object_mut().expect("the fixture config").remove("note");
+    settings["appearance"] = serde_json::json!({ "theme": w["theme"] });
+    std::fs::write(case.dir.join("config/settings.json"), settings.to_string()).unwrap();
     let size = vec2(f(&w["size"][0]) as f32, f(&w["size"][1]) as f32);
     let ppp = f(&w["pixels_per_point"]) as f32;
     case.note(format!("launch {window}: {size:?} at {ppp} px/pt, {}", w["theme"]));
