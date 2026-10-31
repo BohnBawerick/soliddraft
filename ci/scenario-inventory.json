@@ -480,7 +480,7 @@
       ],
       "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
       "route": "MCP assembly, mate and Form subassembly commands -> formation plan -> assembly transaction -> proven plane query -> Catallax adapter -> pinned kernel",
-      "supported_limits": "Increments 1-2 of 4 of V6 batch 1: root part occurrences in their default state formed into a new separate file with internal and crossing distance mates, one-step undo and redo, and a typed cycle refusal; default configuration, no patterns; partial M4/M6 evidence.",
+      "supported_limits": "Increments 1-3 of 4 of V6 batch 1: root part occurrences in their default state formed into a new separate file with internal and crossing distance mates, one-step undo and redo, a typed cycle refusal, and a part edit accepted by the sub-assembly's Update then the root's; default configuration, no patterns; partial M4/M6 evidence.",
       "evidence": "result.json, protocol.json, commands/NNNN/{command.json,kernel.json,inspect-*.stdout}; work/parts/base.dwprt, work/parts/pin.dwprt, work/root.dwasm and work/modules/pack.dwasm"
     }
   ]

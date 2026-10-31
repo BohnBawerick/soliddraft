@@ -55,6 +55,24 @@ that move on their own, at any depth; a pattern member follows its seed.
 So a root driving a part inside a sub-assembly moves that part and whatever the
 sub-assembly's own mates tie to it, and leaves the sub-assembly's free parts alone.
 
+## Updating across files
+
+A part edit reaches the root only through the sub-assembly that places it, each file
+accepting what it places with its own Update, the way assemblies always work
+([assemblies.md](assemblies.md#rebuild)):
+
+1. The part is saved. Nothing else changes: the sub-assembly and the root keep showing,
+   proving and solving on the revisions they pinned. A session that recorded the old bytes
+   keeps proving on them.
+2. The root's Update accepts only its own sources. With only a part inside the sub-assembly
+   newer, it accepts nothing, records no step, and `assembly_update` lists those parts under
+   `nested_newer` with the sub-assembly (`holder`) that has to update first.
+3. The sub-assembly, opened on its own, updates and is saved.
+4. The root's Update then accepts the sub-assembly's new revision with its parts' new pins,
+   proving the mates that cross into it on them, in one step.
+
+No Update writes a file; each file is written by its own Save.
+
 ## Publication and history
 
 Both candidate truths are made, flattened and solved before anything is written: the root

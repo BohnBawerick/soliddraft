@@ -173,3 +173,54 @@ fn form_publishes_one_new_file_and_changes_the_root_in_memory() {
     assert_eq!(alone["values"], json!([]));
     assert_eq!((sha(&base), sha(&pin), sha(&pack)), (hashes.1, hashes.2, pack_bytes));
 }
+
+/// Steps 31 to 46: a part edit reaches the root only through the sub-assembly. The root's
+/// Update leaves the nested part alone and says so; the new file accepts it and is saved;
+/// then the root accepts the new file. No Update writes a file, and each file is written
+/// only by its own Save.
+#[test]
+fn a_part_edit_reaches_the_root_through_its_sub_assembly() {
+    let mut r = flat("update");
+    let (root, pin, pack) = (r.file("root.dwasm"), r.file("parts/pin.dwprt"), r.file("modules/pack.dwasm"));
+    r.ok("assembly_form_subassembly", r.form());
+    r.ok("assembly_save", json!({ "path": root }));
+    let (t1, s0) = (sha(&root), sha(&pack));
+
+    r.ok("open", json!({ "path": pin }));
+    r.ok("edit_extrude", json!({ "feature": "Boss-Extrude1", "depth": 8, "flip": false }));
+    r.ok("save", json!({ "path": pin }));
+    assert_eq!((sha(&root), sha(&pack)), (t1.clone(), s0.clone()), "a part save writes no assembly");
+
+    r.ok("open", json!({ "path": root }));
+    let first = r.ok("assembly_update", json!({}));
+    assert_eq!(first["updated"], 0);
+    let holders: Vec<&str> =
+        first["nested_newer"].as_array().unwrap().iter().map(|n| n["holder"].as_str().unwrap()).collect();
+    assert_eq!(holders, ["16", "16", "16"], "the root names the sub-assembly that must update first");
+    assert_eq!(first["assembly"]["accepted_state"]["undo"]["depth"], 0, "nothing was accepted");
+    assert_eq!(at(&first["assembly"], "16/5"), json!([10.0, 10.0, 31.0]));
+    assert_eq!(sha(&root), t1);
+
+    r.ok("open", json!({ "path": pack }));
+    let child = r.ok("assembly_update", json!({}))["assembly"].clone();
+    assert_eq!(at(&child, "5"), json!([0.0, 0.0, 11.0]));
+    assert_eq!((sha(&root), sha(&pack)), (t1.clone(), s0.clone()), "Update writes no file");
+    r.ok("assembly_save", json!({ "path": pack }));
+    let s1 = sha(&pack);
+    assert_ne!(s1, s0);
+    assert_eq!(sha(&root), t1, "saving the sub-assembly leaves the root's file alone");
+
+    r.ok("open", json!({ "path": root }));
+    let updated = r.ok("assembly_update", json!({}));
+    assert_eq!(updated["updated"], 1);
+    assert_eq!(updated["nested_newer"], json!([]));
+    let assembly = &updated["assembly"];
+    assert_eq!(at(assembly, "16/4"), json!([10.0, 10.0, 22.0]));
+    assert_eq!(at(assembly, "16/5"), json!([10.0, 10.0, 33.0]));
+    assert_eq!(at(assembly, "16/6"), json!([60.0, -20.0, 7.0]));
+    assert_eq!(assembly["solver"]["remaining_dof"], 6);
+    assert_eq!((sha(&root), sha(&pack)), (t1.clone(), s1.clone()), "Update writes no file");
+    r.ok("assembly_save", json!({ "path": root }));
+    assert_ne!(sha(&root), t1);
+    assert_eq!(sha(&pack), s1, "saving the root leaves the sub-assembly's file alone");
+}
