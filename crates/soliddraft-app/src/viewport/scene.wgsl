@@ -34,6 +34,15 @@ struct Globals {
     shadow: vec4<f32>,
     // x: environment light. y: reflections. z: occlusion strength. w: roughest mip.
     look: vec4<f32>,
+    // The modelling grid, in view space. xyz: a major intersection of the lattice, and
+    // the lattice's directions. w: how far it is pulled toward the viewer, the minor
+    // spacing and the major spacing.
+    grid_anchor: vec4<f32>,
+    grid_u: vec4<f32>,
+    grid_v: vec4<f32>,
+    grid_ink: vec4<f32>,
+    // x, y: minor and major opacity. z, w: minor and major width in pixels.
+    grid_lines: vec4<f32>,
     // Diffuse environment light as nine spherical-harmonic coefficients (environment.rs).
     sh: array<vec4<f32>, 9>,
     hover_id: u32,
@@ -312,6 +321,69 @@ fn fs_ground(in: GroundOut) -> @location(0) vec4<f32> {
     return vec4<f32>(0.0, 0.0, 0.0, alpha);
 }
 
+// Grid --------------------------------------------------------------------------
+// The lattice has no geometry: every pixel finds where its ray meets the plane, draws
+// the lines near that point and writes the point's depth, so the faces hide it and it
+// reaches the horizon without a near-plane streak. The depth buffer stays as it was.
+
+struct GridVaryings {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) ndc: vec2<f32>,
+};
+
+struct GridFragment {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+};
+
+@vertex
+fn vs_grid(@builtin(vertex_index) i: u32) -> GridVaryings {
+    var out: GridVaryings;
+    out.ndc = vec2<f32>(f32(i32(i & 1u) * 4 - 1), f32(i32(i >> 1u) * 4 - 1));
+    out.clip = vec4<f32>(out.ndc, 0.0, 1.0);
+    return out;
+}
+
+// How much of a pixel the lines of spacing `step` cover, for a point `p` of the plane.
+// `pixel` is how far the plane moves per pixel across each family of lines. Lines that
+// crowd together fade out, each family on its own, instead of shimmering.
+fn grid_lines(p: vec2<f32>, step: f32, pixel: vec2<f32>, width: f32) -> f32 {
+    let distance = abs(fract(p / step + 0.5) - 0.5) * step / pixel;
+    let line = clamp(vec2<f32>(width * 0.5 + 0.5) - distance, vec2<f32>(0.0), vec2<f32>(1.0));
+    let room = smoothstep(vec2<f32>(3.0), vec2<f32>(6.0), step / pixel);
+    return max(line.x * room.x, line.y * room.y);
+}
+
+@fragment
+fn fs_grid(in: GridVaryings) -> GridFragment {
+    let near = globals.inv_proj * vec4<f32>(in.ndc, 1.0, 1.0);
+    let middle = globals.inv_proj * vec4<f32>(in.ndc, 0.5, 1.0);
+    let start = near.xyz / near.w;
+    let along = normalize(middle.xyz / middle.w - start);
+    let normal = cross(globals.grid_u.xyz, globals.grid_v.xyz);
+    let facing = dot(along, normal);
+    let t = dot(globals.grid_anchor.xyz - start, normal) / facing;
+    let point = start + along * t;
+    let hit = point - globals.grid_anchor.xyz;
+    let p = vec2<f32>(dot(hit, globals.grid_u.xyz), dot(hit, globals.grid_v.xyz));
+    let dx = dpdx(p);
+    let dy = dpdy(p);
+    let pixel = sqrt(dx * dx + dy * dy) + vec2<f32>(1e-12);
+    let minor = grid_lines(p, globals.grid_u.w, pixel, globals.grid_lines.z) * globals.grid_lines.x;
+    let major = grid_lines(p, globals.grid_v.w, pixel, globals.grid_lines.w) * globals.grid_lines.y;
+    let alpha = max(minor, major);
+
+    let clip = globals.proj * vec4<f32>(pulled_view(point, globals.grid_anchor.w), 1.0);
+    let depth = clip.z / clip.w;
+    if (t <= 0.0 || abs(facing) < 1e-6 || clip.w <= 0.0 || depth < 0.0 || depth > 1.0 || alpha <= 0.0) {
+        discard;
+    }
+    var out: GridFragment;
+    out.color = vec4<f32>(globals.grid_ink.rgb * alpha, alpha);
+    out.depth = depth;
+    return out;
+}
+
 // Edges ------------------------------------------------------------------------
 // Each segment is an instance drawn as a quad of constant width in pixels, so lines
 // are wide on WebGL2 too. Ends are extended by half the width so polylines join.
@@ -331,13 +403,15 @@ struct LineOut {
 // Clip position of `p` moved toward the viewer, so lines win the depth test against
 // the faces they bound. `scale` multiplies the configured pull.
 fn pulled_clip(p: vec3<f32>, scale: f32) -> vec4<f32> {
-    var v = globals.view * vec4<f32>(p, 1.0);
+    let v = (globals.view * vec4<f32>(p, 1.0)).xyz;
+    return globals.proj * vec4<f32>(pulled_view(v, scale), 1.0);
+}
+
+fn pulled_view(v: vec3<f32>, scale: f32) -> vec3<f32> {
     if (globals.eye.w > 0.5) {
-        v.z = v.z + globals.pull.y * scale;
-    } else {
-        v = vec4<f32>(v.xyz * (1.0 - globals.pull.x * scale), 1.0);
+        return vec3<f32>(v.xy, v.z + globals.pull.y * scale);
     }
-    return globals.proj * v;
+    return v * (1.0 - globals.pull.x * scale);
 }
 
 fn line_vertex(in: LineIn, width_px: f32) -> vec4<f32> {

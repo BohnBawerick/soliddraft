@@ -10,11 +10,12 @@
 //!
 //! Passes, in order: the shadow map from the light fixed above the model (only
 //! when the geometry changed), the ambient occlusion prepass, sampling and blur
-//! (full tier only), the colour pass (faces, the ground shadow, edges as wide
-//! lines, ghosts) and the id pass. Depth is reversed (near 1, far 0) on every
+//! (full tier only), the colour pass (faces, the ground shadow, the grid, edges as
+//! wide lines, ghosts) and the id pass. Depth is reversed (near 1, far 0) on every
 //! camera pass. `look.rs` holds the presets and the tiers.
 
 use super::assembly::{AssemblyFrame, AssemblyRenderer};
+use super::grid::{self, GridFrame};
 use crate::document::DisplayMesh;
 use crate::viewport::environment;
 use crate::viewport::look::{Preset, Tier};
@@ -147,6 +148,8 @@ pub struct FrameInput {
     pub pick_out: Arc<Mutex<PickSample>>,
     /// An assembly to draw with the part, if one is open.
     pub assembly: Option<AssemblyFrame>,
+    /// The modelling grid, when one shows.
+    pub grid: Option<GridFrame>,
 }
 
 pub struct ViewportCallback(pub FrameInput);
@@ -197,6 +200,11 @@ struct Globals {
     ground: [f32; 4],
     shadow: [f32; 4],
     look: [f32; 4],
+    grid_anchor: [f32; 4],
+    grid_u: [f32; 4],
+    grid_v: [f32; 4],
+    grid_ink: [f32; 4],
+    grid_lines: [f32; 4],
     sh: [[f32; 4]; 9],
     hover_id: u32,
     selected_id: u32,
@@ -402,6 +410,7 @@ pub struct ViewportRenderer {
     tier: Tier,
     face_pipeline: wgpu::RenderPipeline,
     ground_pipeline: wgpu::RenderPipeline,
+    grid_pipeline: wgpu::RenderPipeline,
     edge_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     id_face_pipeline: wgpu::RenderPipeline,
@@ -514,6 +523,8 @@ impl ViewportRenderer {
             })
         };
         let scene_layout = pipeline_layout("scene", &[&globals_layout, &layouts.body, &layouts.frame]);
+        // The grid reads only the globals: nothing else is bound with an empty document.
+        let grid_layout = pipeline_layout("grid", &[&globals_layout]);
         let uniforms_layout = pipeline_layout("uniforms", &[&layouts.uniforms]);
         let ao_layout = pipeline_layout("occlusion", &[&layouts.uniforms, &layouts.ao_inputs]);
         let blit_pipeline_layout = pipeline_layout("blit", &[&layouts.blit]);
@@ -608,6 +619,18 @@ impl ViewportRenderer {
             layout: &scene_layout,
             vs: "vs_ground",
             fs: Some("fs_ground"),
+            buffers: &[],
+            format: Some(COLOR_FORMAT),
+            blend: premul,
+            samples: MSAA,
+            cull: None,
+            depth: depth(false),
+        });
+        let grid_pipeline = pipeline(Desc {
+            label: "grid",
+            layout: &grid_layout,
+            vs: "vs_grid",
+            fs: Some("fs_grid"),
             buffers: &[],
             format: Some(COLOR_FORMAT),
             blend: premul,
@@ -818,6 +841,7 @@ impl ViewportRenderer {
             tier,
             face_pipeline,
             ground_pipeline,
+            grid_pipeline,
             edge_pipeline,
             shadow_pipeline,
             id_face_pipeline,
@@ -1082,6 +1106,15 @@ impl ViewportRenderer {
         let toward_sun = environment::softbox_direction();
         queue.write_buffer(&self.backdrop, 0, bytemuck::bytes_of(&Backdrop::from_srgb(input.backdrop)));
         let model_radius = bounds.map_or(100.0, |(lo, hi)| ((hi - lo).length() / 2.0).max(1.0));
+        let grid = input.grid.unwrap_or(GridFrame {
+            anchor: Vec3::ZERO,
+            u: Vec3::X,
+            v: Vec3::Y,
+            minor: 1.0,
+            major: 1.0,
+            pull: 0.0,
+            ink: egui::Color32::TRANSPARENT,
+        });
         queue.write_buffer(
             &self.globals,
             0,
@@ -1110,6 +1143,16 @@ impl ViewportRenderer {
                     look.reflections,
                     if ao { look.ambient_occlusion } else { 0.0 },
                     (environment::LEVELS - 1) as f32,
+                ],
+                grid_anchor: [grid.anchor.x, grid.anchor.y, grid.anchor.z, grid.pull],
+                grid_u: [grid.u.x, grid.u.y, grid.u.z, grid.minor],
+                grid_v: [grid.v.x, grid.v.y, grid.v.z, grid.major],
+                grid_ink: egui::Rgba::from(grid.ink).to_array(),
+                grid_lines: [
+                    grid::MINOR_LINE.0,
+                    grid::MAJOR_LINE.0,
+                    grid::MINOR_LINE.1 * input.pixels_per_point,
+                    grid::MAJOR_LINE.1 * input.pixels_per_point,
                 ],
                 sh: self.sh,
                 hover_id: input.hover_id,
@@ -1272,6 +1315,11 @@ impl ViewportRenderer {
                 // The ground darkens behind the opaque faces and in front of the background.
                 pass.set_pipeline(&self.ground_pipeline);
                 pass.draw(0..6, 0..1);
+            }
+            if input.grid.is_some() {
+                // Tested against the faces and written to no buffer, so it can hide nothing.
+                pass.set_pipeline(&self.grid_pipeline);
+                pass.draw(0..3, 0..1);
             }
             if show_faces && let Some(g) = ghost {
                 pass.set_pipeline(&self.face_pipeline);
@@ -1467,9 +1515,18 @@ mod tests {
             .expect("scene.wgsl validates");
         let options =
             glsl::Options { version: glsl::Version::Embedded { version: 300, is_webgl: true }, ..Default::default() };
-        let vertex =
-            ["vs_face", "vs_ground", "vs_edge", "vs_shadow", "vs_id_face", "vs_id_edge", "vs_id_vertex", "vs_blit"];
-        let fragment = ["fs_face", "fs_ground", "fs_edge", "fs_id", "fs_blit_linear", "fs_blit_gamma"];
+        let vertex = [
+            "vs_face",
+            "vs_ground",
+            "vs_grid",
+            "vs_edge",
+            "vs_shadow",
+            "vs_id_face",
+            "vs_id_edge",
+            "vs_id_vertex",
+            "vs_blit",
+        ];
+        let fragment = ["fs_face", "fs_ground", "fs_grid", "fs_edge", "fs_id", "fs_blit_linear", "fs_blit_gamma"];
         let stages = vertex
             .iter()
             .map(|e| (naga::ShaderStage::Vertex, e))
@@ -1487,8 +1544,8 @@ mod tests {
 
     #[test]
     fn globals_match_the_shader_layout() {
-        // Five matrices, ten vectors, nine harmonics and four ids.
-        assert_eq!(std::mem::size_of::<Globals>(), 5 * 64 + 10 * 16 + 9 * 16 + 16);
+        // Five matrices, fifteen vectors, nine harmonics and four ids.
+        assert_eq!(std::mem::size_of::<Globals>(), 5 * 64 + 15 * 16 + 9 * 16 + 16);
         assert_eq!(std::mem::size_of::<LineInstance>(), 28);
         assert_eq!(std::mem::size_of::<BodyUniform>(), 32 + 48 * MAX_APPEARANCES);
     }
