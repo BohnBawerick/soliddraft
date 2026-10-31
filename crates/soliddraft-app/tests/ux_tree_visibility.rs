@@ -317,6 +317,21 @@ fn row_selected(app: &App, label: &str) -> bool {
         == Some(egui::accesskit::Toggled::True)
 }
 
+/// Clicks a ribbon command by its label. A narrow window folds its group into one
+/// button, which opens the group's row first.
+fn ribbon_command(case: &mut Case, app: &mut App, group: &str, label: &str) {
+    let button =
+        |app: &App| app.query_all_by_role_and_label(egui::accesskit::Role::Button, label).next().map(|n| n.rect());
+    if button(app).is_none() {
+        let folded = format!("{group} group");
+        case.note(format!("open the folded ribbon group '{folded}'"));
+        click_at(app, bounds(app, &folded).center());
+    }
+    let r = button(app).unwrap_or_else(|| panic!("the ribbon offers {label}"));
+    case.note(format!("ribbon {label} at {:?}", r.center()));
+    click_at(app, r.center());
+}
+
 fn open_origin(app: &mut App) {
     if app.query_by_label("Origin").is_none() {
         click_row_name(app, "Origin, planes and axes");
@@ -962,9 +977,7 @@ fn one_click(window: &str) {
         assert_eq!(choices(app), [Some(false), None, None], "the disclosure writes no choice");
 
         // A pattern editor takes an axis row's name as its direction.
-        let linear =
-            app.get_all_by_role_and_label(egui::accesskit::Role::Button, "Linear").next().expect("Linear").rect();
-        click_at(app, linear.center());
+        ribbon_command(case, app, "Pattern", "Linear");
         assert!(
             matches!(app.state().state.editor.as_ref().map(|e| &e.params), Some(EditorParams::Pattern(_))),
             "the ribbon's Linear opened the pattern editor"
