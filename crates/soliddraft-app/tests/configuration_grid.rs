@@ -5,7 +5,10 @@
 //! fixtures`, never from this application.
 
 use egui::{Key, Modifiers, vec2};
-use egui_kittest::{Harness, kittest::Queryable};
+use egui_kittest::{
+    Harness,
+    kittest::{NodeT, Queryable},
+};
 use serde_json::{Value, json};
 use soliddraft_app::app::{Automation, SolidDraftApp};
 use soliddraft_app::app_tools::AppTools;
@@ -321,16 +324,16 @@ fn edit_candidate(h: &mut App<'_>) {
     type_in(h, &format!("Narrow {WIDTH}"), "130 mm");
 }
 
-#[test]
-fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
+/// The bracket with Narrow selected in the real application, where this machine has a GPU.
+fn window(name: &str) -> Option<(App<'static>, PathBuf)> {
     let instance = egui_wgpu::wgpu::Instance::default();
     let adapters = pollster::block_on(instance.enumerate_adapters(egui_wgpu::wgpu::Backends::all()));
     if adapters.is_empty() {
         assert!(std::env::var_os("SOLIDDRAFT_REQUIRE_GPU").is_none(), "required GPU unavailable");
         eprintln!("no GPU adapter; skipping");
-        return;
+        return None;
     }
-    let config = scratch("window");
+    let config = scratch(name);
     soliddraft_app::file::set_config_dir(Some(config.clone()));
     let mut state = AppState::new(Document::new("Part1", Arc::new(soliddraft_kernel_catallax::CatallaxKernel::new())));
     bracket(&mut state);
@@ -344,13 +347,23 @@ fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
         .wgpu()
         .build_eframe(|cc| SolidDraftApp::new(cc, doc, Automation::default()));
     settle(&mut h);
+    Some((h, config))
+}
+
+fn open_grid(h: &mut App<'_>) {
+    button(h, "View tab");
+    button(h, "Configuration grid");
+    assert!(h.state().state.grid.open);
+}
+
+#[test]
+fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
+    let Some((mut h, config)) = window("window") else { return };
     let start = accepted(&mut h.state_mut().state, None);
     assert!((volume(&mut h.state_mut().state) - 151869.02664470769).abs() < 0.005);
 
     // The visible command opens the window on the live table.
-    button(&mut h, "View tab");
-    button(&mut h, "Configuration grid");
-    assert!(h.state().state.grid.open);
+    open_grid(&mut h);
     edit_candidate(&mut h);
     button(&mut h, "Preview");
     h.get_by_label(&format!("Narrow: plate_w 130 mm, flange_d 65 mm, hole_d 12 mm, title {FAMILY} (inherited)"));
@@ -400,5 +413,121 @@ fn g_ui_the_window_edits_previews_cancels_and_applies_one_step() {
     assert_eq!(rows[2], json!(["152.4 mm", "", "", WIDE]));
     assert!((volume(st) - 151869.02664470769).abs() < 0.005);
     assert_eq!(st.doc.model().geometry_hash().to_string(), start.geometry);
+    let _ = std::fs::remove_dir_all(&config);
+}
+
+fn narrow_cell(h: &App<'_>) -> Option<String> {
+    h.get_by_label(&format!("Narrow {WIDTH}")).value()
+}
+
+fn apply_is_offered(h: &App<'_>) -> bool {
+    !h.get_all_by_role_and_label(egui::accesskit::Role::Button, "Apply").next().unwrap().accesskit_node().is_disabled()
+}
+
+fn preview_twice(h: &mut App<'_>) {
+    type_in(h, &format!("Narrow {WIDTH}"), "130 mm");
+    button(h, "Preview");
+    button(h, "Preview");
+}
+
+/// Presses Apply, which must not do anything, and proves a token cannot reach the part either.
+fn nothing_to_apply(h: &mut App<'_>, start: &Accepted, tokens: &[&str]) {
+    button(h, "Apply");
+    assert_eq!(&accepted(&mut h.state_mut().state, None), start, "Apply published what the window does not show");
+    assert!(!apply_is_offered(h));
+    for token in tokens {
+        let error = apply(&mut h.state_mut().state, token).unwrap_err();
+        assert!(error.contains("expired preview"), "{token}: {error}");
+    }
+    assert_eq!(&accepted(&mut h.state_mut().state, None), start);
+}
+
+#[test]
+fn g_ui_cancel_after_repeated_previews_leaves_nothing_to_apply() {
+    let Some((mut h, config)) = window("cancel") else { return };
+    let start = accepted(&mut h.state_mut().state, None);
+    open_grid(&mut h);
+    preview_twice(&mut h);
+    assert!(apply_is_offered(&h));
+    button(&mut h, "Cancel");
+    assert_eq!(narrow_cell(&h).as_deref(), Some("120"));
+    nothing_to_apply(&mut h, &start, &["grid-1", "grid-2"]);
+    let _ = std::fs::remove_dir_all(&config);
+}
+
+#[test]
+fn g_ui_an_edit_after_repeated_previews_withdraws_them_all() {
+    let Some((mut h, config)) = window("edit") else { return };
+    let start = accepted(&mut h.state_mut().state, None);
+    open_grid(&mut h);
+    preview_twice(&mut h);
+    type_in(&mut h, &format!("Narrow {WIDTH}"), "125 mm");
+    nothing_to_apply(&mut h, &start, &["grid-1", "grid-2"]);
+
+    // The cells on screen are still the draft, and they preview and apply as one step.
+    assert_eq!(narrow_cell(&h).as_deref(), Some("125 mm"));
+    button(&mut h, "Preview");
+    button(&mut h, "Apply");
+    let st = &mut h.state_mut().state;
+    assert_eq!(st.doc.undo_depth(), start.journal["undo"].as_array().unwrap().len() + 1);
+    let grid = call(st, "configuration_grid", json!({}));
+    assert_eq!(grid["rows"][1]["cells"][0], "125 mm");
+    let _ = std::fs::remove_dir_all(&config);
+}
+
+#[test]
+fn g_ui_closing_the_window_either_way_withdraws_its_previews() {
+    let Some((mut h, config)) = window("close") else { return };
+    let start = accepted(&mut h.state_mut().state, None);
+    open_grid(&mut h);
+    let mut issued = 0;
+    for close in ["Close window", "Configuration grid"] {
+        preview_twice(&mut h);
+        button(&mut h, close);
+        assert!(!h.state().state.grid.open, "{close}");
+        button(&mut h, "Configuration grid");
+        assert_eq!(narrow_cell(&h).as_deref(), Some("120"), "{close}");
+        issued += 2;
+        let tokens: Vec<String> = (issued - 1..=issued).map(|n| format!("grid-{n}")).collect();
+        nothing_to_apply(&mut h, &start, &tokens.iter().map(String::as_str).collect::<Vec<_>>());
+    }
+    let _ = std::fs::remove_dir_all(&config);
+}
+
+#[test]
+fn g_ui_an_agents_previews_stay_apart_from_the_window() {
+    let Some((mut h, config)) = window("agent") else { return };
+    let start = accepted(&mut h.state_mut().state, None);
+    open_grid(&mut h);
+    type_in(&mut h, &format!("Narrow {WIDTH}"), "125 mm");
+
+    // Two previews the window did not make, of a width it does not show.
+    let st = &mut h.state_mut().state;
+    let live = call(st, "configuration_grid", json!({}));
+    let table = |row: &Value| {
+        let cells = row["cells"].as_array().unwrap();
+        Value::Array(std::iter::once(row["name"].clone()).chain(cells.iter().cloned()).collect())
+    };
+    let mut rows: Vec<Value> = live["rows"].as_array().unwrap().iter().map(table).collect();
+    rows[1][1] = json!("130 mm");
+    let kept = preview_cells(st, json!(rows))["preview_id"].as_str().unwrap().to_owned();
+    let dropped = preview_cells(st, json!(rows))["preview_id"].as_str().unwrap().to_owned();
+    settle(&mut h);
+    assert!(!apply_is_offered(&h), "the window offered an agent's preview");
+    button(&mut h, "Apply");
+    assert_eq!(accepted(&mut h.state_mut().state, None), start);
+
+    // An agent's cancel leaves the person's typing alone.
+    call(&mut h.state_mut().state, "cancel_configuration_grid", json!({ "preview_id": dropped }));
+    settle(&mut h);
+    assert_eq!(narrow_cell(&h).as_deref(), Some("125 mm"));
+
+    // The window's Cancel retires its own preview and leaves the agent's open.
+    button(&mut h, "Preview");
+    button(&mut h, "Cancel");
+    assert_eq!(narrow_cell(&h).as_deref(), Some("120"));
+    let st = &mut h.state_mut().state;
+    apply(st, &kept).unwrap();
+    assert_eq!(call(st, "configuration_grid", json!({}))["rows"][1]["cells"][0], "130 mm");
     let _ = std::fs::remove_dir_all(&config);
 }

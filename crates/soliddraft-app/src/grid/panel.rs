@@ -73,7 +73,7 @@ pub fn show(ctx: &egui::Context, state: &mut AppState) {
     let mut actions = Vec::new();
     let mut changed = false;
     let mut open = true;
-    let previewing = state.grid.latest().is_some();
+    let previewing = state.grid.shown().is_some();
     egui::Window::new("Configuration grid").open(&mut open).default_width(640.0).show(ctx, |ui| {
         let Draft { table, new_property, .. } = &mut draft;
         let (header, rows) = table.split_first_mut().expect("the table has a header");
@@ -121,7 +121,7 @@ pub fn show(ctx: &egui::Context, state: &mut AppState) {
                 actions.push(GridAction::Export(Format::Xlsx));
             }
         });
-        if let Some(preview) = state.grid.latest() {
+        if let Some(preview) = state.grid.shown() {
             ui.separator();
             ui.label(RichText::new(format!("Preview {}: not applied", preview.id)).family(theme::semibold()));
             for row in preview.report["resolved"].as_array().map(Vec::as_slice).unwrap_or_default() {
@@ -155,6 +155,9 @@ pub fn apply(state: &mut AppState, action: GridAction) {
     let said = match action {
         GridAction::Toggle => {
             state.grid.open = !state.grid.open;
+            if !state.grid.open {
+                discard(state);
+            }
             None
         }
         GridAction::Close => {
@@ -166,7 +169,10 @@ pub fn apply(state: &mut AppState, action: GridAction) {
         GridAction::Preview => {
             let draft = state.grid.draft.clone().unwrap_or_else(|| draft_of(state));
             match preview::preview(state, &draft.table) {
-                Ok(_) => Some("Previewed. Nothing has changed yet.".to_owned()),
+                Ok(report) => {
+                    state.grid.bind(&report);
+                    Some("Previewed. Nothing has changed yet.".to_owned())
+                }
                 Err(e) => Some(e),
             }
         }
@@ -175,8 +181,8 @@ pub fn apply(state: &mut AppState, action: GridAction) {
             Some("Cancelled. The part is unchanged.".to_owned())
         }
         GridAction::Apply => {
-            let id = state.grid.latest().map(|p| p.id.clone()).unwrap_or_default();
-            Some(match preview::apply(state, &id) {
+            let id = state.grid.shown().map(|p| p.id.clone()).ok_or("Preview the table first".to_owned());
+            Some(match id.and_then(|id| preview::apply(state, &id)) {
                 Ok(_) => "Applied as one undo step.".to_owned(),
                 Err(e) => e,
             })
@@ -189,10 +195,11 @@ pub fn apply(state: &mut AppState, action: GridAction) {
     }
 }
 
-/// Forgets the draft and any preview of it.
+/// Forgets the draft and the window's preview of it.
 fn discard(state: &mut AppState) {
     state.grid.withdraw();
     state.grid.draft = None;
+    state.grid.message = None;
 }
 
 fn add_property(state: &mut AppState) -> Option<String> {

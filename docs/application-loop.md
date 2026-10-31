@@ -482,7 +482,7 @@ View, Panels, Configuration grid opens the window. Agents use the same steps:
 | `apply_configuration_grid` | Rebuilds the selected row on a scratch copy, then publishes one undo step |
 | `export_configuration_grid` | Writes the accepted table as CSV or XLSX |
 
-A preview is bound to the document and revision it came from and is used once. Applying one after the part changed, or one that was cancelled or applied, is refused. Other rows keep the rule of the single verbs: their graph is checked now and they build when activated.
+A preview is bound to the document and revision it came from and is used once. Applying one after the part changed, or one that was cancelled or applied, is refused. The window holds one preview of its own: previewing again replaces it, and editing a cell, Cancel or closing the window retires it. Previews made through these tools stay open under their own ids; the window neither shows nor applies them, and cancelling one leaves the window's cells alone. Other rows keep the rule of the single verbs: their graph is checked now and they build when activated.
 
 Both files use the same columns, mapped by header name, in any order:
 

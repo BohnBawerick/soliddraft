@@ -48,6 +48,8 @@ pub struct GridState {
     pub draft: Option<Draft>,
     /// Open previews, oldest first. Publishing one makes the others stale.
     previews: Vec<Preview>,
+    /// The one preview the window shows and applies. Each agent addresses its own by id.
+    window: Option<String>,
     /// The panel's last message.
     pub message: Option<String>,
     retired: VecDeque<(String, &'static str)>,
@@ -62,16 +64,29 @@ impl GridState {
         }
     }
 
-    /// The window's preview: the newest open one.
-    pub fn latest(&self) -> Option<&Preview> {
-        self.previews.last()
+    /// The window's preview, while it is still open.
+    pub fn shown(&self) -> Option<&Preview> {
+        let id = self.window.as_ref()?;
+        self.previews.iter().find(|p| &p.id == id)
     }
 
-    /// Retires the newest preview, as an edited draft does.
+    /// Retires the window's preview, as an edit, Cancel or Close does.
     pub(crate) fn withdraw(&mut self) {
-        if let Some(preview) = self.previews.pop() {
-            self.retire(preview.id, "cancelled");
+        self.release("cancelled");
+    }
+
+    /// Gives the window the preview `report` describes, in place of the one it had.
+    pub(crate) fn bind(&mut self, report: &Value) {
+        self.release("replaced");
+        self.window = report["preview_id"].as_str().map(str::to_owned);
+    }
+
+    fn release(&mut self, how: &'static str) {
+        if let Some(at) = self.previews.iter().position(|p| Some(&p.id) == self.window.as_ref()) {
+            let preview = self.previews.remove(at);
+            self.retire(preview.id, how);
         }
+        self.window = None;
     }
 
     /// Takes the open preview `id`, or says what became of it.
@@ -149,11 +164,10 @@ fn candidate_rows(grid: &Grid) -> Vec<Value> {
         .collect()
 }
 
-/// Discards the preview and its draft. The token cannot be used again.
+/// Discards the preview. The token cannot be used again; the window's cells stay.
 pub(crate) fn cancel(state: &mut AppState, id: &str) -> Result<Value, String> {
     let preview = state.grid.take(id)?;
     state.grid.retire(preview.id, "cancelled");
-    state.grid.draft = None;
     Ok(json!({ "cancelled": id }))
 }
 
@@ -190,6 +204,7 @@ pub(crate) fn apply(state: &mut AppState, id: &str) -> Result<Value, String> {
     if let Some(reason) = busy(state) {
         return Err(reason.into());
     }
+    let from_window = state.grid.window.as_deref() == Some(id);
     let preview = state.grid.take(id)?;
     let model = state.doc.model();
     let stale = if preview.document != model.id() {
@@ -212,7 +227,9 @@ pub(crate) fn apply(state: &mut AppState, id: &str) -> Result<Value, String> {
     let how = if outcome.is_ok() { "applied" } else { "refused" };
     state.grid.retire(preview.id, how);
     outcome?;
-    state.grid.draft = None;
+    if from_window {
+        state.grid.draft = None;
+    }
     Ok(json!({
         "applied": id,
         "revision": state.doc.model().semantic_hash().as_str(),

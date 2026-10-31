@@ -123,7 +123,9 @@ fn read_table(state: &mut AppState, path: &Path, format: Format) -> Result<(Vec<
 /// Previews a table file for the window, by its extension. Returns its cells for the draft.
 pub(crate) fn preview_file(state: &mut AppState, path: &Path) -> Result<Vec<Vec<String>>, String> {
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-    read_table(state, path, Format::parse(&extension)?).map(|(table, _)| table)
+    let (table, report) = read_table(state, path, Format::parse(&extension)?)?;
+    state.grid.bind(&report);
+    Ok(table)
 }
 
 /// Writes the accepted table. No document state changes.
@@ -159,4 +161,32 @@ pub(crate) fn values(mut all: Value, active: Value) -> Value {
         }
     }
     all
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::Document;
+
+    #[test]
+    fn a_file_previewed_for_the_window_replaces_its_preview_and_an_edit_retires_it() {
+        let mut state = AppState::new(Document::new("Part1", crate::kernel()));
+        let dir = std::env::temp_dir().join(format!("soliddraft-import-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("table.csv");
+        let table = exchange::cells(&state.doc.model().configuration_grid());
+        std::fs::write(&path, exchange::encode(Format::Csv, &table).unwrap()).unwrap();
+
+        preview_file(&mut state, &path).unwrap();
+        let first = state.grid.shown().unwrap().id.clone();
+        preview_file(&mut state, &path).unwrap();
+        let second = state.grid.shown().unwrap().id.clone();
+        assert_ne!(first, second);
+        assert!(preview::apply(&mut state, &first).unwrap_err().contains("expired preview"));
+
+        state.grid.withdraw();
+        assert!(state.grid.shown().is_none());
+        assert!(preview::apply(&mut state, &second).unwrap_err().contains("expired preview"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
