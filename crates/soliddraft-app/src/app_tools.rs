@@ -255,6 +255,9 @@ impl AppTools<'_> {
         if let Some(result) = crate::grid::tools::run(self.state, name, input) {
             return Some(result);
         }
+        if let Some(result) = crate::subassembly::tools::run(self.state, name, input) {
+            return Some(result);
+        }
         let drawing_active = self.state.drawing.is_active();
         let assembly_active = self.state.assembly.is_active();
         Some(match name {

@@ -42,6 +42,7 @@ pub mod settings;
 pub mod sketch_tools;
 pub mod sketcher;
 pub mod state;
+pub mod subassembly;
 pub mod theme;
 pub mod tree;
 pub mod tree_visibility;

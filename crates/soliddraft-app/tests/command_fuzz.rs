@@ -18,6 +18,7 @@
 //! `PROPTEST_CASES=2000 PROPTEST_RNG_SEED=7 cargo test -p soliddraft-app --test command_fuzz`.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::time::Duration;
 
@@ -606,8 +607,9 @@ fn mated_state() -> AppState {
     state
 }
 
-const MATE_TOOLS: [&str; 9] = [
+const MATE_TOOLS: [&str; 10] = [
     "insert_component",
+    "assembly_form_subassembly",
     "assembly_measure_planes",
     "assembly_mate_origin",
     "assembly_mate_distance",
@@ -624,6 +626,11 @@ fn mate_calls() -> BoxedStrategy<Vec<Call>> {
     pools.any = ["O", "Z", "gap", "5 mm", "12 deg", "gap + 1 mm", "Boss-Extrude1", "side", "end_cap", "opposed"]
         .map(str::to_owned)
         .to_vec();
+    // Occurrence paths and assembly files for Form subassembly: real, nested, unknown, a
+    // pattern member, a file that exists and one that does not.
+    let dir = std::env::temp_dir().join(format!("soliddraft-fuzz-mates-{}", std::process::id()));
+    pools.any.extend(["2", "4", "4/2", "99", "4:7.1"].map(str::to_owned));
+    pools.any.extend(["rig.dwasm", "pack.dwasm"].map(|f| dir.join(f).display().to_string()));
     pools.features = vec!["Boss-Extrude1".to_owned()];
     let specs: Vec<_> =
         tool_specs(Surface::Mcp).into_iter().filter(|s| MATE_TOOLS.contains(&s.name.as_str())).collect();
@@ -664,6 +671,46 @@ proptest! {
     fn mate_tools_never_panic_and_refusals_change_nothing(calls in mate_calls()) {
         let what = format!("{calls:?}");
         within_limit(what, move || run_on_mates(calls));
+    }
+}
+
+/// Form subassembly refuses what it cannot form whole, and a refusal changes nothing: the
+/// accepted state, the redo it finds and the files are as they were.
+#[test]
+fn form_refusals_change_nothing() {
+    let mut state = mated_state();
+    let dir = std::env::temp_dir().join(format!("soliddraft-fuzz-mates-{}", std::process::id()));
+    let (root, pack) = (dir.join("rig.dwasm"), dir.join("refused.dwasm"));
+    let caller = Caller::Mcp { client: "fuzz".into() };
+    let form = |paths: Value, path: &Path, origin: Value| json!({ "paths": paths, "path": path, "origin": origin });
+    let cases = [
+        // The schema refuses an empty selection and a missing file before the command runs.
+        (form(json!([]), &pack, json!("4")), "schema"),
+        (json!({ "paths": ["4"], "origin": "4" }), "schema"),
+        (form(json!(["4", "4"]), &pack, json!("4")), "invalid"),
+        (form(json!(["4", "99"]), &pack, json!("4")), "invalid"),
+        (form(json!(["4/2"]), &pack, json!("4/2")), "invalid"),
+        (form(json!(["4:7.1"]), &pack, json!("4:7.1")), "invalid"),
+        (form(json!(["not a path"]), &pack, json!("4")), "invalid"),
+        (form(json!(["4"]), &pack, json!("2")), "invalid"),
+        (form(json!(["4"]), &dir.join("refused.dwprt"), json!("4")), "invalid"),
+        // O holds A on the root's origin: it cannot move into a new file.
+        (form(json!(["2"]), &pack, json!("2")), "unsupported"),
+        (form(json!(["4"]), &root, json!("4")), "destination_exists"),
+    ];
+    let rig = std::fs::read(&root).unwrap();
+    for (arguments, code) in cases {
+        let before = AppTools { state: &mut state }.summary()["assembly"]["accepted_state"].clone();
+        let out =
+            call_checked(&mut AppTools { state: &mut state }, "assembly_form_subassembly", arguments.clone(), &caller);
+        assert!(out.is_error, "{arguments} formed");
+        match serde_json::from_str::<Value>(&out.content) {
+            Ok(refused) => assert_eq!(refused["refused"], code, "{arguments}: {}", out.content),
+            Err(_) => assert_eq!(code, "schema", "{arguments}: {}", out.content),
+        }
+        assert_eq!(AppTools { state: &mut state }.summary()["assembly"]["accepted_state"], before, "{arguments}");
+        assert!(!pack.exists(), "{arguments} wrote a file");
+        assert_eq!(std::fs::read(&root).unwrap(), rig, "{arguments} touched the root's file");
     }
 }
 

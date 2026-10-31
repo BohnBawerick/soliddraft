@@ -421,11 +421,48 @@ paths = ["crates/soliddraft-model/src/tracked.rs"]
 module = ["tracked"]
 
 [[areas]]
-name = "v5.assembly_crate"
+name = "assembly.core"
+owner = "core"
+crate = "soliddraft-assembly"
+paths = [
+  "crates/soliddraft-assembly/src/lib.rs",
+  "crates/soliddraft-assembly/src/document.rs",
+  "crates/soliddraft-assembly/src/schema.rs",
+  "crates/soliddraft-assembly/src/file.rs",
+  "crates/soliddraft-assembly/src/load.rs",
+  "crates/soliddraft-assembly/src/store.rs",
+  "crates/soliddraft-assembly/src/occurrence.rs",
+  "crates/soliddraft-assembly/src/placement.rs",
+  "crates/soliddraft-assembly/src/path.rs",
+  "crates/soliddraft-assembly/src/source.rs",
+  "crates/soliddraft-assembly/src/scene.rs",
+  "crates/soliddraft-assembly/src/bvh.rs",
+  "crates/soliddraft-assembly/src/mesh.rs",
+  "crates/soliddraft-assembly/src/binary.rs",
+  "crates/soliddraft-assembly/src/bulk.rs"
+]
+module = []
+
+[[areas]]
+name = "v5.assembly_mates"
 owner = "V5"
 crate = "soliddraft-assembly"
-paths = ["crates/soliddraft-assembly/"]
-module = []
+paths = ["crates/soliddraft-assembly/src/mates/"]
+module = ["mates"]
+
+[[areas]]
+name = "v6.subassembly_model"
+owner = "V6"
+crate = "soliddraft-assembly"
+paths = ["crates/soliddraft-assembly/src/subassembly/"]
+module = ["subassembly"]
+
+[[areas]]
+name = "v6.subassembly_app"
+owner = "V6"
+crate = "soliddraft-app"
+paths = ["crates/soliddraft-app/src/subassembly/"]
+module = ["subassembly"]
 
 [[areas]]
 name = "v9.import"

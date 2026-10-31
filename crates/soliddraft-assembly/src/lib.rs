@@ -25,6 +25,8 @@
 //!   and what an id-buffer texel names.
 //! - **The hierarchy** ([`bvh`]): boxes over occurrences for rays, regions and the
 //!   camera's view.
+//! - **Sub-assemblies** ([`subassembly`]): forming chosen parts into a new assembly file
+//!   that keeps their references, mates and freedoms.
 //!
 //! The schema is documented in `docs/assemblies.md`.
 
@@ -43,6 +45,7 @@ pub mod scene;
 pub mod schema;
 pub mod source;
 pub mod store;
+pub mod subassembly;
 
 pub use binary::BinaryError;
 pub use document::{AssemblyDocument, Changes, EditError, Opening, RebuildReport, RefChange, Selection, SourceReport};
@@ -60,3 +63,4 @@ pub use scene::{Draw, Instance, Picked, Scene};
 pub use schema::{Assembly, Component, Direction, OccurrenceAppearance, Override, Pattern, PatternRule, Source, Units};
 pub use source::{DisplaySource, FileSource, KernelSource};
 pub use store::{Definition, DefinitionIndex, DefinitionKey, DefinitionStore, Freshness, LoadState};
+pub use subassembly::{FormCode, FormPlan, FormRefusal, FormRequest, FormStatus, Formed, Migration};

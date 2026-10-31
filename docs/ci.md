@@ -109,6 +109,15 @@ The `assembly` acceptance scenario checks separate part and assembly undo, a flo
 component at the origin, in-session freshness, transactional Update, failure retention
 and reopen from accepted display copies through MCP at the current Catallax pin.
 
+The `subassembly-form` scenario runs the V6 batch 1 design's manifest: a base and three
+placements of one pin, mated and driven, formed into `modules/pack.dwasm` with every pose,
+reference, mate id and freedom checked against hand-derived values, then saved and both
+files reopened. Its later increments add history, refusals, the two-file Update and
+the reopened driver; until its typed refusal step lands it is not an acceptance scenario.
+`crates/soliddraft-assembly/tests/subassembly_form.rs` and
+`crates/soliddraft-app/tests/subassembly_form.rs` compare file bytes and package contents
+the runner cannot.
+
 ## Configuration acceptance
 
 `ci/scenarios/configurations.json` checks three width variants against hand-derived volume, area, centroid and bounds, then checks exact geometry identity across undo, redo, switches and reopens. Two checked STEP exports must match the selected variant. The scenario records click timings. S13 checks zero-depth refusal and a valid row whose cut would empty the body. Activation must preserve the previous variant; switching and repairing that row then prove recovery. Model cases M1-M9 cover old files, display meshes, inheritance, write targets, rename, row validation, undo and damaged truth. Command fuzzing includes configuration edits and switches.

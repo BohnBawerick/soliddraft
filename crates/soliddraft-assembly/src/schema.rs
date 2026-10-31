@@ -597,8 +597,16 @@ impl Assembly {
             }
             if let Mate::Distance { a, b, distance, .. } = mate {
                 for end in [a, b] {
-                    let placed = end.component().and_then(|c| self.component(c)).and_then(|c| self.source(c.source));
-                    if placed.is_none_or(|s| s.document.id != Some(end.document)) {
+                    let placed = end.holder().and_then(|c| self.component(c)).and_then(|c| self.source(c.source));
+                    // A face inside a sub-assembly is checked against the sub-assembly when it
+                    // is solved; this file holds only its first step.
+                    let nested = end.path.steps().len() > 1;
+                    let ok = match placed {
+                        Some(s) if nested => s.document.kind == DocKind::Assembly,
+                        Some(s) => s.document.id == Some(end.document),
+                        None => false,
+                    };
+                    if !ok {
                         return bad(format!("mate {} names a face of another document", mate.name()));
                     }
                 }

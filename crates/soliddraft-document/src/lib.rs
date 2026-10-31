@@ -24,7 +24,8 @@
 //!   phase 0 has the [`CacheOnlyStore`] ([`store`]).
 //! - **File locations.** Where reference files are found: libraries, templates, sheet
 //!   formats, styles, configuration tables, search folders ([`locations`]).
-//! - **Atomic saves.** [`save_atomic`] for every writer ([`save`]), and backups of the
+//! - **Atomic saves.** [`save_atomic`] for every writer and [`save_new`] for a file that
+//!   must not exist yet ([`save`]), and backups of the
 //!   previous version when a save replaces a file ([`backup`]).
 //! - **Recovery.** Autosave's recovery copies, written beside nothing the user owns,
 //!   and which of them to offer after a crash ([`recovery`]); when autosave writes one
@@ -60,5 +61,5 @@ pub use manifest::{EnvelopeError, Identity, Manifest, Package, Section, identify
 pub use recovery::{RecoveryCopy, Standing};
 pub use reference::DocRef;
 pub use resolve::{Location, OpenDocument, RefStatus, Resolution, Resolver, Target, Via};
-pub use save::save_atomic;
+pub use save::{save_atomic, save_new};
 pub use store::{CacheOnlyStore, RevisionStore, StoreError};

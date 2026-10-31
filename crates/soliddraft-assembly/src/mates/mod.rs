@@ -8,11 +8,14 @@
 //! - [`solver`] places components from proven plane equations and counts what stays free.
 //! - [`reference`] finds faces and proves their planes at a pinned revision.
 //! - [`command`] runs every change as one candidate: preview, prove, solve, then commit.
+//! - [`bodies`] reads the mates of the root and of every sub-assembly in it, and the
+//!   part occurrences they move, by path.
 //!
 //! This batch has two families: an Origin mate and a distance between planar faces. It
 //! covers axis-aligned planes with exact offsets; see `docs/mates.md`.
 
-mod command;
+pub(crate) mod bodies;
+pub(crate) mod command;
 mod reference;
 pub(crate) mod solver;
 
@@ -125,11 +128,12 @@ impl Mate {
         }
     }
 
-    /// The components it ties.
+    /// The root's components it ties: those its faces are on, or the sub-assemblies that
+    /// hold them.
     pub fn components(&self) -> Vec<ComponentId> {
         match self {
             Mate::Origin { component, .. } => vec![*component],
-            Mate::Distance { a, b, .. } => [a, b].iter().filter_map(|e| e.component()).collect(),
+            Mate::Distance { a, b, .. } => [a, b].iter().filter_map(|e| e.holder()).collect(),
         }
     }
 
@@ -143,12 +147,19 @@ impl Mate {
 }
 
 impl FaceEndpoint {
-    /// The root component it is on. This batch's endpoints are always one of them.
+    /// The root component it is on, when it is on one of the root's own parts.
     pub fn component(&self) -> Option<ComponentId> {
         match self.path.steps() {
             [step] if step.member.is_none() => Some(step.component),
             _ => None,
         }
+    }
+
+    /// The root component that holds its part: the part itself, or the sub-assembly it is
+    /// placed in. `None` for a path through a pattern member, which mates do not reach.
+    pub fn holder(&self) -> Option<ComponentId> {
+        let steps = self.path.steps();
+        (!steps.is_empty() && steps.iter().all(|s| s.member.is_none())).then(|| steps[0].component)
     }
 }
 

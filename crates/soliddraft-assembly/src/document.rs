@@ -26,6 +26,7 @@ use soliddraft_tessellation::{Level, Quality, Settings};
 
 use crate::file::{AssemblyPackage, FileError, RefCopy, display_entry, level_entry};
 use crate::load::{self, LevelJob, LevelWorker, LoadError, LoadEvent, LoadHandle, Lookup, OpenOptions, Structure};
+use crate::mates::bodies::{self, Scope};
 use crate::mates::{MateEntry, MateRefusal, Proofs, SolverStatus};
 use crate::occurrence::{Flags, OccurrenceIndex, OccurrenceTable, label_of};
 use crate::path::{ComponentId, OccurrencePath, PatternId, SourceId, Step};
@@ -732,8 +733,7 @@ impl AssemblyDocument {
     /// each. One undo step.
     pub fn move_to(&mut self, moves: &[(OccurrencePath, Placement)]) -> Result<(), EditError> {
         let rows: Vec<OccurrenceIndex> = moves.iter().map(|(p, _)| self.row(p)).collect::<Result<_, _>>()?;
-        let mated: HashSet<ComponentId> = self.assembly.known_mates().flat_map(|m| m.components()).collect();
-        if moves.iter().any(|(p, _)| Self::owner(p).is_ok_and(|c| mated.contains(&c))) {
+        if moves.iter().any(|(p, _)| self.is_mated(p)) {
             return self.move_mated(moves);
         }
         let (comps, ovs) = split_owners(moves.iter().map(|(p, _)| p));
@@ -1333,23 +1333,100 @@ impl AssemblyDocument {
         }
     }
 
-    /// Solves a loaded candidate's mates and moves its components. Returns those it moved.
-    fn solve_candidate(&mut self, candidate: &mut AssemblyDocument) -> Result<Vec<ComponentId>, MateRefusal> {
-        let solved = self.solve_truth(&candidate.assembly)?;
-        let mut moved = Vec::new();
-        for (id, placement) in solved.placements {
-            let Some(c) = candidate.assembly.component_mut(id) else { continue };
-            if c.placement == placement {
-                continue;
+    /// A candidate of this document with `truth` in its place, at `path` under `id`, its
+    /// structure read and its meshes loaded, so a change that restructures the tree can be
+    /// shown and solved before it is accepted. `extra` files are looked in first.
+    pub(crate) fn candidate(
+        &self,
+        path: Option<PathBuf>,
+        id: DocumentId,
+        truth: Assembly,
+        extra: Vec<AssemblyPackage>,
+    ) -> Result<AssemblyDocument, LoadError> {
+        let mut packages = extra;
+        packages.extend(self.packages.iter().cloned());
+        let mut candidate = AssemblyDocument::from_parts(path, id, truth, packages.clone(), self.options.clone());
+        // Meshes already loaded are kept for the definitions the candidate still shows.
+        candidate.store = self.store.clone();
+        let mut lookup = Lookup::with_packages(packages, candidate.path.as_deref(), &self.options);
+        candidate.restructure(&mut lookup)?;
+        candidate.start_loading(lookup);
+        candidate.finish_loading();
+        Ok(candidate)
+    }
+
+    /// The truth an edit that restructures the tree touches: these components and
+    /// sources, the mates and values whole, and the id counter.
+    pub(crate) fn structural_image(&self, components: &[ComponentId], sources: &[SourceId]) -> TruthImage {
+        let mut image = self.image(components, &[]);
+        image.sources = sources.iter().map(|s| (*s, self.assembly.source(*s).cloned())).collect();
+        image.design = Some(Design::of(&self.assembly));
+        image
+    }
+
+    /// Makes a candidate's truth and structure this document's, as one undo step.
+    pub(crate) fn adopt(&mut self, label: &str, candidate: AssemblyDocument, before: TruthImage) {
+        self.assembly = candidate.assembly;
+        self.solver_status = None;
+        self.store = candidate.store;
+        self.table = candidate.table;
+        self.root = candidate.root;
+        self.refs = candidate.refs;
+        self.parents = candidate.parents;
+        self.packages = candidate.packages;
+        self.levels = None;
+        self.exact.clear();
+        self.bvh = None;
+        self.bvh_job = None;
+        self.bvh_moved.clear();
+        self.generation += 1;
+        self.changes = Changes { structure: true, ..Changes::default() };
+        let after = self.reimage(&before);
+        self.undo.push(Record {
+            label: label.into(),
+            before,
+            after,
+            rows_before: Vec::new(),
+            rows_after: Vec::new(),
+            added: Vec::new(),
+            removed: Vec::new(),
+        });
+        self.redo.clear();
+    }
+
+    /// True when moving the occurrence at `path` moves a part a mate reads: it is one, or
+    /// holds one.
+    fn is_mated(&self, path: &OccurrencePath) -> bool {
+        let scope = Scope::new(&self.assembly, &self.table, &self.store);
+        self.gather(&scope).is_ok_and(|p| p.bodies.keys().any(|b| b.steps().starts_with(path.steps())))
+            || Self::owner(path).is_ok_and(|c| self.assembly.known_mates().any(|m| m.components().contains(&c)))
+    }
+
+    /// Solves a loaded candidate's mates and moves its parts. Returns the components and
+    /// overrides it changed.
+    fn solve_candidate(
+        &mut self,
+        candidate: &mut AssemblyDocument,
+    ) -> Result<(Vec<ComponentId>, Vec<OccurrencePath>), MateRefusal> {
+        let problem = self.gather(&Scope::new(&candidate.assembly, &candidate.table, &candidate.store))?;
+        let solved = self.solve_problem(problem)?;
+        let kept =
+            bodies::locals(&Scope::new(&candidate.assembly, &candidate.table, &candidate.store), &solved.placements);
+        let (mut components, mut overrides) = (Vec::new(), Vec::new());
+        for k in &kept {
+            match Self::owner(&k.path) {
+                Ok(c) => components.push(c),
+                Err(p) => overrides.push(p),
             }
-            c.placement = placement;
-            moved.push(id);
-            let path = OccurrencePath::root().child(Step::component(id));
+        }
+        let placed: Vec<(OccurrencePath, Placement)> = kept.iter().map(|k| (k.path.clone(), k.local)).collect();
+        bodies::keep(&mut candidate.assembly, kept);
+        for (path, placement) in placed {
             if let Some(row) = candidate.table.find(&path) {
                 candidate.table.set_local(row, placement, &candidate.store);
             }
         }
-        Ok(moved)
+        Ok((components, overrides))
     }
 
     /// Accepts every root source together, only after its proposed revision can be
@@ -1420,8 +1497,8 @@ impl AssemblyDocument {
                         }
                     }
                     let changes = report.sources.iter().any(|s| s.status == RefChange::Updated || s.moved.is_some());
-                    let mut moved = Vec::new();
-                    if problems.is_empty() && changes && !candidate.assembly.mates.is_empty() {
+                    let mut moved = (Vec::new(), Vec::new());
+                    if problems.is_empty() && changes {
                         match self.solve_candidate(&mut candidate) {
                             Ok(placed) => moved = placed,
                             Err(refusal) => {
@@ -1431,34 +1508,9 @@ impl AssemblyDocument {
                         }
                     }
                     if problems.is_empty() && changes {
-                        let mut before = self.image(&moved, &[]);
+                        let mut before = self.image(&moved.0, &moved.1);
                         before.sources = self.assembly.sources.iter().map(|s| (s.id, Some(s.clone()))).collect();
-                        self.assembly = candidate.assembly;
-                        self.solver_status = None;
-                        self.store = candidate.store;
-                        self.table = candidate.table;
-                        self.root = candidate.root;
-                        self.refs = candidate.refs;
-                        self.parents = candidate.parents;
-                        self.packages = candidate.packages;
-                        self.levels = None;
-                        self.exact.clear();
-                        self.bvh = None;
-                        self.bvh_job = None;
-                        self.bvh_moved.clear();
-                        self.generation += 1;
-                        self.changes = Changes { structure: true, ..Changes::default() };
-                        let after = self.reimage(&before);
-                        self.undo.push(Record {
-                            label: "Update".into(),
-                            before,
-                            after,
-                            rows_before: Vec::new(),
-                            rows_after: Vec::new(),
-                            added: Vec::new(),
-                            removed: Vec::new(),
-                        });
-                        self.redo.clear();
+                        self.adopt("Update", candidate, before);
                     }
                 }
             }

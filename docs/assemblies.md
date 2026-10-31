@@ -305,6 +305,7 @@ SolidWorks top-level assembly hides or moves a part of a sub-assembly.
 | pattern components | `add_pattern(seeds, rule)` |
 | rename a component | `rename(id, name)` |
 | delete components | `delete(&ids)` |
+| form parts into a sub-assembly file | `form_subassembly(&request)`, see [subassemblies.md](subassemblies.md) |
 | undo, redo | `undo()`, `redo()`, `undo_label()`, `redo_label()` |
 
 `take_changes()` returns what the renderer must re-read since it last asked: definitions

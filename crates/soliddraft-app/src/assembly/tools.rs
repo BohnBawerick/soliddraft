@@ -3,6 +3,7 @@
 use super::*;
 use crate::mates::tools::refused;
 use serde_json::{Value, json};
+use soliddraft_assembly::Step;
 
 pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
     refresh(state);
@@ -34,13 +35,65 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
         })
     }).collect();
     let (mates, values, solver) = crate::mates::tools::rows(s);
+    let occurrences = occurrences(s);
     Some(json!({
         "active": state.assembly.active, "name": s.doc.assembly().name, "path": s.doc.path(),
         "revision": s.doc.revision(), "geometry_hash": s.doc.assembly().geometry_hash(), "dirty": s.doc.is_dirty(), "undo": s.doc.undo_label(),
-        "components": components, "mates": mates, "values": values, "solver": solver,
+        "components": components, "occurrences": occurrences, "mates": mates, "values": values, "solver": solver,
         "proof_rebuilds": s.doc.parts_rebuilt_for_proofs(),
         "accepted_state": accepted_state(s),
     }))
+}
+
+/// The motions of a rigid body, as the solver names them.
+const MOTIONS: [&str; 6] = ["translate_x", "translate_y", "translate_z", "spin_x", "spin_y", "spin_z"];
+
+/// Every occurrence at any depth, keyed by its path: where it comes from, where it sits in
+/// its own assembly and in the root, what it shows, the mates it takes part in and the
+/// motions it keeps on its own.
+fn occurrences(s: &mut AssemblySession) -> Value {
+    let participation = s.doc.mate_participation();
+    let free = s.doc.solver().free;
+    let table = s.doc.table();
+    let mut out = serde_json::Map::new();
+    for row in (1..table.len() as u32).map(OccurrenceIndex) {
+        let flags = table.flags(row);
+        if flags.has(Flags::REMOVED) {
+            continue;
+        }
+        let path = table.path(row);
+        let def = s.doc.store().get(table.definition(row));
+        let reference = s.doc.reference(table.definition(row));
+        let parent = table.parent(row).map(|p| table.path(p)).unwrap_or_default();
+        let (local, world, bounds) = (table.local(row), table.world(row), table.bounds(row));
+        let mates = participation.get(&path).cloned().unwrap_or_default();
+        // A part no mate reads keeps all six; a pattern member follows its seed.
+        let alone = mates.is_empty()
+            && !flags.has(Flags::ASSEMBLY)
+            && !flags.has(Flags::SUPPRESSED)
+            && path.steps().iter().all(|s| s.member.is_none());
+        let motions: Vec<&str> = if alone {
+            MOTIONS.to_vec()
+        } else {
+            free.iter()
+                .filter(|m| {
+                    m.path.clone().unwrap_or_else(|| OccurrencePath::root().child(Step::component(m.component))) == path
+                })
+                .map(|m| m.motion.as_str())
+                .collect()
+        };
+        out.insert(path.to_string(), json!({
+            "path": path, "parent": parent, "kind": if flags.has(Flags::ASSEMBLY) { "assembly" } else { "part" },
+            "document": def.key.document, "configuration": def.key.configuration, "pinned": reference.map(|r| &r.pinned),
+            "definition": { "document": def.key.document, "revision": def.key.revision, "quality": def.key.quality },
+            "display": def.state.as_str(), "warning": warning(def),
+            "local": { "translation": local.translation.to_array(), "rotation": local.rotation.to_array() },
+            "world": { "translation": world.translation.to_array(), "rotation": world.rotation.to_array() },
+            "bounds": if bounds.is_empty() { Value::Null } else { json!({ "min": bounds.min.to_array(), "max": bounds.max.to_array() }) },
+            "mates": mates, "free": motions,
+        }));
+    }
+    Value::Object(out)
 }
 
 /// The accepted state, read without saving: what a refusal must leave exactly as it was.
