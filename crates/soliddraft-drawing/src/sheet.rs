@@ -29,6 +29,9 @@ pub struct Sheet {
     /// Title block values that replace the linked document properties, by field key.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub format_overrides: BTreeMap<String, String>,
+    /// Title block fields that read a part property, by field key. An override still wins.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub title_bindings: BTreeMap<String, String>,
     /// Views, parents before their children.
     #[serde(default)]
     pub views: Vec<View>,
@@ -52,6 +55,7 @@ impl Sheet {
             projection: template.projection,
             zones: template.zones,
             format_overrides: BTreeMap::new(),
+            title_bindings: BTreeMap::new(),
             views: Vec::new(),
             annotations: Vec::new(),
             tables: Vec::new(),

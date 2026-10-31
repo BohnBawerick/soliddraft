@@ -1,0 +1,1374 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "configuration-title",
+  "max_work": 20000000,
+  "folders": [
+    "fixtures",
+    "out"
+  ],
+  "setup": [
+    [
+      "check-configuration-grid.py",
+      "fixtures",
+      "{bundle}/fixtures"
+    ]
+  ],
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              60,
+              45,
+              0
+            ],
+            "width": 140,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              45,
+              0
+            ],
+            "width": 10,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 70,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              10
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch3",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 41950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.3324427964,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 15.56639059011,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 130,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 70,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "plate_w",
+        "expression": "140"
+      }
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "flange_d",
+        "expression": "plate_w / 2"
+      }
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "hole_d",
+        "expression": "12"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "expression": "plate_w"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "parameter": "depth",
+        "expression": "flange_d"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch3",
+        "dimension": 1,
+        "expression": "hole_d"
+      }
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Narrow"
+      }
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Narrow",
+        "name": "plate_w",
+        "expression": "120"
+      }
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Wide, \"shop\""
+      }
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Wide, \"shop\"",
+        "name": "plate_w",
+        "expression": "6 in"
+      }
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "columns": [
+          "configuration",
+          "value:plate_w [mm]",
+          "value:flange_d [mm]",
+          "value:hole_d [mm]",
+          "property:title [text]"
+        ],
+        "rows": [
+          [
+            "Default",
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ],
+          [
+            "Narrow",
+            "120",
+            "",
+            "",
+            ""
+          ],
+          [
+            "Wide, \"shop\"",
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        ]
+      },
+      "label": "candidate titles"
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-1"
+      },
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 35950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.6285924228,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 13.88923850917,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 120,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 60,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 120
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 60
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/fixtures/g1-inch.xlsx",
+        "format": "xlsx"
+      },
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-2"
+        }
+      ]
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-2"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 165369.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 38950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.46842943312,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 14.72824254119,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 125,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 65,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/title-base.dwprt"
+      },
+      "files": [
+        "{bundle}/title-base.dwprt"
+      ]
+    },
+    {
+      "tool": "make_drawing",
+      "arguments": {
+        "template": "iso-a3"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/drawing/source/properties/title",
+          "equals": "Bracket, \"family\""
+        }
+      ]
+    },
+    {
+      "tool": "drawing_auto_update",
+      "arguments": {
+        "on": false
+      },
+      "checks": [
+        {
+          "pointer": "/summary/drawing/automatic_update",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {}
+    },
+    {
+      "tool": "drawing_command",
+      "arguments": {
+        "command_json": "{\"op\": \"execute\", \"command\": {\"type\": \"bind_title_property\", \"sheet\": 0, \"key\": \"title\", \"property\": \"title\"}}"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_bindings/title",
+          "equals": "title"
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 25,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/drawing/source/revision",
+          "same_as": {
+            "step": 25,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 25
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 25
+        }
+      ],
+      "same_geometry_as_step": 21
+    },
+    {
+      "tool": "drawing_export_svg",
+      "arguments": {
+        "path": "{bundle}/out/family.svg"
+      },
+      "files": [
+        "{bundle}/out/family.svg"
+      ],
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "title",
+          "{bundle}/out/family.svg",
+          "Bracket, \"family\""
+        ]
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "same_as": {
+            "step": 23,
+            "pointer": "/summary/drawing/sheets/0/title_block/title"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 26
+        },
+        {
+          "pointer": "/summary/undo",
+          "same_as_step": 26
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 26
+        }
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {}
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Wide, \"shop\""
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195609.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 45670.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.18988755296,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 16.60477120579,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -16.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 136.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 76.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 25,
+            "pointer": "/result/active_id"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {}
+    },
+    {
+      "tool": "show_drawing",
+      "arguments": {}
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/drawing/source/revision",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 32
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 25,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide, \"shop\""
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/summary/drawing/views_match_pin",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Wide, \"shop\""
+        }
+      ]
+    },
+    {
+      "tool": "drawing_command",
+      "arguments": {
+        "command_json": "{\"op\": \"execute\", \"command\": {\"type\": \"set_title_field\", \"sheet\": 0, \"key\": \"title\", \"value\": \"Issued copy\"}}"
+      },
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Issued copy"
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 32
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/revision",
+          "same_as_step": 32
+        }
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {}
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "columns": [
+          "configuration",
+          "value:plate_w [mm]",
+          "value:flange_d [mm]",
+          "value:hole_d [mm]",
+          "property:title [text]"
+        ],
+        "rows": [
+          [
+            "Default",
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ],
+          [
+            "Narrow",
+            "130 mm",
+            "",
+            "",
+            ""
+          ],
+          [
+            "Wide, \"shop\"",
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide revised\""
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-3"
+        }
+      ]
+    },
+    {
+      "tool": "cancel_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-3"
+      }
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-3"
+      },
+      "refused": "expired preview",
+      "label": "cancelled title token"
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/result/state/mesh_version",
+          "same_as_step": 32
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "columns": [
+          "configuration",
+          "value:plate_w [mm]",
+          "value:flange_d [mm]",
+          "value:hole_d [mm]",
+          "property:title [text]"
+        ],
+        "rows": [
+          [
+            "Default",
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ],
+          [
+            "Narrow",
+            "130 mm",
+            "",
+            "",
+            ""
+          ],
+          [
+            "Wide, \"shop\"",
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide revised\""
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-4"
+        }
+      ]
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-4"
+      },
+      "same_geometry_as_step": 31,
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/state/semantic_revision",
+          "differs_from": {
+            "step": 32,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "show_drawing",
+      "arguments": {}
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide revised\""
+        }
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {}
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide revised\""
+        }
+      ],
+      "same_geometry_as_step": 31
+    },
+    {
+      "tool": "show_drawing",
+      "arguments": {}
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide\""
+        }
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {}
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 31
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/title-wide.dwprt"
+      },
+      "files": [
+        "{bundle}/title-wide.dwprt"
+      ]
+    },
+    {
+      "tool": "show_drawing",
+      "arguments": {}
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide revised\""
+        }
+      ]
+    },
+    {
+      "tool": "drawing_save",
+      "arguments": {
+        "path": "{bundle}/title-wide.dwdrw"
+      },
+      "files": [
+        "{bundle}/title-wide.dwdrw"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/title-wide.dwdrw"
+      },
+      "fresh_process": true,
+      "label": "cold reopen",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide revised\""
+        },
+        {
+          "pointer": "/summary/drawing/source/properties/title",
+          "equals": "Bracket, \"wide revised\""
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/drawing/source/revision",
+          "same_as": {
+            "step": 46,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/summary/drawing/sheets/0/title_bindings/title",
+          "equals": "title"
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "tool": "drawing_export_svg",
+      "arguments": {
+        "path": "{bundle}/out/revised.svg"
+      },
+      "files": [
+        "{bundle}/out/revised.svg"
+      ],
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "title",
+          "{bundle}/out/revised.svg",
+          "Bracket, \"wide revised\""
+        ]
+      ]
+    },
+    {
+      "tool": "drawing_show_part",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195609.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 45670.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.18988755296,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 16.60477120579,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -16.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 136.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 76.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ],
+      "same_geometry_as_step": 31,
+      "checked_step_export": "{bundle}/title-wide.dwprt"
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 165369.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 38950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.46842943312,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 14.72824254119,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 125,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 65,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/title-wide.dwprt"
+      },
+      "files": [
+        "{bundle}/title-wide.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/title-wide.dwdrw"
+      },
+      "fresh_process": true,
+      "label": "stale reopen",
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"wide revised\""
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/active_id"
+          }
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": false
+        },
+        {
+          "pointer": "/summary/drawing/part",
+          "contains": "newer"
+        }
+      ]
+    },
+    {
+      "tool": "drawing_rebuild",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/summary/drawing/sheets/0/title_block/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/summary/drawing/up_to_date",
+          "equals": true
+        },
+        {
+          "pointer": "/summary/drawing/source/configuration",
+          "same_as": {
+            "step": 25,
+            "pointer": "/result/active_id"
+          }
+        }
+      ]
+    }
+  ]
+}

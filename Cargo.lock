@@ -5076,6 +5076,7 @@ dependencies = [
  "naga",
  "pollster 0.4.0",
  "proptest",
+ "quick-xml",
  "resvg",
  "rfd",
  "serde",
@@ -5099,6 +5100,7 @@ dependencies = [
  "web-sys",
  "web-time",
  "wgpu",
+ "zip",
 ]
 
 [[package]]

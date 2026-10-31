@@ -844,6 +844,10 @@ pub enum Command {
     ActivateConfiguration {
         name: String,
     },
+    /// Replaces the whole configuration table as one step.
+    SetConfigurationGrid {
+        grid: Box<model::configs::Grid>,
+    },
     SetValue {
         name: String,
         expression: String,
@@ -937,6 +941,7 @@ impl Command {
             Command::AddConfiguration { .. }
             | Command::SetConfigurationValue { .. }
             | Command::ActivateConfiguration { .. } => "Configuration".into(),
+            Command::SetConfigurationGrid { .. } => "Configuration grid".into(),
             Command::SetValue { .. } => "Set value".into(),
             Command::Drive { .. } => "Drive input".into(),
             Command::RenameValue { .. } => "Rename value".into(),
@@ -1202,6 +1207,8 @@ pub struct Document {
     pub meshes: HashMap<BodyId, Arc<DisplayMesh>>,
     /// Bumped when display geometry or shading changes, so the renderer re-uploads.
     pub mesh_version: u64,
+    /// The model's table edits this display has followed.
+    table_edits: u64,
     /// Features past this index are not built. `None` builds all. Setting it
     /// and calling [`Document::rebuild`] rolls the display back without an
     /// undo entry, as the feature editors do; [`Command::Rollback`] is the
@@ -1268,6 +1275,7 @@ impl Document {
             tess_params: TessellationParams::default(),
             meshes: HashMap::new(),
             mesh_version: 0,
+            table_edits: 0,
             rollback: None,
             faces: Vec::new(),
             edges: Vec::new(),
@@ -1315,6 +1323,7 @@ impl Document {
             tess_params: self.tess_params,
             meshes: self.meshes.clone(),
             mesh_version: self.mesh_version,
+            table_edits: self.table_edits,
             rollback: self.rollback,
             faces: self.faces.clone(),
             edges: self.edges.clone(),
@@ -2075,6 +2084,7 @@ impl Document {
                 vec![model::Command::SetConfigurationValue { configuration, name, expression }]
             }
             Command::ActivateConfiguration { name } => vec![model::Command::ActivateConfiguration { name }],
+            Command::SetConfigurationGrid { grid } => vec![model::Command::SetConfigurationGrid { grid }],
             Command::SetValue { name, expression } => vec![model::Command::SetValue { name, expression }],
             Command::Drive { input, expression } => vec![model::Command::Drive { input, expression }],
             Command::RenameValue { name, to } => vec![model::Command::RenameValue { name, to }],
@@ -2248,6 +2258,11 @@ impl Document {
         self.sync();
         self.retain_proved_revision();
         self.refresh_display();
+        // A table change can keep the mesh and still give the drawing a new source.
+        if self.table_edits != self.model.table_edits() {
+            self.table_edits = self.model.table_edits();
+            self.mesh_version += 1;
+        }
         if !self.has_model_failure() {
             self.shown_revision = self.revision;
         }

@@ -59,6 +59,8 @@ impl Document {
             values: self.values.clone(),
             observations: self.observations.clone(),
             configurations: self.configurations.clone(),
+            properties: self.properties.clone(),
+            table_edits: self.table_edits,
             datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_id: self.next_id,

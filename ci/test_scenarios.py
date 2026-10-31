@@ -713,6 +713,36 @@ class RunnerEndToEnd(unittest.TestCase):
         self.code = code
         return report, checks
 
+    def run_fresh(self, expected):
+        helper = ["check-configuration-grid.py", "grid", "{bundle}/fixtures/g1.csv", expected]
+        steps = [{"tool": "extrude", "arguments": {}},
+                 {"tool": "extrude", "arguments": {}, "fresh_process": True, "helpers": [helper]}]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            scenario = root / "scenario.json"
+            scenario.write_text(json.dumps({
+                "format": "soliddraft-scenario/1", "name": "synthetic-fresh", "steps": steps,
+                "setup": [["check-configuration-grid.py", "fixtures", "{bundle}/fixtures"]]}))
+            args = argparse.Namespace(scenario=scenario, out=root / "run", soliddraft=str(FAKE),
+                                      catallax_verify="unused", timeout=scenarios.HANG_TIMEOUT_S, strict=False)
+            os.environ["FAKE_MODE"] = "ok"
+            os.environ["FAKE_PIN"] = scenarios.pinned_revision()
+            try:
+                with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(
+                        scenarios, "load_known_over_budget", return_value={}):
+                    scenarios.run(args)
+            finally:
+                del os.environ["FAKE_MODE"], os.environ["FAKE_PIN"]
+            report = json.loads((args.out / "result.json").read_text())
+            return report, (args.out / "commands-1/0001/command.json").exists()
+
+    def test_a_fresh_process_has_its_own_evidence_and_a_helper_can_fail_the_step(self):
+        report, separate = self.run_fresh("g1")
+        self.assertTrue(report["pass"], report)
+        self.assertTrue(separate)
+        report, _ = self.run_fresh("g0")
+        self.assertFalse(report["pass"])
+
     def test_only_the_declared_field_view_refusal_is_accepted(self):
         for mode, declared, expected in [("field-view", True, True), ("field-view", False, False),
                                          ("wrong-view-error", True, False), ("ok", True, False)]:

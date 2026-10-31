@@ -302,6 +302,7 @@ jobs:
       - run: cargo test -p soliddraft-app --test measure_panel -- --nocapture
       - run: cargo test -p soliddraft-app --test measure_guides -- --nocapture
       - run: cargo test -p soliddraft-app --test mate_panel -- --nocapture
+      - run: cargo test -p soliddraft-app --test configuration_grid -- --nocapture
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -338,6 +339,7 @@ jobs:
       - run: cargo test -p soliddraft-app --test measure_panel -- --nocapture
       - run: cargo test -p soliddraft-app --test measure_guides -- --nocapture
       - run: cargo test -p soliddraft-app --test mate_panel -- --nocapture
+      - run: cargo test -p soliddraft-app --test configuration_grid -- --nocapture
       - uses: actions/upload-artifact@v4
         if: always()
         with:

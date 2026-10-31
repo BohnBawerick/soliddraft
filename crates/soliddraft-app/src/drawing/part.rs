@@ -8,7 +8,8 @@ use soliddraft_drawing::measure::format_value;
 use soliddraft_drawing::project::{CircleInfo, Projected};
 use soliddraft_drawing::{ContentHash, DocumentId};
 use soliddraft_drawing::{
-    Entity, EntityKind, EntityRef, ModelDimension, ModelEntity, ModelMeasure, Namer, Part, Resolution, feature_name,
+    Entity, EntityKind, EntityRef, ModelDimension, ModelEntity, ModelMeasure, Namer, Part, PartSource, Resolution,
+    feature_name,
 };
 use soliddraft_kernel_api::{BodyId, EdgeId, FaceId, Kernel, Point2, Topology, Vec3};
 use std::sync::Arc;
@@ -56,6 +57,10 @@ impl<'a> PartContext<'a> {
             dimensions: feature_dimensions(self.doc),
             namer: Some(self),
             preview: true,
+            source: PartSource {
+                configuration: self.doc.model().active_configuration().cloned(),
+                properties: self.doc.model().resolved_properties(),
+            },
         }
     }
 

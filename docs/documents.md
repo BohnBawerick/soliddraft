@@ -122,12 +122,18 @@ Neither hash depends on Rust `Debug` output.
 - `path` is relative to the referencing file's folder, with forward slashes.
 - `pinned` is the target's semantic hash when the referencing document was last rebuilt
   against it. The referencing document shows that revision until a Rebuild.
-- `configuration` and `display_state` are reserved and left out when empty. Phase 0 writes
-  neither and keeps any value it reads. A configuration is a named set of overrides on a
-  part or assembly; a display state (visibility, colours, an exploded pose) is a separate
-  mechanism, so a colour change never invalidates geometry.
+- `configuration` is the stable id of the row the revision was accepted at, left out for
+  Default. A drawing sets it on creation and Rebuild, beside `pinned`. Assemblies write none
+  yet and keep any value they read. A configuration is a named set of overrides on a part or
+  assembly.
+- `display_state` is reserved and left out when empty. A display state (visibility, colours,
+  an exploded pose) is a separate mechanism, so a colour change never invalidates geometry.
 - `locator` is reserved for a revision store's own address of the pinned revision, such as
   a Git commit.
+
+A drawing also keeps `source_properties`, the part's text properties at the pinned revision
+and configuration, and a sheet keeps `title_bindings`, which title fields read them. Both are
+left out when empty.
 
 A drawing's `model` is a reference. Phase 2 turns it into a list (`models`), one per part
 or assembly on the sheet.

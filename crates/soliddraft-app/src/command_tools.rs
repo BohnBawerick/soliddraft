@@ -1748,7 +1748,7 @@ fn scratch_copy(doc: &Document) -> Document {
     doc.scratch()
 }
 
-fn status_text(doc: &Document, id: FeatureId) -> String {
+pub(crate) fn status_text(doc: &Document, id: FeatureId) -> String {
     match doc.feature(id).map(|f| (&f.status, f.suppressed)) {
         Some((FeatureStatus::Ok, _)) => "ok".into(),
         Some((FeatureStatus::Pending, _)) => "proof pending".into(),
@@ -1764,7 +1764,7 @@ fn status_text(doc: &Document, id: FeatureId) -> String {
     }
 }
 
-fn broken(f: &crate::document::Feature) -> bool {
+pub(crate) fn broken(f: &crate::document::Feature) -> bool {
     matches!(f.status, FeatureStatus::Error(_) | FeatureStatus::NeedsRepair(_))
 }
 

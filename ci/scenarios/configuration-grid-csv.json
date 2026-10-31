@@ -1,0 +1,1839 @@
+{
+  "format": "soliddraft-scenario/1",
+  "name": "configuration-grid-csv",
+  "max_work": 20000000,
+  "folders": [
+    "fixtures",
+    "out"
+  ],
+  "setup": [
+    [
+      "check-configuration-grid.py",
+      "fixtures",
+      "{bundle}/fixtures"
+    ]
+  ],
+  "steps": [
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              60,
+              45,
+              0
+            ],
+            "width": 140,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch1",
+        "depth": 10,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "top",
+        "shapes": [
+          {
+            "shape": "rectangle",
+            "center": [
+              5,
+              45,
+              0
+            ],
+            "width": 10,
+            "height": 90
+          }
+        ]
+      }
+    },
+    {
+      "tool": "extrude",
+      "arguments": {
+        "sketch": "Sketch2",
+        "depth": 70,
+        "flip": false
+      }
+    },
+    {
+      "tool": "sketch",
+      "arguments": {
+        "plane": "Boss-Extrude1 \u00b7 End cap",
+        "shapes": [
+          {
+            "shape": "circle",
+            "center": [
+              70,
+              45,
+              10
+            ],
+            "diameter": 12
+          }
+        ]
+      }
+    },
+    {
+      "tool": "cut",
+      "arguments": {
+        "sketch": "Sketch3",
+        "through_all": true,
+        "depth": 1,
+        "flip": false
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 41950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.3324427964,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 15.56639059011,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 130,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 70,
+          "tolerance": 0.001
+        }
+      ]
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "plate_w",
+        "expression": "140"
+      }
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "flange_d",
+        "expression": "plate_w / 2"
+      }
+    },
+    {
+      "tool": "set_value",
+      "arguments": {
+        "name": "hole_d",
+        "expression": "12"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch1",
+        "dimension": 1,
+        "expression": "plate_w"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "feature": "Boss-Extrude2",
+        "parameter": "depth",
+        "expression": "flange_d"
+      }
+    },
+    {
+      "tool": "drive",
+      "arguments": {
+        "sketch": "Sketch3",
+        "dimension": 1,
+        "expression": "hole_d"
+      }
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Narrow"
+      }
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Narrow",
+        "name": "plate_w",
+        "expression": "120"
+      }
+    },
+    {
+      "tool": "add_configuration",
+      "arguments": {
+        "name": "Wide, \"shop\""
+      }
+    },
+    {
+      "tool": "set_configuration_value",
+      "arguments": {
+        "configuration": "Wide, \"shop\"",
+        "name": "plate_w",
+        "expression": "6 in"
+      }
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "columns": [
+          "configuration",
+          "value:plate_w [mm]",
+          "value:flange_d [mm]",
+          "value:hole_d [mm]",
+          "property:title [text]"
+        ],
+        "rows": [
+          [
+            "Default",
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ],
+          [
+            "Narrow",
+            "120",
+            "",
+            "",
+            ""
+          ],
+          [
+            "Wide, \"shop\"",
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        ]
+      },
+      "label": "candidate titles"
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-1"
+      },
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 35950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.6285924228,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 13.88923850917,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 120,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 60,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 120
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 60
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/grid-base.dwprt"
+      },
+      "files": [
+        "{bundle}/grid-base.dwprt"
+      ],
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "unchanged",
+          "{bundle}/grid-base.dwprt",
+          "{bundle}/grid-base.sha256"
+        ]
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/grid-base.dwprt"
+      },
+      "fresh_process": true,
+      "label": "fresh process",
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 151869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 35950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.6285924228,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 13.88923850917,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 120,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 60,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 120
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 60
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ],
+      "same_geometry_as_step": 19
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/columns",
+          "equals": [
+            "configuration",
+            "value:plate_w [mm]",
+            "value:flange_d [mm]",
+            "value:hole_d [mm]",
+            "property:title [text]"
+          ]
+        },
+        {
+          "pointer": "/result/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "120",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "export_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/out/g0.csv",
+        "format": "csv"
+      },
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "grid",
+          "{bundle}/out/g0.csv",
+          "g0"
+        ]
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/statuses",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/dirty",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/displayed_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/mesh_version",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "120",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/fixtures/g1-inch.csv",
+        "format": "csv"
+      },
+      "label": "preview",
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-1"
+        },
+        {
+          "pointer": "/result/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/columns",
+          "equals": [
+            "configuration",
+            "value:plate_w [mm]",
+            "value:flange_d [mm]",
+            "value:hole_d [mm]",
+            "property:title [text]"
+          ]
+        },
+        {
+          "pointer": "/result/changes",
+          "equals": [
+            {
+              "row": "Narrow",
+              "column": "value:plate_w [mm]",
+              "from": "120",
+              "to": "130 mm"
+            }
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/2/id"
+          }
+        },
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "130 mm",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        }
+      ],
+      "same_geometry_as_step": 19
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/statuses",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/dirty",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/displayed_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/mesh_version",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "120",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        }
+      ],
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "unchanged",
+          "{bundle}/grid-base.dwprt",
+          "{bundle}/grid-base.sha256"
+        ]
+      ]
+    },
+    {
+      "tool": "cancel_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-1"
+      }
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-1"
+      },
+      "refused": "expired preview",
+      "label": "cancelled token"
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/statuses",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/undo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/redo",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/dirty",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/displayed_revision",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/state/mesh_version",
+          "same_as_step": 22
+        },
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "120",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        }
+      ]
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/fixtures/g1-inch.csv",
+        "format": "csv"
+      },
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-2"
+        }
+      ]
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-2"
+      },
+      "label": "apply",
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 165369.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 38950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.46842943312,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 14.72824254119,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 125,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 65,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "130 mm",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/1/id"
+          }
+        },
+        {
+          "pointer": "/result/rows/2/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/2/id"
+          }
+        },
+        {
+          "pointer": "/result/resolved/0/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/result/resolved/0/values/1/value",
+          "equals": 70
+        },
+        {
+          "pointer": "/result/resolved/1/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/result/resolved/1/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/result/resolved/2/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/result/resolved/2/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/result/resolved/1/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/result/resolved/1/properties/title",
+          "equals": "Bracket, \"family\""
+        },
+        {
+          "pointer": "/result/resolved/1/inherited_properties",
+          "equals": [
+            "title"
+          ]
+        },
+        {
+          "pointer": "/result/resolved/2/properties/title",
+          "equals": "Bracket, \"wide\""
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "equals": 1
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "same_geometry_as_step": 19,
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "120",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        },
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/state/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "equals": 0
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "tool": "redo",
+      "arguments": {},
+      "same_geometry_as_step": 31,
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "130 mm",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        },
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/geometry_hash"
+          }
+        },
+        {
+          "pointer": "/result/state/undo_depth",
+          "equals": 1
+        },
+        {
+          "pointer": "/result/state/redo_depth",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "tool": "export_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/out/g1.csv",
+        "format": "csv"
+      },
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "grid",
+          "{bundle}/out/g1.csv",
+          "g1"
+        ]
+      ]
+    },
+    {
+      "tool": "export_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/out/g1.xlsx",
+        "format": "xlsx"
+      },
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "grid",
+          "{bundle}/out/g1.xlsx",
+          "g1"
+        ]
+      ]
+    },
+    {
+      "tool": "preview_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/fixtures/unicode.csv",
+        "format": "csv"
+      },
+      "checks": [
+        {
+          "pointer": "/result/preview_id",
+          "equals": "grid-3"
+        }
+      ]
+    },
+    {
+      "tool": "apply_configuration_grid",
+      "arguments": {
+        "preview_id": "grid-3"
+      },
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 31
+    },
+    {
+      "tool": "export_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/out/unicode.csv",
+        "format": "csv"
+      },
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "grid",
+          "{bundle}/out/unicode.csv",
+          "g1-unicode"
+        ]
+      ]
+    },
+    {
+      "tool": "export_configuration_grid",
+      "arguments": {
+        "path": "{bundle}/out/unicode.xlsx",
+        "format": "xlsx"
+      },
+      "helpers": [
+        [
+          "check-configuration-grid.py",
+          "grid",
+          "{bundle}/out/unicode.xlsx",
+          "g1-unicode"
+        ]
+      ]
+    },
+    {
+      "tool": "undo",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/rebuild/operations",
+          "equals": 0
+        }
+      ],
+      "same_geometry_as_step": 31
+    },
+    {
+      "tool": "save",
+      "arguments": {
+        "path": "{bundle}/csv-130.dwprt"
+      },
+      "files": [
+        "{bundle}/csv-130.dwprt"
+      ]
+    },
+    {
+      "tool": "open",
+      "arguments": {
+        "path": "{bundle}/csv-130.dwprt"
+      },
+      "fresh_process": true,
+      "label": "reopen",
+      "checks": [
+        {
+          "pointer": "/summary/configurations/active",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 165369.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 38950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.46842943312,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 14.72824254119,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 125,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 65,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ],
+      "same_geometry_as_step": 31,
+      "checked_step_export": "{bundle}/csv-130.dwprt"
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/rows/0/name",
+          "equals": "Default"
+        },
+        {
+          "pointer": "/result/rows/0/cells",
+          "equals": [
+            "140",
+            "plate_w / 2",
+            "12",
+            "Bracket, \"family\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/name",
+          "equals": "Narrow"
+        },
+        {
+          "pointer": "/result/rows/1/cells",
+          "equals": [
+            "130 mm",
+            "",
+            "",
+            ""
+          ]
+        },
+        {
+          "pointer": "/result/rows/2/name",
+          "equals": "Wide, \"shop\""
+        },
+        {
+          "pointer": "/result/rows/2/cells",
+          "equals": [
+            "152.4 mm",
+            "",
+            "",
+            "Bracket, \"wide\""
+          ]
+        },
+        {
+          "pointer": "/result/rows/1/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/1/id"
+          }
+        },
+        {
+          "pointer": "/result/rows/2/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/2/id"
+          }
+        },
+        {
+          "pointer": "/result/state/semantic_revision",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/semantic_revision"
+          }
+        },
+        {
+          "pointer": "/result/state/geometry_hash",
+          "same_as": {
+            "step": 32,
+            "pointer": "/result/state/geometry_hash"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Wide, \"shop\""
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 195609.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 45670.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.18988755296,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 16.60477120579,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -16.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 136.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 76.2,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 152.4
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 76.2
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Default"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 178869.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 41950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.3324427964,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 15.56639059011,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -10,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 130,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 70,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 140
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 70
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ]
+    },
+    {
+      "tool": "activate_configuration",
+      "arguments": {
+        "name": "Narrow"
+      },
+      "checks": [
+        {
+          "pointer": "/measurement/volume_mm3",
+          "approx": 165369.0266447077,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/area_mm2",
+          "approx": 38950.79644737231,
+          "tolerance": 0.005
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/0",
+          "approx": 43.46842943312,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/1",
+          "approx": 45,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/measurement/centre_of_mass/2",
+          "approx": 14.72824254119,
+          "tolerance": 1e-06
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/0",
+          "approx": -5,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/1",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/min/2",
+          "approx": 0,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/0",
+          "approx": 125,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/1",
+          "approx": 90,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/body/bounding_box/max/2",
+          "approx": 65,
+          "tolerance": 0.001
+        },
+        {
+          "pointer": "/summary/values/0/value",
+          "equals": 130
+        },
+        {
+          "pointer": "/summary/values/1/value",
+          "equals": 65
+        },
+        {
+          "pointer": "/summary/values/2/value",
+          "equals": 12
+        },
+        {
+          "pointer": "/summary/values/0/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/1/unit",
+          "equals": "mm"
+        },
+        {
+          "pointer": "/summary/values/2/unit",
+          "equals": "mm"
+        }
+      ],
+      "same_geometry_as_step": 31
+    },
+    {
+      "tool": "configuration_grid",
+      "arguments": {},
+      "checks": [
+        {
+          "pointer": "/result/rows/1/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/1/id"
+          }
+        },
+        {
+          "pointer": "/result/rows/2/id",
+          "same_as": {
+            "step": 22,
+            "pointer": "/result/rows/2/id"
+          }
+        },
+        {
+          "pointer": "/result/resolved/1/properties/title",
+          "equals": "Bracket, \"family\""
+        }
+      ]
+    }
+  ]
+}

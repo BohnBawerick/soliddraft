@@ -1,6 +1,6 @@
 //! V3 increment 1 cases M1-M9 from the independent acceptance report.
 use soliddraft_kernel_catallax::CatallaxKernel;
-use soliddraft_model::{Command, Document, FileError, display, values::Input};
+use soliddraft_model::{Command, Document, FileError, configs::Grid, display, values::Input};
 use std::sync::Arc;
 
 fn kernel() -> Arc<CatallaxKernel> {
@@ -273,4 +273,194 @@ fn regression_failed_batch_restores_configuration_truth() {
     };
     assert!(doc.execute(batch).is_err());
     assert_eq!((doc.part_json(), doc.semantic_hash(), doc.geometry_hash(), doc.undo_depth()), before);
+}
+
+// V3 increment 2: the whole table, text properties and old files.
+
+const MAIN_PART: &[u8] = include_bytes!("fixtures/main-configured.dwprt");
+
+fn configured() -> Document {
+    Document::from_bytes(MAIN_PART, kernel()).unwrap()
+}
+
+fn with_cells(d: &Document, change: impl FnOnce(&mut Grid)) -> Grid {
+    let mut grid = d.configuration_grid();
+    change(&mut grid);
+    grid
+}
+
+fn set_grid(d: &mut Document, grid: Grid) {
+    d.execute(Command::SetConfigurationGrid { grid: Box::new(grid) }).unwrap();
+}
+
+#[test]
+fn p_compat_a_main_file_keeps_its_identities_and_gains_nothing() {
+    let expected: serde_json::Value = serde_json::from_str(include_str!("fixtures/main-configured.info.json")).unwrap();
+    let doc = configured();
+    assert_eq!(doc.id().to_string(), expected["id"].as_str().unwrap());
+    assert_eq!(doc.semantic_hash().to_string(), expected["revision"].as_str().unwrap());
+    assert_eq!(doc.geometry_hash().to_string(), expected["geometry_hash"].as_str().unwrap());
+    assert!(doc.truth().get("properties").is_none());
+    assert!(doc.part_json().find("\"properties\"").is_none(), "absent fields stay out of the file");
+    let reopened = Document::from_bytes(&doc.to_bytes().unwrap(), kernel()).unwrap();
+    assert_eq!(reopened.part_json(), doc.part_json());
+    assert_eq!(reopened.semantic_hash(), doc.semantic_hash());
+    assert_eq!(reopened.geometry_hash(), doc.geometry_hash());
+}
+
+#[test]
+fn p_compat_default_only_properties_survive_and_bad_types_are_refused() {
+    let mut doc = Document::new("Plain", kernel());
+    let grid = with_cells(&doc, |g| {
+        g.properties = vec!["title".into()];
+        g.rows[0].properties.insert("title".into(), "Bracket, \"family\"".into());
+    });
+    let (hash, geometry) = (doc.semantic_hash(), doc.geometry_hash());
+    set_grid(&mut doc, grid);
+    assert_ne!(doc.semantic_hash(), hash);
+    assert_eq!(doc.geometry_hash(), geometry, "text is not geometry");
+    assert!(doc.configuration_grid().rows.len() == 1 && doc.truth().get("configurations").is_none());
+    let back = Document::from_bytes(&doc.to_bytes().unwrap(), kernel()).unwrap();
+    assert_eq!(back.resolved_properties()["title"], "Bracket, \"family\"");
+    assert_eq!(back.semantic_hash(), doc.semantic_hash());
+
+    let file = doc.truth();
+    let mut wrong = file.clone();
+    wrong["properties"] = serde_json::json!(5);
+    let error = Document::from_part_json(&wrong.to_string(), kernel()).unwrap_err();
+    assert!(matches!(error, FileError::Json(_)), "{error}");
+
+    let mut d = configured();
+    let grid = with_cells(&d, |g| {
+        g.properties = vec!["title".into()];
+        g.rows[1].properties.insert("title".into(), "Narrow title".into());
+    });
+    set_grid(&mut d, grid);
+    let mut wrong = d.truth();
+    wrong["configurations"]["rows"][0]["properties"]["title"] = serde_json::json!(5);
+    let error = Document::from_part_json(&wrong.to_string(), kernel()).unwrap_err();
+    assert!(matches!(error, FileError::Json(_)), "{error}");
+    let mut wrong = d.truth();
+    wrong["configurations"]["rows"][0]["properties"]["title"] = serde_json::json!("two\nlines");
+    let error = Document::from_part_json(&wrong.to_string(), kernel()).unwrap_err();
+    assert!(matches!(error, FileError::Invalid(_)), "{error}");
+}
+
+#[test]
+fn the_table_is_one_step_with_sparse_rows_and_stable_ids() {
+    let mut d = configured();
+    let before = d.configuration_grid();
+    let ids: Vec<_> = before.rows.iter().map(|r| r.id.clone()).collect();
+    let (hash, geometry, depth) = (d.semantic_hash(), d.geometry_hash(), d.undo_depth());
+    let grid = with_cells(&d, |g| {
+        g.properties = vec!["title".into()];
+        g.rows[0].properties.insert("title".into(), "Family".into());
+        g.rows[1].values.insert("plate_w".into(), "6 in".into());
+    });
+    set_grid(&mut d, grid);
+    d.rebuild();
+    assert_eq!(d.undo_depth(), depth + 1);
+    let after = d.configuration_grid();
+    assert_eq!(after.rows[1].values["plate_w"], "152.4 mm", "unit literals keep V1's canonical form");
+    assert!(!after.rows[1].values.contains_key("flange_d"), "a blank stays inherited");
+    assert_eq!(after.rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(), ids);
+    numbers(&d, 152.4, 76.2);
+    assert_eq!(d.resolved_properties()["title"], "Family", "Narrow inherits the file's text");
+    assert_ne!(d.geometry_hash(), geometry);
+    d.undo().unwrap();
+    assert_eq!((d.semantic_hash(), d.geometry_hash()), (hash.clone(), geometry.clone()));
+    assert_eq!(d.configuration_grid(), before);
+    assert!(d.resolved_properties().is_empty());
+    d.redo().unwrap();
+    assert_eq!(d.configuration_grid(), after);
+    assert_eq!(d.resolved_properties()["title"], "Family");
+}
+
+#[test]
+fn a_property_edit_rebuilds_nothing() {
+    let mut d = configured();
+    d.rebuild();
+    let geometry = d.geometry_hash();
+    let grid = with_cells(&d, |g| {
+        g.rows[1].properties.insert("title".into(), "Own text".into());
+    });
+    let before = d.semantic_hash();
+    set_grid(&mut d, grid);
+    assert!(!d.is_dirty(), "text starts no rebuild");
+    assert_ne!(d.semantic_hash(), before);
+    assert_eq!(d.geometry_hash(), geometry);
+    assert_eq!(d.resolved_properties()["title"], "Own text");
+}
+
+#[test]
+fn a_candidate_is_refused_whole_and_names_its_cell() {
+    let mut d = configured();
+    let cases: Vec<(Grid, &str, Option<&str>, Option<&str>)> = vec![
+        (
+            with_cells(&d, |g| {
+                g.rows[1].values.insert("plate_w".into(), "30 deg".into());
+            }),
+            "expected length (mm), found angle (deg)",
+            Some("Narrow"),
+            Some("plate_w"),
+        ),
+        (
+            with_cells(&d, |g| {
+                g.rows[1].values.insert("plate_w".into(), "flange_d * 2".into());
+            }),
+            "cycle",
+            Some("Narrow"),
+            Some("plate_w"),
+        ),
+        (
+            with_cells(&d, |g| {
+                g.rows[0].values.remove("hole_d");
+            }),
+            "missing required cell",
+            Some("Default"),
+            Some("hole_d"),
+        ),
+        (
+            with_cells(&d, |g| {
+                let extra = g.rows[1].clone();
+                g.rows.push(extra);
+            }),
+            "duplicate configuration Narrow",
+            None,
+            None,
+        ),
+        (
+            with_cells(&d, |g| {
+                g.rows.pop();
+            }),
+            "missing configuration Narrow",
+            None,
+            None,
+        ),
+        (
+            with_cells(&d, |g| {
+                g.values[0].name = "missing_w".into();
+            }),
+            "unknown named value missing_w",
+            None,
+            None,
+        ),
+        (
+            with_cells(&d, |g| {
+                g.values[0].unit = "deg".into();
+            }),
+            "expected length (mm), found unit deg",
+            None,
+            Some("plate_w"),
+        ),
+    ];
+    let truth = d.part_json();
+    for (grid, reason, row, column) in cases {
+        let refusal = d.check_configuration_grid(&grid).unwrap_err();
+        assert!(refusal.reason.contains(reason), "{refusal}");
+        assert_eq!((refusal.row.as_deref(), refusal.column.as_deref()), (row, column), "{refusal}");
+        let error = d.execute(Command::SetConfigurationGrid { grid: Box::new(grid) }).unwrap_err().to_string();
+        assert!(error.contains(reason), "{error}");
+        assert_eq!(d.part_json(), truth);
+    }
 }

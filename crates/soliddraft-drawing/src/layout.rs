@@ -88,7 +88,7 @@ pub fn make_drawing(part: &Part, new: &NewDrawing) -> Result<MadeDrawing, Drawin
     let index = PartIndex::build(part)?;
     let mut drawing = Drawing::new(new.model.clone(), &new.template);
     drawing.meta = new.meta.clone();
-    drawing.model.pinned = part.digest.clone();
+    drawing.accept_source(part);
     let projection = new.template.projection;
 
     // Which views fold off the base view.

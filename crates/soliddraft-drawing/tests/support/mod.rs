@@ -303,5 +303,6 @@ pub fn box_part<'k>(k: &'k BoxKernel, tag: &str, size: Vec3) -> Part<'k> {
         ],
         namer: None,
         preview: false,
+        source: Default::default(),
     }
 }

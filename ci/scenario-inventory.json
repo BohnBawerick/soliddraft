@@ -406,6 +406,49 @@
       "route": "MCP document commands -> Catallax adapter -> pinned kernel",
       "supported_limits": "One part with named-value overrides only; widths 120, 140 and 152.4 mm; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; rows Default, Narrow, Wide, Zero and Void; Zero rejects zero depth, Void rejects the empty cut with flange_d 5 mm and hole_d 200 mm, then repairs with hole_d 12 mm",
       "evidence": "result.json, protocol.json and commands/NNNN/{part.dwprt,command.json,kernel.json,viewport.png,view.svg}; narrow.dwprt; wide.dwprt; commands/0024 and commands/0028/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
+    },
+    {
+      "id": "configuration-grid-csv",
+      "file": "ci/scenarios/configuration-grid-csv.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
+      "route": "MCP configuration grid tools -> CSV codec -> document transaction -> Catallax adapter -> pinned kernel",
+      "supported_limits": "Text properties and named values of one part with rows Default, Narrow and a quoted row; the complete row set must be present; no row rename or deletion; volume and area tolerance 0.005, centroid tolerance 1e-6 mm, mesh bounds tolerance 0.001 mm; app work cap 20M",
+      "evidence": "result.json, protocol.json, commands/NNNN and commands-N/NNNN/{command.json,kernel.json,viewport.png,helper-*.stdout}; fixtures/; out/{g0,g1,unicode}.*; csv-130.dwprt; commands-2/0001/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
+    },
+    {
+      "id": "configuration-grid-xlsx",
+      "file": "ci/scenarios/configuration-grid-xlsx.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
+      "route": "MCP configuration grid tools -> OOXML codec -> document transaction -> Catallax adapter -> pinned kernel",
+      "supported_limits": "One Configurations sheet of string and numeric cells mapped by header name; formula cells are refused; other limits as configuration-grid-csv",
+      "evidence": "result.json, protocol.json, commands/NNNN and commands-N/NNNN/{command.json,kernel.json,viewport.png,helper-*.stdout}; fixtures/; out/{g0,g1,unicode}.*; xlsx-130.dwprt; commands-2/0001/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
+    },
+    {
+      "id": "configuration-title",
+      "file": "ci/scenarios/configuration-title.json",
+      "acceptance": true,
+      "owners": [
+        "soliddraft-app",
+        "soliddraft-model",
+        "soliddraft-drawing",
+        "soliddraft-kernel-catallax"
+      ],
+      "catallax_revision": "659259eedbd0f156ab601784f29f42e87e419c76",
+      "route": "MCP grid and drawing tools -> document transaction -> drawing source snapshot -> SVG writer; Catallax adapter -> pinned kernel",
+      "supported_limits": "One title field bound to a text property of the part the drawing pins; automatic update off; no component configuration selector; app work cap 20M",
+      "evidence": "result.json, protocol.json, commands/NNNN and commands-N/NNNN/{command.json,kernel.json,helper-*.stdout}; out/{family,revised}.svg; title-wide.dwprt; title-wide.dwdrw; commands-1/0003/{part.step,step-report.json,check-step.stdout,check-step.stderr}"
     }
   ]
 }

@@ -89,6 +89,10 @@ pub struct Document {
     pub(crate) values: crate::values::Values,
     pub(crate) observations: BTreeMap<String, crate::tracked::Observation>,
     pub(crate) configurations: crate::configs::Configurations,
+    /// The file's own text properties, under any configuration overrides.
+    pub(crate) properties: crate::configs::Properties,
+    /// Accepted table changes in this session. Not saved.
+    pub(crate) table_edits: u64,
     pub(crate) datum_names: BTreeMap<DatumPlane, String>,
     /// The first feature below the rollback bar.
     pub(crate) rollback: Option<FeatureId>,
@@ -136,6 +140,8 @@ impl Document {
             values: Default::default(),
             observations: Default::default(),
             configurations: Default::default(),
+            properties: Default::default(),
+            table_edits: 0,
             datum_names: BTreeMap::new(),
             rollback: None,
             next_id: 1,

@@ -1014,8 +1014,9 @@ fn build<'k>(
     let (report, body) = soliddraft_recipe::build(kernel, recipe).map_err(|e| format!("{}: {e}", path.display()))?;
     let backend = format!("{} {}", report.backend.name, report.backend.version);
     // The CLI only writes files, so its views come from the certified mesh.
+    let dimensions = feature_dimensions(recipe);
     let part =
-        Part { kernel, body, digest: revision, dimensions: feature_dimensions(recipe), namer: None, preview: false };
+        Part { kernel, body, digest: revision, dimensions, namer: None, preview: false, source: Default::default() };
     Ok((part, backend))
 }
 

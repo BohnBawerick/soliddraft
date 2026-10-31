@@ -52,7 +52,7 @@ pub use entity::{EntityKind, EntityRef, Fingerprint, ModelEntity};
 pub use ids::{AnnotationId, SHEET, TemplateId, ViewId};
 pub use layout::{MadeDrawing, NewDrawing, default_views, make_drawing};
 pub use model_items::{ImportReport, ModelDimension, ModelMeasure};
-pub use part::{Entity, Namer, Part, PartIndex, Resolution, feature_name};
+pub use part::{Entity, Namer, Part, PartIndex, PartSource, Resolution, feature_name};
 pub use sheet::{Projection, RevisionRow, Scale, Sheet, Table, TableKind};
 pub use soliddraft_document::{ContentHash, DocKind, DocRef, DocumentId};
 pub use template::{DimensionStyle, LineWidths, Margins, PaperSize, Template, TitleBlock, TitleField, ZoneGrid};
@@ -66,6 +66,7 @@ pub use view::{
 };
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Errors of drawing operations.
 #[derive(Debug, thiserror::Error)]
@@ -126,6 +127,10 @@ pub struct Drawing {
     /// Drawing options.
     #[serde(default)]
     pub settings: DrawingSettings,
+    /// The part's text properties at the pinned revision and configuration. They change
+    /// with the views, so a title never comes from a later part than its line work.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub source_properties: BTreeMap<String, String>,
 }
 
 impl Drawing {
@@ -139,6 +144,7 @@ impl Drawing {
             next_view_label: "A".to_owned(),
             next_datum_label: "A".to_owned(),
             settings: DrawingSettings::default(),
+            source_properties: BTreeMap::new(),
         }
     }
 
@@ -160,6 +166,13 @@ impl Drawing {
             v.geometry = ViewGeometry::default();
         }
         Ok(soliddraft_document::manifest::semantic_hash(DocKind::Drawing, &serde_json::to_value(&bare)?))
+    }
+
+    /// Pins the drawing at the part's revision, configuration and properties, together.
+    pub(crate) fn accept_source(&mut self, part: &Part<'_>) {
+        self.model.pinned = part.digest.clone();
+        self.model.configuration = part.source.configuration.clone();
+        self.source_properties = part.source.properties.clone();
     }
 
     /// True when the views show the part revision the drawing is pinned at: every view

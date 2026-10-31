@@ -220,3 +220,79 @@ fn the_file_and_the_exports_carry_the_drawing() {
     assert!(back.entities().all(|e| !matches!(e.specific, dxf::entities::EntityType::Spline(_))));
     assert!(back.entities().any(|e| e.common.layer == "VISIBLE"));
 }
+
+mod title_binding {
+    use soliddraft_drawing::display::{Item, layout_sheet, property};
+    use soliddraft_drawing::file::{self, FileMeta};
+    use soliddraft_drawing::{Command, Drawing, DrawingError, UndoStack, apply};
+
+    const MAIN: &[u8] = include_bytes!("fixtures/main-configured.dwdrw");
+
+    fn shown(drawing: &Drawing, text: &str) -> bool {
+        layout_sheet(drawing, 0).items.iter().any(|item| matches!(item, Item::Text(t) if t.text == text))
+    }
+
+    fn bind() -> Command {
+        Command::BindTitleProperty { sheet: 0, key: "title".into(), property: "title".into() }
+    }
+
+    #[test]
+    fn p_compat_a_main_drawing_keeps_its_identity_and_literal_title() {
+        let info: serde_json::Value = serde_json::from_str(include_str!("fixtures/main-configured.info.json")).unwrap();
+        let (drawing, meta) = file::from_bytes(MAIN).unwrap();
+        assert_eq!(meta.id.to_string(), info["id"].as_str().unwrap());
+        assert_eq!(drawing.semantic_hash().unwrap().to_string(), info["revision"].as_str().unwrap());
+        assert_eq!(drawing.model.pinned.to_string(), info["references"][0]["pinned"].as_str().unwrap());
+        assert!(drawing.source_properties.is_empty() && drawing.sheets[0].title_bindings.is_empty());
+        assert!(drawing.model.configuration.is_none());
+        let title = drawing.meta.title.clone();
+        assert_eq!(property(&drawing, &drawing.sheets[0], 0, 1, "title"), title);
+        assert!(shown(&drawing, &title));
+        let bytes = file::to_bytes(&drawing, &meta.rewritten("x", drawing.meta.units)).unwrap();
+        let (back, _) = file::from_bytes(&bytes).unwrap();
+        assert_eq!(back, drawing);
+        assert_eq!(back.semantic_hash().unwrap().to_string(), info["revision"].as_str().unwrap());
+        assert!(!back.to_json().unwrap().contains("title_bindings"), "absent fields stay out of the file");
+    }
+
+    #[test]
+    fn p_compat_a_bound_title_reopens_from_its_snapshot_without_a_part() {
+        let (mut drawing, _) = file::from_bytes(MAIN).unwrap();
+        drawing.source_properties.insert("title".into(), "Bracket, \"family\"".into());
+        apply(&mut drawing, &bind()).unwrap();
+        let meta = FileMeta::new("x", drawing.meta.units);
+        let (mut back, _) = file::from_bytes(&file::to_bytes(&drawing, &meta).unwrap()).unwrap();
+        assert_eq!(back, drawing);
+        assert!(shown(&back, "Bracket, \"family\""));
+
+        // A new session's own undo history works on the reopened drawing.
+        let mut stack = UndoStack::new();
+        let issued = Command::SetTitleField { sheet: 0, key: "title".into(), value: "Issued copy".into() };
+        stack.run(&mut back, &issued, None).unwrap();
+        assert!(shown(&back, "Issued copy"), "a literal override wins");
+        stack.undo(&mut back).unwrap();
+        assert!(shown(&back, "Bracket, \"family\""), "clearing it resumes the binding");
+        stack.redo(&mut back).unwrap();
+        assert!(shown(&back, "Issued copy"));
+
+        for field in ["title_bindings", "source_properties"] {
+            let mut wrong = serde_json::to_value(&drawing).unwrap();
+            let holder = if field == "title_bindings" { &mut wrong["sheets"][0] } else { &mut wrong };
+            holder[field] = serde_json::json!(5);
+            let error = Drawing::from_json(&wrong.to_string()).unwrap_err();
+            assert!(matches!(error, DrawingError::Json(_)), "{field}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_missing_source_property_is_named_and_never_filled_in() {
+        let (mut drawing, _) = file::from_bytes(MAIN).unwrap();
+        drawing.source_properties.insert("other".into(), "Another row's text".into());
+        apply(&mut drawing, &bind()).unwrap();
+        assert!(shown(&drawing, "[unresolved property title]"));
+        assert!(!shown(&drawing, "Another row's text"));
+        let clear = Command::BindTitleProperty { sheet: 0, key: "title".into(), property: String::new() };
+        apply(&mut drawing, &clear).unwrap();
+        assert!(shown(&drawing, &drawing.meta.title.clone()), "an unbound field keeps the drawing's metadata");
+    }
+}
