@@ -18,11 +18,7 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
         let reference = s.doc.reference(table.definition(row));
         let placement = table.local(row);
         let bounds = table.bounds(row);
-        let (status, now) = match &def.freshness {
-            Freshness::Current => ("current", Some(&def.key.revision)),
-            Freshness::NewerAvailable { now } => ("newer_available", Some(now)),
-            Freshness::Missing | Freshness::Unchecked => ("missing", None),
-        };
+        let (status, now) = freshness(def);
         json!({
             "path": table.path(row),
             "document": def.key.document,
@@ -43,6 +39,33 @@ pub(crate) fn summary(state: &mut AppState) -> Option<Value> {
         "proof_rebuilds": s.doc.parts_rebuilt_for_proofs(),
         "accepted_state": accepted_state(s),
     }))
+}
+
+/// How a definition's pinned revision compares with its document now, and the revision
+/// now when it is known.
+fn freshness(def: &soliddraft_assembly::Definition) -> (&'static str, Option<&soliddraft_document::ContentHash>) {
+    match &def.freshness {
+        Freshness::Current => ("current", Some(&def.key.revision)),
+        Freshness::NewerAvailable { now } => ("newer_available", Some(now)),
+        Freshness::Missing | Freshness::Unchecked => ("missing", None),
+    }
+}
+
+/// The occurrences inside sub-assemblies whose documents have moved on. The root's Update
+/// does not reach them: each sub-assembly is updated on its own, then the root accepts it.
+fn nested_newer(s: &AssemblySession) -> Value {
+    let table = s.doc.table();
+    let rows: Vec<Value> = (1..table.len() as u32)
+        .map(OccurrenceIndex)
+        .filter(|r| !table.flags(*r).has(Flags::REMOVED) && table.parent(*r) != Some(OccurrenceIndex::ROOT))
+        .filter_map(|r| {
+            let def = s.doc.store().get(table.definition(r));
+            let Freshness::NewerAvailable { now } = &def.freshness else { return None };
+            let holder = table.parent(r).map(|p| table.path(p)).unwrap_or_default();
+            Some(json!({ "path": table.path(r), "holder": holder, "document": def.key.document, "pinned": def.key.revision, "now": now }))
+        })
+        .collect();
+    Value::Array(rows)
 }
 
 /// The motions of a rigid body, as the solver names them.
@@ -86,7 +109,7 @@ fn occurrences(s: &mut AssemblySession) -> Value {
             "path": path, "parent": parent, "kind": if flags.has(Flags::ASSEMBLY) { "assembly" } else { "part" },
             "document": def.key.document, "configuration": def.key.configuration, "pinned": reference.map(|r| &r.pinned),
             "definition": { "document": def.key.document, "revision": def.key.revision, "quality": def.key.quality },
-            "display": def.state.as_str(), "warning": warning(def),
+            "display": def.state.as_str(), "warning": warning(def), "status": freshness(def).0,
             "local": { "translation": local.translation.to_array(), "rotation": local.rotation.to_array() },
             "world": { "translation": world.translation.to_array(), "rotation": world.rotation.to_array() },
             "bounds": if bounds.is_empty() { Value::Null } else { json!({ "min": bounds.min.to_array(), "max": bounds.max.to_array() }) },
@@ -189,8 +212,10 @@ pub(crate) fn run(state: &mut AppState, name: &str, input: &Value) -> Option<Res
         "insert_component" => insert_one(state, input),
         "assembly_update" => update(state)
             .map(|report| {
+                let nested = state.assembly.session.as_ref().map(nested_newer).unwrap_or_default();
                 json!({
                     "updated": report.updated(), "unchanged": report.sources.len() - report.updated(),
+                    "nested_newer": nested,
                     "assembly": summary(state),
                 })
             })
