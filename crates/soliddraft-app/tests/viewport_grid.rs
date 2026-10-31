@@ -2,10 +2,7 @@
 //! spacing that follows the zoom and says what it is, and a grid that moves to the open
 //! sketch's plane and back, all read from the real renderer's frames.
 //!
-//! The design is `sdc-d-ux-viewport`, merge B. Its case
-//! `grid_visibility_is_a_persistent_display_preference` needs the Preferences window and
-//! lands with it. Until then `support::set_display` holds the grid on or off for the
-//! frame comparisons here, and no case asserts the preference itself.
+//! The design is `sdc-d-ux-viewport`, merge B.
 
 #[path = "support/viewport_acceptance.rs"]
 mod support;
@@ -104,6 +101,72 @@ fn the_grid_shows_in_every_look() {
         let (on, off) = grid_frames(&mut case, &mut app, "first-view");
         assert_lattice(&on, &off, &app, lattice_on_ground(minor), name);
     }
+}
+
+#[test]
+fn grid_visibility_is_a_persistent_display_preference() {
+    let mut case = Case::gpu("grid_preference");
+    case.seed_settings(
+        r#"{"view":{"preset":"fast","show_origin_planes":false,"always_show_origin_axes":false},"navigation":{"preset_id":"onshape","future":"keep"}}"#,
+    );
+    let navigation = case.settings_json()["navigation"].clone();
+    let others = |case: &Case| {
+        let saved = case.settings_json();
+        assert_eq!(saved["navigation"], navigation, "the navigation section stays");
+        assert_eq!(saved["view"]["show_origin_planes"], false, "Show origin planes stays");
+        assert_eq!(saved["view"]["always_show_origin_axes"], false, "Always show origin axes stays");
+        assert_eq!(saved["view"]["preset"], "fast", "the look stays");
+    };
+
+    let mut app = launch_for_frames(empty(), SIZE, 1.0);
+    let before = model(&app);
+    assert_eq!(app.state().state.viewport.preset, Preset::Fast, "the look with no shadow ground");
+    to_top_orthographic(&mut app);
+    let view = camera(&app);
+    open_grid_and_planes(&mut app);
+    assert!(checked(&app, SHOW_GRID), "checked on a file that never set it");
+    close_preferences(&mut app);
+    assert!(readout(&app).is_some(), "a readout with the grid on");
+    let on = case.frame(&mut app, "checked");
+
+    // Off: no readout. Both families are only in the frame with the grid on, so neither
+    // is left in the frame without it.
+    set_preference(&mut app, SHOW_GRID, false);
+    assert_eq!(readout(&app), None, "no readout with the grid off");
+    let off = case.frame(&mut app, "unchecked");
+    others(&case);
+    set_preference(&mut app, SHOW_GRID, true);
+    assert!(readout(&app).is_some(), "the readout is back");
+    let (x, y, _) = assert_top_view_grid(&app, (&on, &off), "the grid on and off");
+    case.note(format!("{} and {} lines came and went", x.lines.len(), y.lines.len()));
+    let again = case.frame(&mut app, "rechecked");
+    assert_top_view_grid(&app, (&again, &off), "the grid checked again");
+    assert_eq!((model(&app), camera(&app)), (before, view), "the choice touches neither the model nor the view");
+    others(&case);
+    drop(app);
+
+    // A restart with it on keeps it on.
+    let mut app = launch_for_frames(empty(), SIZE, 1.0);
+    to_top_orthographic(&mut app);
+    open_grid_and_planes(&mut app);
+    assert!(checked(&app, SHOW_GRID), "still checked after a restart");
+    close_preferences(&mut app);
+    assert!(readout(&app).is_some(), "the readout after a restart");
+    set_preference(&mut app, SHOW_GRID, false);
+    drop(app);
+
+    // A restart with it off keeps it off.
+    let mut app = launch_for_frames(empty(), SIZE, 1.0);
+    to_top_orthographic(&mut app);
+    open_grid_and_planes(&mut app);
+    assert!(!checked(&app, SHOW_GRID), "still unchecked after a restart");
+    close_preferences(&mut app);
+    assert_eq!(readout(&app), None, "no readout after a restart with the grid off");
+    let off = case.frame(&mut app, "unchecked-restarted");
+    set_preference(&mut app, SHOW_GRID, true);
+    let on = case.frame(&mut app, "checked-restarted");
+    assert_top_view_grid(&app, (&on, &off), "after a restart with the grid off");
+    others(&case);
 }
 
 /// The zoom sweep, with the numbers the design holds it to at any size and scale.

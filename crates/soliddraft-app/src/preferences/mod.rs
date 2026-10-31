@@ -1,16 +1,18 @@
 //! The Preferences window: a searchable list of categories on the left and the chosen
-//! page on the right. This first delivery fills Navigation > Mouse, Navigation > Orbit
-//! and zoom and Navigation > View keys; the other categories are reserved here as data
-//! and shown as coming later, never as finished pages.
+//! page on the right. It fills Navigation > Mouse, Navigation > Orbit and zoom,
+//! Navigation > View keys and Viewport > Grid and planes; the other categories are
+//! reserved here as data and shown as coming later, never as finished pages.
 //!
-//! [`Preferences`] holds the window's state and a draft of the navigation settings.
-//! Every accepted change is handed back as a [`Change`]; the app saves it
-//! (`AppState::set_navigation`) and the tests can do the same without a GPU.
+//! [`Preferences`] holds the window's state and a draft of the settings it edits. Every
+//! accepted change is handed back as a [`Change`]; the app saves it
+//! (`AppState::set_navigation`, `AppState::set_reference_display`) and the tests can do
+//! the same without a GPU.
 
 mod ui;
 
 use crate::navigation::view_keys::{self, ViewKeys};
 use crate::navigation::{Chord, NavigationSettings, Refusal, Router, presets};
+use crate::settings::ReferenceDisplay;
 
 /// A page of the window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,11 +34,13 @@ impl Page {
 pub const MOUSE: &str = "navigation.mouse";
 pub const ORBIT_ZOOM: &str = "navigation.orbit_zoom";
 pub const VIEW_KEYS: &str = "navigation.view_keys";
+pub const GRID_AND_PLANES: &str = "viewport.grid_and_planes";
 
-const PAGES: [Page; 3] = [
+const PAGES: [Page; 4] = [
     Page { id: MOUSE, category: "navigation", title: "Mouse" },
     Page { id: ORBIT_ZOOM, category: "navigation", title: "Orbit and zoom" },
     Page { id: VIEW_KEYS, category: "navigation", title: "View keys" },
+    Page { id: GRID_AND_PLANES, category: "viewport", title: "Grid and planes" },
 ];
 
 /// The pages with controls, in the order the list shows them.
@@ -66,7 +70,7 @@ pub struct Category {
 
 const CATEGORIES: [Category; 7] = [
     Category { id: "navigation", label: "Navigation", status: Status::Available },
-    Category { id: "viewport", label: "Viewport", status: Status::Reserved },
+    Category { id: "viewport", label: "Viewport", status: Status::Available },
     Category { id: "selection_editing", label: "Selection and editing", status: Status::Reserved },
     Category { id: "interface", label: "Interface", status: Status::Reserved },
     Category { id: "appearance_graphics", label: "Appearance and graphics", status: Status::Reserved },
@@ -126,6 +130,9 @@ fn index() -> Vec<Hit> {
     for (control, label) in ui::VIEW_KEY_CONTROLS {
         all.push(hit(VIEW_KEYS, Some(control.to_owned()), label.to_owned()));
     }
+    for (control, label) in ui::GRID_AND_PLANES_CONTROLS {
+        all.push(hit(GRID_AND_PLANES, Some(control.to_owned()), label.to_owned()));
+    }
     all
 }
 
@@ -143,6 +150,8 @@ pub fn search(query: &str) -> Vec<Hit> {
 pub enum Change {
     /// Save and use these navigation settings.
     Navigation(NavigationSettings),
+    /// Save and use these display choices.
+    Display(ReferenceDisplay),
 }
 
 /// A line the window shows under its page.
@@ -160,6 +169,8 @@ pub struct Preferences {
     pub highlight: Option<String>,
     /// The navigation settings as the window shows them.
     pub draft: NavigationSettings,
+    /// The display choices as the window shows them.
+    pub display: ReferenceDisplay,
     pub message: Option<Message>,
     /// The row waiting for a new gesture from the practice area.
     pub capture: Option<&'static str>,
@@ -171,14 +182,15 @@ pub struct Preferences {
 }
 
 impl Preferences {
-    /// The window on Navigation > Mouse with `settings`.
-    pub fn new(settings: &NavigationSettings) -> Self {
+    /// The window on Navigation > Mouse with `settings` and `display`.
+    pub fn new(settings: &NavigationSettings, display: ReferenceDisplay) -> Self {
         let mac = cfg!(target_os = "macos");
         Self {
             page: MOUSE,
             search: String::new(),
             highlight: None,
             draft: settings.clone(),
+            display,
             message: None,
             capture: None,
             practice_label: "Try a gesture here".to_owned(),
@@ -221,6 +233,16 @@ impl Preferences {
     fn refuse(&mut self, refusal: Refusal) -> Result<(), Refusal> {
         self.message = Some(Message { text: refusal.to_string(), error: true });
         Err(refusal)
+    }
+
+    /// Changes the display choices with `edit` and hands them to the app.
+    pub fn edit_display(&mut self, edit: impl FnOnce(&mut ReferenceDisplay)) {
+        let before = self.display;
+        edit(&mut self.display);
+        if self.display != before {
+            self.message = None;
+            self.changes.push(Change::Display(self.display));
+        }
     }
 
     /// Changes the draft with `edit` and hands it to the app.
@@ -315,6 +337,12 @@ pub fn window(ctx: &egui::Context, prefs: &mut Option<Preferences>, state: &mut 
             Change::Navigation(s) => {
                 if let Err(e) = state.set_navigation(s) {
                     p.revert(&state.navigation, format!("Not saved: {e}"));
+                }
+            }
+            Change::Display(d) => {
+                if let Err(e) = state.set_reference_display(d) {
+                    p.display = state.viewport.references;
+                    p.message = Some(Message { text: format!("Not saved: {e}"), error: true });
                 }
             }
         }

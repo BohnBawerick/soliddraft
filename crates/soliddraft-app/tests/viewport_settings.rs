@@ -9,7 +9,7 @@ mod support;
 use serde_json::json;
 use soliddraft_app::settings::{self, InstallKind, ReferenceDisplay};
 use soliddraft_app::viewport::look::Preset;
-use support::Case;
+use support::{ALWAYS_SHOW_AXES, Case, empty, launch, set_preference};
 
 const DEFAULTS: ReferenceDisplay =
     ReferenceDisplay { show_grid: true, show_origin_planes: true, always_show_origin_axes: false };
@@ -153,6 +153,12 @@ fn look_and_display_writes_preserve_each_other() {
     expected["view"]["preset"] = json!("fast");
     expected["view"]["always_show_origin_axes"] = json!(true);
     assert_eq!(case.settings_json(), expected, "interleaved writes keep each other's keys");
+
+    // The same through the window: only the choice clicked changes.
+    let mut app = launch(empty());
+    set_preference(&mut app, ALWAYS_SHOW_AXES, false);
+    expected["view"]["always_show_origin_axes"] = json!(false);
+    assert_eq!(case.settings_json(), expected, "a toggle in Preferences keeps everything else");
 }
 
 #[test]
