@@ -350,3 +350,9 @@ soliddraft draw <part.dwprt | recipe.json> ...
   folder, Add file, a typed path, Remove, Move up and Move down. Built-in content is
   listed read-only above the user's entries. Search folders apply when the page is saved;
   templates, sheet formats and styles are read when the app starts.
+
+## Named-value configurations
+
+Part truth has an optional `configurations` entry with stable row IDs, row names, sparse named-value overrides, the selected row and a common feature base. Files with only Default omit the entry and retain their existing hashes. Each switch resolves from the common base, so reaching the same row restores its exact geometry hash. Geometry hashes exclude the configuration table and include the resolved features. Semantic hashes include the table and selection.
+
+A row inherits file defaults except for its explicit overrides. `set_value` edits the layer supplying that value in the selected row. Rename updates override keys and expression text. Every row passes the existing value graph's unit and cycle checks before a change commits. Saves retain the selected row and its display meshes; reopening and STEP export use that row. Materials and mass still use Default.

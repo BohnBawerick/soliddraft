@@ -120,6 +120,7 @@ struct Pools {
     features: Vec<String>,
     edges: Vec<String>,
     proposals: Vec<String>,
+    configurations: Vec<String>,
     templates: Vec<String>,
     /// The views a drawing of the bracket has.
     views: Vec<String>,
@@ -135,6 +136,7 @@ fn pools(doc: &Document) -> Pools {
         sketches: strings(&["previous"]),
         features: ahead.clone(),
         edges: Vec::new(),
+        configurations: strings(&["Default", "Narrow", "Wide"]),
         proposals: strings(&["P1", "P2", "P3", "P4", "P99"]),
         templates: strings(&["iso-a3", "ansi-b", "iso-a9"]),
         views: strings(&["Front view", "Top view", "Left view", "right VIEW", "Isometric view", "Section Z-Z"]),
@@ -160,6 +162,7 @@ impl Pools {
     /// The names a string parameter called `hint` takes.
     fn named(&self, hint: &str) -> &[String] {
         match hint {
+            "configuration" => &self.configurations,
             "plane" => &self.planes,
             "sketch" => &self.sketches,
             "feature" | "before" => &self.features,
@@ -376,7 +379,18 @@ fn sane_call(pools: Pools) -> BoxedStrategy<Call> {
         .prop_map(move |(a, b)| call("measure", json!({ "a": a, "b": b })));
     let rollback = prop::option::of(pick(pools.features.clone()))
         .prop_map(move |before| call("rollback", json!({ "before": before })));
+    let configurations =
+        (pick(pools.configurations.clone()), 0u8..4, size()).prop_map(|(configuration, action, width)| match action {
+            0 => call("set_value", json!({"name":"plate_w", "expression":width.to_string()})),
+            1 => call("add_configuration", json!({"name":configuration})),
+            2 => call(
+                "set_configuration_value",
+                json!({"configuration":configuration,"name":"plate_w","expression":width.to_string()}),
+            ),
+            _ => call("activate_configuration", json!({"name":configuration})),
+        });
     prop_oneof![
+        3 => configurations,
         3 => sketch, 3 => extrude, 2 => cut, 2 => fillet, 2 => chamfer, 2 => edit, 1 => suppress, 1 => delete,
         2 => propose, 2 => apply, 2 => step, 1 => measure, 1 => rollback,
     ]

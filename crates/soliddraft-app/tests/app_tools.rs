@@ -15,6 +15,9 @@ use soliddraft_document::DocumentId;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+#[path = "support/configuration_tools.rs"]
+mod configuration_tools;
+
 /// The undo depths of the open documents, with identities for replacement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Depths {
@@ -294,6 +297,7 @@ fn every_tool_runs_without_a_window_and_undoes_as_its_row_says() {
     s.call("set_value", json!({"name":"part_depth","expression":"12"}));
     s.call("drive", json!({"feature":"Boss-Extrude1","parameter":"depth","expression":"part_depth"}));
     s.call("rename_value", json!({"name":"part_depth","to":"plate_depth"}));
+    configuration_tools::exercise(&mut s);
     s.call("shell", json!({"open_faces":["Boss-Extrude1 · End cap"],"thickness":2}));
     s.call("edit_shell", json!({"feature":"Shell1","thickness":1.5}));
     s.call("new_part", json!({}));

@@ -114,6 +114,8 @@ struct Recipe {
     features: Vec<Feature>,
     #[serde(default, skip_serializing_if = "crate::values::Values::is_empty")]
     values: crate::values::Values,
+    #[serde(default, skip_serializing_if = "crate::configs::Configurations::is_empty")]
+    configurations: crate::configs::Configurations,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     datum_names: BTreeMap<DatumPlane, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -171,6 +173,7 @@ impl Document {
             units: Units::Mm,
             features: self.features.clone(),
             values: self.values.clone(),
+            configurations: self.configurations.clone(),
             datum_names: self.datum_names.clone(),
             rollback: self.rollback,
             next_feature: self.next_id,
@@ -326,7 +329,7 @@ impl Document {
         if !format_major(&found, "soliddraft-part").is_some_and(|m| (1..=newest).contains(&m)) {
             return Err(FileError::Format { found });
         }
-        let recipe: Recipe = serde_json::from_str(text)?;
+        let mut recipe: Recipe = serde_json::from_str(text)?;
         let mut ids: Vec<FeatureId> = recipe.features.iter().map(|f| f.id).collect();
         ids.sort();
         if ids.windows(2).any(|w| w[0] == w[1]) {
@@ -371,11 +374,18 @@ impl Document {
         for (datum, name) in recipe.datum_names {
             doc.rename_datum(datum, &name).map_err(|e| FileError::Invalid(e.to_string()))?;
         }
-        let resolved = recipe.values.validate(&recipe.features).map_err(FileError::Invalid)?;
-        if resolved != recipe.features {
+        let resolved = recipe.configurations.validate(&recipe.values, &recipe.features).map_err(FileError::Invalid)?;
+        // Solving a variant also fills solver caches that saved sketches omit.
+        let consistent = if recipe.configurations.is_empty() {
+            resolved == recipe.features
+        } else {
+            serde_json::to_value(&resolved)? == serde_json::to_value(&recipe.features)?
+        };
+        if !consistent {
             return Err(FileError::Invalid("driven inputs disagree with their expressions".into()));
         }
         doc.values = recipe.values;
+        doc.configurations = recipe.configurations;
         doc.features = recipe.features;
         doc.rollback = recipe.rollback;
         doc.next_id = recipe.next_feature;
@@ -412,7 +422,7 @@ fn part_manifest(id: DocumentId, backend: &BackendInfo, truth: &Value, settings:
 fn shape_hash(truth: &Value) -> ContentHash {
     let mut truth = soliddraft_document::hash::without_format(truth);
     if let Value::Object(map) = &mut truth {
-        for key in ["name", "datum_names", "material", "appearances", "snapshots", "values"] {
+        for key in ["name", "datum_names", "material", "appearances", "snapshots", "values", "configurations"] {
             map.remove(key);
         }
         if let Some(Value::Array(features)) = map.get_mut("features") {
