@@ -9,7 +9,7 @@
 //! count as modifiers, and the most specific row wins.
 
 use super::{
-    Action, Binding, Button, Capability, DragAxis, EventKind, KeyLocation, Mods, NavContext, NavKey,
+    Action, Binding, Button, Capability, Chord, DragAxis, EventKind, KeyLocation, Mods, NavContext, NavKey,
     NavigationSettings, Preset, ZoomDirection,
 };
 use egui::{Pos2, Vec2};
@@ -291,8 +291,22 @@ impl Router {
         self.capture.is_some_and(|c| matches!(c.latched, Some(Some(_))))
     }
 
+    /// The gesture held now, as a row's chord: a drag with these buttons, held keys and
+    /// modifiers. For capturing a new gesture.
+    pub fn gesture(&self) -> Chord {
+        let m = self.modifiers;
+        let platform = self.config.mac && m.mac_cmd;
+        Chord {
+            event: EventKind::Drag,
+            buttons: self.buttons.clone(),
+            held_keys: self.held.iter().map(|(k, _)| *k).collect(),
+            required: Mods { ctrl: m.ctrl || (!self.config.mac && m.command), shift: m.shift, alt: m.alt, platform },
+            ..Chord::default()
+        }
+    }
+
     /// The captured press moved past the threshold, whether or not a row took it.
-    fn moved_past_threshold(&self) -> bool {
+    pub fn moved_past_threshold(&self) -> bool {
         self.capture.is_some_and(|c| c.latched.is_some())
     }
 

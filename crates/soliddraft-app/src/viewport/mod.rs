@@ -12,7 +12,7 @@ pub mod render;
 
 use crate::document::{AxisKind, DisplayMesh, Document, Selection};
 use crate::icons::{self, Icon};
-use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Router, ZoomAnchor};
+use crate::navigation::{Action, Motion, NavContext, NavigationSettings, Outcome, Routed, Router, ZoomAnchor};
 use crate::settings::ReferenceDisplay;
 use crate::sketch::Sketch;
 use crate::state::{AppAction, SketchSession};
@@ -94,6 +94,49 @@ impl Default for ViewportState {
 
 /// The zoom of one point of a drag-zoom: the natural log of its factor.
 const DRAG_ZOOM: f32 = 0.005;
+
+/// Moves `camera` as one routed navigation event says, scaled by the user's camera
+/// settings. `pointer` anchors a cursor zoom. Returns whether the event asked to fit the
+/// view, which the caller does with the document's bounds.
+pub fn apply_navigation(
+    camera: &mut Camera,
+    r: &Routed,
+    router: &Router,
+    nav: &NavigationSettings,
+    rect: Rect,
+    pointer: Option<Pos2>,
+) -> bool {
+    let aspect = rect.width() / rect.height().max(1.0);
+    let ndc =
+        |p: Pos2| ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0);
+    let Outcome::Action(action) = r.outcome else { return false };
+    match (action, r.motion) {
+        (Action::Orbit, Motion::Drag { delta, .. }) => {
+            let k = nav.camera.orbit_sensitivity;
+            camera.orbit(delta.x * k, delta.y * k);
+        }
+        (Action::Pan, Motion::Drag { delta, .. }) => {
+            let k = nav.camera.pan_sensitivity;
+            camera.pan(delta.x * k, delta.y * k, rect.height());
+        }
+        (Action::DragZoom, Motion::Drag { delta, origin }) => {
+            let anchor = r.binding.and_then(|id| router.binding(id)).map(|b| b.anchor);
+            let at = (anchor == Some(ZoomAnchor::Cursor)).then(|| ndc(origin));
+            // Dragging up zooms in.
+            camera.zoom((-delta.y * DRAG_ZOOM).exp(), at, aspect);
+        }
+        (Action::WheelZoom, Motion::Zoom { factor }) => {
+            let at = match nav.camera.zoom_anchor {
+                ZoomAnchor::Cursor => pointer.filter(|p| rect.contains(*p)).map(ndc),
+                ZoomAnchor::Center => None,
+            };
+            camera.zoom(factor, at, aspect);
+        }
+        (Action::Fit, _) => return true,
+        _ => {}
+    }
+    false
+}
 
 /// A projected view-cube face: view, normal, label, screen polygon, depth, facing.
 type CubeFace<'a> = (StandardView, Vec3, &'a str, Vec<Pos2>, f32, f32);
@@ -347,8 +390,8 @@ impl ViewportState {
         sketching: bool,
         nav: &NavigationSettings,
     ) -> bool {
-        let aspect = rect.width() / rect.height().max(1.0);
         let dt = ui.input(|i| i.stable_dt).min(0.1);
+        self.camera.transition_seconds = nav.camera.transition_seconds;
         if self.camera.tick(dt) {
             ui.ctx().request_repaint();
         }
@@ -359,9 +402,6 @@ impl ViewportState {
         let events =
             ui.input(|i| crate::navigation::gather(&i.events, i.time, |p| hovered && rect.contains(p), hovered));
         let pointer = ui.input(|i| i.pointer.hover_pos());
-        let ndc =
-            |p: Pos2| ((p.x - rect.left()) / rect.width() * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height() * 2.0);
-        let mut fit = false;
         let mut routed: Vec<_> = events.into_iter().map(|e| self.router.handle(e)).collect();
         // A release outside the window may never arrive; the buttons egui sees down decide.
         let (time, last) = ui.input(|i| (i.time, i.pointer.latest_pos()));
@@ -371,33 +411,9 @@ impl ViewportState {
                 routed.push(self.router.handle(crate::navigation::NavEvent::Release { button: b, pos, time }));
             }
         }
+        let mut fit = false;
         for r in routed {
-            let Outcome::Action(action) = r.outcome else { continue };
-            match (action, r.motion) {
-                (Action::Orbit, Motion::Drag { delta, .. }) => {
-                    let k = nav.camera.orbit_sensitivity;
-                    self.camera.orbit(delta.x * k, delta.y * k);
-                }
-                (Action::Pan, Motion::Drag { delta, .. }) => {
-                    let k = nav.camera.pan_sensitivity;
-                    self.camera.pan(delta.x * k, delta.y * k, rect.height());
-                }
-                (Action::DragZoom, Motion::Drag { delta, origin }) => {
-                    let anchor = r.binding.and_then(|id| self.router.binding(id)).map(|b| b.anchor);
-                    let at = (anchor == Some(ZoomAnchor::Cursor)).then(|| ndc(origin));
-                    // Dragging up zooms in.
-                    self.camera.zoom((-delta.y * DRAG_ZOOM).exp(), at, aspect);
-                }
-                (Action::WheelZoom, Motion::Zoom { factor }) => {
-                    let at = match nav.camera.zoom_anchor {
-                        ZoomAnchor::Cursor => pointer.filter(|p| rect.contains(*p)).map(ndc),
-                        ZoomAnchor::Center => None,
-                    };
-                    self.camera.zoom(factor, at, aspect);
-                }
-                (Action::Fit, _) => fit = true,
-                _ => {}
-            }
+            fit |= apply_navigation(&mut self.camera, &r, &self.router, nav, rect, pointer);
         }
         if self.router.dragging() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);

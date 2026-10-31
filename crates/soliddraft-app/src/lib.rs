@@ -30,6 +30,7 @@ pub mod navigation;
 pub mod palette;
 pub mod panels;
 pub mod platform;
+pub mod preferences;
 pub mod properties;
 pub mod recovery;
 pub mod ribbon;

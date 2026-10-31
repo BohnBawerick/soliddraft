@@ -917,3 +917,181 @@ fn view_keys_fit_normal_reverse_and_principal_views() {
     app.run_steps(60);
     assert_eq!(view_name(&app), "Right", "F8 with nothing selected snaps to the nearest view");
 }
+
+/// Opens Preferences from the Tools menu, as a user does.
+fn open_preferences(app: &mut App) {
+    app.get_by_label("Tools").click();
+    app.run_steps(3);
+    app.get_by_label("Preferences…").click();
+    app.run_steps(4);
+    assert!(app.state().preferences.is_some(), "the menu opened Preferences");
+}
+
+/// Keeps a frame of the Preferences window for review.
+fn preferences_frame(app: &mut App, name: &str) {
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/navigation-test/preferences");
+    std::fs::create_dir_all(&out).unwrap();
+    if let Ok(image) = app.render() {
+        let _ = image.save(out.join(format!("{name}.png")));
+    }
+}
+
+fn settings_bytes(dir: &Path) -> Vec<u8> {
+    std::fs::read(dir.join("settings.json")).unwrap_or_default()
+}
+
+#[test]
+fn preferences_window_opens_with_search_and_categories() {
+    let (_guard, dir) = config_dir("prefs-open");
+    if skip_without_gpu() {
+        return;
+    }
+    std::fs::write(dir.join("settings.json"), r#"{"theme":"dark"}"#).unwrap();
+    let mut app = gesture_app(soliddraft_app::demo_document(), "legacy_soliddraft");
+    let before = settings_bytes(&dir);
+    open_preferences(&mut app);
+    assert!(app.query_by_label("Search settings").is_some());
+    assert!(app.query_by_label("Navigation > Mouse").is_some(), "it opens on Navigation > Mouse");
+    assert!(app.query_by_label("Orbit and zoom").is_some() && app.query_by_label("View keys").is_some());
+    preferences_frame(&mut app, "mouse");
+    app.state_mut().preferences.as_mut().unwrap().search = "wheel".into();
+    app.run_steps(3);
+    preferences_frame(&mut app, "search-wheel");
+    app.state_mut().preferences.as_mut().unwrap().search.clear();
+    app.run_steps(2);
+    app.get_by_label("Close window").click();
+    app.run_steps(4);
+    assert!(app.state().preferences.is_none(), "the window closed");
+    assert!(!app.ctx.egui_wants_keyboard_input(), "the keyboard is the app's again");
+    assert_eq!(settings_bytes(&dir), before, "opening and closing changed no setting");
+}
+
+#[test]
+fn mouse_page_preset_switch_updates_list_practice_and_settings() {
+    let (_guard, dir) = config_dir("prefs-mouse");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "legacy_soliddraft");
+    open_preferences(&mut app);
+    app.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Onshape").click();
+    app.run_steps(4);
+    assert_eq!(app.state().state.navigation.preset_id, "onshape", "the app uses it at once");
+    assert!(app.query_by_label("Orbit: Right drag").is_some());
+    let saved: serde_json::Value = serde_json::from_slice(&settings_bytes(&dir)).unwrap();
+    assert_eq!(saved["navigation"]["preset_id"], "onshape");
+    // The viewport follows: a right drag orbits.
+    app.state_mut().preferences = None;
+    app.run_steps(2);
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let r_drag = effect(&mut app, "prefs-onshape-right-drag", |app| {
+        drag(app, PointerButton::Secondary, c, c + vec2(50.0, 20.0), Modifiers::NONE)
+    });
+    assert_eq!(r_drag, ORBIT);
+    drop(app);
+    let app = Harness::builder()
+        .with_size(vec2(1440.0, 900.0))
+        .with_pixels_per_point(1.0)
+        .wgpu()
+        .build_eframe(|cc| SolidDraftApp::new(cc, box_document(), Automation::default()));
+    assert_eq!(app.state().state.navigation.preset_id, "onshape", "still Onshape after a restart");
+}
+
+#[test]
+fn practice_viewport_reports_the_gesture_without_moving_the_camera() {
+    let (_guard, _dir) = config_dir("prefs-practice");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "solidworks");
+    open_preferences(&mut app);
+    let area = app.get_by_label("Practice area").rect();
+    let before = cam(&app);
+    drag(&mut app, PointerButton::Middle, area.center(), area.center() + vec2(40.0, 20.0), Modifiers::NONE);
+    assert_eq!(app.state().preferences.as_ref().unwrap().practice_label, "Orbit");
+    drag(&mut app, PointerButton::Middle, area.center(), area.center() + vec2(40.0, 20.0), Modifiers::CTRL);
+    assert_eq!(app.state().preferences.as_ref().unwrap().practice_label, "Pan");
+    app.hover_at(area.center());
+    app.step();
+    app.event(wheel_event(egui::MouseWheelUnit::Line, 2.0, Modifiers::NONE));
+    app.run_steps(3);
+    assert_eq!(app.state().preferences.as_ref().unwrap().practice_label, "Zoom");
+    assert_eq!(cam(&app), before, "the part's camera did not move");
+}
+
+#[test]
+fn orbit_zoom_page_enabled_controls_change_camera() {
+    let (_guard, _dir) = config_dir("prefs-orbit-zoom");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "solidworks");
+    let c = viewport(&app).left_bottom() + vec2(150.0, -150.0);
+    let turn = |app: &mut App| {
+        let before = cam(app);
+        drag(app, PointerButton::Middle, c, c + vec2(40.0, 0.0), Modifiers::NONE);
+        cam(app).0 - before.0
+    };
+    let once = turn(&mut app);
+    open_preferences(&mut app);
+    app.get_by_label("Orbit and zoom").click();
+    app.run_steps(3);
+    preferences_frame(&mut app, "orbit-zoom");
+    app.state_mut().preferences.as_mut().unwrap().edit(|s| s.camera.orbit_sensitivity = 2.0);
+    app.run_steps(3);
+    assert_eq!(app.state().state.navigation.camera.orbit_sensitivity, 2.0, "saved and used");
+    app.state_mut().preferences = None;
+    app.run_steps(2);
+    let twice = turn(&mut app);
+    assert!((twice - 2.0 * once).abs() < 1e-4, "the same drag turns twice as far: {once} then {twice}");
+}
+
+#[test]
+fn view_keys_page_shows_profiles_and_conflicts() {
+    let (_guard, _dir) = config_dir("prefs-view-keys");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(box_document(), "solidworks");
+    open_preferences(&mut app);
+    app.get_by_label("View keys").click();
+    app.run_steps(3);
+    app.get_by_role_and_label(egui::accesskit::Role::RadioButton, "SOLIDWORKS").click();
+    app.run_steps(4);
+    assert_eq!(app.state().state.navigation.keyboard_profile, "solidworks");
+    assert!(app.query_all_by_label_contains("Fit: F — blocked").next().is_some());
+    preferences_frame(&mut app, "view-keys");
+    app.state_mut().preferences = None;
+    app.run_steps(2);
+    // Every command in the conflict still runs from its button.
+    ribbon_button(&mut app, "Fit");
+    ribbon_button(&mut app, "Front");
+    assert_eq!(view_name(&app), "Front");
+}
+
+#[test]
+fn preferences_does_not_disturb_existing_settings() {
+    let (_guard, dir) = config_dir("prefs-undisturbed");
+    if skip_without_gpu() {
+        return;
+    }
+    let mut app = gesture_app(soliddraft_app::demo_document(), "fusion");
+    let root = dir.join("recovery-root");
+    app.state_mut().start_recovery(&root, Default::default());
+    open_preferences(&mut app);
+    app.state_mut().preferences = None;
+    app.run_steps(2);
+    // The existing windows still open, from the commands their menu entries run.
+    let command = |id: &str| soliddraft_app::commands::all().iter().find(|c| c.id == id).unwrap();
+    app.state_mut().state.run_command(command("file_locations"));
+    app.run_steps(4);
+    assert!(app.state().state.locations_dialog.is_some(), "File locations opens");
+    app.state_mut().state.locations_dialog = None;
+    app.state_mut().state.push(AppAction::ShowRecovery);
+    app.run_steps(4);
+    assert!(app.query_by_label("Recover documents").is_some(), "the recovery window opens");
+    app.state_mut().state.run_command(command("provider_settings"));
+    app.run_steps(4);
+    assert!(app.state().state.provider_dialog.is_some(), "the Assistant settings open");
+    assert!(app.query_by_label("Assistant settings").is_some());
+}
